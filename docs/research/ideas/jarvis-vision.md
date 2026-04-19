@@ -1,317 +1,336 @@
-# Jarvis — Intent Router & Ship's Computer Vision
+# Jarvis — General Purpose DeepAgent with Dispatch Tools
 
-## For: `/system-arch` session · guardkit/jarvis repo · April 2026
-
----
-
-## Purpose of this document
-
-Captures the high-level vision for the Jarvis system — a unified intent router and
-orchestration layer that makes the entire Ship's Computer agent fleet accessible through
-any interaction modality (voice via Reachy Mini, messaging via Telegram/Slack, dashboard,
-CLI). This is the "glue" that turns a collection of specialist agents into a coherent
-personal AI assistant.
-
-This document feeds into `/system-arch` to produce architecture intent, C4 diagrams,
-component boundaries, ADRs, and open questions.
+> **Version:** 2.0
+> **Date:** 19 April 2026
+> **Status:** Vision — ready for `/system-arch`
+> **Supersedes:** v1.0 (March 2026)
+> **Aligned with:** fleet-architecture-v3-coherence-via-flywheel.md (19 April 2026), forge-pipeline-architecture.md v2.2, fleet-master-index.md v2 + D40-D46
+> **Framing source:** 19 April 2026 conversation — Rich + Claude, "the Tony Stark v1 mini-Jarvis" discussion
 
 ---
 
-## What is Jarvis?
+## 1. What Jarvis Is (v2 Framing)
 
-Jarvis is an **intent router** — a lightweight orchestration layer that:
+**Jarvis is a General Purpose DeepAgent with dispatch tools.**
 
-1. Accepts natural language input from any adapter (voice, text, dashboard, CLI)
-2. Classifies the intent of the request
-3. Dispatches to the appropriate specialist agent (or handles directly via the General Purpose Agent)
-4. Returns results through the originating adapter
+Not a thin intent router in front of a fleet. Not a classification layer. Not a separate process from the GPA. **Jarvis IS the GPA, and dispatch is one tool category among many.** The reasoning model reads registered capability descriptions and decides.
 
-The name is aspirational — inspired by Iron Man's JARVIS, Star Trek's Ship Computer, and
-Red Dwarf's Holly. The goal is a persistent, always-available AI assistant that feels like
-talking to a single intelligence, even though it's orchestrating a fleet of specialists behind
-the scenes.
+The v1 vision (March 2026) framed Jarvis as a "thin router with the GPA as one of many specialists to dispatch to." That framing made Jarvis a plumbing component. The v2 framing makes Jarvis a DeepAgent whose superpower is *knowing which brain to apply to which problem* — and dispatch is how it applies non-local brains.
 
-**Key insight:** Jarvis is NOT a single monolithic agent. It's a thin routing layer with a
-rich set of specialist agents behind it. The intelligence comes from choosing the right
-specialist for each request and from the General Purpose Agent handling everything that
-doesn't fit a specialist.
+**The one-sentence thesis:** *One reasoning model that knows which reasoning model to use.*
+
+This is the Tony Stark / Iron Man aesthetic rendered architecturally. Stark's Jarvis isn't smart because it has one brain; it's smart because it knows which brain to apply to which problem.
 
 ---
 
-## The Agent Fleet
+## 2. Three Delegation Targets
 
-Jarvis dispatches to six specialist agents plus a general purpose fallback, each with
-complexity matched to its task. Together they form a complete pipeline from ideation
-through to deployed code:
+Jarvis has three dispatch mechanisms, each for a different kind of work:
 
-```
-Ideation Agent → Product Owner Agent → Architect Agent → GuardKit Factory
-(explore)        (document)             (architect)       (implement)
-```
+### Target 1: Async Subagents (same process, different model)
 
-### 1. GuardKit Factory (Heavy — Full Adversarial Pipeline)
-- **Repo:** `guardkit/guardkitfactory`
-- **Template:** `langchain-deepagents-weighted-evaluation` (adversarial template to be extracted post-production as Phase 5)
-- **Purpose:** Autonomous software development pipeline driving GuardKit slash commands
-- **Complexity:** Multi-stage pipeline (arch → design → spec → plan → build → review), Player-Coach adversarial loop, Graphiti context, human-in-the-loop checkpoints
-- **When dispatched:** "Build a new feature for...", "Create a system architecture for...", "Run the pipeline for..."
-- **Model:** Gemini 3.1 Pro (orchestration/reasoning) + Claude Code SDK or vLLM Qwen3-Coder-Next (implementation)
+`AsyncSubAgent` instances declared at Jarvis startup. Each points to a LangGraph graph with a different `create_deep_agent(model=...)` configuration. Communication via ASGI (in-process). Preview feature in DeepAgents 0.5.3+.
 
-### 2. YouTube Planner (Medium — Weighted Evaluation, Research-Intensive)
-- **Repo:** `guardkit/youtube-planner`
-- **Template:** `langchain-deepagents-weighted-evaluation`
-- **Purpose:** AI-powered content planning from idea capture through to filmable bullet-point script
-- **Complexity:** Multi-stage pipeline (idea capture → validation → hook/title → 3-act structure → script), competitive intelligence, weighted scoring
-- **When dispatched:** "I have a video idea about...", "What should my next video be about?", "Research what channels are covering..."
-- **Model:** Gemini 3.1 Pro (reasoning/evaluation) + Claude API (content generation)
+**Use for:** model-routing, parallel reasoning workloads, long-running background research, anything where Jarvis is doing the work itself but wants to parallelise or pick a different brain.
 
-### 3. Ideation Agent (Medium — Weighted Evaluation, Divergent Reasoning)
-- **Repo:** `guardkit/ideation-agent`
-- **Template:** `langchain-deepagents-weighted-evaluation`
-- **Purpose:** Structured ideation sessions with weighted evaluation criteria — jumpstarts the exploratory thinking that currently happens manually in Claude Desktop
-- **Complexity:** Player generates/expands ideas, Coach evaluates against weighted criteria, configurable criteria per domain
-- **When dispatched:** "I want to explore an idea about...", "What if we built...", "Help me think through..."
-- **Model:** Gemini 3.1 Pro (divergent reasoning, 1M context for full project landscape)
+**Ships with four at launch:**
 
-### 4. Product Owner Agent (Medium — Weighted Evaluation, Documentation)
-- **Repo:** `guardkit/product-owner-agent`
-- **Template:** `langchain-deepagents-weighted-evaluation`
-- **Purpose:** Takes raw, unstructured information (brain dumps, meeting notes, regulatory docs, competitor analysis) and produces structured product documentation
-- **Complexity:** Player generates document suite, Coach evaluates for grounding/completeness/actionability, domain-configurable templates
-- **When dispatched:** "Generate product docs for...", "Structure this information into...", "Create a regulatory analysis for..."
-- **Model:** Gemini 3.1 Pro (reasoning/evaluation) + Claude API (document generation)
-- **Proof point:** FinProxy LPA — 14 docs (310 KB) in one weekend, James approved with minimal feedback
+| Name | Model | Description passed to supervisor |
+|---|---|---|
+| `deep_reasoner` | `google_genai:gemini-3.1-pro` | Deep reasoning, architectural synthesis, 1M-token context work |
+| `adversarial_critic` | `anthropic:claude-opus-4-7` | Coach-style quality evaluation, subtle flaw identification. Higher cost — reserve for adversarial work |
+| `long_research` | `openai:gpt-5.4` | Multi-hour open-ended research, persistent web search, synthesis |
+| `quick_local` | `vllm:qwen3-coder-next` (local on GB10) | Quick lookups, privacy-sensitive content, low-stakes reasoning |
 
-### 5. Architect Agent (Medium — Weighted Evaluation, Architecture Generation)
-- **Repo:** `guardkit/architect-agent`
-- **Template:** `langchain-deepagents-weighted-evaluation`
-- **Purpose:** Translates product documentation into system architecture — C4 diagrams, ADRs, and GuardKit conversation starter documents for `/system-arch`
-- **Complexity:** Player generates C4 diagrams + ADRs, Coach validates by tracing flows, Graphiti integration for architectural memory that compounds over projects
-- **When dispatched:** "Architect this project", "Generate a system architecture from these docs", "Create a conversation starter for /system-arch"
-- **Model:** Gemini 3.1 Pro (architectural reasoning) + Claude API (document generation)
-- **Key pattern:** Output IS the input to `/system-arch` — the conversation starter document format
+The descriptions include cost + latency signals so the reasoning model has skin in the routing decision. The supervisor's system prompt teaches a preference: **default to cheapest-that-fits; escalate on need.** Local vLLM is the floor; cloud-premium is the escalation.
 
-### 6. General Purpose Agent (Light — ReAct with Rich Toolset)
-- **Repo:** `guardkit/jarvis` (co-located with intent router, or future separate repo)
-- **Template:** `langchain-deepagents` (base template, no adversarial loop)
-- **Purpose:** Everything else — research, drafting, scheduling, chores, quick lookups, home automation
-- **Complexity:** Single ReAct agent with broad tool access, fast turnaround, no quality gate needed
-- **When dispatched:** Default — anything that doesn't match a specialist pattern
-- **Model:** Local vLLM for simple tasks, cloud API for complex reasoning (intent-based model routing)
+### Target 2: Specialist Agents (different process, via NATS)
+
+Architect, Product Owner, Ideation, UX Designer — each a deployment of the `specialist-agent` binary with `--role X`, each registered on `fleet.register` with its own `agent_id` and `AgentManifest`.
+
+Communication via `agents.command.{agent_id}` / `agents.result.{agent_id}` (singular topics per ADR-SP-016). Discovered dynamically via `NATSKVManifestRegistry` with live watch per ADR-ARCH-015/ADR-ARCH-017.
+
+**Use for:** fine-tuned domain specialists, work that needs its own Graphiti role group, services that scale independently, tasks that genuinely benefit from a separate model fine-tuned on a domain corpus.
+
+Zero code changes needed when a new specialist role ships — same pattern as Forge.
+
+### Target 3: Forge (different process, via JetStream publish)
+
+Specifically for build intent. Jarvis publishes `BuildQueuedPayload` to `pipeline.build-queued.{feature_id}` per ADR-SP-014 Pattern A, with `triggered_by="jarvis"`, `originating_adapter`, `correlation_id`, and `parent_request_id`.
+
+Not a command — a queued job. Durable in JetStream. Sequential execution by Forge per `max_ack_pending=1`.
+
+Forge registers on `fleet.register` so Jarvis's capability-driven routing can *discover* it; triggering remains a JetStream publish.
+
+**Use for:** build intent only. "Build a new feature for X", "Run the pipeline for Y", "Queue FEAT-XXX". Everything else routes elsewhere.
+
+### How the reasoning model chooses
+
+One mental pattern: **capability-driven dispatch via reasoning over descriptions.** Three registries:
+
+- Async subagent specs declared at Jarvis startup (from `jarvis/config/subagents.yaml` or similar)
+- NATS fleet discovered live from `agent-registry` KV bucket with 30-second cache + watch invalidation
+- JetStream build queue just writes `pipeline.build-queued.*` — Forge is discovered via its fleet registration
+
+All three become tools in Jarvis's DeepAgents toolbelt. Tool docstrings carry the descriptions. Reasoning model picks. Same pattern as Forge's ADR-ARCH-015 (no `agent_id` hardcoding) and ADR-ARCH-016 (fleet is the catalogue).
 
 ---
 
-## Intent Classification & Dynamic Agent Discovery (CAN Bus Pattern)
+## 3. The Adapter Layer
 
-**Resolved decision (D15):** Agents self-register their capabilities on startup,
-analogous to devices on a vehicle CAN bus announcing themselves. Jarvis builds its
-routing table dynamically from these registrations — no router code changes when
-adding new agents.
+Jarvis's attention comes from humans via adapters. Each adapter is a thin stateless translator between the modality's native protocol and NATS.
 
-### How It Works
+| Adapter | Input | Output | Launch priority |
+|---|---|---|---|
+| **Telegram** | Telegram Bot API → NATS | NATS → Telegram Bot API | 1 — quickest feedback loop |
+| **CLI wrapper** | stdin → NATS | NATS → stdout | 2 — for testing + scripting |
+| **Dashboard** | WebSocket → NATS | NATS → WebSocket → React UI | 3 — visual monitoring |
+| **Reachy Mini** | Voice → Whisper → NATS | NATS → TTS → Reachy speaker + expressions | 4 — when hardware arrives |
 
-Each agent publishes an `AgentRegistrationPayload` to `fleet.register` on startup,
-declaring:
-- **Intents** it can handle, with confidence scores (0.0-1.0)
-- **Signal words** that indicate those intents
-- **Concurrency limits** (max_concurrent tasks)
-- **Status** (ready, starting, degraded)
+All adapters use the `nats-asyncio-service` template (built from `deepagents-orchestrator-exemplar`). Topics follow the existing taxonomy:
 
-Jarvis subscribes to `fleet.register`, `fleet.deregister`, and `fleet.heartbeat.>`
-and maintains the routing table in the `agent-registry` NATS KV bucket (survives
-Jarvis restarts).
+- `jarvis.command.{adapter}` — inbound user input
+- `jarvis.intent.classified` — (legacy, retained for observability) — Jarvis's classification output event
+- `jarvis.dispatch.{target}` — (legacy) — dispatch event for tracing
+- `notifications.{adapter}` — outbound proactive messages
 
-### Routing Algorithm
-
-1. Classify the intent (lightweight LLM call or rule-based matching against registered signals)
-2. Query the `agent-registry` KV for all registered agents
-3. Filter to agents whose intents include the classified intent
-4. Select the agent with highest confidence for that intent
-5. If tied, pick the one with lowest queue_depth (from heartbeat data)
-6. Dispatch to the selected agent
-7. If no specialist matches, route to General Purpose Agent (default fallback)
-
-### Example Registration
-
-```yaml
-# Product Owner Agent publishes this on startup:
-agent_id: "product-owner-agent"
-name: "Product Owner Agent"
-template: "langchain-deepagents-weighted-evaluation"
-intents:
-  - pattern: "product.document"
-    signals: ["product docs", "structure this", "regulatory analysis", "document the requirements"]
-    confidence: 0.9
-    description: "Generate structured product documentation from raw information"
-  - pattern: "ideate"
-    signals: ["explore product", "what should we build"]
-    confidence: 0.3  # can handle but ideation-agent is better
-max_concurrent: 1
-status: "ready"
-```
-
-### Lifecycle
-
-```
-Agent starts  → publishes registration to fleet.register
-              → Jarvis adds to routing table (agent-registry KV)
-              → Agent heartbeats every 30s to fleet.heartbeat.{agent_id}
-
-Agent running → Jarvis routes matching requests to it
-              → Heartbeat includes queue_depth + active_tasks for load balancing
-
-Agent stops   → publishes deregistration to fleet.deregister
-              → Jarvis removes from routing table
-
-Agent crashes → heartbeat stops → after 90s Jarvis marks unavailable
-              → docker restart policy recreates container → agent re-registers
-```
-
-### Why This Matters
-
-Adding the Product Owner Agent or Architect Agent requires zero changes to the
-Jarvis router. Build it, containerise it, start it — Jarvis discovers it automatically.
-Scale GuardKit Factory to two instances for parallel builds — Jarvis load-balances
-across them via queue_depth. This is the architectural pattern that makes the fleet
-genuinely extensible.
-
-The classification should be **generous with the general bucket** — if no registered
-agent matches with confidence > 0.5, route to General Purpose Agent. Users can always
-redirect: "Actually, run that through the ideation agent."
+**Key principle unchanged:** Adapters are stateless translators. Business logic lives in Jarvis. Jarvis uses `AsyncSubAgent` task IDs + `correlation_id` to route replies back to the originating adapter.
 
 ---
 
-## Infrastructure: NATS JetStream as the Backbone
+## 4. Thread-per-Session Model
 
-All communication flows through NATS JetStream — the Ship's Computer event bus. This is
-already designed and documented in the Ship's Computer Architecture (v1.0, January 2026).
+**Single Jarvis supervisor, thread-per-session.** A "session" is an adapter + time window.
 
-### Topic Structure
+- Reachy voice session this morning → thread A
+- Telegram conversation this evening → thread B
+- Dashboard session while coding → thread C
 
-```
-jarvis.command.{adapter}          ← Input from any adapter
-jarvis.intent.classified          ← Router publishes classified intent
-jarvis.dispatch.{agent}           ← Dispatched to specialist agent
+Threads share **Memory Store** (LangGraph long-term memory) so "what we discussed this morning" works across adapters. Threads do **not** share live context windows — Telegram doesn't see Reachy's current context, which prevents context bleed and auto-summarisation churn.
 
-fleet.register                    ← Agent capability announcements (CAN bus pattern)
-fleet.deregister                  ← Agent graceful shutdown
-fleet.heartbeat.{agent_id}        ← Periodic health signal (every 30s)
+Cross-thread continuity via:
 
-agents.status.{agent}             ← Agent status updates (existing Ship's Computer topics)
-agents.approval.{agent}.{task}    ← Human-in-the-loop checkpoints
-agents.results.{agent}            ← Agent results
+- **Memory Store** for durable recall ("last week we talked about...")
+- **Graphiti `jarvis_routing_history`** for routing priors (learned preferences across all sessions)
+- **Graphiti `jarvis_ambient_history`** for notification-pattern priors
 
-notifications.{adapter}           ← Outbound notifications to adapters
-system.health.{component}         ← Health monitoring
-```
-
-### Adapter Pattern
-
-Each input/output modality is a thin NATS adapter — a `nats-asyncio-service` (from the
-template being built today) that translates between the modality's native protocol and
-NATS messages:
-
-| Adapter | Input | Output | Template |
-|---------|-------|--------|----------|
-| **Reachy Mini** | Voice (OpenAI Realtime API / Whisper) → text → NATS | NATS → TTS → Reachy speaker + expressions | `nats-asyncio-service` |
-| **Telegram** | Telegram Bot API → NATS | NATS → Telegram Bot API | `nats-asyncio-service` |
-| **Slack** | Slack Events API → NATS | NATS → Slack Web API | `nats-asyncio-service` |
-| **Dashboard** | WebSocket → NATS | NATS → WebSocket → React UI | `nats-asyncio-service` |
-| **CLI** | stdin → NATS | NATS → stdout | `nats-asyncio-service` |
-| **PM Webhooks (Linear)** | Linear webhook → NATS | NATS → Linear API | `nats-asyncio-service` |
-
-**Key principle:** Adapters are stateless translators. They don't contain business logic.
-The router and agents contain all the intelligence.
+This is the LangGraph-native pattern: supervisor graph state is thread-scoped; Memory Store is thread-independent.
 
 ---
 
-## Hardware Topology
+## 5. Selectively Ambient — Three Patterns
 
-| Machine | Role in Jarvis |
-|---------|---------------|
-| **MacBook Pro M2 Max** | Dashboard client. CLI adapter. Planning/research. Cloud API calls originate here. |
-| **Dell DGX Spark GB10 (128GB)** | NATS server. vLLM inference (3 models). Graphiti (FalkorDB). Agent execution. Docker host. Reachy Mini connection (USB). |
-| **Synology DS918+ NAS (32TB)** | FalkorDB persistence. Shared storage. Backup. |
-| **Reachy Mini (×2)** | "Scholar" (tutoring interface). "Bridge" (Ship's Computer / Jarvis interface). |
+Jarvis's ambient behaviour has three patterns with different costs and risks.
 
-Connected via Tailscale mesh VPN. NATS accessible at `nats://100.x.y.z:4222` from any device.
+### Pattern A — Reactive
+Jarvis responds when spoken to. Baseline DeepAgents behaviour.
+
+### Pattern B — Triggered
+Watchers — async subagents monitoring a condition, emitting a notification when it fires. Implemented as `start_async_task` with a watcher subagent prompt ("monitor X, return when Y"). Stateful threads, async sleeps internally.
+
+Example watchers:
+- "Watch the Forge queue — when FEAT-FORGE-007 completes, nudge me"
+- "Watch my calendar — when I have a free 2-hour block today, suggest working on the talk"
+- "Watch the NVIDIA driver apt channel — notify when 590 appears"
+
+### Pattern C — Volitional
+Jarvis notices something on its own and proactively speaks. "You haven't committed to forge in 4 days and the DDD talk is in 3 weeks." Requires either a scheduler or a long-lived async subagent on a daily cadence.
+
+### v1 Scope
+
+**Commit to A and B. Prototype C as an opt-in skill only.** One skill — "morning briefing" — that runs on demand (Rich asks for it) but could later become scheduled. This lets Pattern C earn its place without auto-enabled-from-day-one risks of annoyance or false alarms.
 
 ---
 
-## Relationship to Existing Architecture
+## 6. Skills
 
-| Document | Relationship |
-|----------|-------------|
-| **Ship's Computer Architecture** (v1.0, Jan 2026) | Jarvis IS the Ship's Computer with a concrete intent router. Same NATS infrastructure, message envelope format, topic conventions, approval workflow. |
-| **Dev Pipeline Architecture** (v1.0, Feb 2026) | GuardKit Factory replaces the Build Agent concept. Jarvis dispatches to it. |
-| **Pipeline Orchestrator Conversation Starter** | The GuardKit Factory conversation starter — feeds `/system-arch` for the factory specifically. |
-| **Pipeline Orchestrator Consolidated Build Plan** | The overall build plan — Jarvis adds the intent router layer and the three additional agents on top. |
+DeepAgents 0.5.3+ exposes **Skills** as a first-class capability — reusable workflows, domain knowledge, and custom instructions the agent can invoke.
+
+**v1 ships with three skills:**
+
+| Skill | Purpose |
+|---|---|
+| `morning-briefing` | Synthesis of calendar + pipeline status + news scan. Opt-in; Rich triggers it. Candidate for Pattern C graduation. |
+| `talk-prep` | DDD Southwest progress tracker — what's done, what's next, where energy should go today |
+| `project-status` | Query Forge queue + specialist-agent fleet state + Graphiti knowledge for a project |
+
+Skills are tool compositions, not new code. They compose existing dispatch targets + Memory Store + Graphiti queries into a named capability.
+
+Fleet-master-index D28 ("Skills layer dropped — superseded by fine-tuning strategy") applied to specialist-agent roles. It does not apply to Jarvis — Jarvis is not fine-tuned and benefits from Skills as composable shortcuts.
 
 ---
 
-## Resolved Decisions (Carry Forward)
+## 7. The Learning Flywheel (per fleet v3 §7)
 
-These decisions are inherited from the Pipeline Orchestrator and Ship's Computer work.
-Do NOT reopen.
+Jarvis has its own learning track, structurally identical to Forge's.
+
+### Two Graphiti groups
+
+- `jarvis_routing_history` — dispatch decisions + outcomes + human redirects
+- `jarvis_ambient_history` — watcher firings + notification outcomes + human dismisses
+
+### `jarvis.learning` module
+
+Same pattern as `forge.learning`. Inside the Jarvis process (module, not separate agent — per fleet v3 D45 deferring meta-agent split). Detects patterns in routing priors and ambient behaviour. Proposes `CalibrationAdjustment` entities. Rich confirms via CLI or notification round-trip.
+
+### Implicit metrics
+
+- **Routing**: redirection rate ("actually, try that with Opus") as the first-order correction signal. Retry rate and cost-adjusted satisfaction once baselines are established.
+- **Ambient**: dismiss rate on proactive notifications; response latency; whether the notification was acted on.
+
+### Trace-richness from day one
+
+Per ADR-FLEET-001, every `jarvis_routing_history` and `jarvis_ambient_history` entry captures the full reasoning trace: tool-call sequence, subagent task IDs, cost/latency per model call, Rich's response text (not just button presses), environmental context.
+
+This compounds. Every session makes future sessions better. Every redirect sharpens future routing. Every dismissed notification refines Pattern B thresholds.
+
+---
+
+## 8. Infrastructure Dependencies
+
+All inherited from fleet substrate. No new infrastructure required.
+
+| Dependency | Role in Jarvis |
+|---|---|
+| **NATS JetStream** | Fleet event bus, adapter↔Jarvis, Jarvis↔Forge (via `pipeline.build-queued.*`), Jarvis↔specialist-agents |
+| **`nats-core`** | Typed payloads, `AgentManifest`, `NATSKVManifestRegistry`, topic registry |
+| **DeepAgents 0.5.3+** | Core harness, `write_todos`, filesystem, `execute`, `task`, `AsyncSubAgent`, `interrupt()`, Memory Store, permissions, Skills, auto-summarisation |
+| **Graphiti / FalkorDB** | `jarvis_routing_history`, `jarvis_ambient_history`, general knowledge queries |
+| **vLLM on GB10** | `quick_local` subagent backing (Qwen3-Coder-Next) |
+| **Cloud providers** | Gemini 3.1 Pro, Claude Opus 4.7, GPT-5.4 — for respective subagents |
+| **Fleet registration via `fleet.register`** | Jarvis itself registers with `agent_id=jarvis`, intents for GPA tasks + meta-dispatch |
+
+---
+
+## 9. Hardware Topology
+
+| Machine | Role |
+|---|---|
+| **MacBook Pro M2 Max** | Primary Claude Desktop / planning environment; Dashboard client; CLI adapter host |
+| **Dell DGX Spark GB10 (128GB)** | Jarvis runs here. NATS, vLLM (quick_local backing), FalkorDB, ChromaDB, Reachy USB connection. Docker host. |
+| **Synology DS918+ NAS (32TB)** | Backup + archived traces per ADR-FLEET-001 retention policy |
+| **Reachy Mini ×2** | Scholar (tutoring interface, Study Tutor target) + Bridge (Jarvis interface). On order. |
+
+Connected via Tailscale mesh. NATS at `nats://100.x.y.z:4222`.
+
+---
+
+## 10. Resolved Decisions (Carry Forward)
+
+### Fleet-wide (from fleet-master-index D1-D39 and fleet v3 D40-D46)
 
 | # | Decision | Resolution |
-|---|----------|-----------|
-| D1 | Agent framework | LangChain DeepAgents SDK |
-| D2 | Reasoning model | Gemini 3.1 Pro API or Claude API (configurable) |
-| D3 | Implementation model | Claude Code SDK (cloud) or vLLM on GB10 (local) |
+|---|---|---|
+| D1 | Agent framework | LangChain DeepAgents SDK 0.5.3+ |
+| D2 | Reasoning model | Configurable per subagent (see §2) |
 | D4 | Event bus | NATS JetStream |
-| D5 | Two-model separation | Orchestration model MUST differ from implementation model |
-| D6 | NemoClaw | Rejected for now — not production-ready on DGX Spark (see `nemoclaw-assessment.md`) |
-| D7 | Tool interface stability | Tool signatures identical across cloud and local modes |
-| D8 | Multi-project | Concurrent pipelines with NATS topic prefix isolation |
-| D9 | Template strategy | Option C — enhance base + create adversarial template (harvest from production) |
-| D10 | ChromaDB over NVIDIA RAG | ChromaDB PersistentClient for vector storage |
-| D14 | Containerisation | Phase 2 — agents run in Docker containers for lifecycle management, concurrency, and fleet scaling. See big-picture-vision-and-durability.md. |
-| D15 | Agent discovery | Dynamic registration via NATS (CAN bus pattern). Agents self-announce capabilities to `fleet.register`. Routing table in `agent-registry` KV bucket. See ADR-004 in nats-core. |
+| D6 | NemoClaw | Rejected. Revisit Q3-Q4 2026. Hooks named but not built (D46). |
+| D14 | Containerisation | Jarvis runs in Docker container |
+| D15 | Agent discovery | Dynamic CAN-bus via `fleet.register` + `agent-registry` KV |
+| D35 | Confidence-gated checkpoints | Applied via Coach scores from specialist agents (when dispatched) |
+| D40 | Three surfaces, one substrate | Jarvis IS a DeepAgent; routing is tool selection |
+| D41 | Flywheel-via-calibration-loop fleet-wide | `jarvis.learning` + Graphiti groups |
+| D42 | Trace-richness by default | Per ADR-FLEET-001 from Jarvis v1 |
+| D43 | Model routing is a reasoning decision | Async subagents expose models; supervisor picks |
+| D44 | Selectively ambient, A+B for v1 | Pattern C as opt-in skill only |
+| D45 | Meta-agent split and harness auto-rewriting deferred | `jarvis.learning` is a module, not separate agent |
+| D46 | NemoClaw integration hooks named but not built | — |
+
+### Jarvis-specific (new)
+
+| # | Decision | Resolution |
+|---|---|---|
+| **J1** | Jarvis architecture | DeepAgent with dispatch tools; not a thin router |
+| **J2** | Four launch subagents | `deep_reasoner`, `adversarial_critic`, `long_research`, `quick_local` |
+| **J3** | Session model | Single supervisor, thread-per-session (adapter + time window) |
+| **J4** | Cross-session continuity | Memory Store + `jarvis_routing_history` + `jarvis_ambient_history` |
+| **J5** | Launch adapters | Telegram first, CLI wrapper second, Dashboard third, Reachy when hardware arrives |
+| **J6** | Launch skills | `morning-briefing`, `talk-prep`, `project-status` |
+| **J7** | Classification approach | Reasoning over capability descriptions, not rule-based signal matching. Opens D11 from v1 vision; resolves it in favour of reasoning-model-driven routing |
+| **J8** | GPA location | There is no separate GPA — Jarvis IS the GPA. Closes D12 from v1 vision |
 
 ---
 
-## New Decisions for `/system-arch` to Resolve
+## 11. Open Questions for `/system-arch` to Resolve
 
-| # | Question | Options | Considerations |
-|---|----------|---------|---------------|
-| D11 | Intent classification model | a) Local Nemotron Nano, b) Cloud API (fast/cheap tier), c) Rule-based matching against registered signals + LLM fallback | Latency matters for voice — Reachy needs fast response. Rule-based for registered signals, LLM for ambiguous. |
-| D12 | General Purpose Agent location | a) Co-located in jarvis repo, b) Separate repo/container | Co-location argument: it's the default/fallback. Separate container argument: follows the fleet pattern, independently scalable. |
-| D13 | Conversation context across agents | a) Each agent independent, b) Shared context via Graphiti, c) Jarvis maintains session state and passes to agents | Multi-turn conversations that span agents need thought. "Build that idea we just discussed" requires context handoff. |
-| D16 | Reachy Mini adapter architecture | a) Direct USB connection from GB10, b) Network-connected via Reachy SDK, c) Hybrid | Two Reachy units with different roles (Scholar vs Bridge) may need different adapter configs. |
-| D17 | Heartbeat timeout policy | a) Fixed 90s, b) Configurable per agent, c) Adaptive based on agent type | Heavy agents (GuardKit Factory) might legitimately go quiet for minutes during builds. |
+Questions that genuinely need architectural reasoning tomorrow:
 
----
+| # | Question | Notes |
+|---|---|---|
+| **JA1** | `jarvis_routing_history` schema fields — exact Pydantic shape | Follow ADR-FLEET-001 base schema + Jarvis-specific fields. Specialist architect agent can propose the structure. |
+| **JA2** | Ambient watcher resource limits — how many concurrent Pattern B watchers before we throttle? | DeepAgents 0.5.3 suggests `--n-jobs-per-worker 10` as a starting point for local dev. Need a defensible ceiling. |
+| **JA3** | Cross-adapter handoff — what happens when Rich starts a task on Telegram and continues on Reachy? | Options: (a) force same-thread by conversation ID if Rich chooses; (b) summary-bridge via Memory Store; (c) both. |
+| **JA4** | Skill discoverability — should skills be statically declared or dynamically registerable like NATS fleet? | v1 leans static. Future: skills-as-registered-capabilities is interesting but not v1. |
+| **JA5** | Rich's confirmation UX for `CalibrationAdjustment` proposals | CLI-based approval round-trip is the baseline. Should Telegram also support it? |
+| **JA6** | `quick_local` fallback when GB10 vLLM is under heavy load (AutoBuild running) | Candidate strategy: supervisor checks `system.health.vllm` and falls back to cloud cheap-tier for "quick" tasks. |
 
-## Build Sequence
-
-The Jarvis intent router depends on having at least one agent to dispatch to. Recommended
-build order:
-
-1. **GuardKit Factory** (already in progress — `guardkitfactory` repo)
-2. **NATS infrastructure + Fleet Compose** (NATS server, streams, KV buckets, agent-registry, docker-compose.fleet.yml)
-3. **Jarvis intent router** (this repo — thin, subscribes to `fleet.register`, routes via KV-backed registry)
-4. **General Purpose Agent** (broad tools, fast turnaround — first containerised agent to auto-register)
-5. **Ideation Agent** (weighted evaluation, divergent reasoning)
-6. **Product Owner Agent** (raw info → structured docs — FinProxy as first domain)
-7. **Architect Agent** (product docs → C4 + ADRs → conversation starter for `/system-arch`)
-8. **YouTube Planner** (weighted evaluation, research-intensive)
-9. **Adapters** (Telegram first — quickest to test, then Dashboard, then Reachy Mini when hardware arrives)
-
-Each agent is containerised (Dockerfile from `nats-asyncio-service` template) and
-auto-registers with Jarvis on startup via the CAN bus pattern. Steps 3-8 can overlap
-once NATS infrastructure exists. Scale any agent with `--scale` for parallel execution.
+Note: v1 vision's D11 (intent classification model) and D12 (GPA location) are **resolved** by the Jarvis-IS-GPA framing. Neither is an open question anymore. D13 (cross-agent context) is answered by the Memory Store + thread-per-session model (J3, J4). D16 (Reachy adapter topology) and D17 (heartbeat timeout) remain open but are adapter-level and heartbeat-config decisions, not foundational.
 
 ---
 
-## YouTube Content Angle
+## 12. Constraints
 
-Building Jarvis is a multi-video content arc for the channel:
+- **Local-first where feasible.** `quick_local` defaults handle privacy-sensitive and low-stakes work on GB10.
+- **Cost discipline.** Per fleet v3 §4, supervisor defaults to cheapest-that-fits; escalation on reasoning need. Cost budget observable via trace-rich `jarvis_routing_history`.
+- **Voice latency budget.** Reachy Mini voice interaction should feel conversational — sub-2-second target for reactive responses. Async subagents are for *non-voice* long-running work; voice reactive stays on fast tier (Gemini Flash or similar).
+- **No horizontal scaling.** Single Jarvis supervisor process per user, per GB10 (mirrors Forge ADR-ARCH-027).
+- **Best-effort availability.** No SLA. Bounded by GB10 uptime + Tailscale + LLM provider uptime (mirrors Forge ADR-ARCH-029).
+- **Preview-feature dependency.** `AsyncSubAgent` is preview in 0.5.3. Pin `>=0.5.3, <0.6` with monitoring on 0.6.x release notes.
 
-- **"I'm Building My Own Jarvis"** — the vision video (browse, emotional hook)
-- **"From Specialist to Assistant"** — the journey from single-purpose agents to general intelligence (building in public)
-- **"Why I'm Not Using NemoClaw (Yet)"** — honest assessment of NVIDIA's marketing vs reality (search + browse)
-- **"Giving My Robot a Brain"** — Reachy Mini integration (browse, hardware porn)
-- **"The Missing Piece Was an Intent Router"** — technical insight video (search)
+---
 
-This feeds directly into the YouTube Planner once it's operational — dogfooding the system.
+## 13. Build Sequence
+
+Prerequisites (in order):
+
+1. ✅ `nats-core` shipping at 98% coverage
+2. ✅ `nats-infrastructure` configured
+3. ◻ NATS running on GB10, integration tests passing
+4. ◻ Specialist-agent Phase 3 (NATS-callable) — enables Jarvis→architect dispatch
+5. ◻ Forge Phase 4 (at minimum partially) — enables Jarvis→build-queue
+6. ◻ DeepAgents 0.5.3 validated on our codebase
+
+Jarvis build:
+
+1. **`/system-arch` on Jarvis** (tomorrow, 20 April 2026) — produces ARCHITECTURE.md + ADRs
+2. `/system-design` — component boundaries, `jarvis_routing_history` schema, skill plugin interface
+3. `/feature-spec × N` — one per major capability (dispatch, async subagents, skills, ambient watchers, learning)
+4. `/feature-plan × N`
+5. `autobuild × N` — waves, sequential within Jarvis's own DeepAgent harness
+6. Validation — Telegram adapter first; dispatch to architect-agent; dispatch to forge; routing learning enabled
+
+v1 ship target: **June 2026** (after Forge Phase 4 completes, same hardware, coincident trace-rich learning).
+
+---
+
+## 14. YouTube Content Angle
+
+The Jarvis build is a multi-video arc:
+
+- **"Building Jarvis — the Tony Stark Aesthetic"** — vision + why-this-not-chatbot (browse)
+- **"One reasoning model that knows which reasoning model to use"** — the model-routing insight (search + browse)
+- **"I Built a Learning Loop for Every Agent"** — Karpathy parallel + flywheel narrative (browse, technical)
+- **"Giving My Robot a Brain"** — Reachy Mini integration (browse, hardware)
+- **"Why I'm Not Using NemoClaw (Yet)"** — D6 rationale with driver-590 update (search + browse)
+- **"Three Agents, One Substrate"** — fleet coherence story (browse, architectural)
+
+The "one reasoning model that knows which reasoning model" line is the hook for the browse-algorithm version; the flywheel story is the deeper technical content.
+
+---
+
+## 15. Source Documents
+
+Materials this vision was built from:
+
+| Source | Contribution |
+|---|---|
+| fleet-architecture-v3-coherence-via-flywheel.md | Keystone framing: three surfaces, Jarvis-IS-GPA, flywheel-per-surface, D40-D46 |
+| ADR-FLEET-001 | Trace-richness commitment — basis for `jarvis_routing_history` schema |
+| forge-pipeline-architecture.md v2.2 | Jarvis→Forge trigger pattern (ADR-SP-014 Pattern A); capability-driven dispatch |
+| forge/docs/architecture/ARCHITECTURE.md + ADRs | Pattern source for ADR-ARCH-015, ADR-ARCH-016, ADR-ARCH-019, ADR-ARCH-020 adoption |
+| DeepAgents 0.5.3 docs (fetched 19 April 2026) | `AsyncSubAgent`, Memory Store, Skills, preview-feature warnings |
+| The Karpathy Loop video transcript (Nate, 2026-04-19) | Flywheel pattern source, trace-richness insight, Karpathy Triplet, safety concerns |
+| Meta-Harness paper (Stanford, 2026 preprint) | External validation of trace-rich learning; Full-filesystem proposer context |
+| Original jarvis-vision.md v1 (March 2026) | What to carry forward: adapter pattern, NATS topic taxonomy, hardware topology. What to supersede: thin-router framing, GPA-as-separate-agent, six-agent fleet list. |
+| Original jarvis-architecture-conversation-starter.md | Preferred decisions ADR-P1-01..06 — most carry forward with fleet v3 refinements |
+| 19 April 2026 conversation (Rich + Claude) | Tony Stark mini-Jarvis framing, model-routing-as-reasoning insight, async subagents integration decision, selectively-ambient three-pattern model |

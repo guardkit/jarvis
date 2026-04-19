@@ -1,0 +1,157 @@
+# Context Manifest — Jarvis
+#
+# Machine-readable cross-repo dependency map for GuardKit context resolution.
+# Used by the Forge orchestrator to assemble --context flags when running
+# /feature-spec, /feature-plan, and other GuardKit commands for Jarvis.
+#
+# Paths are relative to the sibling repo root (assumes all repos checked out
+# under a common parent directory, e.g. ~/Projects/appmilla_github/).
+#
+# Categories:
+#   architecture  — system-level docs consumed by /system-arch, /system-design
+#   contracts     — interface definitions, payload schemas, API references
+#   specs         — system specs consumed by /feature-spec
+#   decisions     — ADRs that constrain this repo's design
+#   source        — key source files that define integration interfaces
+#   framing       — fleet-level vision/framing docs (new category)
+#
+# Created: 19 April 2026
+
+repo: jarvis
+description: >
+  General Purpose DeepAgent with dispatch tools. Attended-surface of the fleet —
+  Rich's Tony-Stark-aesthetic assistant. Routes reasoning to async subagents (model
+  selection), dispatches to specialist agents via NATS, queues builds to Forge
+  via JetStream. Selectively ambient behaviour via skills and watchers.
+
+dependencies:
+
+  nats-core:
+    path: ../nats-core
+    relationship: "Jarvis publishes/subscribes NATS events, registers via fleet.register, dispatches via agents.command.*, queues builds via pipeline.build-queued.*, uses typed payload schemas"
+    key_docs:
+      - path: docs/design/specs/nats-core-system-spec.md
+        category: specs
+        description: "Payload schemas, topic registry, client API surface"
+
+      - path: docs/design/contracts/agent-manifest-contract.md
+        category: contracts
+        description: "AgentManifest, ToolCapability, IntentCapability — Jarvis publishes its own manifest and consumes others'"
+
+      - path: docs/design/decisions/ADR-001-nats-as-event-bus.md
+        category: decisions
+        description: "Why NATS, JetStream persistence model"
+
+      - path: docs/design/decisions/ADR-004-dynamic-fleet-registration.md
+        category: decisions
+        description: "KV-backed manifest registry, heartbeat, capability announcement — basis for Jarvis's capability-driven dispatch"
+
+      - path: src/nats_core/manifest.py
+        category: source
+        description: "AgentManifest Pydantic model — the wire format Jarvis reads/publishes"
+
+      - path: src/nats_core/topics.py
+        category: source
+        description: "Topic namespace constants — Jarvis must use these singular topics"
+
+      - path: src/nats_core/payloads/
+        category: source
+        description: "BuildQueuedPayload, ApprovalRequestPayload, NotificationPayload — wire formats for Jarvis's dispatch tools"
+
+  forge:
+    path: ../forge
+    relationship: "Jarvis triggers builds by publishing BuildQueuedPayload to pipeline.build-queued.{feature_id} per ADR-SP-014 Pattern A; receives progress via notifications"
+    key_docs:
+      - path: docs/research/ideas/fleet-architecture-v3-coherence-via-flywheel.md
+        category: framing
+        description: "Keystone framing — three surfaces, Jarvis-IS-GPA, flywheel per surface, D40-D46"
+
+      - path: docs/research/ideas/ADR-FLEET-001-trace-richness.md
+        category: framing
+        description: "Fleet-wide trace-richness commitment — basis for jarvis_routing_history schema"
+
+      - path: docs/architecture/ARCHITECTURE.md
+        category: architecture
+        description: "Forge architecture — source of pattern (capability-driven dispatch, no static config, DeepAgents built-ins)"
+
+      - path: docs/architecture/decisions/ADR-ARCH-015-capability-driven-dispatch.md
+        category: decisions
+        description: "Capability-driven dispatch pattern Jarvis also adopts"
+
+      - path: docs/architecture/decisions/ADR-ARCH-016-fleet-is-the-catalogue.md
+        category: decisions
+        description: "No pre-coded catalogue — Jarvis inherits this pattern for its dispatch tools"
+
+      - path: docs/architecture/decisions/ADR-ARCH-019-no-static-behavioural-config.md
+        category: decisions
+        description: "Reasoning, not config — Jarvis inherits this for its routing decisions"
+
+      - path: docs/architecture/decisions/ADR-ARCH-020-adopt-deepagents-builtins.md
+        category: decisions
+        description: "DeepAgents 0.5.3 built-ins — Jarvis also adopts write_todos, filesystem, execute, task, interrupt"
+
+      - path: docs/architecture/decisions/ADR-ARCH-031-async-subagents-for-long-running-work.md
+        category: decisions
+        description: "Async subagents for long-running work — parallel decision Jarvis makes for its four launch subagents"
+
+      - path: docs/research/forge-pipeline-architecture.md
+        category: architecture
+        description: "Anchor v2.2 — ADR-SP-014 Pattern A (Jarvis→Forge trigger), SP-016 singular topics"
+
+      - path: docs/research/ideas/fleet-master-index.md
+        category: framing
+        description: "Fleet repo map, resolved decisions D1-D39 + D40-D46 addendum"
+
+  specialist-agent:
+    path: ../specialist-agent
+    relationship: "Jarvis dispatches to architect, product-owner, ideation, ux-designer roles via NATS agents.command.{agent_id}; consumes ResultPayload"
+    key_docs:
+      - path: docs/research/ideas/architect-agent-vision.md
+        category: architecture
+        description: "Three roles, three-layer architecture, delegation targets"
+
+      - path: src/specialist_agent/config/architect-role.yaml
+        category: contracts
+        description: "Architect role configuration — capabilities Jarvis can invoke"
+
+      - path: src/specialist_agent/config/product-owner-role.yaml
+        category: contracts
+        description: "Product Owner role configuration — capabilities Jarvis can invoke"
+
+      - path: src/specialist_agent/config/ideation-role.yaml
+        category: contracts
+        description: "Ideation role configuration — capabilities Jarvis can invoke"
+
+  nats-infrastructure:
+    path: ../nats-infrastructure
+    relationship: "Jarvis runs on the NATS infrastructure deployed by this repo; uses FLEET, AGENTS, JARVIS, NOTIFICATIONS streams"
+    key_docs:
+      - path: docs/design/decisions/ADR-001-standalone-infra-repo.md
+        category: decisions
+        description: "Why infrastructure is separate"
+
+      - path: docs/design/decisions/ADR-002-account-multi-tenancy.md
+        category: decisions
+        description: "NATS account isolation — affects Jarvis's connection config"
+
+  guardkit:
+    path: ../guardkit
+    relationship: "Jarvis will (future) use GuardKit slash commands via subprocess for some skills; also source of template for building Jarvis itself"
+    key_docs:
+      - path: installer/core/templates/langchain-deepagents/
+        category: contracts
+        description: "Base template Jarvis was scaffolded from"
+
+      - path: installer/core/templates/nats-asyncio-service/
+        category: contracts
+        description: "Adapter template for Jarvis's adapters (Telegram, CLI, Dashboard, Reachy)"
+
+internal_docs:
+  description: "Key docs within the jarvis repo itself (for completeness / Jarvis self-awareness)"
+  always_include:
+    - docs/research/ideas/jarvis-vision.md
+    - docs/research/ideas/jarvis-architecture-conversation-starter.md
+  research:
+    - docs/research/ideas/general-purpose-agent.md
+    - docs/research/ideas/nemoclaw-assessment.md
+    - docs/research/ideas/reachy-mini-integration.md
