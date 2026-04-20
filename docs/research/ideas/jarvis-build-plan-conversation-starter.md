@@ -1,13 +1,99 @@
-# Conversation Starter: Jarvis Build-Out — Scope, Build Plan, `guardkit init`
+# Conversation Starter: Jarvis Build-Out — Phase Pairs Generation Brief
 
-## Date: 19 April 2026
-## Status: Ready — scopes today's build-planning session, assumes tomorrow's `/system-arch` lands as planned
+## Date: 19 April 2026 (updated 20 April 2026)
+## Status: Decisions landed; `guardkit init` complete. **Next action:** use this document as input to a new Claude Code conversation that produces Phase 1 scope + build plan pair (and further phase pairs as needed), following the specialist-agent pattern.
 ## Repo: `guardkit/jarvis`
+## Instruction to Claude in the next conversation: see §0 below.
+
+---
+
+## 0. Instruction for Claude (read this first)
+
+**You are being given this document as input to produce phase-pair planning artefacts for the Jarvis repo**, following the exact pattern established in `specialist-agent/docs/research/ideas/`. This conversation starter contains the resolved scope, decisions, and feature breakdown — but **it is not itself a build plan**. Your job is to generate the proper pairs.
+
+### Reference pattern (read these first — they are the template)
+
+| File | Role |
+|---|---|
+| `/Users/richardwoollcott/Projects/appmilla_github/specialist-agent/docs/research/ideas/phase1-output-quality-scope.md` | **Scope doc template.** Motivation, feature descriptions, changes-required, do-not-change list, success criteria, files-that-will-change table. Written as input to `/feature-spec`. |
+| `/Users/richardwoollcott/Projects/appmilla_github/specialist-agent/docs/research/ideas/phase1-build-plan.md` | **Build plan template.** Status log, feature summary with dependencies, detailed per-feature change descriptions, exact GuardKit command sequence with full `--context` flags, risk mitigation, timeline, "after this phase" forward pointer. |
+
+**Match the shape of these documents precisely.** Tone, section ordering, table formats, the status-log table, the command blocks with `--context` arrays, the Do-Not-Change section, the Files That Will Change table, the Expected Timeline table, the Risk Mitigation table, and the "After Phase N" forward pointer are all mandatory.
+
+### What to produce
+
+**Phase 1 first, in full:**
+
+1. `/Users/richardwoollcott/Projects/appmilla_github/jarvis/docs/research/ideas/phase1-supervisor-scaffolding-scope.md`
+2. `/Users/richardwoollcott/Projects/appmilla_github/jarvis/docs/research/ideas/phase1-build-plan.md`
+
+Phase 1 covers **FEAT-JARVIS-001 only** (Project Scaffolding, Supervisor Skeleton & Session Lifecycle). It's the foundation phase and deserves its own pair because every subsequent feature depends on it landing cleanly.
+
+**After Phase 1, propose the phase grouping for the remaining v1 features** and confirm with Rich before generating Phase 2+ pairs. Suggested grouping to validate:
+
+- **Phase 2 — Dispatch Foundations**: FEAT-JARVIS-002 (Core Tools + Dispatch Tools) + FEAT-JARVIS-003 (Async Subagents). Both depend only on 001; both are about giving the supervisor its dispatch vocabulary.
+- **Phase 3 — Fleet Integration**: FEAT-JARVIS-004 (NATS Fleet Registration + Specialist Dispatch) + FEAT-JARVIS-005 (Build Queue Dispatch to Forge). Natural pairing — 004 establishes the fleet contract, 005 consumes it.
+- **Phase 4 — Surfaces**: FEAT-JARVIS-006 (Telegram Adapter) + FEAT-JARVIS-007 (Skills + Memory Store). Both are user-facing surfaces rather than infrastructure.
+
+Ask Rich whether this grouping is right before producing Phase 2+ docs. He may want finer or coarser slices.
+
+### Inputs you should read before writing anything
+
+1. **This document** — `jarvis-build-plan-conversation-starter.md` — for the resolved decisions, Q2/3/4/5/6/7 answers, feature descriptions, scope-preserving rules, and risk register.
+2. **The two reference pattern files above** — the specialist-agent phase1 pair. Match their shape.
+3. `jarvis/docs/research/ideas/jarvis-vision.md` v2 — the product vision.
+4. `jarvis/docs/research/ideas/jarvis-architecture-conversation-starter.md` v2 — the `/system-arch` inputs (ADR-J-P1..P10, JA1-JA9 open questions).
+5. `forge/docs/research/ideas/fleet-architecture-v3-coherence-via-flywheel.md` — the keystone fleet decision doc (D1-D46).
+6. `forge/docs/research/ideas/ADR-FLEET-001-trace-richness.md` — the trace schema Jarvis must honour from day one.
+7. `forge/` — pattern reference. Forge's 30 ADRs + ARCHITECTURE.md + its own build-plan document if present.
+8. `specialist-agent/docs/reviews/deepagents-sdk-2026-04.md` — justifies the DeepAgents 0.5.3 pin.
+9. `jarvis/.guardkit/context-manifest.yaml` — the context manifest landed 19 April.
+10. `jarvis/CLAUDE.md` (root) — the post-init project seed.
+
+### Critical constraints to honour
+
+- **`/system-arch` has NOT yet run.** Target: 21 April 2026. It produces `docs/architecture/ARCHITECTURE.md`, C4 diagrams, and ADR-J-001..N (including a DeepAgents pin ADR). Phase 1 scope + build plan will be written *assuming* those lands; the first step in the Phase 1 build plan's command sequence should be `/system-arch`, with the scope doc noting what it produces as input to the subsequent `/system-design` step.
+- **`guardkit init` IS complete** (see §1.6 below for observed output). Python scaffolding (`src/`, `tests/`, `pyproject.toml`) did **not** land at init — this is correct; it's part of FEAT-JARVIS-001.
+- **FEAT-JARVIS-008 (learning flywheel) is deferred to v1.5** per Q10.2. Do not include it in any v1 phase pair. When it returns, it gets its own phase pair.
+- **FEAT-JARVIS-006 is Telegram-only** for v1 per Q10.3. CLI and Dashboard adapters move to v1.5 (FEAT-JARVIS-009) with their own phase pair.
+- **DeepAgents `>=0.5.3,<0.6` pin** must be honoured in Phase 1's `pyproject.toml` subtask.
+- **Trace richness from day one** per ADR-FLEET-001 — every `*_history` write uses the full schema starting at FEAT-JARVIS-004, even though the `jarvis.learning` reader defers to v1.5.
+- **Scope-preserving rules in §2 apply** — no new agent repos until v1 ships, no fleet-decision changes mid-build, Rich-in-the-loop for learning.
+- **Holding the line on D40, D45, ADR-ARCH-019 — see §7 watch-points.**
+
+### Output format reminders (from specialist-agent pair)
+
+- Each scope doc header: `## For: <what command consumes it>`, `## Date:`, `## Status:`, `## Context:`.
+- Each build plan header: `## For: <purpose>`, `## Date:`, `## Status:`, `## Repo:`, `## Machine:`.
+- Build plan must have a **Status Log** table, populated with the known events to date (`guardkit init` on 20 April, `/system-arch` target 21 April).
+- Build plan must have a **GuardKit Command Sequence** with fully-spelled-out `--context` arrays for each `/feature-spec` and `/feature-plan` invocation — see specialist-agent's Step 1–Step 4 blocks for the exact shape.
+- Build plan must have a **Do-Not-Change** section calling out fleet v3 decisions, scope-preserving rules, and the template-inherited patterns.
+- Build plan must have a **Files That Will Change** table.
+- Build plan must have an **Expected Timeline** table and an **After Phase N: What Comes Next** section.
+- Scope doc must have a **Do-Not-Change** section, **Success Criteria** list, and a **Files That Will Change** table.
+
+### Quality bar
+
+Treat each phase pair as a production-quality planning artefact that Rich can hand to `/feature-spec` the next morning without further editing. The specialist-agent Phase 1 pair is the quality bar — match or exceed it.
+
+---
+
 ## Target outcomes of this session:
-1. Confirmed scope doc for Jarvis v1
-2. Build plan (feature breakdown, prerequisites, sequencing) — patterned on Forge's
-3. Decided `guardkit init` invocation, ready to run
-4. Known open questions parked for tomorrow's `/system-arch` or later sessions
+1. ✅ Confirmed scope doc for Jarvis v1 (below, as revised 20 April)
+2. ✅ Build plan (feature breakdown, prerequisites, sequencing) — patterned on Forge's
+3. ✅ `guardkit init langchain-deepagents-orchestrator` executed (20 April morning)
+4. **Next:** generate Phase 1 scope + build plan pair per the instruction in §0 above
+
+## 20 April update — summary of decisions
+
+- **Q10.2** — FEAT-JARVIS-008 (learning flywheel) deferred to v1.5. Trace-richness schema (ADR-FLEET-001) stays on from day one; the pattern detector + Rich-in-the-loop CLI defer.
+- **Q10.3** — Adapters narrowed: **Telegram only** for v1. CLI and Dashboard adapters move to v1.5 (FEAT-JARVIS-009).
+- **Q10.5** — `talk-prep` Pattern C ambient slot reserved. `jarvis.skills.talk_prep` scaffolded as a module in FEAT-JARVIS-007; ambient nudge logic lands in v1.5 (FEAT-JARVIS-010).
+- **Q10.4** — `jarvis.learning` stays a module, not a separate DeepAgent. D45 holds.
+- **Q10.6** — First real FEAT-JARVIS-005 test case: a genuinely useful Jarvis internal improvement, not a canned `hello-world`.
+- **Q10.7** — `jarvis purge-traces` CLI defers to v1.1.
+- **Scaffolding reframed as a feature.** The original §11 "Step 4 — pin bump" presupposed that `guardkit init` rendered `requirements.txt` / `pyproject.toml`. It didn't — the template's pattern layer (20 scaffold files) is consumed by AutoBuild, not at init time. So `pyproject.toml` creation, Python `src/` layout, CLI entrypoint, and the DeepAgents `>=0.5.3,<0.6` pin all move **inside FEAT-JARVIS-001** and land via the proper `/system-design → /feature-spec → /feature-plan → AutoBuild` pipeline. The pin bump is no longer a standalone prerequisite — it is an architectural decision recorded by tomorrow's `/system-arch` and implemented as a subtask of FEAT-JARVIS-001.
+- **Revised v1 timeline:** ~11–12 working days (down from 15), reflecting -008 deferral and the adapter narrowing.
 
 ---
 
@@ -23,7 +109,7 @@ This document covers the build — not the architecture. Architecture is settled
 - `jarvis/docs/research/ideas/jarvis-architecture-conversation-starter.md` v2 (inputs for `/system-arch`)
 - `forge/docs/research/ideas/ADR-FLEET-001-trace-richness.md` (trace schema commitment)
 
-Tomorrow's `/system-arch` on Jarvis (20 April) will produce `ARCHITECTURE.md`, C4 diagrams, and ADR-J-P1..P10. This build plan assumes those land and feature work follows.
+Tomorrow's `/system-arch` on Jarvis (21 April) will produce `ARCHITECTURE.md`, C4 diagrams, and ADR-J-P1..P10. This build plan assumes those land and feature work follows.
 
 ---
 
@@ -68,23 +154,40 @@ These map 1:1 onto the patterns Jarvis vision v2 §8 and the `/system-arch` conv
 
 The template's `manifest.json` lists `production_ready: false, learning_resource: true, reference_implementation: true, confidence_score: 85.0`. Interpretation: it's the *closest fit* but Jarvis may be the first production user. Same relationship Forge and specialist-agent had with their templates — expect to contribute improvements back. Acceptable trade-off.
 
-### Post-`init` pin bump (required)
+### DeepAgents pin requirement (handled inside FEAT-JARVIS-001)
 
-The template is pinned `deepagents >= 0.4.11`. Per the specialist-agent SDK review (`specialist-agent/docs/reviews/deepagents-sdk-2026-04.md`), the latest stable is 0.5.3 (15 April 2026), which includes **`AsyncSubAgentMiddleware`** — the preview feature that makes Jarvis's four-subagent dispatch work naturally.
+The template's `manifest.json` pins `deepagents >= 0.4.11`. Per the specialist-agent SDK review (`specialist-agent/docs/reviews/deepagents-sdk-2026-04.md`), the latest stable is 0.5.3 (15 April 2026), which includes **`AsyncSubAgentMiddleware`** — the preview feature that makes Jarvis's four-subagent dispatch work naturally.
 
-**First commit after `guardkit init`**: bump `requirements.txt` and `pyproject.toml` to `deepagents >= 0.5.3, < 0.6`, matching Forge and Study Tutor. Record this decision in-repo (ADR-J-001 or as a note under `docs/architecture/`).
+**20 April correction:** `guardkit init` does not render `requirements.txt` / `pyproject.toml` at init time (the 20 pattern-layer scaffold files are consumed by AutoBuild). So there is no file to "bump" today. Instead:
 
-### Post-`init` pre-existing content to preserve
+1. Tomorrow's `/system-arch` records the `deepagents >= 0.5.3, < 0.6` pin as an ADR (likely ADR-J-001 or similar) — an architectural constraint, not a side-note.
+2. FEAT-JARVIS-001 creates `pyproject.toml` with the correct pin as part of its scaffolding subtasks.
+3. Same pattern as Forge and Study Tutor — pin lives in the feature that creates the dependency file, not in a separate pre-commit step.
 
-The Jarvis repo already contains:
+This reframing is documented in the 20 April update block at the top of this document.
 
-- `docs/research/ideas/` — vision v2, conversation-starter v2, general-purpose-agent, nemoclaw-assessment, reachy-mini-integration (keep all)
-- `docs/product/architect-greenfield/architecture.md` — from an earlier architect-greenfield run (pre-fleet-v3). **Flag as superseded** once tomorrow's `/system-arch` lands; don't delete yet (it's useful evidence of how the framing shifted).
+### Post-`init` pre-existing content preserved (20 April — confirmed)
+
+The Jarvis repo contains (all preserved through init):
+
+- `docs/research/ideas/` — vision v2, conversation-starter v2, general-purpose-agent, nemoclaw-assessment, reachy-mini-integration (kept)
+- `docs/product/architect-greenfield/architecture.md` — from an earlier architect-greenfield run (pre-fleet-v3). **Flag as superseded** once tomorrow's `/system-arch` lands; don't delete yet (useful evidence of how the framing shifted).
 - `docs/product/po-extract/` and `docs/product/gpa-idea/` — 30 PO extract outputs and 7 gpa-idea outputs. **Valuable raw material** — treat as feature-spec input candidates when we reach `/feature-spec`.
-- `.guardkit/context-manifest.yaml` — already landed (fleet v3 session), references nats-core, forge, specialist-agent, nats-infrastructure, guardkit.
+- `.guardkit/context-manifest.yaml` — landed 19 April (fleet v3 session), references nats-core, forge, specialist-agent, nats-infrastructure, guardkit.
 - `tasks/` — currently empty; populated by this build plan.
 
-The `guardkit init` command will add `.claude/`, `agents/`, `manifest.json`, `settings.json`, and template scaffolds under `src/`, `tests/`, `docs/`. Existing `docs/research/` and `docs/product/` will be merged, not overwritten (per the template resolver's skip logic).
+### What `guardkit init` actually landed (20 April)
+
+Observed output:
+
+- `.claude/` — 14 agent files (7 orchestrator specialists × base + ext), 15 rule files, `CLAUDE.md`, `commands/`, `manifest.json`, `rules/`, `task-plans/`
+- `.guardkit/.mcp.json` — MCP config
+- `.guardkit/graphiti.yaml` — copied from `agentic-dataset-factory`, `project_id=jarvis`
+- `CLAUDE.md` (repo root) — seeded with project purpose, Python stack, LangChain DeepAgents SDK
+- **No** `src/`, `tests/`, `pyproject.toml`, `requirements.txt` — the pattern layer's 20 scaffold files are deferred to AutoBuild / `guardkit render` (per the init tip).
+- Graphiti seeding skipped (`GOOGLE_API_KEY` not set); Graphiti seeding is opt-in and can be revisited later.
+
+Existing `docs/research/` and `docs/product/` trees were not disturbed.
 
 ---
 
@@ -133,12 +236,13 @@ Mirrors fleet v3 §8 ("Jarvis v1") exactly. Re-stating here so this document sta
 
 ### Hard prerequisites (blocking — can't start FEAT-JARVIS-001)
 
-- [ ] **Tomorrow's `/system-arch` complete.** Produces `docs/architecture/ARCHITECTURE.md`, C4 diagrams, ADR-J-P1..P10. Without this, feature IDs and acceptance criteria are ungrounded. **Target: 20 April 2026.**
-- [ ] **`guardkit init langchain-deepagents-orchestrator` executed.** Scaffolds `src/`, `tests/`, `.claude/`, `manifest.json`. Baseline commit before feature work.
-- [ ] **DeepAgents pin bumped to `>=0.5.3, <0.6`.** Required for `AsyncSubAgentMiddleware`. First post-init commit.
+- [ ] **`/system-arch` complete.** Produces `docs/architecture/ARCHITECTURE.md`, C4 diagrams, ADR-J-001..N (including the DeepAgents 0.5.3 pin ADR). Without this, feature IDs and acceptance criteria are ungrounded. **Target: 21 April 2026.**
+- [x] **`guardkit init langchain-deepagents-orchestrator` executed.** Landed 20 April. `.claude/` agents/rules, `CLAUDE.md`, `.guardkit/graphiti.yaml` present. Python scaffold deferred to FEAT-JARVIS-001 per the reframing above.
 - [x] **nats-core library.** 98% coverage, shipping. Contains `AgentManifest`, `CommandPayload`, `ResultPayload`, `BuildQueuedPayload`, `NotificationPayload`, `NATSKVManifestRegistry`. Used by Forge and specialist-agent in production.
 - [x] **Fleet-wide ADR-FLEET-001 landed.** Trace-richness schema committed. Defines what Jarvis must capture per decision.
 - [x] **`.guardkit/context-manifest.yaml` in Jarvis repo.** References nats-core, forge, specialist-agent, nats-infrastructure, guardkit. Landed 19 April.
+
+*Removed from prerequisites:* "DeepAgents pin bumped to `>=0.5.3, <0.6`" — this is no longer a pre-feature step; it is implemented inside FEAT-JARVIS-001 as a scaffolding subtask, informed by the pin ADR from `/system-arch`.
 
 ### Soft prerequisites (valuable but not blocking)
 
@@ -166,67 +270,76 @@ Already-enumerated in `jarvis-architecture-conversation-starter.md` v2 §13. Sum
 
 ---
 
-## 4. Feature Breakdown — FEAT-JARVIS-001..008
+## 4. Feature Breakdown — FEAT-JARVIS-001..007 (v1)
 
-Patterned on Forge's FEAT-FORGE-001..007. Each feature ≈ 2-4 days, suitable for AutoBuild per feature with `/task-review` gates.
+Patterned on Forge's FEAT-FORGE-001..007. Each feature ≈ 2-4 days, suitable for AutoBuild per feature with `/task-review` gates. FEAT-JARVIS-008 (learning flywheel) is deferred to v1.5 per the 20 April update.
 
 | # | Feature | Depends On | Est. | Purpose |
 |---|---|---|---|---|
-| **FEAT-JARVIS-001** | Supervisor Skeleton & Session Lifecycle | — | 2-3 days | DeepAgent supervisor via `create_deep_agent()` (or `create_agent()` per `/system-arch` outcome). Session type, thread-per-session model, Memory Store integration, startup/shutdown lifecycle. `jarvis` CLI entrypoint. Smoke test: supervisor answers a trivial question via CLI. |
+| **FEAT-JARVIS-001** | Project Scaffolding, Supervisor Skeleton & Session Lifecycle | — | 3-4 days | **Includes all Python scaffolding** — `pyproject.toml` with `deepagents>=0.5.3,<0.6` pin, `src/{agents,tools,prompts,config,infrastructure,shared}/` layer structure per template, `tests/` layout, ruff config. DeepAgent supervisor via `create_deep_agent()` (or `create_agent()` per `/system-arch` outcome). Session type, thread-per-session model, Memory Store integration, startup/shutdown lifecycle. `jarvis` CLI entrypoint. Smoke test: supervisor answers a trivial question via CLI. |
 | **FEAT-JARVIS-002** | Core Tools & Capability-Driven Dispatch Tools | 001 | 2-3 days | Non-dispatch tools (file read, web search, calendar stub, calculator), dispatch tools (`call_specialist`, `queue_build`), capability catalogue reader reading from `nats-core` KV manifest registry. Same pattern as Forge ADR-ARCH-015/016. Smoke test: supervisor lists available capabilities and picks correctly for three canned prompts. |
 | **FEAT-JARVIS-003** | Async Subagents for Model Routing | 001 | 2-3 days | Four `AsyncSubAgent` instances at startup: `deep_reasoner`, `adversarial_critic`, `long_research`, `quick_local`. ASGI transport (per Forge ADR-ARCH-031 precedent). Cost + latency signals in descriptions. Supervisor dispatches to subagents via `start_async_task`/`check_async_task`. Smoke test: each subagent callable; supervisor picks `quick_local` for a trivial lookup and `deep_reasoner` for a reasoning task. |
 | **FEAT-JARVIS-004** | NATS Fleet Registration & Specialist Dispatch | 002 | 2-3 days | Jarvis registers on `fleet.register` with `AgentManifest`. `NATSKVManifestRegistry` discovers specialist-agent fleet. `call_specialist` tool issues `agents.command.{agent_id}` and awaits `agents.result.{agent_id}`. Timeout handling, retry with redirect. Smoke test: Jarvis dispatches to a running `specialist-agent --role architect` and receives `ResultPayload` with Coach score. |
-| **FEAT-JARVIS-005** | Build Queue Dispatch (Jarvis → Forge) | 004 | 1-2 days | `queue_build` tool publishes `BuildQueuedPayload` to `pipeline.build-queued.{feature_id}` per ADR-SP-014 Pattern A. No await; fire-and-forget pattern. Notification channel for Forge progress updates (`pipeline.stage-complete.*`). Smoke test: Jarvis queues a build, Forge consumer picks it up, Jarvis receives stage-complete notifications. |
-| **FEAT-JARVIS-006** | Adapters — Telegram + CLI + Dashboard | 001 | 3-4 days | Three adapters each as `nats-asyncio-service`-patterned module publishing `jarvis.command.*` / subscribing `jarvis.notification.*`. Adapter ↔ session correlation via session_id in payload. Smoke test: each adapter round-trips a "hello" to Jarvis. |
-| **FEAT-JARVIS-007** | Skills & Memory Store | 001 | 2-3 days | Three launch skills: `morning-briefing`, `talk-prep`, `project-status`. Each a composable tool unit callable via command pattern (`/skill morning-briefing`) or via natural language dispatch. Memory Store holds cross-session state (e.g. "last session we discussed X"). Smoke test: each skill produces plausible output; Memory Store recalls a fact from a prior session. |
-| **FEAT-JARVIS-008** | Learning Flywheel — `jarvis.learning` + Graphiti Groups | 004 | 2-3 days | `jarvis_routing_history` and `jarvis_ambient_history` Graphiti groups populated per ADR-FLEET-001 schema. `jarvis.learning` pattern detector (module, not separate agent per D45) reads groups, proposes `CalibrationAdjustment` entities. Rich-in-the-loop CLI for confirm/reject. System prompt retrieval injects priors. Smoke test: after 10 dispatches, learning module proposes one plausible adjustment. |
+| **FEAT-JARVIS-005** | Build Queue Dispatch (Jarvis → Forge) | 004 | 1-2 days | `queue_build` tool publishes `BuildQueuedPayload` to `pipeline.build-queued.{feature_id}` per ADR-SP-014 Pattern A. No await; fire-and-forget pattern. Notification channel for Forge progress updates (`pipeline.stage-complete.*`). Smoke test: Jarvis queues a genuinely useful Jarvis internal improvement (per Q10.6), Forge consumer picks it up, Jarvis receives stage-complete notifications. |
+| **FEAT-JARVIS-006** | Telegram Adapter | 001 | 1-2 days | **Telegram only for v1** (per Q10.3). `nats-asyncio-service`-patterned module publishing `jarvis.command.*` / subscribing `jarvis.notification.*`. Adapter ↔ session correlation via session_id in payload. Smoke test: Telegram adapter round-trips a "hello" to Jarvis. CLI and Dashboard adapters move to FEAT-JARVIS-009 (v1.5). |
+| **FEAT-JARVIS-007** | Skills & Memory Store | 001 | 2-3 days | Three launch skills: `morning-briefing`, `talk-prep`, `project-status`. Each a composable tool unit callable via command pattern (`/skill morning-briefing`) or via natural language dispatch. **`talk-prep` module scaffolded with a reserved slot for Pattern C ambient nudges** (per Q10.5); v1 ships the command-pattern form only, ambient logic lands in FEAT-JARVIS-010. Memory Store holds cross-session state. Smoke test: each skill produces plausible output; Memory Store recalls a fact from a prior session. |
+| ~~**FEAT-JARVIS-008**~~ | ~~Learning Flywheel~~ | — | — | **Deferred to v1.5** (per Q10.2). Trace-richness writes (ADR-FLEET-001 schema) still populate from day one — every `*_history` write uses the full schema — so no data is lost. What defers: the `jarvis.learning` pattern detector module, the `CalibrationAdjustment` Graphiti entity, and the Rich-in-the-loop CLI for confirm/reject. |
 
-### Optional post-v1 features (NOT in v1 scope — noted for reference)
+### v1.5 features (post-attended-dispatch-ships)
 
-- **FEAT-JARVIS-009**: Ambient Pattern B watcher — one proven candidate ("Forge queue completion nudge").
-- **FEAT-JARVIS-010**: Reachy Mini voice adapter — when hardware lands.
-- **FEAT-JARVIS-011**: Second cohort of async subagents if the original four prove insufficient.
-- **FEAT-JARVIS-012**: Context7 integration as a first-class Jarvis tool.
+- **FEAT-JARVIS-008 (moved)**: Learning Flywheel — `jarvis.learning` + Graphiti calibration loop. Re-enters when v1 has shipped and real routing history exists to learn from.
+- **FEAT-JARVIS-009**: CLI + Dashboard adapters — the two adapters deferred from FEAT-JARVIS-006 per Q10.3.
+- **FEAT-JARVIS-010**: `talk-prep` Pattern C ambient nudges — volitional behaviour targeting DDD Southwest (16 May) prep.
+- **FEAT-JARVIS-011**: `jarvis purge-traces` CLI — GDPR-clean per ADR-FLEET-001, deferred from v1 per Q10.7.
+
+### Further-post-v1 features (noted for reference)
+
+- Ambient Pattern B watcher — one proven candidate ("Forge queue completion nudge").
+- Reachy Mini voice adapter — when hardware lands.
+- Second cohort of async subagents if the original four prove insufficient.
+- Context7 integration as a first-class Jarvis tool.
 
 ---
 
 ## 5. Full Build Pipeline (Forge-style)
 
-Once tomorrow's `/system-arch` lands and `guardkit init` is done, the pipeline is:
+Once `/system-arch` lands (21 April) and `guardkit init` is done (✅ 20 April), the pipeline is:
 
 ```
-[done]     /system-arch   → docs/architecture/ARCHITECTURE.md + C4 + ADR-J-P1..P10
-[next]     /system-design → per-feature design docs (8 × FEAT-JARVIS-00N design.md)
-           /feature-spec  → per-feature gherkin scenarios (8 × FEAT-JARVIS-00N_summary.md)
-           /feature-plan  → per-feature task decomposition (8 × FEAT-JARVIS-00N build plan)
-           autobuild      → per-feature implementation (8 × AutoBuild runs)
-           /task-review   → gates as needed per feature complexity
+[done]     guardkit init    → .claude/, CLAUDE.md, .guardkit/graphiti.yaml (Python scaffold deferred to FEAT-JARVIS-001)
+[pending]  /system-arch     → docs/architecture/ARCHITECTURE.md + C4 + ADR-J-001..N (21 April)
+[then]     /system-design   → per-feature design docs (7 × FEAT-JARVIS-00N design.md)
+           /feature-spec    → per-feature gherkin scenarios (7 × FEAT-JARVIS-00N_summary.md)
+           /feature-plan    → per-feature task decomposition (7 × FEAT-JARVIS-00N build plan,
+                              mirroring Study Tutor's FEAT-PO-002 output shape)
+           autobuild        → per-feature implementation (7 × AutoBuild runs)
+           /task-review     → gates as needed per feature complexity
 ```
 
 ### Batch or sequential?
 
 **Sequential, not batched.** Reasoning:
 
-- FEAT-JARVIS-001 establishes the supervisor skeleton; every subsequent feature depends on it.
+- FEAT-JARVIS-001 establishes the supervisor skeleton (and all Python scaffolding per §4); every subsequent feature depends on it.
 - FEAT-JARVIS-002 and -003 are parallel candidates (both depend only on 001) but Forge's experience shows **sequential with AutoBuild** is faster in practice than juggling parallel AutoBuild runs.
-- The learning feature (008) depends on 004 (NATS integration). Don't schedule it early.
-- Adapters (006) and skills (007) depend only on 001; they can slot in wherever makes sense.
-
-### Suggested ordering (v1)
+- Adapters (006 Telegram-only) and skills (007) depend only on 001; they can slot in wherever makes sense.
+- FEAT-JARVIS-008 (learning) is deferred to v1.5; it would have depended on 004 (NATS integration) if retained.
+### Suggested ordering (v1 — revised 20 April)
 
 ```
-Day 1:    guardkit init + pin bump + FEAT-JARVIS-001 (/system-design + /feature-spec)
-Day 2-3:  FEAT-JARVIS-001 (/feature-plan + autobuild + /task-review)
-Day 3-4:  FEAT-JARVIS-002 (/system-design through autobuild)
-Day 5-6:  FEAT-JARVIS-003 (async subagents — the hardest)
-Day 7-8:  FEAT-JARVIS-004 (NATS fleet integration)
-Day 9:    FEAT-JARVIS-005 (build queue — small)
-Day 10-11: FEAT-JARVIS-006 (adapters — three thin modules)
-Day 12-13: FEAT-JARVIS-007 (skills + Memory Store)
-Day 14-15: FEAT-JARVIS-008 (learning flywheel)
+Day 0 (20 Apr):  guardkit init ✅ (done) + init commit
+Day 1 (21 Apr):  /system-arch → ARCHITECTURE.md, C4, ADR-J-001..N (incl. DeepAgents pin ADR)
+Day 2-4:         FEAT-JARVIS-001 (/system-design → /feature-spec → /feature-plan → autobuild → /task-review)
+                 — includes pyproject.toml, src/ scaffolding, pin, CLI entrypoint, supervisor
+Day 5-6:         FEAT-JARVIS-002 (core tools + dispatch tools)
+Day 7-8:         FEAT-JARVIS-003 (async subagents — the hardest)
+Day 9-10:        FEAT-JARVIS-004 (NATS fleet integration)
+Day 10-11:       FEAT-JARVIS-005 (build queue — small)
+Day 11-12:       FEAT-JARVIS-006 (Telegram adapter only)
+Day 12-13:       FEAT-JARVIS-007 (skills + Memory Store)
 ```
 
-Total: ~15 working days for v1. Realistic given testing plus interruptions.
+Total: ~11–12 working days for v1 (down from 15). Saved by deferring -008 (learning) and narrowing -006 to Telegram-only. Realistic given testing plus interruptions.
 
 ---
 
@@ -237,7 +350,7 @@ Forge's experience (30 ADRs, 6 features via AutoBuild) informs:
 - **Per-feature AutoBuild, not per-task.** AutoBuild runs a whole feature's task list overnight, not a single task. Expect ~90 minutes per feature.
 - **`/task-review` after each feature, not after each task.** Review once at the gate, not per sub-task. Keeps signal-to-noise high.
 - **Context manifests are populated and ready.** `.guardkit/context-manifest.yaml` already landed.
-- **Trace richness on by default.** ADR-FLEET-001 implementations follow from FEAT-JARVIS-008; earlier features use the schema even if the learning module isn't yet reading it.
+- **Trace richness on by default from day one.** ADR-FLEET-001 schema is used by every `*_history` write starting with FEAT-JARVIS-004 (which introduces routing dispatch) — even though the `jarvis.learning` *reader* is deferred to v1.5 (FEAT-JARVIS-008). This is non-negotiable per the scope-preserving rules in §2; no "we'll add traces later".
 - **Three-Layer Build Defence applies.** Layer 1 (prevention via better plans + Graphiti context), Layer 2 (recovery via Player-Coach loop), Layer 3 (assisted resolution via specialist resolver agents). Same as Forge.
 
 ---
@@ -246,7 +359,7 @@ Forge's experience (30 ADRs, 6 features via AutoBuild) informs:
 
 Tomorrow's session produces Jarvis's architecture documents. This build plan is *written for those outputs to land_cleanly*. Specifically:
 
-- FEAT-JARVIS-001..008 are **tentative feature IDs** — `/system-arch` may adjust numbering or rename. Acceptable.
+- FEAT-JARVIS-001..007 are **tentative feature IDs** — `/system-arch` may adjust numbering or rename. Acceptable. (008 is deferred to v1.5 per the 20 April update.)
 - ADR-J-P1..P10 named in `jarvis-architecture-conversation-starter.md` v2 become real ADR-J-001..N. Acceptable drift.
 - JA1-JA9 open questions in the conversation-starter will resolve in `/system-arch` — particularly JA1 (schema fields for `jarvis_routing_history`), JA6 (`quick_local` fallback under GB10 pressure), and JA3 (cross-adapter handoff semantics).
 - Anything `/system-arch` uncovers that this build plan doesn't anticipate → update this document after the session.
@@ -271,18 +384,17 @@ Reminder from the fleet v3 conversation capture (notes for tomorrow):
 | nats-infrastructure on GB10 not running when FEAT-JARVIS-004 starts | In-process nats-py test server acceptable for dev; deferred for end-to-end test. |
 | Four subagents triggering rate limits or cost spikes during dev | `quick_local` (GB10 vLLM) is the default; remote subagents gated by supervisor reasoning. Per-day spend cap in dev. |
 | Learning module (008) proposing bad adjustments early | Rich-in-the-loop gate; `CalibrationAdjustment` entities only persist on confirm. Same pattern as Forge's proven ADR-ARCH-005/006. |
-| Adapters (006) turning into a rabbit-hole | Scope discipline: three thin modules, `nats-asyncio-service`-patterned, no fancy UX. Dashboard is *status*, not *control centre*. |
+| Adapters (006) turning into a rabbit-hole | Scope discipline: v1 is **Telegram only** (per Q10.3), `nats-asyncio-service`-patterned, no fancy UX. CLI and Dashboard defer to v1.5 (FEAT-JARVIS-009). |
 
 ---
 
-## 9. Decisions Required From This Conversation
+## 9. Decisions From The 19–20 April Conversation (resolved)
 
-1. **Confirm template choice** — `langchain-deepagents-orchestrator`. ✅ if accepted; alternative needs evidence.
-2. **Confirm `guardkit init` invocation timing** — today (before `/system-arch`) or tomorrow (after `/system-arch`)?
-   - **My recommendation: today.** Reasoning: scaffolding the repo doesn't depend on architecture decisions; `/system-arch` consumes existing repo state + conversation-starter. Having `.claude/`, `agents/`, and the orchestrator specialists already in place means `/system-arch` runs with more context.
-3. **Confirm feature-ordering preference** — as per §5 Day-by-day, or different?
-4. **Agree Day-1 scope** — `guardkit init` + pin bump + start FEAT-JARVIS-001 `/system-design`? Or `guardkit init` + pin bump + stop-for-the-day?
-5. **Any additional v1 features needed?** (E.g. if there's a Telegram-adapter-first urgency that bumps it ahead of FEAT-JARVIS-002/003.)
+1. ✅ **Template choice** — `langchain-deepagents-orchestrator` confirmed. Sanity-checked against template source tree; layer mapping and seven specialists match Jarvis's needs.
+2. ✅ **`guardkit init` timing** — executed 20 April morning, before `/system-arch`. Gives tomorrow's session more context to work with.
+3. ✅ **Feature ordering** — as per §5 revised. Sequential, not batched. FEAT-JARVIS-001 first (now includes scaffolding).
+4. ✅ **Day-1 scope** — `guardkit init` + commit + stop. The original "pin bump" step is absorbed into FEAT-JARVIS-001 (see reframing at top of document).
+5. ✅ **v1 scope tightened** — Telegram-only adapter (Q10.3); -008 learning deferred to v1.5 (Q10.2); `talk-prep` Pattern C slot reserved (Q10.5); purge-traces deferred to v1.1 (Q10.7); `jarvis.learning` stays a module not an agent (Q10.4); FEAT-JARVIS-005 test case is a genuinely useful Jarvis internal improvement (Q10.6).
 
 ---
 
@@ -304,66 +416,86 @@ Reminder from the fleet v3 conversation capture (notes for tomorrow):
 
 ---
 
-## 11. Exact Command to Run Today
+## 11. Commands Run / To Run
 
-Assuming §9 decisions land positively:
+### ✅ Executed 20 April 2026
 
 ```bash
-# 1. Confirm repo state
 cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
-git status                                   # should be clean on main
-ls .guardkit/                                 # should show context-manifest.yaml
+git status                                   # clean on main
+ls .guardkit/                                 # context-manifest.yaml present
 
-# 2. Run guardkit init
 guardkit init langchain-deepagents-orchestrator \
   --project-name jarvis \
   --interactive
-
-# 3. Inspect what landed
-git status
-ls -la                                        # should show new .claude/, agents/, manifest.json, settings.json, src/, tests/, templates/
-
-# 4. Pin bump (first commit after init)
-# Edit requirements.txt: deepagents >= 0.5.3, < 0.6
-# Edit pyproject.toml equivalent
-git add -A
-git commit -m "chore: guardkit init with langchain-deepagents-orchestrator template; bump DeepAgents pin to 0.5.3"
-
-# 5. (Optional, if there is bandwidth today) — prep for tomorrow's /system-arch
-# Nothing to do here — jarvis-architecture-conversation-starter.md v2 is the primary input.
+# Landed: .claude/ (14 agents, 15 rules, CLAUDE.md, commands, manifest, rules, task-plans),
+#         .guardkit/.mcp.json, .guardkit/graphiti.yaml, CLAUDE.md (root)
+# Deferred to FEAT-JARVIS-001: src/, tests/, pyproject.toml
+# Graphiti seeding skipped (GOOGLE_API_KEY not set — can seed later)
 ```
 
-### After `/system-arch` tomorrow
+### Still to run — 20 April (end of day)
 
 ```bash
-# 1. Validate /system-arch outputs exist
-ls docs/architecture/
-# Expected: ARCHITECTURE.md, decisions/ADR-J-001..N.md, c4-*.svg or similar
+# Commit the init output (and the 20 April edits to this conversation starter)
+git add -A
+git commit -m "chore: guardkit init with langchain-deepagents-orchestrator template
 
-# 2. Update this build plan if needed
-# Reconcile FEAT-JARVIS-001..008 names with actual ADR-J-001..N
-
-# 3. Start FEAT-JARVIS-001 /system-design
-guardkit system-design "Supervisor Skeleton & Session Lifecycle" \
-  --context docs/architecture/ARCHITECTURE.md \
-  --context docs/research/ideas/jarvis-vision.md \
-  --context ../forge/docs/research/ideas/fleet-architecture-v3-coherence-via-flywheel.md \
-  --context ../forge/docs/research/ideas/ADR-FLEET-001-trace-richness.md
+- Seven orchestrator specialist agents under .claude/agents/ (14 files incl. ext)
+- 15 rules and CLAUDE.md seeded with project purpose and DeepAgents SDK stack
+- Graphiti config copied from agentic-dataset-factory; seeding deferred
+  (GOOGLE_API_KEY not set; can revisit later)
+- Python scaffolding (src/, tests/, pyproject.toml) and DeepAgents pin bump
+  to >=0.5.3,<0.6 deferred to FEAT-JARVIS-001 (Phase 1)
+- Conversation starter updated to instruct generation of phase pair docs
+  (per specialist-agent pattern) as the next-conversation brief"
 ```
+
+### Next conversation — generate Phase 1 pair (see §0)
+
+Open a fresh Claude Code conversation in the `jarvis/` repo and reference **this document** plus the two specialist-agent template files. Claude will produce:
+
+- `docs/research/ideas/phase1-supervisor-scaffolding-scope.md`
+- `docs/research/ideas/phase1-build-plan.md`
+
+Both structured to match the specialist-agent Phase 1 pair exactly. The Phase 1 build plan's command sequence will begin with `/system-arch` (target 21 April), followed by `/system-design FEAT-JARVIS-001 → /feature-spec FEAT-JARVIS-001 → /feature-plan FEAT-JARVIS-001 → AutoBuild → /task-review`.
+
+Once Rich confirms the Phase 1 pair is good, Claude will propose the grouping for Phase 2–4 (covering FEAT-JARVIS-002..007) and generate those pairs on confirmation.
+
+### Tomorrow — 21 April 2026: `/system-arch` (invoked from Phase 1 build plan)
+
+The actual `/system-arch` invocation will be spelled out in the Phase 1 build plan's GuardKit Command Sequence (Step 1), with full `--context` flags matching the specialist-agent pattern. Something along these lines:
+
+```bash
+/system-arch "Jarvis: General Purpose DeepAgent with dispatch tools" \
+  --context docs/research/ideas/jarvis-architecture-conversation-starter.md \
+  --context docs/research/ideas/jarvis-vision.md \
+  --context docs/research/ideas/jarvis-build-plan-conversation-starter.md \
+  --context docs/research/ideas/phase1-supervisor-scaffolding-scope.md \
+  --context docs/research/ideas/phase1-build-plan.md \
+  --context ../forge/docs/research/ideas/fleet-architecture-v3-coherence-via-flywheel.md \
+  --context ../forge/docs/research/ideas/ADR-FLEET-001-trace-richness.md \
+  --context ../forge/docs/architecture/ARCHITECTURE.md \
+  --context ../specialist-agent/docs/reviews/deepagents-sdk-2026-04.md
+```
+
+The exact form (context ordering, any additional references to Forge ADRs) is for the Phase 1 build plan to finalise.
 
 ---
 
-## 12. Done-Definition for This Conversation
+## 12. Done-Definition for This Conversation (20 April close)
 
 The conversation is done when:
 
-- [ ] `guardkit init langchain-deepagents-orchestrator` executed in `jarvis/` repo
-- [ ] DeepAgents pin bumped to `>= 0.5.3, < 0.6`
-- [ ] First commit on Jarvis repo landed (the init + pin bump)
-- [ ] Build plan (§4 feature breakdown) confirmed or revised
-- [ ] Day-by-day ordering (§5) confirmed or revised
-- [ ] Starter questions 1-7 have explicit answers (or explicit "defer to `/system-arch`")
-- [ ] This conversation starter updated with answers as comments/edits
+- [x] `guardkit init langchain-deepagents-orchestrator` executed in `jarvis/` repo
+- [x] Build plan (§4 feature breakdown) revised — -008 deferred, -006 Telegram-only, scaffolding absorbed into -001
+- [x] Day-by-day ordering (§5) revised — ~11–12 days, scaffolding inside FEAT-JARVIS-001
+- [x] Starter questions 1–7 answered (Q2/3/5 by user, Q4/6/7 by recommendation; all recorded in the 20 April update block)
+- [x] This conversation starter updated with answers
+- [x] Conversation starter rewritten at §0 to instruct Claude (in the next conversation) to generate the Phase 1 scope + build plan pair following the specialist-agent template
+- [ ] First commit on Jarvis repo landed (the init output + this conversation-starter update)
+
+*Open for next session:* Phase 1 pair generation per §0, then `/system-arch` on 21 April invoked from the Phase 1 build plan's Step 1.
 
 ---
 

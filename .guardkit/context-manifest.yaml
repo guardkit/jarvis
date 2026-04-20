@@ -138,7 +138,7 @@ dependencies:
     path: ../guardkit
     relationship: "Jarvis will (future) use GuardKit slash commands via subprocess for some skills; also source of template for building Jarvis itself"
     key_docs:
-      - path: installer/core/templates/langchain-deepagents/
+      - path: installer/core/templates/langchain-deepagents-orchestrator/
         category: contracts
         description: "Base template Jarvis was scaffolded from"
 
