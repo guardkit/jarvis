@@ -1,0 +1,19 @@
+project_id: jarvis
+enabled: true
+graph_store: falkordb
+falkordb_host: whitestocks
+falkordb_port: 6379
+timeout: 30.0
+max_concurrent_episodes: 3
+llm_provider: gemini
+llm_model: gemini-2.5-pro
+llm_max_tokens: 4096
+embedding_provider: vllm
+embedding_base_url: http://promaxgb10-41b1:8001/v1
+embedding_model: nomic-embed-text-v1.5
+group_ids:
+- product_knowledge
+- command_workflows
+- architecture_decisions
+host: localhost
+port: 8000
