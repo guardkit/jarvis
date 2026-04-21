@@ -82,3 +82,59 @@ Captured 30 ADRs + C4 diagrams across 6 categories. Mid-session you corrected my
 
 Graphiti seeding runs locally via GB10 vLLM — I'll be notified when the five background jobs finish. Meanwhile, the markdown artefacts are ready for review regardless of seeding state.
 
+
+
+
+
+/system-design FEAT-JARVIS-001 \
+  --context docs/architecture/ARCHITECTURE.md \
+  --context docs/architecture/decisions/ADR-J-001-deepagents-pin.md \
+  --context docs/architecture/decisions/ADR-J-002-supervisor-factory.md \
+  --context docs/architecture/decisions/ADR-J-003-layer-structure.md \
+  --context docs/architecture/decisions/ADR-J-004-supervisor-model-default.md \
+  --context docs/architecture/decisions/ADR-J-005-memory-store-backend.md \
+  --context docs/research/ideas/phase1-supervisor-scaffolding-scope.md \
+  --context docs/research/ideas/phase1-build-plan.md \
+  --context docs/research/ideas/jarvis-vision.md \
+  --context ../forge/docs/architecture/ARCHITECTURE.md \
+  --context ../specialist-agent/pyproject.toml \
+  --context ../forge/pyproject.toml \
+  --context .guardkit/context-manifest.yaml
+
+Summary
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ SYSTEM DESIGN — FEAT-JARVIS-001
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Created: docs/design/FEAT-JARVIS-001/
+├── design.md                                   ← top-level consolidated doc
+├── contracts/
+│   ├── API-cli.md                              (3 subcommands, env vars, exit codes)
+│   └── API-internal.md                         (module boundaries, public APIs, stability)
+├── models/
+│   ├── DM-jarvis-reasoning.md                  (Session, Adapter, AppState, exceptions)
+│   └── DM-config.md                            (JarvisConfig BaseSettings)
+├── diagrams/
+│   └── supervisor-container-l3.md              ⚠ AWAITING APPROVAL
+└── decisions/
+    ├── DDR-001 — no network protocols Phase 1
+    ├── DDR-002 — Memory Store keyed by user_id
+    ├── DDR-003 — CLI = chat/version/health only
+    └── DDR-004 — thread_id == session_id 1:1
+
+Protocols NOT generated (by design — see DDR-001):
+  openapi.yaml | mcp-tools.json | a2a-schemas.yaml
+
+Contradictions with 30 existing ADRs: 0
+Graphiti: 9 seeding commands ready, awaiting [Y/N]
+
+Pending gates:
+  1. C4 L3 diagram approval → [A/R/R]
+  2. Graphiti seeding → [Y/N]
+
+Next in pipeline (per phase1-build-plan.md Steps 3–5):
+  /feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...
+  /feature-plan FEAT-JARVIS-001
+  AutoBuild
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
