@@ -154,9 +154,4 @@ flowchart TB
 
 ## Review gate
 
-Per Phase 3.5 of `/system-design`, this diagram requires explicit approval before proceeding. Options:
-- **[A]pprove** — diagram goes into the design output as-is.
-- **[R]evise** — specify changes (add/remove components, re-route edges).
-- **[R]eject** — diagram excluded from output; Phase 1 ships without a C4 L3 diagram.
-
-*Approval status: pending user review.*
+**Approved** by Rich on 2026-04-21 during the `/system-design FEAT-JARVIS-001` session.
