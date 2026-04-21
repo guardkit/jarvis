@@ -27,3 +27,6 @@ Thumbs.db
 .pytest_cache/
 htmlcov/
 .coverage
+
+# Runtime logs
+.guardkit/graphiti-query-log.jsonl
