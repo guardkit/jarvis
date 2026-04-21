@@ -138,3 +138,29 @@ Next in pipeline (per phase1-build-plan.md Steps 3–5):
   /feature-plan FEAT-JARVIS-001
   AutoBuild
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Committed as b259206 — 12 files, 3211 insertions. Branch is now 3 commits ahead of origin/main; nothing pushed. C4 L3 approval and Graphiti seeding are still outstanding whenever you want to revisit.
+
+Pending gates:
+  1. C4 L3 diagram approval → [A]pprove
+  2. Graphiti seeding → [Y]
+
+  Graphiti seeding succeeded — all 9 artefacts ingested across 42 episodes total.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ GRAPHITI SEEDING COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+contracts/API-cli.md                  →  1 episode
+contracts/API-internal.md             → 11 episodes (chunked — large)
+models/DM-jarvis-reasoning.md         → 10 episodes (chunked — large)
+models/DM-config.md                   →  1 episode
+decisions/DDR-001..004.md             →  4 episodes (1 each, --type adr)
+design.md                             → 14 episodes (chunked — large)
+─────────────────────────────────────────────
+Total: 9 files, 42 episodes → FalkorDB @ whitestocks:6379
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Warnings were just benign "document too large, auto-chunking" notes — no failures.
+
+/system-design FEAT-JARVIS-001 is complete. Design artefacts + approval + Graphiti seeding all landed. Branch is 4 commits ahead of origin/main, nothing pushed. Next per phase1-build-plan.md Step 3: /feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...
