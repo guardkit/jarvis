@@ -2,7 +2,7 @@
 
 ## For: Laying the foundation for v1 Jarvis — the attended DeepAgent with dispatch tools. Every subsequent feature in v1 (FEAT-JARVIS-002..007) compounds on this one.
 ## Date: 20 April 2026
-## Status: `guardkit init` complete (20 April). `/system-arch` target 21 April. Ready for `/system-arch` invocation (Step 1 of this command sequence), then `/feature-spec FEAT-JARVIS-001`.
+## Status: `guardkit init` complete (20 April). `/system-arch` **complete** (21 April) — 30 ADRs `ADR-ARCH-001..030`, C4 (`system-context.md`, `container.md`), `domain-model.md`, `ARCHITECTURE.md`, `assumptions.yaml`. `/system-design FEAT-JARVIS-001` **complete** (21 April) — `docs/design/FEAT-JARVIS-001/` (`design.md`, `diagrams/`, `contracts/`, `decisions/`, `models/`), C4 L3 diagram approved, Graphiti seeding landed. Branch 4 commits ahead of `origin/main`, nothing pushed. **Next: Step 3 — `/feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...`.**
 ## Repo: `guardkit/jarvis`
 ## Machine: MacBook Pro M2 Max (planning + build via Claude Code)
 
@@ -21,7 +21,9 @@
 | 2026-04-20 | `jarvis-build-plan-conversation-starter.md` revised | 20 April decisions captured: FEAT-JARVIS-008 (learning) deferred to v1.5, FEAT-JARVIS-006 narrowed to Telegram-only, scaffolding absorbed into FEAT-JARVIS-001, `talk-prep` Pattern C slot reserved, `jarvis purge-traces` deferred to v1.1. Timeline revised to 11–12 working days. |
 | 2026-04-20 | `phase1-supervisor-scaffolding-scope.md` written | This document's companion scope doc — input to `/feature-spec FEAT-JARVIS-001`. |
 | 2026-04-20 | `phase1-build-plan.md` written | This document. |
-| 2026-04-21 | *pending* — `/system-arch` invocation (Step 1 below) | Target: `docs/architecture/ARCHITECTURE.md`, C4 diagrams, ADR-J-001..N — including the DeepAgents pin ADR and the supervisor factory ADR. |
+| 2026-04-21 | `/system-arch` **complete** (Step 1) | Commit `2e96b24`. Produced `docs/architecture/ARCHITECTURE.md`, `system-context.md`, `container.md`, `domain-model.md`, `assumptions.yaml`, and **30 ADRs** `ADR-ARCH-001..030` (actual IDs, not the tentative `ADR-J-001..N`). Key ADRs for Phase 1: `ADR-ARCH-001` (local-first inference via llama-swap), `ADR-ARCH-002` (clean hexagonal in DeepAgents supervisor), `ADR-ARCH-003` (Jarvis is the GPA), `ADR-ARCH-005` (seven bounded contexts), `ADR-ARCH-006` (five-group module layout — supersedes the eight-layer sketch in this plan), `ADR-ARCH-009` (thread-per-session with Memory Store summary bridge), `ADR-ARCH-010` (Python 3.12 + DeepAgents pin), `ADR-ARCH-011` (single Jarvis reasoner subagent), `ADR-ARCH-015` (CI: ruff + mypy + pytest), `ADR-ARCH-020` (trace-richness by default), `ADR-ARCH-025` (DeepAgents 0.6 upgrade gated). Session transcript: `docs/history/system-arch-history.md`. |
+| 2026-04-21 | `/system-design FEAT-JARVIS-001` **complete** (Step 2) | Commits `b259206` (design artefacts) and `7c8cdeb` (C4 L3 diagram approval). Produced `docs/design/FEAT-JARVIS-001/design.md` plus `diagrams/`, `contracts/`, `decisions/`, `models/` subtrees. Approval gate passed; Graphiti seeding completed. Session transcript: `docs/history/system-design-history.md`. |
+| 2026-04-21 | Design artefacts + approval + Graphiti seeding landed | FEAT-JARVIS-001 design phase closed. Branch is 4 commits ahead of `origin/main`, nothing pushed. Ready for Step 3 (`/feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...`). |
 
 ---
 
@@ -322,9 +324,9 @@ Target: **30–40 tests.** Enough to cover the scaffold; not so many that they o
 
 ## GuardKit Command Sequence
 
-### Step 1: /system-arch — produce Jarvis architecture
+### Step 1: /system-arch — produce Jarvis architecture ✅ COMPLETE (21 April 2026)
 
-**Target: 21 April 2026.** This is the first Phase 1 step — it produces the ADRs that FEAT-JARVIS-001 consumes. The Phase 1 feature build cannot start until Step 1 lands.
+**Completed 21 April 2026** (commit `2e96b24`). Session transcript: `docs/history/system-arch-history.md`. Delivered: `docs/architecture/ARCHITECTURE.md`, `system-context.md`, `container.md`, `domain-model.md`, `assumptions.yaml`, and 30 ADRs `ADR-ARCH-001..030` (under `docs/architecture/decisions/`). The actual ADR namespace is `ADR-ARCH-*`, not the tentative `ADR-J-*` used elsewhere in this plan — downstream Step 3/4 `--context` lists below should be read with that substitution in mind. The original Step 1 invocation is preserved below for traceability.
 
 ```bash
 cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
@@ -372,9 +374,11 @@ cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
 
 (ADR numbering is tentative — `/system-arch` may reorder.)
 
-After Step 1, **update this build plan's Status Log** with the actual ADR IDs before proceeding to Step 2.
+After Step 1, **update this build plan's Status Log** with the actual ADR IDs before proceeding to Step 2. *(Done 21 April — actual IDs are `ADR-ARCH-001..030`; see Status Log above.)*
 
-### Step 2: /system-design FEAT-JARVIS-001
+### Step 2: /system-design FEAT-JARVIS-001 ✅ COMPLETE (21 April 2026)
+
+**Completed 21 April 2026** (commits `b259206` + `7c8cdeb`). Session transcript: `docs/history/system-design-history.md`. Delivered: `docs/design/FEAT-JARVIS-001/design.md` plus `diagrams/`, `contracts/`, `decisions/`, `models/` subtrees. C4 L3 diagram approved; Graphiti seeding landed. The original Step 2 invocation is preserved below for traceability — note that the context list should be read against the actual `ADR-ARCH-*` files (not the tentative `ADR-J-*` names).
 
 ```bash
 /system-design FEAT-JARVIS-001 \
@@ -395,7 +399,9 @@ After Step 1, **update this build plan's Status Log** with the actual ADR IDs be
 
 Expected output: `docs/design/FEAT-JARVIS-001/design.md` — component boundaries for the eight layers (`agents/`, `tools/`, `prompts/`, `config/`, `infrastructure/`, `sessions/`, `cli/`, `shared/`), the `Session` type's exact Pydantic fields, the `SessionManager` interface, the `build_supervisor` factory signature, the `JarvisConfig` schema, test fixture boundaries.
 
-### Step 3: /feature-spec FEAT-JARVIS-001
+### Step 3: /feature-spec FEAT-JARVIS-001 ⬅ NEXT
+
+**Ready to invoke.** Steps 1 and 2 complete; `docs/design/FEAT-JARVIS-001/design.md` is in place. The invocation below was authored before Step 1/2 landed — when running it, substitute the real ADR IDs (`ADR-ARCH-001..030`) from `docs/architecture/decisions/` for the tentative `ADR-J-*` names listed in `--context`.
 
 ```bash
 /feature-spec "Project Scaffolding, Supervisor Skeleton & Session Lifecycle: pyproject.toml with deepagents>=0.5.3,<0.6 pin, src/jarvis/ layer structure, DeepAgents supervisor via create_deep_agent(), thread-per-session with Memory Store, jarvis CLI (chat/version/health), smoke tests" \
@@ -580,8 +586,8 @@ These are settled from fleet v3, conversation-starter v2, and the 20 April refra
 
 | Day | Activity | Output |
 |-----|----------|--------|
-| 1 (21 Apr) | Step 1 — `/system-arch` invocation + review | `ARCHITECTURE.md`, C4 diagrams, ADR-J-001..N. Update this build plan with actual ADR IDs. |
-| 2 (22 Apr) | Step 2 + Step 3 — `/system-design FEAT-JARVIS-001`, `/feature-spec FEAT-JARVIS-001`. Resolve low-confidence assumptions. | `docs/design/FEAT-JARVIS-001/design.md`; `features/feat-jarvis-001-*/`. |
+| 1 (21 Apr) ✅ | Step 1 **and** Step 2 — `/system-arch` + `/system-design FEAT-JARVIS-001` both landed same day. | `ARCHITECTURE.md`, C4 diagrams, domain model, `ADR-ARCH-001..030` (30 ADRs, actual IDs); `docs/design/FEAT-JARVIS-001/design.md` + `diagrams/` + `contracts/` + `decisions/` + `models/`. C4 L3 approval + Graphiti seeding done. |
+| 2 (22 Apr) | Step 3 — `/feature-spec FEAT-JARVIS-001`. Resolve low-confidence assumptions. | `features/feat-jarvis-001-*/`. |
 | 3 (23 Apr) | Step 4 + start of Step 5 — `/feature-plan FEAT-JARVIS-001`; begin AutoBuild (scaffold → config → pyproject). | `tasks/FEAT-JARVIS-001-*.md`; first 2–3 commits landed. |
 | 4 (24 Apr) | Step 5 — complete AutoBuild (prompts, supervisor, infra, sessions, CLI, tests, docs). | All Phase 1 commits landed; CI green locally. |
 | 4 (24 Apr) | Step 6 + Step 7 — `/task-review`, fix any flagged issues, regression check. | Review pass; ruff + mypy + pytest all green. |
@@ -609,5 +615,5 @@ Rich — please confirm the Phase 2 / 3 / 4 grouping above before I produce thos
 
 *Phase 1 build plan: 20 April 2026*
 *Predecessor: `guardkit init langchain-deepagents-orchestrator` (20 April 2026); `.guardkit/context-manifest.yaml` landed 19 April 2026; ADR-FLEET-001 + fleet v3 keystone doc 19 April 2026.*
-*Input to: `/system-arch` (Step 1, target 21 April 2026), then `/feature-spec FEAT-JARVIS-001`.*
+*Input to: `/system-arch` (Step 1) ✅ complete 21 April 2026 · `/system-design FEAT-JARVIS-001` (Step 2) ✅ complete 21 April 2026 · next: `/feature-spec FEAT-JARVIS-001` (Step 3).*
 *"Rich can have a useful conversation with it on day 1, even if it can't dispatch to anything yet."*

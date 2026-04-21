@@ -164,3 +164,4 @@ Total: 9 files, 42 episodes → FalkorDB @ whitestocks:6379
 Warnings were just benign "document too large, auto-chunking" notes — no failures.
 
 /system-design FEAT-JARVIS-001 is complete. Design artefacts + approval + Graphiti seeding all landed. Branch is 4 commits ahead of origin/main, nothing pushed. Next per phase1-build-plan.md Step 3: /feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...
+
