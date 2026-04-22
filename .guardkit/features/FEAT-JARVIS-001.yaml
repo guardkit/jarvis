@@ -1,0 +1,249 @@
+id: FEAT-JARVIS-001
+name: Project Scaffolding, Supervisor Skeleton & Session Lifecycle
+description: 'Phase 1 foundation: Python 3.12 scaffold, DeepAgents supervisor (built-ins
+  only), thread-per-session SessionManager with user-keyed Memory Store, jarvis CLI
+  (chat/version/health). Day-1 success: Rich holds a useful conversation; fact from
+  session A recalled in session B for the same user.'
+created: '2026-04-21T14:30:00Z'
+status: completed
+complexity: 7
+estimated_tasks: 11
+tasks:
+- id: TASK-J001-001
+  name: pyproject.toml with deepagents>=0.5.3,<0.6 pin and tool config
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-001-pyproject-toml-and-deepagents-pin.md
+  complexity: 4
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T22:31:06.673367'
+  completed_at: '2026-04-21T22:42:26.129020'
+- id: TASK-J001-002
+  name: "Shared primitives \u2014 constants, Adapter enum, exception hierarchy"
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-002-shared-primitives.md
+  complexity: 3
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 25
+  requires_infrastructure: []
+  result:
+    total_turns: 2
+    final_decision: approved
+    error: null
+  turns_completed: 2
+  current_turn: 0
+  started_at: '2026-04-21T22:31:06.678071'
+  completed_at: '2026-04-21T22:42:26.133858'
+- id: TASK-J001-010
+  name: Reserve-empty packages (tools, subagents, skills, routing, watchers, discovery,
+    learning, adapters)
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-010-reserved-empty-packages.md
+  complexity: 2
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 15
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T22:31:06.682752'
+  completed_at: '2026-04-21T22:42:26.138383'
+- id: TASK-J001-003
+  name: "config/ \u2014 JarvisConfig (BaseSettings) + validate_provider_keys"
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-003-config-jarvis-settings.md
+  complexity: 5
+  dependencies:
+  - TASK-J001-001
+  - TASK-J001-002
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 60
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T22:42:27.946932'
+  completed_at: '2026-04-21T22:50:52.288625'
+- id: TASK-J001-004
+  name: prompts/supervisor_prompt.py + tests/ scaffold (conftest with fake_llm fixture)
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-004-prompts-and-test-scaffold.md
+  complexity: 3
+  dependencies:
+  - TASK-J001-001
+  - TASK-J001-002
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 30
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T22:42:27.952148'
+  completed_at: '2026-04-21T22:50:52.293926'
+- id: TASK-J001-005
+  name: "infrastructure/ \u2014 structlog setup + lifecycle (startup/shutdown + AppState)"
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-005-infrastructure-logging-lifecycle.md
+  complexity: 5
+  dependencies:
+  - TASK-J001-003
+  - TASK-J001-002
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 60
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T22:50:54.304810'
+  completed_at: '2026-04-21T22:59:20.118529'
+- id: TASK-J001-006
+  name: "agents/supervisor.py \u2014 build_supervisor(config) factory (DeepAgents\
+    \ built-ins only, token-free)"
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-006-agents-supervisor-factory.md
+  complexity: 7
+  dependencies:
+  - TASK-J001-003
+  - TASK-J001-004
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 90
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T22:50:54.310411'
+  completed_at: '2026-04-21T22:59:20.123575'
+- id: TASK-J001-007
+  name: "sessions/ \u2014 Session model + SessionManager (thread-per-session, user-keyed\
+    \ Memory Store, concurrent-invoke refusal)"
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-007-sessions-session-and-manager.md
+  complexity: 8
+  dependencies:
+  - TASK-J001-005
+  - TASK-J001-006
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 120
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T22:59:22.076703'
+  completed_at: '2026-04-21T23:09:02.138363'
+- id: TASK-J001-008
+  name: "cli/main.py \u2014 click group chat/version/health + REPL + SIGINT=130"
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-008-cli-main-click-group.md
+  complexity: 7
+  dependencies:
+  - TASK-J001-007
+  - TASK-J001-005
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 90
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T23:09:04.021346'
+  completed_at: '2026-04-21T23:17:27.282076'
+- id: TASK-J001-009
+  name: tests/test_smoke_end_to_end.py + import-graph regression test
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-009-tests-end-to-end-smoke.md
+  complexity: 4
+  dependencies:
+  - TASK-J001-008
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T23:17:29.102439'
+  completed_at: '2026-04-21T23:28:43.205520'
+- id: TASK-J001-011
+  name: .env.example + README Quickstart + .gitignore audit
+  file_path: tasks/backlog/project-scaffolding-supervisor-sessions/TASK-J001-011-env-example-and-readme-quickstart.md
+  complexity: 2
+  dependencies:
+  - TASK-J001-003
+  - TASK-J001-008
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 20
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-21T23:17:29.107730'
+  completed_at: '2026-04-21T23:28:43.210816'
+orchestration:
+  parallel_groups:
+  - - TASK-J001-001
+    - TASK-J001-002
+    - TASK-J001-010
+  - - TASK-J001-003
+    - TASK-J001-004
+  - - TASK-J001-005
+    - TASK-J001-006
+  - - TASK-J001-007
+  - - TASK-J001-008
+  - - TASK-J001-009
+    - TASK-J001-011
+  estimated_duration_minutes: 600
+  recommended_parallel: 3
+execution:
+  started_at: '2026-04-21T22:31:06.639746'
+  completed_at: '2026-04-21T23:28:43.222249'
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-JARVIS-001
+  total_turns: 12
+  tasks_completed: 11
+  tasks_failed: 0
+  current_wave: 6
+  completed_waves:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  last_updated: '2026-04-21T23:28:43.216242'
+  archived_at: null
+  archived_to: null

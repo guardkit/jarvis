@@ -2,7 +2,7 @@
 
 ## For: Laying the foundation for v1 Jarvis — the attended DeepAgent with dispatch tools. Every subsequent feature in v1 (FEAT-JARVIS-002..007) compounds on this one.
 ## Date: 20 April 2026
-## Status: `guardkit init` complete (20 April). `/system-arch` **complete** (21 April) — 30 ADRs `ADR-ARCH-001..030`, C4 (`system-context.md`, `container.md`), `domain-model.md`, `ARCHITECTURE.md`, `assumptions.yaml`. `/system-design FEAT-JARVIS-001` **complete** (21 April) — `docs/design/FEAT-JARVIS-001/` (`design.md`, `diagrams/`, `contracts/`, `decisions/`, `models/`), C4 L3 diagram approved, Graphiti seeding landed. Branch 4 commits ahead of `origin/main`, nothing pushed. **Next: Step 3 — `/feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...`.**
+## Status: `guardkit init` complete (20 April). `/system-arch` **complete** (21 April) — 30 ADRs `ADR-ARCH-001..030`, C4 (`system-context.md`, `container.md`), `domain-model.md`, `ARCHITECTURE.md`, `assumptions.yaml`. `/system-design FEAT-JARVIS-001` **complete** (21 April) — `docs/design/FEAT-JARVIS-001/` (`design.md`, `diagrams/`, `contracts/`, `decisions/`, `models/`), C4 L3 diagram approved, Graphiti seeding landed. `/feature-spec FEAT-JARVIS-001` **complete** (21 April) — `features/project-scaffolding-supervisor-sessions/` (35 scenarios across 7 groups; 6 assumptions all confirmed; `review_required: false`). **Next: Step 4 — `/feature-plan FEAT-JARVIS-001 --context features/project-scaffolding-supervisor-sessions/...`.**
 ## Repo: `guardkit/jarvis`
 ## Machine: MacBook Pro M2 Max (planning + build via Claude Code)
 
@@ -24,6 +24,8 @@
 | 2026-04-21 | `/system-arch` **complete** (Step 1) | Commit `2e96b24`. Produced `docs/architecture/ARCHITECTURE.md`, `system-context.md`, `container.md`, `domain-model.md`, `assumptions.yaml`, and **30 ADRs** `ADR-ARCH-001..030` (actual IDs, not the tentative `ADR-J-001..N`). Key ADRs for Phase 1: `ADR-ARCH-001` (local-first inference via llama-swap), `ADR-ARCH-002` (clean hexagonal in DeepAgents supervisor), `ADR-ARCH-003` (Jarvis is the GPA), `ADR-ARCH-005` (seven bounded contexts), `ADR-ARCH-006` (five-group module layout — supersedes the eight-layer sketch in this plan), `ADR-ARCH-009` (thread-per-session with Memory Store summary bridge), `ADR-ARCH-010` (Python 3.12 + DeepAgents pin), `ADR-ARCH-011` (single Jarvis reasoner subagent), `ADR-ARCH-015` (CI: ruff + mypy + pytest), `ADR-ARCH-020` (trace-richness by default), `ADR-ARCH-025` (DeepAgents 0.6 upgrade gated). Session transcript: `docs/history/system-arch-history.md`. |
 | 2026-04-21 | `/system-design FEAT-JARVIS-001` **complete** (Step 2) | Commits `b259206` (design artefacts) and `7c8cdeb` (C4 L3 diagram approval). Produced `docs/design/FEAT-JARVIS-001/design.md` plus `diagrams/`, `contracts/`, `decisions/`, `models/` subtrees. Approval gate passed; Graphiti seeding completed. Session transcript: `docs/history/system-design-history.md`. |
 | 2026-04-21 | Design artefacts + approval + Graphiti seeding landed | FEAT-JARVIS-001 design phase closed. Branch is 4 commits ahead of `origin/main`, nothing pushed. Ready for Step 3 (`/feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...`). |
+| 2026-04-21 | `/feature-spec FEAT-JARVIS-001` **complete** (Step 3) | Produced `features/project-scaffolding-supervisor-sessions/` — `project-scaffolding-supervisor-sessions.feature` (35 scenarios across 7 groups: 8 @key-example, 7 @boundary, 8 @negative, 12 @edge-case incl. 3 @security / 2 @concurrency / 2 @integration; 6 @smoke, 3 @regression), `_assumptions.yaml` (6 assumptions — 4 medium, 2 low — all confirmed), `_summary.md`. All four initial Propose-Review groups + all three edge-case-expansion sub-groups (security/concurrency/integration) accepted. Defaults taken for all 6 assumptions, with ASSUM-002 (`/exit` matching) and ASSUM-003 (concurrent invoke refusal) explicitly re-reviewed and signed off — `review_required: false`. Two tentative `ADR-J-*` paths in the original invocation were automatically mapped to actual `ADR-ARCH-*` IDs; two unreachable `--context` paths (`../forge/src/forge/cli/main.py`, `../specialist-agent/docs/reviews/deepagents-sdk-2026-04.md`) were skipped without harm. Ready for Step 4 (`/feature-plan FEAT-JARVIS-001`). |
+| 2026-04-21 | Phase 5 design decisions pinned via assumption resolution | Six previously-unstated behaviours became part of the specification contract: (1) ASSUM-001 blank-line chat turn is silently skipped; (2) ASSUM-002 `/exit` is case-sensitive lowercase with whitespace trimmed; (3) ASSUM-003 concurrent `invoke` on the same session is refused with a clear error (not silently serialised); (4) ASSUM-004 REPL reads the next stdin line only after the prior reply is printed; (5) ASSUM-005 `pydantic.ValidationError` at config load exits the CLI with code 1 (same as `ConfigurationError`); (6) ASSUM-006 non-CLI adapters (`telegram`/`dashboard`/`reachy`) raise `JarvisError` from `SessionManager.start_session`. These pins are load-bearing for Step 4 task decomposition and Step 5 AutoBuild — do not re-litigate without updating the feature file. |
 
 ---
 
@@ -399,9 +401,9 @@ After Step 1, **update this build plan's Status Log** with the actual ADR IDs be
 
 Expected output: `docs/design/FEAT-JARVIS-001/design.md` — component boundaries for the eight layers (`agents/`, `tools/`, `prompts/`, `config/`, `infrastructure/`, `sessions/`, `cli/`, `shared/`), the `Session` type's exact Pydantic fields, the `SessionManager` interface, the `build_supervisor` factory signature, the `JarvisConfig` schema, test fixture boundaries.
 
-### Step 3: /feature-spec FEAT-JARVIS-001 ⬅ NEXT
+### Step 3: /feature-spec FEAT-JARVIS-001 ✅ COMPLETE (21 April 2026)
 
-**Ready to invoke.** Steps 1 and 2 complete; `docs/design/FEAT-JARVIS-001/design.md` is in place. The invocation below was authored before Step 1/2 landed — when running it, substitute the real ADR IDs (`ADR-ARCH-001..030`) from `docs/architecture/decisions/` for the tentative `ADR-J-*` names listed in `--context`.
+**Completed 21 April 2026.** Delivered: `features/project-scaffolding-supervisor-sessions/` — `project-scaffolding-supervisor-sessions.feature` (35 scenarios; 6 @smoke, 3 @regression), `_assumptions.yaml` (6 assumptions, all confirmed; `review_required: false`), `_summary.md`. Six behaviours previously unstated in design contracts were pinned via assumption resolution — see Status Log row above for the full list. The original invocation is preserved below for traceability; when replaying, note that the tentative `ADR-J-*` context paths were auto-mapped to actual `ADR-ARCH-*` files and two unreachable sibling-repo paths were skipped.
 
 ```bash
 /feature-spec "Project Scaffolding, Supervisor Skeleton & Session Lifecycle: pyproject.toml with deepagents>=0.5.3,<0.6 pin, src/jarvis/ layer structure, DeepAgents supervisor via create_deep_agent(), thread-per-session with Memory Store, jarvis CLI (chat/version/health), smoke tests" \
@@ -423,28 +425,34 @@ Expected output: `docs/design/FEAT-JARVIS-001/design.md` — component boundarie
   --context .guardkit/context-manifest.yaml
 ```
 
-Expected output: `features/feat-jarvis-001-*/feat-jarvis-001-*.feature` (Gherkin scenarios), `_assumptions.yaml`, `_summary.md`. Resolve any low-confidence assumptions before Step 4.
+Actual output: `features/project-scaffolding-supervisor-sessions/` — `project-scaffolding-supervisor-sessions.feature` + `_assumptions.yaml` + `_summary.md`. All low-confidence assumptions were resolved (ASSUM-002, ASSUM-003 explicitly re-reviewed and signed off).
 
-### Step 4: /feature-plan FEAT-JARVIS-001
+### Step 4: /feature-plan FEAT-JARVIS-001 ⬅ NEXT
+
+**Ready to invoke.** Step 3 complete; the feature folder `features/project-scaffolding-supervisor-sessions/` is in place with `review_required: false`. Context paths below use the actual feature folder name and the real `ADR-ARCH-*` ADR IDs (substituted for the tentative `ADR-J-*` names in the original invocation template).
 
 ```bash
 /feature-plan "Project Scaffolding, Supervisor Skeleton & Session Lifecycle" \
-  --context features/feat-jarvis-001-*/feat-jarvis-001-*_summary.md \
-  --context features/feat-jarvis-001-*/feat-jarvis-001-*.feature \
-  --context features/feat-jarvis-001-*/feat-jarvis-001-*_assumptions.yaml \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_summary.md \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions.feature \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_assumptions.yaml \
   --context docs/design/FEAT-JARVIS-001/design.md \
   --context docs/architecture/ARCHITECTURE.md \
-  --context docs/architecture/decisions/ADR-J-001-deepagents-pin.md \
-  --context docs/architecture/decisions/ADR-J-002-supervisor-factory.md \
-  --context docs/architecture/decisions/ADR-J-003-layer-structure.md \
+  --context docs/architecture/decisions/ADR-ARCH-010-python-312-and-deepagents-pin.md \
+  --context docs/architecture/decisions/ADR-ARCH-002-clean-hexagonal-in-deepagents-supervisor.md \
+  --context docs/architecture/decisions/ADR-ARCH-006-five-group-module-layout.md \
+  --context docs/architecture/decisions/ADR-ARCH-009-thread-per-session-with-memory-store-summary-bridge.md \
+  --context docs/architecture/decisions/ADR-ARCH-011-single-jarvis-reasoner-subagent.md \
+  --context docs/architecture/decisions/ADR-ARCH-015-ci-ruff-mypy-pytest.md \
+  --context docs/architecture/decisions/ADR-ARCH-020-trace-richness-by-default.md \
+  --context docs/architecture/decisions/ADR-ARCH-021-tools-return-structured-errors.md \
   --context docs/research/ideas/phase1-supervisor-scaffolding-scope.md \
   --context docs/research/ideas/phase1-build-plan.md \
-  --context ../forge/pyproject.toml \
   --context ../specialist-agent/pyproject.toml \
   --context .guardkit/context-manifest.yaml
 ```
 
-Expected output: `tasks/FEAT-JARVIS-001-*.md` — a task decomposition mirroring Study Tutor's FEAT-PO-002 output shape. Tasks should be ordered to enable clean per-logical-step commits.
+Expected output: `tasks/FEAT-JARVIS-001-*.md` — a task decomposition mirroring Study Tutor's FEAT-PO-002 output shape. Tasks should be ordered to enable clean per-logical-step commits and must honour the six assumption-resolved behaviours pinned in Step 3 (empty-turn skip, `/exit` matching, concurrent-invoke refusal, REPL serialisation, config-error exit code 1, non-CLI-adapter `JarvisError`).
 
 ### Step 5: AutoBuild FEAT-JARVIS-001
 
@@ -586,9 +594,9 @@ These are settled from fleet v3, conversation-starter v2, and the 20 April refra
 
 | Day | Activity | Output |
 |-----|----------|--------|
-| 1 (21 Apr) ✅ | Step 1 **and** Step 2 — `/system-arch` + `/system-design FEAT-JARVIS-001` both landed same day. | `ARCHITECTURE.md`, C4 diagrams, domain model, `ADR-ARCH-001..030` (30 ADRs, actual IDs); `docs/design/FEAT-JARVIS-001/design.md` + `diagrams/` + `contracts/` + `decisions/` + `models/`. C4 L3 approval + Graphiti seeding done. |
-| 2 (22 Apr) | Step 3 — `/feature-spec FEAT-JARVIS-001`. Resolve low-confidence assumptions. | `features/feat-jarvis-001-*/`. |
-| 3 (23 Apr) | Step 4 + start of Step 5 — `/feature-plan FEAT-JARVIS-001`; begin AutoBuild (scaffold → config → pyproject). | `tasks/FEAT-JARVIS-001-*.md`; first 2–3 commits landed. |
+| 1 (21 Apr) ✅ | Steps 1, 2, **and** 3 — `/system-arch` + `/system-design FEAT-JARVIS-001` + `/feature-spec FEAT-JARVIS-001` all landed same day (a day ahead of the original schedule). | `ARCHITECTURE.md`, C4 diagrams, domain model, `ADR-ARCH-001..030` (30 ADRs, actual IDs); `docs/design/FEAT-JARVIS-001/design.md` + `diagrams/` + `contracts/` + `decisions/` + `models/`; `features/project-scaffolding-supervisor-sessions/` (35 scenarios, 6 assumptions confirmed, `review_required: false`). C4 L3 approval + Graphiti seeding done. |
+| 2 (22 Apr) | Step 4 — `/feature-plan FEAT-JARVIS-001` (bumped earlier following same-day Step 3 completion). | `tasks/FEAT-JARVIS-001-*.md`. |
+| 3 (23 Apr) | Step 5 — begin AutoBuild (scaffold → config → pyproject → prompts/supervisor). | First 3–4 commits landed. |
 | 4 (24 Apr) | Step 5 — complete AutoBuild (prompts, supervisor, infra, sessions, CLI, tests, docs). | All Phase 1 commits landed; CI green locally. |
 | 4 (24 Apr) | Step 6 + Step 7 — `/task-review`, fix any flagged issues, regression check. | Review pass; ruff + mypy + pytest all green. |
 | 4 (24 Apr) | Step 8 — day-1 conversation validation. | Conversation recorded as evidence; Phase 1 closed. |

@@ -165,3 +165,136 @@ Warnings were just benign "document too large, auto-chunking" notes — no failu
 
 /system-design FEAT-JARVIS-001 is complete. Design artefacts + approval + Graphiti seeding all landed. Branch is 4 commits ahead of origin/main, nothing pushed. Next per phase1-build-plan.md Step 3: /feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...
 
+
+
+
+/feature-spec "Project Scaffolding, Supervisor Skeleton & Session Lifecycle: pyproject.toml with deepagents>=0.5.3,<0.6 pin, src/jarvis/ layer structure, DeepAgents supervisor via create_deep_agent(), thread-per-session with Memory Store, jarvis CLI (chat/version/health), smoke tests" \
+  --context docs/design/FEAT-JARVIS-001/design.md \
+  --context docs/architecture/ARCHITECTURE.md \
+  --context docs/architecture/decisions/ADR-J-001-deepagents-pin.md \
+  --context docs/architecture/decisions/ADR-J-002-supervisor-factory.md \
+  --context docs/architecture/decisions/ADR-J-003-layer-structure.md \
+  --context docs/architecture/decisions/ADR-J-004-supervisor-model-default.md \
+  --context docs/architecture/decisions/ADR-J-005-memory-store-backend.md \
+  --context docs/research/ideas/phase1-supervisor-scaffolding-scope.md \
+  --context docs/research/ideas/phase1-build-plan.md \
+  --context docs/research/ideas/jarvis-vision.md \
+  --context docs/research/ideas/jarvis-architecture-conversation-starter.md \
+  --context ../forge/docs/research/ideas/ADR-FLEET-001-trace-richness.md \
+  --context ../specialist-agent/docs/reviews/deepagents-sdk-2026-04.md \
+  --context ../forge/src/forge/cli/main.py \
+  --context ../specialist-agent/src/specialist_agent/cli/main.py \
+  --context .guardkit/context-manifest.yaml
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE SPEC COMPLETE: Project Scaffolding, Supervisor Skeleton & Session Lifecycle
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Files written:
+features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions.feature
+features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_assumptions.yaml
+features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_summary.md
+
+Scenarios: 35 total
+@key-example: 8   @boundary: 7
+@negative: 8      @edge-case: 12
+@smoke: 6         @regression: 3
+@security: 3      @concurrency: 2   @integration: 2
+
+Assumptions: 6 total
+high: 0
+medium: 4 (ASSUM-001, 004, 005, 006 — Coach review recommended)
+low: 2 (ASSUM-002, 003 — human review required)
+
+REVIEW REQUIRED: 2 low-confidence assumptions need verification
+See: features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_assumptions.yaml
+
+ASSUM-002: "/exit" case/whitespace handling — not pinned in any contract
+ASSUM-003: Concurrent invoke on same session — refuse vs. serialise not pinned
+Deferred: 0 scenario groups
+
+Next steps:
+
+Review low-confidence assumptions (ASSUM-002, 003) — either confirm now or leave for the Coach gate at /task-review
+Run Step 4 of the Phase 1 build plan:
+
+/feature-plan "Project Scaffolding, Supervisor Skeleton & Session Lifecycle" \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_summary.md \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions.feature \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_assumptions.yaml \
+  --context docs/design/FEAT-JARVIS-001/design.md \
+  --context docs/research/ideas/phase1-build-plan.md
+
+
+/feature-plan "Project Scaffolding, Supervisor Skeleton & Session Lifecycle" \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_summary.md \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions.feature \
+  --context features/project-scaffolding-supervisor-sessions/project-scaffolding-supervisor-sessions_assumptions.yaml \
+  --context docs/design/FEAT-JARVIS-001/design.md \
+  --context docs/architecture/ARCHITECTURE.md \
+  --context docs/architecture/decisions/ADR-ARCH-010-python-312-and-deepagents-pin.md \
+  --context docs/architecture/decisions/ADR-ARCH-002-clean-hexagonal-in-deepagents-supervisor.md \
+  --context docs/architecture/decisions/ADR-ARCH-006-five-group-module-layout.md \
+  --context docs/architecture/decisions/ADR-ARCH-009-thread-per-session-with-memory-store-summary-bridge.md \
+  --context docs/architecture/decisions/ADR-ARCH-011-single-jarvis-reasoner-subagent.md \
+  --context docs/architecture/decisions/ADR-ARCH-015-ci-ruff-mypy-pytest.md \
+  --context docs/architecture/decisions/ADR-ARCH-020-trace-richness-by-default.md \
+  --context docs/architecture/decisions/ADR-ARCH-021-tools-return-structured-errors.md \
+  --context docs/research/ideas/phase1-supervisor-scaffolding-scope.md \
+
+
+Feature planning complete. Here is the summary:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ FEATURE PLANNING COMPLETE — FEAT-JARVIS-001
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Feature: Project Scaffolding, Supervisor Skeleton & Session Lifecycle
+Review task: TASK-REV-J001 (review_complete, decision=implement)
+Structured YAML: .guardkit/features/FEAT-JARVIS-001.yaml
+Feature folder: tasks/backlog/project-scaffolding-supervisor-sessions/
+
+Artefacts created
+README.md — feature overview + task table
+IMPLEMENTATION-GUIDE.md — data-flow diagram, integration-contract sequence diagram, task-dependency graph, §4 Integration Contracts (3 contracts), wave structure, invariants, risks
+11 subtask files (see table below)
+Task breakdown (11 tasks · 6 waves)
+Wave	Tasks	Type of wave
+1	TASK-J001-001, -002, -010	parallel (3)
+2	TASK-J001-003, -004	parallel (2)
+3	TASK-J001-005, -006	parallel (2)
+4	TASK-J001-007	serial
+5	TASK-J001-008	serial
+6	TASK-J001-009, -011	parallel (2)
+Aggregate complexity: 7/10 · Total effort: ~600 min (10 hrs sum; critical path ~7 hrs) · Timeline: 3–4 working days
+
+Integration contracts pinned
+SUPERVISOR_MODEL_ENDPOINT (TASK-003 → TASK-006): provider-prefixed model + OPENAI_BASE_URL to llama-swap
+COMPILED_SUPERVISOR_GRAPH (TASK-006 → TASK-007): ainvoke must pass both config.thread_id and store kwargs
+APP_STATE (TASK-005 → TASK-008): logging configured before config validation
+Pre-flight validation
+✅ All 11 task files exist
+✅ All dependencies reference valid task IDs
+✅ No intra-wave dependency conflicts (caught and fixed T009/T011 → split to wave 6)
+✅ All tasks have task_type in frontmatter (CoachValidator compatible)
+✅ Consumer tasks have consumer_context + seam test stubs
+✅ .guardkit/features/FEAT-JARVIS-001.yaml schema valid
+
+Next steps
+
+/feature-build FEAT-JARVIS-001        # autonomous Player-Coach
+# or wave-by-wave:
+/task-work TASK-J001-001 --implement-only   # wave 1 (in parallel with -002, -010)
+
+
+
+
+
+
+
+
+
+
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-001 --verbose --max-turns 30
