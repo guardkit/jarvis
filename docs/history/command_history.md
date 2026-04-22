@@ -288,6 +288,66 @@ Next steps
 # or wave-by-wave:
 /task-work TASK-J001-001 --implement-only   # wave 1 (in parallel with -002, -010)
 
+════════════════════════════════════════════════════════════
+FEATURE RESULT: SUCCESS
+════════════════════════════════════════════════════════════
+
+Feature: FEAT-JARVIS-001 - Project Scaffolding, Supervisor Skeleton & Session Lifecycle
+Status: COMPLETED
+Tasks: 11/11 completed
+Total Turns: 12
+Duration: 57m 36s
+
+                                  Wave Summary
+╭────────┬──────────┬────────────┬──────────┬──────────┬──────────┬─────────────╮
+│  Wave  │  Tasks   │   Status   │  Passed  │  Failed  │  Turns   │  Recovered  │
+├────────┼──────────┼────────────┼──────────┼──────────┼──────────┼─────────────┤
+│   1    │    3     │   ✓ PASS   │    3     │    -     │    4     │      -      │
+│   2    │    2     │   ✓ PASS   │    2     │    -     │    2     │      -      │
+│   3    │    2     │   ✓ PASS   │    2     │    -     │    2     │      -      │
+│   4    │    1     │   ✓ PASS   │    1     │    -     │    1     │      -      │
+│   5    │    1     │   ✓ PASS   │    1     │    -     │    1     │      -      │
+│   6    │    2     │   ✓ PASS   │    2     │    -     │    2     │      -      │
+╰────────┴──────────┴────────────┴──────────┴──────────┴──────────┴─────────────╯
+
+Execution Quality:
+  Clean executions: 11/11 (100%)
+
+SDK Turn Ceiling:
+  Invocations: 5
+  Ceiling hits: 0/5 (0%)
+
+                                  Task Details
+╭──────────────────────┬────────────┬──────────┬─────────────────┬──────────────╮
+│ Task                 │ Status     │  Turns   │ Decision        │  SDK Turns   │
+├──────────────────────┼────────────┼──────────┼─────────────────┼──────────────┤
+│ TASK-J001-001        │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-J001-002        │ SUCCESS    │    2     │ approved        │      -       │
+│ TASK-J001-010        │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-J001-003        │ SUCCESS    │    1     │ approved        │      46      │
+│ TASK-J001-004        │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-J001-005        │ SUCCESS    │    1     │ approved        │      45      │
+│ TASK-J001-006        │ SUCCESS    │    1     │ approved        │      44      │
+│ TASK-J001-007        │ SUCCESS    │    1     │ approved        │      47      │
+│ TASK-J001-008        │ SUCCESS    │    1     │ approved        │      48      │
+│ TASK-J001-009        │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-J001-011        │ SUCCESS    │    1     │ approved        │      -       │
+╰──────────────────────┴────────────┴──────────┴─────────────────┴──────────────╯
+
+Worktree: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-JARVIS-001
+Branch: autobuild/FEAT-JARVIS-001
+
+Next Steps:
+  1. Review: cd /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-JARVIS-001
+  2. Diff: git diff main
+  3. Merge: git checkout main && git merge autobuild/FEAT-JARVIS-001
+  4. Cleanup: guardkit worktree cleanup FEAT-JARVIS-001
+INFO:guardkit.cli.display:Final summary rendered: FEAT-JARVIS-001 - completed
+INFO:guardkit.orchestrator.review_summary:Review summary written to /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/autobuild/FEAT-JARVIS-001/review-summary.md
+✓ Review summary: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/autobuild/FEAT-JARVIS-001/review-summary.md
+INFO:guardkit.orchestrator.feature_orchestrator:Feature orchestration complete: FEAT-JARVIS-001, status=completed, completed=11/11
+richardwoollcott@Mac jarvis %
+
 
 
 
