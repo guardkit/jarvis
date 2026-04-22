@@ -10,27 +10,80 @@ Vision documents ready in `docs/research/ideas/`. Next step: run `/system-arch`.
 
 ## Quickstart
 
+Run everything via `uv run …`; `uv` selects the project's pinned 3.12 interpreter (see `.python-version`).
+
 ```bash
 # 1. Clone and enter the repo
 git clone <repo-url> && cd jarvis
 
-# 2. Create a virtual environment (Python 3.12)
-python3.12 -m venv .venv
-source .venv/bin/activate
+# 2. Create the project venv (uv reads .python-version → 3.12)
+#    and install runtime + dev deps in one step.
+uv sync
 
-# 3. Install with dev extras
-pip install -e ".[dev]"
-
-# 4. Copy the example env file and configure
+# 3. Copy the example env file and configure
 cp .env.example .env
 # Edit .env with your provider keys / endpoints
 
-# 5. Run the test suite
-pytest
+# 4. Run the test suite
+uv run pytest
 
-# 6. Launch the CLI
-jarvis version
+# 5. Launch the CLI
+uv run jarvis version
 ```
+
+## Development — Tests, Lint, Types
+
+Every dev command goes through `uv run …`. That resolves the tool from
+`.venv/bin/` against the pinned 3.12 interpreter; bypassing it (bare `pytest`,
+bare `ruff`) can silently hit a system Python with different package versions.
+
+```bash
+# Full regression (what CI-equivalent Step 7 of the build plan runs)
+uv run pytest                                          # 341 passing
+uv run pytest --cov=src/jarvis --cov-report=term       # with coverage
+uv run ruff check src/jarvis/ tests/                   # lint
+uv run mypy src/jarvis/                                # types (strict)
+
+# Targeted runs while iterating
+uv run pytest tests/test_supervisor.py -v              # one file
+uv run pytest tests/test_supervisor.py::TestBuildSupervisorReturnsGraph -v
+uv run pytest -k "supervisor and not no_llm" -v        # keyword filter
+uv run pytest --lf                                     # re-run last failures
+```
+
+### Dev dependency layout
+
+Dev tooling (pytest, ruff, mypy, types-*) lives in `[dependency-groups].dev`
+(PEP 735), **not** `[project.optional-dependencies]`. This means:
+
+- Bare `uv sync` installs them by default — no `--extra dev` / `--dev` flag
+  needed. Earlier iterations had them as an optional-extra, which caused
+  `uv sync` to silently prune `.venv/bin/pytest` on every run and then
+  `uv run pytest` fell through to the system Python.
+- `uv sync --no-dev` skips them (useful for prod/release builds).
+- `uv sync --extra providers` adds the optional provider SDKs
+  (`langchain-anthropic`, `langchain-google-genai`) — those are still an
+  `[project.optional-dependencies]` extra because they are runtime, not dev.
+
+### Troubleshooting
+
+**`uv run` warns about `VIRTUAL_ENV=…` not matching `.venv`.** Something in
+your shell exported `VIRTUAL_ENV` pointing at a non-project interpreter (often
+a framework Python). `uv run` ignores it, but you can silence the warning
+with `unset VIRTUAL_ENV` or `deactivate`.
+
+**Tests fail with `ModuleNotFoundError: No module named 'jarvis'` in a
+subprocess.** `.venv/bin/python` is fine, but something invoked a different
+Python (e.g. a stale `uv run` picked up `/usr/local/bin/pytest`). Verify
+with `uv run python -c "import sys; print(sys.executable)"` — it must resolve
+to `.venv/bin/python3`. If not, re-sync: `rm -rf .venv && uv sync`.
+
+**`OpenAIError: The api_key client option must be set…` in supervisor tests.**
+Only unmocked tests would hit a real OpenAI client. Every test that calls
+`build_supervisor` must patch `jarvis.agents.supervisor.init_chat_model` — use
+the `fake_llm` fixture from `tests/conftest.py`. See
+`tests/test_supervisor.py::TestBuildSupervisorReturnsGraph` for the canonical
+pattern.
 
 ## The Full Pipeline
 

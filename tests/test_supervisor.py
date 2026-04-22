@@ -13,6 +13,7 @@ Seam test:
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,11 +27,19 @@ class TestBuildSupervisorReturnsGraph:
     """AC-001: build_supervisor(test_config) returns a CompiledStateGraph
     without issuing any network request."""
 
-    def test_returns_compiled_state_graph(self, test_config: object) -> None:
-        """Factory returns a CompiledStateGraph instance."""
+    def test_returns_compiled_state_graph(
+        self, test_config: object, fake_llm: Any
+    ) -> None:
+        """Factory returns a CompiledStateGraph instance without a real provider client.
+
+        Patches ``init_chat_model`` with the deterministic ``fake_llm`` fixture so the
+        OpenAI client is never instantiated — AC-001 requires no network and no real
+        provider credentials at build time.
+        """
         from jarvis.agents.supervisor import build_supervisor
 
-        graph = build_supervisor(test_config)
+        with patch("jarvis.agents.supervisor.init_chat_model", return_value=fake_llm):
+            graph = build_supervisor(test_config)
         assert isinstance(graph, CompiledStateGraph)
 
     def test_no_network_calls_at_build_time(self, test_config: object) -> None:

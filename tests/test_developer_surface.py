@@ -212,13 +212,18 @@ class TestAC004ReadmeQuickstart:
     @pytest.mark.parametrize(
         "command_fragment",
         [
-            "pip install",
+            "uv sync",
             ".env.example",
             "pytest",
         ],
     )
     def test_quickstart_contains_command(self, command_fragment: str) -> None:
-        """Quickstart section references key commands."""
+        """Quickstart section references key commands.
+
+        ``uv sync`` is the canonical install command now that dev tooling lives
+        under PEP 735 ``[dependency-groups].dev`` (formerly ``pip install -e
+        ".[dev]"`` against ``[project.optional-dependencies].dev``).
+        """
         content = README.read_text()
         # Extract the Quickstart section (from heading to next ## heading or end)
         match = re.search(

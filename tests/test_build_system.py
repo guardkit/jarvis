@@ -173,12 +173,21 @@ class TestAC003DevToolsResolve:
         assert "tests" in pytest_opts["testpaths"]
 
     def test_dev_extras_include_tools(self) -> None:
-        """[project.optional-dependencies].dev includes ruff, mypy, pytest."""
+        """[dependency-groups].dev includes ruff, mypy, pytest.
+
+        Dev tooling lives in PEP 735 ``[dependency-groups].dev`` so that a bare
+        ``uv sync`` installs them into ``.venv`` — keeping ``.venv/bin/pytest``
+        in lock-step with the pinned 3.12 interpreter. Putting them under
+        ``[project.optional-dependencies].dev`` would require callers to
+        remember ``--extra dev`` and any bare ``uv sync`` would silently prune
+        them, which historically caused ``uv run pytest`` to fall through to
+        the system Python.
+        """
         data = _load_pyproject()
-        dev_deps = data["project"]["optional-dependencies"]["dev"]
+        dev_deps = data["dependency-groups"]["dev"]
         dep_names = [d.split(">")[0].split("<")[0].split("=")[0].strip() for d in dev_deps]
         for tool in ("pytest", "ruff", "mypy"):
-            assert tool in dep_names, f"{tool} missing from [project.optional-dependencies].dev"
+            assert tool in dep_names, f"{tool} missing from [dependency-groups].dev"
 
 
 # ===================================================================
@@ -210,6 +219,18 @@ class TestAC004EntryPoint:
 
     def test_jarvis_version_command(self) -> None:
         """The version sub-command produces output."""
+        check = subprocess.run(
+            [sys.executable, "-c", "import jarvis; print(jarvis.__version__)"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert check.returncode == 0, (
+            f"sys.executable {sys.executable!r} cannot import jarvis. "
+            f"Run via `uv run pytest` so the project's pinned venv is used. "
+            f"stderr: {check.stderr}"
+        )
+
         result = subprocess.run(
             [sys.executable, "-m", "jarvis.cli.main", "version"],
             capture_output=True,

@@ -2,7 +2,7 @@
 
 ## For: Laying the foundation for v1 Jarvis — the attended DeepAgent with dispatch tools. Every subsequent feature in v1 (FEAT-JARVIS-002..007) compounds on this one.
 ## Date: 20 April 2026
-## Status: `guardkit init` complete (20 April). `/system-arch` **complete** (21 April) — 30 ADRs `ADR-ARCH-001..030`, C4 (`system-context.md`, `container.md`), `domain-model.md`, `ARCHITECTURE.md`, `assumptions.yaml`. `/system-design FEAT-JARVIS-001` **complete** (21 April) — `docs/design/FEAT-JARVIS-001/` (`design.md`, `diagrams/`, `contracts/`, `decisions/`, `models/`), C4 L3 diagram approved, Graphiti seeding landed. `/feature-spec FEAT-JARVIS-001` **complete** (21 April) — `features/project-scaffolding-supervisor-sessions/` (35 scenarios across 7 groups; 6 assumptions all confirmed; `review_required: false`). **Next: Step 4 — `/feature-plan FEAT-JARVIS-001 --context features/project-scaffolding-supervisor-sessions/...`.**
+## Status: `guardkit init` complete (20 April). `/system-arch` **complete** (21 April) — 30 ADRs `ADR-ARCH-001..030`, C4 (`system-context.md`, `container.md`), `domain-model.md`, `ARCHITECTURE.md`, `assumptions.yaml`. `/system-design FEAT-JARVIS-001` **complete** (21 April) — `docs/design/FEAT-JARVIS-001/` (`design.md`, `diagrams/`, `contracts/`, `decisions/`, `models/`), C4 L3 diagram approved, Graphiti seeding landed. `/feature-spec FEAT-JARVIS-001` **complete** (21 April) — `features/project-scaffolding-supervisor-sessions/` (35 scenarios across 7 groups; 6 assumptions all confirmed; `review_required: false`). `/feature-plan FEAT-JARVIS-001` **complete** (21 April) — 11 subtasks across 6 waves in `tasks/backlog/project-scaffolding-supervisor-sessions/`, structured YAML at `.guardkit/features/FEAT-JARVIS-001.yaml`, IMPLEMENTATION-GUIDE.md with data-flow + integration-contract + task-dependency Mermaid diagrams + §4 Integration Contracts. AutoBuild (Step 5) **complete** (21 April, ~57 min wall-clock) — all 11 tasks Player→Coach approved (10 in one turn, TASK-J001-002 in two turns after a src-layout sys.path fix). `/task-review FEAT-JARVIS-001` (Step 6) **complete** (22 April) — score 82/100, decision `revise → [I]mplement`. Report at `.claude/reviews/FEAT-JARVIS-001-review-report.md`; 4 remediation subtasks across 2 waves landed in `tasks/backlog/phase1-review-fixes/`. Two HIGH findings (mypy not clean on `src/jarvis/`, one env-fragile pytest failure) block Success Criteria #5 + #6 until Wave 1 of the fix folder completes. **Next: execute `tasks/backlog/phase1-review-fixes/` (FIX-001..004), then Step 7 regression check.**
 ## Repo: `guardkit/jarvis`
 ## Machine: MacBook Pro M2 Max (planning + build via Claude Code)
 
@@ -26,6 +26,9 @@
 | 2026-04-21 | Design artefacts + approval + Graphiti seeding landed | FEAT-JARVIS-001 design phase closed. Branch is 4 commits ahead of `origin/main`, nothing pushed. Ready for Step 3 (`/feature-spec FEAT-JARVIS-001 --context docs/design/FEAT-JARVIS-001/design.md ...`). |
 | 2026-04-21 | `/feature-spec FEAT-JARVIS-001` **complete** (Step 3) | Produced `features/project-scaffolding-supervisor-sessions/` — `project-scaffolding-supervisor-sessions.feature` (35 scenarios across 7 groups: 8 @key-example, 7 @boundary, 8 @negative, 12 @edge-case incl. 3 @security / 2 @concurrency / 2 @integration; 6 @smoke, 3 @regression), `_assumptions.yaml` (6 assumptions — 4 medium, 2 low — all confirmed), `_summary.md`. All four initial Propose-Review groups + all three edge-case-expansion sub-groups (security/concurrency/integration) accepted. Defaults taken for all 6 assumptions, with ASSUM-002 (`/exit` matching) and ASSUM-003 (concurrent invoke refusal) explicitly re-reviewed and signed off — `review_required: false`. Two tentative `ADR-J-*` paths in the original invocation were automatically mapped to actual `ADR-ARCH-*` IDs; two unreachable `--context` paths (`../forge/src/forge/cli/main.py`, `../specialist-agent/docs/reviews/deepagents-sdk-2026-04.md`) were skipped without harm. Ready for Step 4 (`/feature-plan FEAT-JARVIS-001`). |
 | 2026-04-21 | Phase 5 design decisions pinned via assumption resolution | Six previously-unstated behaviours became part of the specification contract: (1) ASSUM-001 blank-line chat turn is silently skipped; (2) ASSUM-002 `/exit` is case-sensitive lowercase with whitespace trimmed; (3) ASSUM-003 concurrent `invoke` on the same session is refused with a clear error (not silently serialised); (4) ASSUM-004 REPL reads the next stdin line only after the prior reply is printed; (5) ASSUM-005 `pydantic.ValidationError` at config load exits the CLI with code 1 (same as `ConfigurationError`); (6) ASSUM-006 non-CLI adapters (`telegram`/`dashboard`/`reachy`) raise `JarvisError` from `SessionManager.start_session`. These pins are load-bearing for Step 4 task decomposition and Step 5 AutoBuild — do not re-litigate without updating the feature file. |
+| 2026-04-22 | `/task-review FEAT-JARVIS-001` **complete** (Step 6) | Architectural post-build review (standard depth, focus=all, tradeoff=balanced). Quality gates: `pytest` 340/341 pass, `ruff` clean on `src/jarvis/`, `mypy` 5 errors on `src/jarvis/`. **Score 82/100.** All six ASSUM-* pins + DDR-002/003/004 verified in code; scope invariants clean (no NATS/Telegram/Graphiti/subagent/custom-tool imports; 8 reserved packages stubbed). 8 findings: 2 HIGH (mypy, env-fragile test — block Success Criteria #5/#6), 2 MEDIUM (`AppState.Any` + stale comments; logging configured after config validation), 4 LOW (`correlation_id` ULID-vs-UUID docstring drift, 7 ruff errors in `tests/`, implicit asyncio-single-loop concurrency model, function-scoped `HumanMessage` import). Decision: `[I]mplement` — 4 remediation subtasks created at `tasks/backlog/phase1-review-fixes/` across 2 parallel waves, ~75 min sequential / ~50 min wall-clock. Review report: `.claude/reviews/FEAT-JARVIS-001-review-report.md`. |
+| 2026-04-21 | `/feature-plan FEAT-JARVIS-001` **complete** (Step 4) | Review task `TASK-REV-J001` created (decision=implement) and moved to `tasks/in_review/`. Produced `tasks/backlog/project-scaffolding-supervisor-sessions/` — README.md, IMPLEMENTATION-GUIDE.md (with mandatory Data Flow, Integration Contract sequence, and Task Dependency Mermaid diagrams + §4 Integration Contracts for `SUPERVISOR_MODEL_ENDPOINT`, `COMPILED_SUPERVISOR_GRAPH`, `APP_STATE`), and 11 subtask files `TASK-J001-001..011`. Structured YAML at `.guardkit/features/FEAT-JARVIS-001.yaml` with 6-wave orchestration (waves 1/2/3/6 parallel; waves 4/5 serial; pre-flight caught an intra-wave-5 dependency and split into waves 5+6 before AutoBuild). Context A defaults (all/standard/balanced/extensibility=yes); Context B recommended-path / auto-detect / standard-testing. |
+| 2026-04-21 | AutoBuild FEAT-JARVIS-001 **complete** (Step 5) | All 11 tasks ran Player→Coach under `guardkit autobuild` in a single worktree (`.guardkit/worktrees/FEAT-JARVIS-001`), wave-ordered, 22:31–23:28 (~57 min wall-clock — well inside the 3–4-day budget). Ten tasks approved in one turn. TASK-J001-002 took two turns: Turn 1 passed lint/mypy/format but the coach's test runner ran `pytest` without an editable install in a src-layout project, so every test failed with `ModuleNotFoundError: No module named 'jarvis'`; Turn 2 added `tests/conftest.py` that prepends `<project-root>/src` to `sys.path` at pytest startup (the standard src-layout fix) and all 29 tests passed. Every task is currently `status: in_review` with `player_success: true` and `coach_success: true`. |
 
 ---
 
@@ -51,7 +54,7 @@ Phase 1 is a *precondition* for every other v1 feature. Dispatch tools (002), as
 
 ## Success Criteria
 
-1. `uv sync` (or `pip install -e ".[dev]"`) succeeds in a clean venv on the MacBook Pro M2 Max.
+1. `uv sync` succeeds in a clean venv on the MacBook Pro M2 Max (installs runtime deps + `[dependency-groups].dev`).
 2. `jarvis version`, `jarvis health`, `jarvis chat` work without unhandled exceptions.
 3. `jarvis chat` holds a useful multi-turn conversation with a real supervisor model — the day-1 criterion.
 4. Memory Store round-trips: a fact stated in session A is recallable in session B.
@@ -134,7 +137,7 @@ Minimal but template-faithful project file:
   - `langchain-core`, `langgraph>=0.3`, `pydantic>=2`, `pydantic-settings`, `structlog`, `python-dotenv`, `click`
   - Provider-specific model packages that the selected supervisor model needs (added as `/system-arch` pins the default model)
   - **Not added in Phase 1:** `nats-py`, `nats-core` (arrives at FEAT-JARVIS-004), `graphiti-core` (arrives at the Graphiti integration feature, v1.5), Telegram SDK (FEAT-JARVIS-006)
-- `[project.optional-dependencies].dev`: `pytest>=8`, `pytest-asyncio`, `pytest-cov`, `ruff`, `mypy`, `types-*` as needed
+- `[dependency-groups].dev` (PEP 735): `pytest>=8`, `pytest-asyncio`, `pytest-cov`, `ruff`, `mypy`, `types-*` as needed — installed by default on bare `uv sync`.
 - `[project.scripts]`: `jarvis = "jarvis.cli.main:main"`
 - `[tool.ruff]`, `[tool.mypy]`, `[tool.pytest.ini_options]` — config matching specialist-agent's style (line length 100, strict mypy, `asyncio_mode = "auto"`, coverage config)
 - `[build-system]`: `hatchling` (same as Forge + specialist-agent)
@@ -427,9 +430,9 @@ Expected output: `docs/design/FEAT-JARVIS-001/design.md` — component boundarie
 
 Actual output: `features/project-scaffolding-supervisor-sessions/` — `project-scaffolding-supervisor-sessions.feature` + `_assumptions.yaml` + `_summary.md`. All low-confidence assumptions were resolved (ASSUM-002, ASSUM-003 explicitly re-reviewed and signed off).
 
-### Step 4: /feature-plan FEAT-JARVIS-001 ⬅ NEXT
+### Step 4: /feature-plan FEAT-JARVIS-001 ✅ COMPLETE (21 April 2026)
 
-**Ready to invoke.** Step 3 complete; the feature folder `features/project-scaffolding-supervisor-sessions/` is in place with `review_required: false`. Context paths below use the actual feature folder name and the real `ADR-ARCH-*` ADR IDs (substituted for the tentative `ADR-J-*` names in the original invocation template).
+**Completed 21 April 2026.** Delivered: (a) review task `TASK-REV-J001` (decision=implement) in `tasks/in_review/`; (b) `tasks/backlog/project-scaffolding-supervisor-sessions/` with README.md, IMPLEMENTATION-GUIDE.md, and 11 subtask files `TASK-J001-001..011`; (c) structured YAML at `.guardkit/features/FEAT-JARVIS-001.yaml`. IMPLEMENTATION-GUIDE.md carries the three mandatory Mermaid diagrams (data flow, integration-contract sequence, task-dependency graph) plus a §4 Integration Contracts section pinning `SUPERVISOR_MODEL_ENDPOINT`, `COMPILED_SUPERVISOR_GRAPH`, and `APP_STATE`. Pre-flight validation caught one intra-wave dependency (TASK-J001-009 and -011 both depended on TASK-J001-008 while sharing wave 5); fixed by splitting into waves 5 (TASK-J001-008 alone) and 6 (parallel: -009 + -011). The original Step 4 invocation is preserved below for traceability.
 
 ```bash
 /feature-plan "Project Scaffolding, Supervisor Skeleton & Session Lifecycle" \
@@ -452,40 +455,71 @@ Actual output: `features/project-scaffolding-supervisor-sessions/` — `project-
   --context .guardkit/context-manifest.yaml
 ```
 
-Expected output: `tasks/FEAT-JARVIS-001-*.md` — a task decomposition mirroring Study Tutor's FEAT-PO-002 output shape. Tasks should be ordered to enable clean per-logical-step commits and must honour the six assumption-resolved behaviours pinned in Step 3 (empty-turn skip, `/exit` matching, concurrent-invoke refusal, REPL serialisation, config-error exit code 1, non-CLI-adapter `JarvisError`).
+Actual output: review task `TASK-REV-J001` in `tasks/in_review/`; feature folder `tasks/backlog/project-scaffolding-supervisor-sessions/` with 11 subtasks (`TASK-J001-001..011`) + README.md + IMPLEMENTATION-GUIDE.md; structured YAML `.guardkit/features/FEAT-JARVIS-001.yaml`. Wave structure (as-planned, after pre-flight fix): **W1** parallel — pyproject, shared, reserved-empty packages · **W2** parallel — config, prompts+conftest · **W3** parallel — infrastructure, supervisor · **W4** serial — sessions · **W5** serial — CLI · **W6** parallel — E2E smoke, docs. All six assumption-resolved behaviours (empty-turn skip, `/exit` matching, concurrent-invoke refusal, REPL serialisation, config-error exit code 1, non-CLI-adapter `JarvisError`) are explicit in the subtask Acceptance Criteria and Coach Validation blocks.
 
-### Step 5: AutoBuild FEAT-JARVIS-001
+### Step 5: AutoBuild FEAT-JARVIS-001 ✅ COMPLETE (21 April 2026)
 
-Run AutoBuild on the FEAT-JARVIS-001 task list. Build order within the feature (suggested — `/feature-plan` may refine):
+**Completed 21 April 2026** under `guardkit autobuild` in a single shared worktree `.guardkit/worktrees/FEAT-JARVIS-001` from `main`. Total wall-clock: **~57 minutes** (22:31:06 → 23:28:43 UTC), well inside the 3–4-day budget. All 11 tasks reached Player→Coach approval; all are now `status: in_review` with `player_success: true` and `coach_success: true` in their `autobuild_state.turns[*]`.
 
-1. **Shared layer first.** `src/jarvis/__init__.py`, `shared/constants.py`, `shared/exceptions.py`, `tools/__init__.py` (empty). Commit.
-2. **Config.** `config/settings.py` + `tests/test_config.py` (with fixtures from `conftest.py`). Commit.
-3. **`pyproject.toml` + `.env.example` + `.gitignore` updates.** Establish `uv sync` works. Commit.
-4. **Prompts + supervisor factory.** `prompts/supervisor_prompt.py`, `agents/supervisor.py` + `tests/test_supervisor.py`. Commit.
-5. **Infrastructure.** `infrastructure/logging.py`, `infrastructure/lifecycle.py`. Commit.
-6. **Sessions.** `sessions/session.py`, `sessions/manager.py` + `tests/test_sessions.py`. Commit.
-7. **CLI.** `cli/main.py` + `tests/test_cli.py`. Commit.
-8. **End-to-end smoke test.** `tests/test_smoke_end_to_end.py`. Commit.
-9. **Docs.** `README.md` Quickstart section. Commit.
+Per-wave timings:
 
-Per conversation starter §6: **per-feature AutoBuild, not per-task.** `/task-review` runs once at the feature gate.
+| Wave | Tasks | Turns total | Wall-clock |
+|------|-------|-------------|-----------|
+| 1 | TASK-J001-001, -002, -010 | 4 (1+2+1) | ~11 min |
+| 2 | TASK-J001-003, -004 | 2 | ~8 min |
+| 3 | TASK-J001-005, -006 | 2 | ~9 min |
+| 4 | TASK-J001-007 | 1 | ~10 min |
+| 5 | TASK-J001-008 | 1 | ~8 min |
+| 6 | TASK-J001-009, -011 | 2 | ~11 min |
+| — | **Total** | **12** | **~57 min** |
 
-### Step 6: /task-review FEAT-JARVIS-001
+The only two-turn task was **TASK-J001-002** (shared primitives). Turn 1 passed lint/mypy/format and implemented the module correctly, but the coach's test runner ran `pytest` without an editable install in a src-layout project — every test failed with `ModuleNotFoundError: No module named 'jarvis'`. Turn 2 added `tests/conftest.py` that prepends `<project-root>/src` to `sys.path` at pytest startup (the standard src-layout fix); all 29 tests passed. Worth capturing as a lesson: **AutoBuild's test runner in src-layout projects needs either an editable install or a `conftest.py` sys.path shim in place before the first wave lands.**
+
+No scope drift; no invariant violations observed in the coach summaries.
+
+### Step 6: /task-review FEAT-JARVIS-001 ✅ COMPLETE (22 April 2026)
+
+**Completed 22 April 2026.** Architectural post-build review of FEAT-JARVIS-001; score **82/100**, decision `[I]mplement`. Quality gates run: `pytest` 340/341 pass, `ruff` clean on `src/jarvis/`, `mypy` 5 errors on `src/jarvis/`. All six ASSUM-* pins and DDR-002/003/004 verified in code; scope invariants clean (no NATS/Telegram/Graphiti/subagent/custom-tool imports in `src/jarvis/`; 8 reserved packages properly stubbed with `# Reserved for FEAT-JARVIS-00N` markers). Review report: [`.claude/reviews/FEAT-JARVIS-001-review-report.md`](../../../.claude/reviews/FEAT-JARVIS-001-review-report.md). Original invocation preserved below for traceability.
 
 ```bash
 /task-review FEAT-JARVIS-001 \
-  --context tasks/FEAT-JARVIS-001-*.md \
+  --context tasks/backlog/project-scaffolding-supervisor-sessions/IMPLEMENTATION-GUIDE.md \
+  --context .guardkit/features/FEAT-JARVIS-001.yaml \
   --context docs/research/ideas/phase1-supervisor-scaffolding-scope.md \
   --context docs/research/ideas/phase1-build-plan.md
 ```
 
-Review gate. Fix anything flagged. Re-run tests. Re-run ruff + mypy.
+**Findings summary** (8 total):
+
+| ID | Severity | Summary | Success-criterion impact |
+|---|---|---|---|
+| F1 | HIGH | mypy 5 errors in `src/jarvis/` (`CompiledStateGraph` missing type params × 3, `_redact_secrets` signature, unused `type: ignore`) | Blocks SC #6 |
+| F2 | HIGH | `test_jarvis_version_command` env-fragile — `sys.executable`-based subprocess fails when ambient venv ≠ project `.venv` (Py3.14 vs Py3.12) | Blocks SC #5 |
+| F3 | MEDIUM | `AppState.supervisor` / `session_manager` typed `Any` with stale "*(None until TASK-J001-…)*" comments; CLI stitches them in via `dataclasses.replace` | None directly; bootstrap smell |
+| F4 | MEDIUM | `JarvisConfig()` pydantic validation runs before `structlog` is configured; config-failure scenario wants structured log events for those failures too | None directly; scenario gap |
+| F5 | LOW | `correlation_id` docstring says ULID, code uses `uuid.uuid4().hex` | None |
+| F6 | LOW | 7 ruff errors in `tests/` (scoped outside SC #6 but indicates drift) | None |
+| F7 | LOW | `SessionManager._in_flight: dict[str, bool]` — safe under asyncio single-loop; fragile when FEAT-006 adds a second task source | Defer to FEAT-JARVIS-006 |
+| F8 | LOW | `from langchain_core.messages import HumanMessage` imported inside `invoke()` instead of module top | None |
+
+**[I]mplement outcome:** 4 remediation subtasks created at [`tasks/backlog/phase1-review-fixes/`](../../../tasks/backlog/phase1-review-fixes/):
+
+| Task | Wave | Mode | Fixes | Est. |
+|---|---|---|---|---|
+| TASK-J001-FIX-001 | 1 | direct | F1 (mypy clean) | 15 min |
+| TASK-J001-FIX-002 | 1 | direct | F2 (Python pin + subprocess hardening) | 10 min |
+| TASK-J001-FIX-003 | 2 | task-work | F3 + F4 (AppState + logging bootstrap) | 35 min |
+| TASK-J001-FIX-004 | 2 | direct | F5 + F6 + F8 (cosmetic) | 15 min |
+
+F7 is explicitly deferred to FEAT-JARVIS-006 (first consumer that stresses multi-task-per-session).
+
+**Next:** execute `tasks/backlog/phase1-review-fixes/` (Wave 1 parallel, then Wave 2 parallel), then Step 7 regression check.
 
 ### Step 7: Regression check
 
 ```bash
 cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
-uv sync --dev
+uv sync
 uv run pytest tests/ -v --tb=short --cov=src/jarvis
 uv run ruff check src/jarvis/ tests/
 uv run mypy src/jarvis/
@@ -595,15 +629,16 @@ These are settled from fleet v3, conversation-starter v2, and the 20 April refra
 | Day | Activity | Output |
 |-----|----------|--------|
 | 1 (21 Apr) ✅ | Steps 1, 2, **and** 3 — `/system-arch` + `/system-design FEAT-JARVIS-001` + `/feature-spec FEAT-JARVIS-001` all landed same day (a day ahead of the original schedule). | `ARCHITECTURE.md`, C4 diagrams, domain model, `ADR-ARCH-001..030` (30 ADRs, actual IDs); `docs/design/FEAT-JARVIS-001/design.md` + `diagrams/` + `contracts/` + `decisions/` + `models/`; `features/project-scaffolding-supervisor-sessions/` (35 scenarios, 6 assumptions confirmed, `review_required: false`). C4 L3 approval + Graphiti seeding done. |
-| 2 (22 Apr) | Step 4 — `/feature-plan FEAT-JARVIS-001` (bumped earlier following same-day Step 3 completion). | `tasks/FEAT-JARVIS-001-*.md`. |
-| 3 (23 Apr) | Step 5 — begin AutoBuild (scaffold → config → pyproject → prompts/supervisor). | First 3–4 commits landed. |
-| 4 (24 Apr) | Step 5 — complete AutoBuild (prompts, supervisor, infra, sessions, CLI, tests, docs). | All Phase 1 commits landed; CI green locally. |
-| 4 (24 Apr) | Step 6 + Step 7 — `/task-review`, fix any flagged issues, regression check. | Review pass; ruff + mypy + pytest all green. |
-| 4 (24 Apr) | Step 8 — day-1 conversation validation. | Conversation recorded as evidence; Phase 1 closed. |
+| 1 (21 Apr) ✅ | Step 4 — `/feature-plan FEAT-JARVIS-001` (also bumped forward to 21 Apr following same-day Step 3). | `tasks/in_review/TASK-REV-J001-*.md`; `tasks/backlog/project-scaffolding-supervisor-sessions/` (README + IMPLEMENTATION-GUIDE + 11 subtasks); `.guardkit/features/FEAT-JARVIS-001.yaml` (6-wave orchestration). |
+| 1 (21 Apr) ✅ | Step 5 — AutoBuild FEAT-JARVIS-001 (also collapsed to 21 Apr). | All 11 tasks Player→Coach approved in ~57 min wall-clock (22:31–23:28 UTC), single worktree `.guardkit/worktrees/FEAT-JARVIS-001`. One two-turn task (TASK-J001-002, src-layout sys.path fix). All tasks `status: in_review`. |
+| 2 (22 Apr) ✅ | Step 6 — `/task-review FEAT-JARVIS-001` (standard depth, architectural mode). | Review pass **with findings**; score 82/100; 2 HIGH (block SC #5/#6), 2 MEDIUM, 4 LOW; decision `[I]mplement`. Report at `.claude/reviews/FEAT-JARVIS-001-review-report.md`. 4 remediation subtasks generated at `tasks/backlog/phase1-review-fixes/` (2 parallel waves, ~50 min wall-clock). |
+| 2 (22 Apr) ⬅ | Execute `tasks/backlog/phase1-review-fixes/` — Wave 1 (FIX-001 ∥ FIX-002) then Wave 2 (FIX-003 ∥ FIX-004). | mypy clean on `src/jarvis/`, 341/341 pytest pass, `AppState` tightened, logging configured at CLI entry, cosmetic polish landed. |
+| 2 (22 Apr) | Step 7 — regression check (ruff + mypy + pytest + coverage baseline). | CI green locally; coverage baseline recorded. |
+| 2 (22 Apr) | Step 8 — day-1 conversation validation. | Conversation recorded as evidence; Phase 1 closed. |
 
-**Target: Phase 1 complete within 3–4 working days (21–24 April 2026).**
+**Revised target: Phase 1 complete in 2 working days (21–22 April 2026) — faster than the 3–4-day original estimate because Steps 1–5 all landed on day 1.**
 
-Realistic given no NATS dependencies, no preview-feature risk, no external integration. The broader v1 timeline (~11–12 working days per conversation starter §5) flows from here.
+Realistic given no NATS dependencies, no preview-feature risk, no external integration. The broader v1 timeline (~11–12 working days per conversation starter §5) flows from here — and now has ~2 days of slack banked.
 
 ---
 
@@ -621,7 +656,8 @@ Rich — please confirm the Phase 2 / 3 / 4 grouping above before I produce thos
 
 ---
 
-*Phase 1 build plan: 20 April 2026*
+*Phase 1 build plan: 20 April 2026 (status updated 22 April 2026).*
 *Predecessor: `guardkit init langchain-deepagents-orchestrator` (20 April 2026); `.guardkit/context-manifest.yaml` landed 19 April 2026; ADR-FLEET-001 + fleet v3 keystone doc 19 April 2026.*
-*Input to: `/system-arch` (Step 1) ✅ complete 21 April 2026 · `/system-design FEAT-JARVIS-001` (Step 2) ✅ complete 21 April 2026 · next: `/feature-spec FEAT-JARVIS-001` (Step 3).*
+*Steps complete: `/system-arch` (Step 1) ✅ 21 April · `/system-design FEAT-JARVIS-001` (Step 2) ✅ 21 April · `/feature-spec FEAT-JARVIS-001` (Step 3) ✅ 21 April · `/feature-plan FEAT-JARVIS-001` (Step 4) ✅ 21 April · AutoBuild (Step 5) ✅ 21 April.*
+*Next: `/task-review FEAT-JARVIS-001` (Step 6) — tasks are in `status: in_review`.*
 *"Rich can have a useful conversation with it on day 1, even if it can't dispatch to anything yet."*

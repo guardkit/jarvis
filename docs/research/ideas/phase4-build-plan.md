@@ -465,7 +465,7 @@ Suggested commit order:
 
 ```bash
 cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
-uv sync --dev
+uv sync
 uv run pytest tests/ -v --tb=short --cov=src/jarvis
 uv run ruff check src/jarvis/ tests/
 uv run mypy src/jarvis/
