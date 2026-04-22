@@ -30,6 +30,7 @@ import ast
 import importlib
 import pathlib
 import sys
+from typing import ClassVar
 
 import pytest
 
@@ -187,7 +188,7 @@ class TestRuntimeImportGraph:
 class TestSharedModuleBoundary:
     """jarvis.shared must not import from any other jarvis subpackage."""
 
-    HIGHER_PACKAGES = [
+    HIGHER_PACKAGES: ClassVar[list[str]] = [
         "jarvis.config",
         "jarvis.sessions",
         "jarvis.agents",

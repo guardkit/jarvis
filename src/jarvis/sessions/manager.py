@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from langchain_core.messages import HumanMessage
 
 from jarvis.sessions.session import Session
 from jarvis.shared.constants import Adapter
@@ -167,8 +168,6 @@ class SessionManager:
 
         self._in_flight[sid] = True
         try:
-            from langchain_core.messages import HumanMessage
-
             result: dict[str, Any] = await self._supervisor.ainvoke(
                 {"messages": [HumanMessage(content=user_input)]},
                 config={"configurable": {"thread_id": session.thread_id}},

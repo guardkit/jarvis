@@ -23,12 +23,10 @@ Strategy:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
-import pytest
 from langgraph.graph.state import CompiledStateGraph
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -98,7 +96,7 @@ class TestNoTokenConsumingCalls:
 class TestCompositeNoLLMCall:
     """Single comprehensive test that asserts all LLM methods are untouched."""
 
-    TOKEN_CONSUMING_METHODS = [
+    TOKEN_CONSUMING_METHODS: ClassVar[list[str]] = [
         "invoke",
         "ainvoke",
         "stream",

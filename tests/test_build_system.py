@@ -15,7 +15,7 @@ import pathlib
 import subprocess
 import sys
 import tomllib
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -229,7 +229,7 @@ class TestAC004EntryPoint:
 class TestAC005Gitignore:
     """AC-005: .gitignore contains all required patterns."""
 
-    REQUIRED_PATTERNS = [
+    REQUIRED_PATTERNS: ClassVar[list[str]] = [
         ".venv/",
         ".env",
         "__pycache__/",

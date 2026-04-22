@@ -26,7 +26,8 @@ class Session(BaseModel):
         thread_id: LangGraph thread identifier — equals ``session_id`` in Phase 1
             per DDR-004.
         started_at: UTC timestamp when the session was created.
-        correlation_id: ULID reserved for FEAT-004 trace-richness (ADR-ARCH-020).
+        correlation_id: Hex-encoded UUID4 placeholder; will migrate to ULID when
+            FEAT-004 wires the trace-richness pipeline (ADR-ARCH-020).
         metadata: Arbitrary key-value pairs for adapter-specific data.
     """
 
