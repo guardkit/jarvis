@@ -6,20 +6,25 @@ and ``health`` sub-commands (DDR-003: exactly three, no more).
 The REPL serialises turns one-at-a-time (ASSUM-004), refuses blank-line
 turns silently (ASSUM-001), and exits cleanly on ``/exit`` / EOF / SIGINT
 (ASSUM-002).
+
+Logging is configured at CLI entry so that configuration-load failures
+(``pydantic.ValidationError`` at ``JarvisConfig()``) are emitted as
+structured events rather than bare ``click.echo`` writes.
 """
 
 from __future__ import annotations
 
 import asyncio
-import dataclasses
+import os
 import signal
 import sys
 from typing import TYPE_CHECKING
 
 import click
+import structlog
 
 from jarvis.agents import build_supervisor
-from jarvis.sessions.manager import SessionManager
+from jarvis.infrastructure.logging import configure
 from jarvis.shared.constants import VERSION, Adapter
 from jarvis.shared.exceptions import ConfigurationError
 
@@ -27,8 +32,24 @@ if TYPE_CHECKING:
     from jarvis.infrastructure.lifecycle import AppState
 
 
+def _configure_default_logging() -> None:
+    """Configure structlog at the default level before any config load.
+
+    ``JARVIS_LOG_LEVEL`` overrides the ``INFO`` default.  ``configure()`` is
+    idempotent so a later call from ``build_app_state(config)`` with the
+    user-specified level simply re-applies.
+    """
+    default_level = os.environ.get("JARVIS_LOG_LEVEL", "INFO")
+    configure(default_level)
+
+
 async def _create_app_state() -> AppState:
-    """Load config, validate keys, bootstrap app state, and wire session manager.
+    """Load config and build the fully-wired :class:`AppState`.
+
+    Logging is configured before :class:`JarvisConfig` is instantiated so
+    that a ``pydantic.ValidationError`` raised during config load is
+    captured as a structured event (via the caller's ``except`` handler)
+    rather than surfacing through an un-configured logger.
 
     Returns:
         A fully wired :class:`AppState` with supervisor and session_manager.
@@ -38,17 +59,11 @@ async def _create_app_state() -> AppState:
         pydantic.ValidationError: If config fields are invalid.
     """
     from jarvis.config.settings import JarvisConfig
-    from jarvis.infrastructure.lifecycle import startup
+    from jarvis.infrastructure.lifecycle import build_app_state
 
+    _configure_default_logging()
     config = JarvisConfig()
-    state = await startup(config)
-
-    # Build supervisor and wire session manager into AppState
-    supervisor = build_supervisor(state.config)
-    session_manager = SessionManager(supervisor=supervisor, store=state.store)
-
-    # AppState is frozen — replace via dataclasses.replace
-    return dataclasses.replace(state, supervisor=supervisor, session_manager=session_manager)
+    return await build_app_state(config)
 
 
 @click.group(invoke_without_command=True)
@@ -73,18 +88,23 @@ def health() -> None:
 
     from jarvis.config.settings import JarvisConfig
 
-    # 1. Load config — ValidationError on malformed fields → exit 1
+    # Configure logging before any validation so that errors are emitted as
+    # structured events (F4 from FEAT-JARVIS-001 review).
+    _configure_default_logging()
+    log = structlog.get_logger(__name__)
+
+    # 1. Load config — ValidationError on malformed fields → structured log + exit 1
     try:
         config = JarvisConfig()
     except ValidationError as exc:
-        click.echo(f"Configuration error: {exc}", err=True)
+        log.error("jarvis_config_invalid", error=str(exc))
         raise SystemExit(1) from exc
 
-    # 2. Validate provider keys — ConfigurationError → exit 1 naming the env var
+    # 2. Validate provider keys — ConfigurationError → structured log + exit 1
     try:
         config.validate_provider_keys()
     except ConfigurationError as exc:
-        click.echo(f"Configuration error: {exc}", err=True)
+        log.error("jarvis_provider_key_missing", error=str(exc))
         raise SystemExit(1) from exc
 
     # 3. Build supervisor (token-free) — report success
@@ -92,7 +112,7 @@ def health() -> None:
         build_supervisor(config)
         click.echo("supervisor: ok")
     except Exception as exc:
-        click.echo(f"supervisor: failed ({exc})", err=True)
+        log.error("jarvis_supervisor_build_failed", error=str(exc))
         raise SystemExit(1) from exc
 
     # 4. Memory store readiness (Phase 1: InMemoryStore always succeeds)
@@ -112,16 +132,27 @@ async def _chat_loop() -> None:
     """Run the interactive REPL loop.
 
     Sequence:
-        1. Bootstrap application state (config → startup → AppState).
+        1. Bootstrap application state (config → build_app_state → AppState).
         2. Start a CLI session via the session manager.
         3. Install SIGINT handler for clean exit (code 130).
         4. Loop: read stdin → skip blanks → handle /exit → invoke → print reply.
     """
+    from pydantic import ValidationError
+
     # 1. Bootstrap — _create_app_state wires supervisor + session_manager
     try:
         state = await _create_app_state()
+    except ValidationError as exc:
+        log = structlog.get_logger(__name__)
+        log.error("jarvis_config_invalid", error=str(exc))
+        raise SystemExit(1) from exc
+    except ConfigurationError as exc:
+        log = structlog.get_logger(__name__)
+        log.error("jarvis_provider_key_missing", error=str(exc))
+        raise SystemExit(1) from exc
     except Exception as exc:
-        click.echo(f"Startup failed: {exc}", err=True)
+        log = structlog.get_logger(__name__)
+        log.error("jarvis_startup_failed", error=str(exc))
         raise SystemExit(1) from exc
 
     session_manager = state.session_manager

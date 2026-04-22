@@ -350,6 +350,231 @@ richardwoollcott@Mac jarvis %
 
 
 
+/task-review FEAT-JARVIS-001 \
+  --context tasks/FEAT-JARVIS-001-*.md \
+  --context docs/research/ideas/phase1-supervisor-scaffolding-scope.md \
+  --context docs/research/ideas/phase1-build-plan.md
+
+Review complete. Report saved at .claude/reviews/FEAT-JARVIS-001-review-report.md.
+
+
+=========================================================================
+REVIEW COMPLETE: FEAT-JARVIS-001
+=========================================================================
+
+Mode: Architectural (post-build gate, Step 6 of phase1-build-plan.md)
+Depth: Standard
+Score: 82/100
+
+Quality gates:
+  pytest:  340 / 341 passing   (1 env-fragile failure — F2)
+  ruff src/jarvis/:  CLEAN
+  ruff tests/:       7 errors  (outside Success Criterion #6)
+  mypy src/jarvis/:  5 errors  (BREAKS Success Criterion #6)
+
+Findings: 8
+  HIGH (block success criteria):
+    F1  mypy not clean on src/jarvis/ — 5 errors, all trivial
+    F2  test_jarvis_version_command env-fragile under py3.14 vs .venv py3.12
+  MEDIUM:
+    F3  AppState.supervisor/session_manager typed Any with stale comments;
+        CLI uses dataclasses.replace to stitch them in
+    F4  JarvisConfig() validation happens BEFORE structlog is configured
+  LOW:
+    F5  correlation_id docstring says ULID, code uses UUID
+    F6  ruff errors in tests/ (scoped outside success criterion)
+    F7  SessionManager concurrency fine for asyncio single-loop; fragile
+        when FEAT-006 adds a second driver
+    F8  HumanMessage import at function scope instead of module top
+
+Strengths:
+  ✓ All 6 ASSUM-* pins implemented in code (not just docs)
+  ✓ DDR-002 (user-keyed store), DDR-003 (3 CLI cmds), DDR-004 (thread=session)
+  ✓ Invariants clean: no NATS / Telegram / Graphiti / subagent / custom-tool
+    imports; 8 reserved packages stubbed with FEAT-* markers
+  ✓ Hexagonal boundary enforced by AST + runtime import-graph tests
+  ✓ Supervisor is token-free at build time (no-LLM-call test passes)
+  ✓ Secret redaction wired into structlog processors
+
+Recommendations (all trivial; ~30–60 min total):
+  R1  Fix 5 mypy errors (REQUIRED for Success Criterion #6)
+  R2  Stabilise sys.executable subprocess test (REQUIRED for Criterion #5)
+  R3  Tighten AppState typing + collapse dataclasses.replace bootstrap
+  R4  Configure logging at CLI entry, before JarvisConfig()
+  R5  Cosmetic: correlation_id docstring, hoist HumanMessage, ruff --fix tests/
+
+Decision Options:
+  [A]ccept — close Phase 1 as-is (WILL miss Success Criteria #5 and #6)
+  [R]evise — I fix R1+R2 (required) and optionally R3–R5 in this session
+  [I]mplement — create a fix subtask folder under tasks/backlog/
+  [C]ancel — discard review
+
+Recommended: [R]evise. The fixes are trivial and close Phase 1 cleanly
+against the build plan's own success criteria.
+
+Your choice [A/R/I/C]?
+=========================================================================
+FEAT-JARVIS-001-review-report.md
+I
+
+================================================================================
+✅ Feature Implementation Structure Created
+================================================================================
+
+Created: tasks/backlog/phase1-review-fixes/
+  ├── README.md
+  ├── IMPLEMENTATION-GUIDE.md
+  ├── TASK-J001-FIX-001-mypy-clean-src.md
+  ├── TASK-J001-FIX-002-python-version-pin.md
+  ├── TASK-J001-FIX-003-bootstrap-refactor.md
+  └── TASK-J001-FIX-004-cosmetic-polish.md
+
+--------------------------------------------------------------------------------
+📋 Execution Strategy:
+--------------------------------------------------------------------------------
+
+Wave 1 (parallel — no file conflicts):
+  ⚡ FIX-001: Fix mypy type errors in src/jarvis/
+     Workspace: phase1-review-fixes-wave1-1   Mode: direct        ~15 min
+  ⚡ FIX-002: Pin Python 3.12 + stabilise subprocess test
+     Workspace: phase1-review-fixes-wave1-2   Mode: direct        ~10 min
+
+Wave 2 (parallel after Wave 1):
+  ⚡ FIX-003: Tighten AppState typing + move logging to CLI entry
+     Workspace: phase1-review-fixes-wave2-1   Mode: task-work     ~35 min
+  ⚡ FIX-004: correlation_id docstring, HumanMessage hoist, ruff tests/
+     Workspace: phase1-review-fixes-wave2-2   Mode: direct        ~15 min
+
+Total: ~75 min sequential · ~50 min wall-clock with parallel waves.
+All tasks reference parent_review=TASK-REV-J001, feature_id=FEAT-JARVIS-001.
+================================================================================
+🚀 Next Steps:
+================================================================================
+1. Review: tasks/backlog/phase1-review-fixes/IMPLEMENTATION-GUIDE.md
+2. Review: tasks/backlog/phase1-review-fixes/README.md
+3. Start Wave 1: /task-work TASK-J001-FIX-001   and   /task-work TASK-J001-FIX-002
+4. Gate between waves: pytest + ruff + mypy must be green on src/jarvis/
+5. Start Wave 2: /task-work TASK-J001-FIX-003   and   /task-work TASK-J001-FIX-004
+================================================================================
+
+
+implement TASK-J001-FIX-001
+
+ TASK-J001-FIX-001 complete. All acceptance criteria met:
+
+  Changes (3 files, +14/-8):
+  - src/jarvis/agents/supervisor.py — parameterised two CompiledStateGraph references as CompiledStateGraph[Any, Any, Any, Any] (the
+  generic takes 4 type params: StateT, ContextT, InputT, OutputT; DeepAgents' inner _InputAgentState / _OutputAgentState are private so
+  the Any fallback applies). Added Any to the existing typing import.
+  - src/jarvis/sessions/manager.py — same parameterisation on SessionManager._supervisor; widened __init__ to a multi-line signature to
+  stay under the 88-char limit.
+  - src/jarvis/infrastructure/logging.py — removed unused # type: ignore[arg-type] (line 65); widened _redact_secrets to match
+  structlog.types.Processor (Any, str, MutableMapping[str, Any] → Mapping[str, Any] | str | bytes | bytearray | tuple[Any, ...]).
+  Redaction body unchanged.
+
+  Quality gates:
+  - uv run mypy src/jarvis/ — clean on two consecutive runs (0 errors, was 5)
+  - uv run ruff check src/jarvis/ — clean
+  - uv run pytest tests/ — 339 pass / 2 fail, identical to the pre-task baseline (verified via git stash). The two failures are
+  pre-existing:
+    - test_jarvis_version_command — handled by FIX-002
+    - test_returns_compiled_state_graph — unrelated: a local env issue where init_chat_model("openai:…") now instantiates
+  openai.AsyncOpenAI eagerly, which requires OPENAI_API_KEY. Present on the unmodified baseline too, so it's out of scope for FIX-001
+  (worth raising separately).
+
+  Diff confined to the three listed files; no pyproject.toml changes needed.
+
+/task-complete TASK-J001-FIX-001
+
+
+implement TASK-J001-FIX-002
+
+ All three changes landed and the acceptance checks pass. Summary of what changed:
+
+  Files changed:
+  - .python-version (NEW) — single line 3.12, pins the interpreter so uv ignores ambient 3.14 venvs.
+  - README.md — added one-sentence note at top of Quickstart steering users to uv run; preserved the existing pip install/pytest/venv
+  content (the developer-surface test parametrizes on those).
+  - tests/test_build_system.py — added diagnostic pre-assertion in test_jarvis_version_command that runs import jarvis under
+  sys.executable first and fails loudly with a message pointing to uv run pytest if drift recurs (no silent skip).
+
+  Acceptance check results:
+  - cat .python-version → 3.12 ✓
+  - uv run python -c "import sys; print(sys.executable)" → …/jarvis/.venv/bin/python3 ✓
+  - uv run pytest tests/test_build_system.py::TestAC004EntryPoint::test_jarvis_version_command -v → 1 passed on a clean .venv ✓
+  - Full suite: 341 passed, 0 failed (matches coach target exactly).
+
+  One caveat worth flagging:
+  - The task's acceptance script says uv sync --dev, but dev deps here are declared under [project.optional-dependencies].dev, not
+  [dependency-groups].dev. uv sync --dev installs runtime deps only; you need uv sync --extra dev (or --all-extras) to get pytest.
+  That's out of scope for FIX-002 but worth a follow-up.
+  - One other test (test_supervisor.py::TestBuildSupervisorReturnsGraph::test_returns_compiled_state_graph) needs OPENAI_API_KEY set
+  in the ambient env — pre-existing, untouched by this task, explicitly out of scope per the task doc ("no other F-* fixes").
+
+
+/task-complete TASK-J001-FIX-002
+
+
+
+/task-work TASK-J001-FIX-003
+
+TASK-J001-FIX-003 complete and moved to in_review.
+
+  Summary of changes
+
+  - src/jarvis/infrastructure/lifecycle.py — AppState now uses concrete types (CompiledStateGraph, BaseStore, SessionManager); no more
+   Any fields or stale "None until TASK-J001-…" comments. New build_app_state(config) factory returns a fully-wired AppState in one
+  step (with startup kept as a backwards-compatible alias).
+  - src/jarvis/cli/main.py — _configure_default_logging() runs at CLI entry before any JarvisConfig() load; _create_app_state
+  collapses to load config → build_app_state(config) (no more dataclasses.replace); ValidationError, ConfigurationError, and generic
+  startup failures are now emitted via structlog before SystemExit(1).
+  - src/jarvis/infrastructure/__init__.py — re-exports build_app_state alongside startup.
+  - tests/test_infrastructure.py — tests that previously relied on startup returning a partial AppState(supervisor=None,
+  session_manager=None) now mock build_supervisor and assert the new complete-state contract.
+
+  Quality gates
+  - uv run mypy src/jarvis/ → clean (26 files).
+  - uv run pytest → 340 passed, 1 pre-existing failure (test_supervisor.py::test_returns_compiled_state_graph) that also fails on
+  2fc9ab7 untouched — outside scope.
+  - uv run ruff check / ruff format --check → clean.
+  - Coach greps: no Any on AppState fields, no dataclasses.replace in src/jarvis/, no "None until TASK" comments.
+  - JARVIS_LOG_LEVEL=bogus uv run jarvis health → emits {"event":"jarvis_config_invalid", …} structlog JSON, exits 1.
+
+✻ Brewed for 12m 5s
+
+※ recap: Completing TASK-J001-FIX-003 (tighten AppState typing, move logging config to CLI entry) for FEAT-JARVIS-001 review wave 2.
+  Task is implemented, tests/mypy/ruff green, and the file is now in tasks/in_review/ awaiting your review. (disable recaps in
+  /config)
+
+
+
+/task-work TASK-J001-FIX-004
+
+TASK-J001-FIX-004 complete. Summary:
+
+  Changes
+  - src/jarvis/sessions/session.py:29 — docstring reworded: ULID wording replaced with UUID4-placeholder note citing FEAT-004 /
+  ADR-ARCH-020.
+  - src/jarvis/sessions/manager.py — hoisted from langchain_core.messages import HumanMessage to module top; removed the function-local
+  import inside invoke.
+  - tests/test_smoke_end_to_end.py, tests/test_supervisor_no_llm_call.py — ruff --fix removed unused imports (Any, CompiledStateGraph,
+  pytest) and sorted the import block.
+  - tests/test_build_system.py, tests/test_import_graph.py, tests/test_supervisor_no_llm_call.py — annotated REQUIRED_PATTERNS,
+  HIGHER_PACKAGES, TOKEN_CONSUMING_METHODS with typing.ClassVar[list[str]].
+  - Task file moved to tasks/completed/TASK-J001-FIX-004/ with status: completed.
+
+  Gates
+  - uv run ruff check src/jarvis/ tests/ → All checks passed.
+  - uv run mypy src/jarvis/ → clean (26 files).
+  - uv run pytest tests/ → 341 passed (with OPENAI_API_KEY set — matches baseline; single remaining failure is a pre-existing env-fragile
+   supervisor test unrelated to this task).
+
+✻ Brewed for 3m 36s
+
+※ recap: Goal was Phase 1 review-fix cleanup; just finished TASK-J001-FIX-004 (docstring, import hoist, ruff/ClassVar tidy) with ruff,
+  mypy, and 341-test pytest all green. Next: commit the changes. (disable recaps in /config)
+
+
 
 
 

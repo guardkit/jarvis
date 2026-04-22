@@ -254,7 +254,7 @@ class TestStartup:
 
     @pytest.mark.asyncio
     async def test_startup_returns_app_state_on_success(self) -> None:
-        """startup() returns an AppState on successful configuration."""
+        """startup() returns a fully-wired AppState on successful configuration."""
         from jarvis.infrastructure.lifecycle import AppState, startup
 
         structlog.reset_defaults()
@@ -265,12 +265,22 @@ class TestStartup:
             )
 
         captured = io.StringIO()
-        with patch("sys.stderr", new=captured):
+        with (
+            patch("sys.stderr", new=captured),
+            patch(
+                "jarvis.infrastructure.lifecycle.build_supervisor",
+                return_value=MagicMock(),
+            ),
+        ):
             state = await startup(config)
 
         assert isinstance(state, AppState)
         assert state.config is config
         assert state.store is not None
+        # New contract: AppState is fully populated — supervisor and
+        # session_manager are never None.
+        assert state.supervisor is not None
+        assert state.session_manager is not None
 
 
 # ============================================================================
@@ -292,7 +302,13 @@ class TestShutdown:
             config = JarvisConfig(openai_base_url="http://fake/v1")
 
         captured = io.StringIO()
-        with patch("sys.stderr", new=captured):
+        with (
+            patch("sys.stderr", new=captured),
+            patch(
+                "jarvis.infrastructure.lifecycle.build_supervisor",
+                return_value=MagicMock(),
+            ),
+        ):
             state = await startup(config)
             await shutdown(state)
 
@@ -307,7 +323,13 @@ class TestShutdown:
             config = JarvisConfig(openai_base_url="http://fake/v1")
 
         captured = io.StringIO()
-        with patch("sys.stderr", new=captured):
+        with (
+            patch("sys.stderr", new=captured),
+            patch(
+                "jarvis.infrastructure.lifecycle.build_supervisor",
+                return_value=MagicMock(),
+            ),
+        ):
             state = await startup(config)
             await shutdown(state)
             # Second call must NOT raise
@@ -324,7 +346,13 @@ class TestShutdown:
             config = JarvisConfig(openai_base_url="http://fake/v1")
 
         captured = io.StringIO()
-        with patch("sys.stderr", new=captured):
+        with (
+            patch("sys.stderr", new=captured),
+            patch(
+                "jarvis.infrastructure.lifecycle.build_supervisor",
+                return_value=MagicMock(),
+            ),
+        ):
             state = await startup(config)
             await shutdown(state)
 
@@ -345,12 +373,14 @@ class TestAppStateImmutability:
         from jarvis.infrastructure.lifecycle import AppState
 
         assert dataclasses.is_dataclass(AppState), "AppState must be a dataclass"
-        # frozen=True means we can't set attributes after init
+        # frozen=True means we can't set attributes after init.  All four
+        # fields are required with concrete types (no more ``None``
+        # sentinels — supervisor and session_manager are always wired).
         state = AppState(
             config=MagicMock(),
-            supervisor=None,
+            supervisor=MagicMock(),
             store=MagicMock(),
-            session_manager=None,
+            session_manager=MagicMock(),
         )
         with pytest.raises(dataclasses.FrozenInstanceError):
             state.config = MagicMock()  # type: ignore[misc]
