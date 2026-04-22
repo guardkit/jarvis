@@ -7,6 +7,9 @@ the package has been installed in the active environment.
 
 Fixtures provided:
 
+- :func:`_isolate_dotenv` (autouse) — chdirs to a tmp dir so ``JarvisConfig``'s
+  ``env_file=".env"`` cannot pick up the operator's real ``.env`` during test
+  runs
 - :func:`fake_llm` — deterministic ``FakeListChatModel`` (no network)
 - :func:`test_config` — ``JarvisConfig`` with sensible defaults and a fake endpoint
 - :func:`in_memory_store` — fresh ``InMemoryStore``, cleared after each test
@@ -30,6 +33,28 @@ import pytest
 _SRC_DIR = str(Path(__file__).resolve().parent.parent / "src")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
+
+
+# ---------------------------------------------------------------------------
+# Autouse: isolate every test from the operator's real ``.env`` file.
+#
+# ``JarvisConfig`` is a ``pydantic_settings.BaseSettings`` subclass with
+# ``env_file=".env"``, resolved relative to the current working directory.
+# When pytest runs from the project root and the operator has populated
+# ``.env`` with their live provider credentials, every ``JarvisConfig()``
+# call silently absorbs those values — breaking tests that assert
+# missing-config failure paths (e.g. ``TestAC005ValidateProviderKeys``).
+#
+# ``monkeypatch.chdir(tmp_path)`` resolves pydantic's relative ``.env``
+# lookup to a nonexistent file for the duration of each test, restoring the
+# original cwd on teardown. Tests that need a specific file layout (subprocess
+# tests in ``test_build_system.py`` / ``test_developer_surface.py``) either
+# pass ``cwd=str(ROOT)`` explicitly or use absolute path constants, so chdir
+# does not disturb them.
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _isolate_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
 
 
 # ---------------------------------------------------------------------------

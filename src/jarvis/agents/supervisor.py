@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from deepagents import create_deep_agent
 from langchain.chat_models import init_chat_model
+from langgraph.checkpoint.memory import InMemorySaver
 
 from jarvis.prompts import SUPERVISOR_SYSTEM_PROMPT
 
@@ -85,13 +86,21 @@ def build_supervisor(config: JarvisConfig) -> CompiledStateGraph[Any, Any, Any, 
     )
 
     # 3. Compile the agent graph — DeepAgents built-ins are wired by middleware.
-    #    tools=[]     → no custom tools (FEAT-002 will add them)
-    #    subagents=[] → no subagents   (FEAT-003 will add them)
+    #    tools=[]                → no custom tools (FEAT-002 will add them)
+    #    subagents=[]            → no subagents   (FEAT-003 will add them)
+    #    checkpointer=InMemorySaver → within-process thread-per-session recall
+    #       so ``session_manager.invoke(session, …)`` accumulates message history
+    #       across turns when called with the same ``thread_id``. Without a
+    #       checkpointer, ``thread_id`` plumbing is a no-op and each turn sees
+    #       only the current message — breaking the day-1 multi-turn criterion.
+    #       Cross-process / cross-session recall requires a persistent saver +
+    #       persistent store, landing in FEAT-JARVIS-007.
     graph: CompiledStateGraph[Any, Any, Any, Any] = create_deep_agent(
         model=model,
         tools=[],
         system_prompt=system_prompt,
         subagents=[],
+        checkpointer=InMemorySaver(),
     )
 
     logger.info("Supervisor graph compiled successfully")

@@ -221,6 +221,108 @@ class TestIdempotentSafe:
 
 
 # ---------------------------------------------------------------------------
+# Within-session recall — compiled graph carries a checkpointer so that
+# ``session_manager.invoke(session, …)`` accumulates message history across
+# turns keyed on ``config.configurable.thread_id``. Without this, the
+# thread-per-session plumbing in SessionManager is a no-op and the day-1
+# multi-turn criterion is unsatisfiable. See [FIX-005].
+# ---------------------------------------------------------------------------
+class TestWithinSessionRecall:
+    """Compiled supervisor graph has a checkpointer so thread_id persists state."""
+
+    def test_compiled_graph_has_checkpointer(
+        self, test_config: object, fake_llm: Any
+    ) -> None:
+        """Wiring check: the compiled graph exposes a non-None checkpointer.
+
+        DeepAgents' ``create_deep_agent(checkpointer=None)`` (the default
+        before FIX-005) returned a graph with no saver — so ``thread_id``
+        in the invoke config had nothing to hook into and each turn was
+        stateless. This test guards against regression.
+        """
+        from jarvis.agents.supervisor import build_supervisor
+
+        with patch("jarvis.agents.supervisor.init_chat_model", return_value=fake_llm):
+            graph = build_supervisor(test_config)
+
+        assert graph.checkpointer is not None, (
+            "build_supervisor() must wire a checkpointer so thread_id persists "
+            "state across turns — otherwise SessionManager's thread-per-session "
+            "plumbing is a no-op (FIX-005)."
+        )
+
+    def test_checkpointer_is_in_memory_saver(
+        self, test_config: object, fake_llm: Any
+    ) -> None:
+        """Phase 1 uses an in-process InMemorySaver.
+
+        Persistent savers (file, sqlite, postgres) land in FEAT-JARVIS-007.
+        This test pins the Phase 1 choice so a silent swap to a persistent
+        backend doesn't go unnoticed.
+        """
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        from jarvis.agents.supervisor import build_supervisor
+
+        with patch("jarvis.agents.supervisor.init_chat_model", return_value=fake_llm):
+            graph = build_supervisor(test_config)
+
+        assert isinstance(graph.checkpointer, InMemorySaver), (
+            f"Phase 1 must use InMemorySaver, got {type(graph.checkpointer).__name__}"
+        )
+
+    def test_create_deep_agent_receives_checkpointer_kwarg(
+        self, test_config: object, fake_llm: Any
+    ) -> None:
+        """build_supervisor passes a non-None ``checkpointer=`` to create_deep_agent.
+
+        Argument-level assertion in addition to the wiring check above:
+        catches regressions where someone removes the kwarg, or where a
+        future DeepAgents upgrade renames the parameter without our code
+        following.
+        """
+        from jarvis.agents.supervisor import build_supervisor
+
+        with (
+            patch("jarvis.agents.supervisor.init_chat_model", return_value=fake_llm),
+            patch("jarvis.agents.supervisor.create_deep_agent") as mock_create,
+        ):
+            mock_create.return_value = MagicMock(spec=CompiledStateGraph)
+            build_supervisor(test_config)
+
+        _, kwargs = mock_create.call_args
+        assert "checkpointer" in kwargs, (
+            "build_supervisor must pass checkpointer= to create_deep_agent; "
+            "without it, SessionManager's thread_id plumbing is a no-op."
+        )
+        assert kwargs["checkpointer"] is not None, (
+            "checkpointer= must be non-None so the supervisor graph persists "
+            "state across turns keyed on thread_id."
+        )
+
+    def test_distinct_graphs_get_distinct_checkpointers(
+        self, test_config: object, fake_llm: Any
+    ) -> None:
+        """Two build_supervisor calls produce graphs with separate savers.
+
+        The idempotency contract (``TestIdempotentSafe``) says two calls
+        produce independent graphs. That extends to the checkpointer: a
+        shared saver between graphs would leak thread state across what
+        should be isolated supervisor instances.
+        """
+        from jarvis.agents.supervisor import build_supervisor
+
+        with patch("jarvis.agents.supervisor.init_chat_model", return_value=fake_llm):
+            graph_a = build_supervisor(test_config)
+            graph_b = build_supervisor(test_config)
+
+        assert graph_a.checkpointer is not graph_b.checkpointer, (
+            "Each build_supervisor call must mint its own checkpointer; "
+            "sharing one would let thread state leak across supervisors."
+        )
+
+
+# ---------------------------------------------------------------------------
 # AC-005 — Lint/format (verified externally, but we check imports are clean)
 # ---------------------------------------------------------------------------
 class TestLintCompliance:

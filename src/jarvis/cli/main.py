@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 import click
 import structlog
+from dotenv import load_dotenv
 
 from jarvis.agents import build_supervisor
 from jarvis.infrastructure.logging import configure
@@ -70,6 +71,15 @@ async def _create_app_state() -> AppState:
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """Jarvis — attended DeepAgent surface."""
+    # Seed os.environ from .env so downstream consumers that read the process
+    # environment directly (langchain's OpenAI client reads OPENAI_API_KEY,
+    # langchain_anthropic reads ANTHROPIC_API_KEY, etc.) see the values the
+    # user put in .env. pydantic-settings populates JarvisConfig from .env but
+    # does NOT export to os.environ, so without this bridge the langchain
+    # clients would fail with "api_key option must be set" even when the key
+    # is present in .env. override=False so shell exports win over .env.
+    load_dotenv(override=False)
+
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         ctx.exit(0)

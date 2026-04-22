@@ -16,9 +16,24 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from jarvis.cli.main import main
+
+
+# ---------------------------------------------------------------------------
+# Autouse: stub ``jarvis.cli.main.load_dotenv`` so tests that run the CLI
+# don't re-seed ``os.environ`` from the operator's real ``.env``. The global
+# conftest already chdirs to a tmp path, which prevents pydantic-settings
+# from reading ``.env`` via its ``env_file`` path; this fixture closes the
+# other path (the explicit ``load_dotenv`` bridge we call in ``main()``).
+# Tests in ``TestDotenvBridge`` apply their own ``patch()`` which nests
+# correctly over this stub.
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _stub_load_dotenv(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("jarvis.cli.main.load_dotenv", lambda **kw: None)
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +55,43 @@ class TestNoArgs:
         runner = CliRunner()
         result = runner.invoke(main, [])
         assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# .env bridging: load_dotenv runs on every CLI entry so that downstream
+# consumers reading os.environ directly (langchain's provider clients) see
+# values the user put in .env. pydantic-settings populates JarvisConfig from
+# .env but does NOT export to os.environ — without this bridge, `jarvis chat`
+# crashes with "api_key option must be set" even when .env has the key.
+# ---------------------------------------------------------------------------
+class TestDotenvBridge:
+    """Every CLI entry calls ``dotenv.load_dotenv`` before subcommand dispatch."""
+
+    def test_version_invokes_load_dotenv(self) -> None:
+        runner = CliRunner()
+        with patch("jarvis.cli.main.load_dotenv") as mock_load:
+            result = runner.invoke(main, ["version"])
+        assert result.exit_code == 0
+        mock_load.assert_called_once_with(override=False)
+
+    def test_no_args_invokes_load_dotenv(self) -> None:
+        runner = CliRunner()
+        with patch("jarvis.cli.main.load_dotenv") as mock_load:
+            result = runner.invoke(main, [])
+        assert result.exit_code == 0
+        mock_load.assert_called_once_with(override=False)
+
+    def test_load_dotenv_does_not_override_existing_env(self) -> None:
+        """``override=False`` — shell exports must win over ``.env``.
+
+        Ensures ad-hoc ``export OPENAI_API_KEY=…`` in the shell can override
+        a stale value in ``.env`` without the user having to edit the file.
+        """
+        runner = CliRunner()
+        with patch("jarvis.cli.main.load_dotenv") as mock_load:
+            runner.invoke(main, ["version"])
+        _, kwargs = mock_load.call_args
+        assert kwargs.get("override") is False
 
 
 # ---------------------------------------------------------------------------
