@@ -14,15 +14,17 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Mapping, MutableMapping
+from typing import Any
 
 import structlog
 
 
 def _redact_secrets(
-    logger: object,
+    logger: Any,
     method_name: str,
-    event_dict: dict[str, object],
-) -> dict[str, object]:
+    event_dict: MutableMapping[str, Any],
+) -> Mapping[str, Any] | str | bytes | bytearray | tuple[Any, ...]:
     """Mask values whose keys end with ``_key`` or ``_token``.
 
     Handles both top-level event_dict entries and nested dicts
@@ -62,7 +64,7 @@ def _redact_dict(d: dict[str, object]) -> dict[str, object]:
         if isinstance(key, str) and (key.endswith("_key") or key.endswith("_token")):
             result[key] = "***"
         elif isinstance(value, dict):
-            result[key] = _redact_dict(value)  # type: ignore[arg-type]
+            result[key] = _redact_dict(value)
         else:
             result[key] = value
     return result

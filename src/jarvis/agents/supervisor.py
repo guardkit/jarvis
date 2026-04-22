@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from deepagents import create_deep_agent
 from langchain.chat_models import init_chat_model
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 _PHASE1_DOMAIN_PROMPT = "No domain-specific instructions configured (Phase 1)."
 
 
-def build_supervisor(config: JarvisConfig) -> CompiledStateGraph:
+def build_supervisor(config: JarvisConfig) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Compose and return the Jarvis supervisor compiled graph.
 
     Phase 1: DeepAgents built-ins only.  No LLM traffic at build time.
@@ -87,7 +87,7 @@ def build_supervisor(config: JarvisConfig) -> CompiledStateGraph:
     # 3. Compile the agent graph — DeepAgents built-ins are wired by middleware.
     #    tools=[]     → no custom tools (FEAT-002 will add them)
     #    subagents=[] → no subagents   (FEAT-003 will add them)
-    graph: CompiledStateGraph = create_deep_agent(
+    graph: CompiledStateGraph[Any, Any, Any, Any] = create_deep_agent(
         model=model,
         tools=[],
         system_prompt=system_prompt,

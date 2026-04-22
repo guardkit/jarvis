@@ -39,7 +39,11 @@ class SessionManager:
         store: A LangGraph BaseStore instance for cross-session memory.
     """
 
-    def __init__(self, supervisor: CompiledStateGraph, store: BaseStore) -> None:
+    def __init__(
+        self,
+        supervisor: CompiledStateGraph[Any, Any, Any, Any],
+        store: BaseStore,
+    ) -> None:
         self._supervisor = supervisor
         self._store = store
         self._sessions: dict[str, Session] = {}
