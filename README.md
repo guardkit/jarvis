@@ -8,6 +8,30 @@ dashboard, CLI) and dispatches them to the appropriate specialist agent.
 
 Vision documents ready in `docs/research/ideas/`. Next step: run `/system-arch`.
 
+## Quickstart
+
+```bash
+# 1. Clone and enter the repo
+git clone <repo-url> && cd jarvis
+
+# 2. Create a virtual environment (Python 3.12)
+python3.12 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install with dev extras
+pip install -e ".[dev]"
+
+# 4. Copy the example env file and configure
+cp .env.example .env
+# Edit .env with your provider keys / endpoints
+
+# 5. Run the test suite
+pytest
+
+# 6. Launch the CLI
+jarvis version
+```
+
 ## The Full Pipeline
 
 ```

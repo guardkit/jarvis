@@ -23,6 +23,10 @@ Thumbs.db
 .env
 .env.local
 
+# Linting & Type Checking
+.ruff_cache/
+.mypy_cache/
+
 # Test & Coverage
 .pytest_cache/
 htmlcov/

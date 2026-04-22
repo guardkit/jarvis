@@ -1,0 +1,125 @@
+"""Tests for TASK-J001-010: Reserved-empty package namespaces per ADR-ARCH-006.
+
+Validates that all eight reserved-empty packages are importable,
+export nothing, and contain at most one line of content.
+"""
+
+from __future__ import annotations
+
+import importlib
+import pathlib
+import sys
+
+import pytest
+
+# The eight reserved-empty packages specified in ADR-ARCH-006
+RESERVED_PACKAGES = [
+    "jarvis.tools",
+    "jarvis.subagents",
+    "jarvis.skills",
+    "jarvis.routing",
+    "jarvis.watchers",
+    "jarvis.discovery",
+    "jarvis.learning",
+    "jarvis.adapters",
+]
+
+# Locate the src directory so we can inspect __init__.py files
+_SRC_DIR = pathlib.Path(__file__).resolve().parent.parent / "src"
+
+
+class TestAC001_AllPackagesImportable:
+    """AC-001: All eight packages are importable — none raise ModuleNotFoundError."""
+
+    @pytest.mark.parametrize("package", RESERVED_PACKAGES)
+    def test_import_succeeds(self, package: str) -> None:
+        """Importing the reserved package must not raise ModuleNotFoundError."""
+        mod = importlib.import_module(package)
+        assert mod is not None
+
+    @pytest.mark.parametrize("package", RESERVED_PACKAGES)
+    def test_package_in_sys_modules(self, package: str) -> None:
+        """After import, the package should appear in sys.modules."""
+        importlib.import_module(package)
+        assert package in sys.modules
+
+
+class TestAC002_EmptyNamespace:
+    """AC-002: `from jarvis.<pkg> import *` yields nothing (empty namespace)."""
+
+    @pytest.mark.parametrize("package", RESERVED_PACKAGES)
+    def test_star_import_yields_nothing(self, package: str) -> None:
+        """The namespace of each reserved package must be empty.
+
+        Either __all__ is not defined (dir() returns only dunder attrs)
+        or __all__ is an empty list.
+        """
+        mod = importlib.import_module(package)
+        all_exports = getattr(mod, "__all__", None)
+        if all_exports is not None:
+            assert all_exports == [], (
+                f"{package}.__all__ should be empty, got {all_exports}"
+            )
+        else:
+            # No __all__ — verify no public names exported
+            public_names = [n for n in dir(mod) if not n.startswith("_")]
+            assert public_names == [], (
+                f"{package} should have no public names, found {public_names}"
+            )
+
+    @pytest.mark.parametrize("package", RESERVED_PACKAGES)
+    def test_dict_has_no_public_symbols(self, package: str) -> None:
+        """Module __dict__ should contain no public symbols."""
+        mod = importlib.import_module(package)
+        public = {k for k in mod.__dict__ if not k.startswith("_")}
+        assert public == set(), (
+            f"{package} should have no public symbols, found {public}"
+        )
+
+
+class TestAC003_InitPyContentLimit:
+    """AC-003: Each __init__.py is <=1 line of content (reserved comment only, no code)."""
+
+    @pytest.mark.parametrize("package", RESERVED_PACKAGES)
+    def test_init_py_at_most_one_line(self, package: str) -> None:
+        """Each reserved package's __init__.py must have at most 1 non-blank line."""
+        parts = package.split(".")
+        init_path = _SRC_DIR / pathlib.Path(*parts) / "__init__.py"
+        assert init_path.exists(), f"Missing {init_path}"
+
+        content = init_path.read_text(encoding="utf-8")
+        # Filter out blank/whitespace-only lines
+        non_blank_lines = [
+            line for line in content.splitlines() if line.strip()
+        ]
+        assert len(non_blank_lines) <= 1, (
+            f"{init_path} has {len(non_blank_lines)} non-blank lines, "
+            f"expected <=1. Content:\n{content}"
+        )
+
+    @pytest.mark.parametrize("package", RESERVED_PACKAGES)
+    def test_init_py_contains_no_code(self, package: str) -> None:
+        """__init__.py should contain only a comment (starting with #) or be empty."""
+        parts = package.split(".")
+        init_path = _SRC_DIR / pathlib.Path(*parts) / "__init__.py"
+        content = init_path.read_text(encoding="utf-8").strip()
+        if content:
+            assert content.startswith("#"), (
+                f"{init_path} contains non-comment content: {content!r}"
+            )
+
+    @pytest.mark.parametrize("package", RESERVED_PACKAGES)
+    def test_init_py_no_imports(self, package: str) -> None:
+        """__init__.py must not contain any import statements."""
+        parts = package.split(".")
+        init_path = _SRC_DIR / pathlib.Path(*parts) / "__init__.py"
+        content = init_path.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                assert not stripped.startswith("import "), (
+                    f"{init_path} contains import statement: {stripped}"
+                )
+                assert not stripped.startswith("from "), (
+                    f"{init_path} contains from-import statement: {stripped}"
+                )

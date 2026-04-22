@@ -1,0 +1,102 @@
+{
+  "task_id": "TASK-J001-004",
+  "timestamp": "2026-04-21T22:50:51.176453",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    "tests/conftest.py"
+  ],
+  "files_created": [
+    "src/jarvis/prompts/__init__.py",
+    "src/jarvis/prompts/supervisor_prompt.py",
+    "tests/test_prompts.py"
+  ],
+  "tests_written": [
+    "tests/test_prompts.py"
+  ],
+  "requirements_addressed": [
+    "AC-001: SUPERVISOR_SYSTEM_PROMPT importable and non-empty",
+    "AC-002: pytest tests/ collects successfully",
+    "AC-003: fake_llm fixture callable with canned responses",
+    "AC-004: test_config fixture validates cleanly",
+    "AC-005: No forbidden tool/subagent names in supervisor prompt"
+  ],
+  "requirements_met": [
+    "AC-001: SUPERVISOR_SYSTEM_PROMPT importable and non-empty",
+    "AC-002: pytest tests/ collects successfully",
+    "AC-003: fake_llm fixture callable with canned responses",
+    "AC-004: test_config fixture validates cleanly",
+    "AC-005: No forbidden tool/subagent names in supervisor prompt"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT` works; the constant is non-empty.",
+      "status": "complete",
+      "evidence": "Created src/jarvis/prompts/supervisor_prompt.py with SUPERVISOR_SYSTEM_PROMPT as a typed str constant. Created src/jarvis/prompts/__init__.py re-export shim with __all__. 11 tests verify import from both module and package paths, non-empty content, str type, {date}/{domain_prompt} placeholders, format resolution, Jarvis identity, attended-conversation posture, and cheapest-that-fits philosophy.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/__init__.py",
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`pytest tests/` collects successfully (no tests defined yet in this task, but collection works).",
+      "status": "complete",
+      "evidence": "pytest tests/ --collect-only reports 202 tests collected successfully. TestAC002PytestCollection class with 2 tests explicitly validates collection. All test files have proper __init__.py and conftest.py structure.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "tests/conftest.py",
+        "tests/test_prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`fake_llm` fixture is callable in a test and returns canned responses without hitting a real provider.",
+      "status": "complete",
+      "evidence": "Added fake_llm fixture to tests/conftest.py using langchain_core FakeListChatModel with 3 canned responses. TestAC003FakeLlm class with 4 tests verifies: fixture not None, first invoke returns 'Canned response 1', second invoke returns 'Canned response 2', and instance is a BaseChatModel. No network calls made.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "tests/conftest.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`test_config` fixture validates cleanly (no `ConfigurationError`).",
+      "status": "complete",
+      "evidence": "Added test_config fixture to tests/conftest.py that creates JarvisConfig with openai_base_url='http://fake-endpoint/v1' in a clean environment (patched os.environ) and calls validate_provider_keys() to ensure no ConfigurationError. TestAC004TestConfigFixture class with 7 tests verifies: not None, is JarvisConfig instance, has fake URL, correct defaults (log_level=INFO, supervisor_model=openai:jarvis-reasoner, memory_store_backend=in_memory), and validate_provider_keys() succeeds on re-call.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "tests/conftest.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "No mention of `call_specialist`, `queue_build`, `morning-briefing`, `task`, or subagent names in the supervisor prompt (scope invariant).",
+      "status": "complete",
+      "evidence": "SUPERVISOR_SYSTEM_PROMPT contains no forbidden terms. TestAC005ScopeInvariant class with 3 tests verifies: no forbidden terms (call_specialist, queue_build, morning-briefing, morning_briefing, talk_prep), no task-as-tool references (task( or 'task' patterns), and no subagent names (jarvis-reasoner, implementer, evaluator, builder). The prompt module docstring documents the scope invariant explicitly.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    }
+  ]
+}

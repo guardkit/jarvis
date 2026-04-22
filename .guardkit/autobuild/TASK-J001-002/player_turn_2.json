@@ -1,0 +1,90 @@
+{
+  "task_id": "TASK-J001-002",
+  "turn": 2,
+  "files_modified": [],
+  "files_created": [
+    "tests/conftest.py"
+  ],
+  "tests_written": [
+    "tests/test_shared.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "29 passed in 0.01s \u2014 verified in fresh venv without editable install (pytest only), and also in full dev venv with editable install. Both pass all 29 tests.",
+  "implementation_notes": "Root cause of Turn 1 failures: the coach's test runner executes `pytest` without `pip install -e .`, so in a src-layout project `import jarvis` fails with ModuleNotFoundError. Fix: created tests/conftest.py that prepends `<project-root>/src` to `sys.path` at pytest startup, which is the standard solution for src-layout projects. All implementation files from Turn 1 are unchanged and correct. Verified fix by creating a fresh venv with only pytest installed (no editable install) \u2014 all 29 tests pass.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: from jarvis import __version__ returns '0.1.0'",
+    "AC-002: from jarvis.shared.constants import Adapter; Adapter.CLI.value == 'cli'",
+    "AC-003: JarvisError, SessionNotFoundError, ConfigurationError all importable with correct subclass relationships",
+    "AC-004: No imports from jarvis.config, jarvis.sessions, jarvis.agents, jarvis.infrastructure, jarvis.cli (verified by AST and runtime import checks)",
+    "AC-005: All modified files pass ruff lint, ruff format, and mypy strict with zero errors"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`from jarvis import __version__` returns `\"0.1.0\"`.",
+      "status": "complete",
+      "evidence": "src/jarvis/__init__.py exports __version__ = '0.1.0'. TestVersion class (3 tests) verifies value, type, and consistency with VERSION constant. Now works without editable install via conftest.py sys.path injection.",
+      "test_file": "tests/test_shared.py",
+      "implementation_files": [
+        "src/jarvis/__init__.py",
+        "tests/conftest.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`from jarvis.shared.constants import Adapter; Adapter.CLI.value == \"cli\"`.",
+      "status": "complete",
+      "evidence": "src/jarvis/shared/constants.py defines Adapter(StrEnum) with CLI='cli', TELEGRAM='telegram', DASHBOARD='dashboard', REACHY='reachy', plus VERSION and DEFAULT_ADAPTER. TestAdapter class (9 tests) verifies all member values, str-enum behavior, member count, default adapter, and importability from jarvis.shared.",
+      "test_file": "tests/test_shared.py",
+      "implementation_files": [
+        "src/jarvis/shared/constants.py",
+        "src/jarvis/shared/__init__.py",
+        "tests/conftest.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`JarvisError`, `SessionNotFoundError`, `ConfigurationError` all importable; subclass relationship holds.",
+      "status": "complete",
+      "evidence": "src/jarvis/shared/exceptions.py defines JarvisError(Exception), ConfigurationError(JarvisError), SessionNotFoundError(JarvisError). TestExceptions class (10 tests) verifies subclass relationships, catchability, instantiation, sibling non-relationship, and re-export from jarvis.shared.",
+      "test_file": "tests/test_shared.py",
+      "implementation_files": [
+        "src/jarvis/shared/exceptions.py",
+        "src/jarvis/shared/__init__.py",
+        "tests/conftest.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "No imports from `jarvis.config`, `jarvis.sessions`, `jarvis.agents`, `jarvis.infrastructure`, `jarvis.cli` (enforced by import graph test in TASK-J001-009).",
+      "status": "complete",
+      "evidence": "All three shared module files only import from stdlib and jarvis.shared.*. TestImportBoundaries class (4 tests) verifies both at runtime (sys.modules snapshot) and statically (AST parsing each file for forbidden import/from-import statements).",
+      "test_file": "tests/test_shared.py",
+      "implementation_files": [
+        "src/jarvis/shared/__init__.py",
+        "src/jarvis/shared/constants.py",
+        "src/jarvis/shared/exceptions.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran ruff check (All checks passed!), ruff format --check (6 files already formatted), and mypy --strict (Success: no issues found in 4 source files) on all implementation and test files including the new conftest.py. Zero errors.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/__init__.py",
+        "src/jarvis/shared/__init__.py",
+        "src/jarvis/shared/constants.py",
+        "src/jarvis/shared/exceptions.py",
+        "tests/conftest.py",
+        "tests/test_shared.py"
+      ]
+    }
+  ],
+  "success": true
+}

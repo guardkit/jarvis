@@ -1,0 +1,31 @@
+{
+  "id": "TURN-FEAT-JARVIS-001-1",
+  "feature_id": "FEAT-JARVIS-001",
+  "task_id": "TASK-J001-002",
+  "turn_number": 1,
+  "player_summary": "Implementation attempt",
+  "player_decision": "feedback",
+  "coach_decision": "feedback",
+  "coach_feedback": "- Tests failed due to infrastructure/environment issues (not code defects). Test command: pytest tests/test_shared.py -v --tb=short. Remediation options: (1) Add mock fixtures for external services, (2) Use SQLite for test database, (3) Mark integration tests with @pytest.mark.integration and exclude via -m 'not integration'. Error detail: Error detail:\n    from jarvis import __version__\nE   ModuleNotFoundError: No module named 'jarvis'\n_______________________ TestVersion.test_version_is_str ________________________\ntests/test_shared.py:31: in test_version_is_str\n    from jarvis import __version__\nResult:\nFAILED tests/test_shared.py::TestImportBoundaries::test_no_forbidden_runtime_imports\nFAILED tests/test_shared.py::TestSharedReexports::test_all_exports - ModuleNo...\nFAILED tests/test_shared.py::TestSharedReexports::test_versi...:\n  Error detail:\n    from jarvis import __version__\nE   ModuleNotFoundError: No module named 'jarvis'\n_______________________ TestVersion.test_version_is_str ________________________\ntests/test_shared.py:31: in test_version_is_str\n    from jarvis import __version__\nResult:\nFAILED tests/test_shared.py::TestImportBoundaries::test_no_forbidden_runtime_imports\nFAILED tests/test_shared.py::TestSharedReexports::test_all_exports - ModuleNo...\nFAILED tests/test_shared.py::TestSharedReexports::test_version_reexport - Mod...\nFAILED tests/test_shared.py::TestSharedReexports::test_default_adapter_reexport\n========================= 26 failed, 3 passed in 0.12s =========================",
+  "mode": "fresh_start",
+  "blockers_found": [],
+  "progress_summary": "Turn 1: feedback",
+  "acceptance_criteria_status": {},
+  "files_modified": [
+    "src/jarvis/__init__.py",
+    "pyproject.toml",
+    "src/jarvis/shared/__init__.py",
+    "src/jarvis/shared/constants.py",
+    "src/jarvis/shared/exceptions.py",
+    "tests/test_shared.py"
+  ],
+  "tests_passed": null,
+  "tests_failed": null,
+  "coverage": null,
+  "arch_score": null,
+  "started_at": "2026-04-21T22:39:56.362196",
+  "completed_at": "2026-04-21T22:39:56.362196",
+  "duration_seconds": null,
+  "lessons_from_turn": [],
+  "what_to_try_next": null
+}

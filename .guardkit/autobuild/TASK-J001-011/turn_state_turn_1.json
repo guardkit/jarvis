@@ -1,0 +1,32 @@
+{
+  "id": "TURN-FEAT-JARVIS-001-1",
+  "feature_id": "FEAT-JARVIS-001",
+  "task_id": "TASK-J001-011",
+  "turn_number": 1,
+  "player_summary": "Implementation attempt",
+  "player_decision": "approve",
+  "coach_decision": "approve",
+  "coach_feedback": null,
+  "mode": "fresh_start",
+  "blockers_found": [],
+  "progress_summary": "Turn 1: approve",
+  "acceptance_criteria_status": {
+    "AC-001": "verified",
+    "AC-002": "verified",
+    "AC-003": "verified",
+    "AC-004": "verified"
+  },
+  "files_modified": [
+    "README.md",
+    ".env.example"
+  ],
+  "tests_passed": null,
+  "tests_failed": null,
+  "coverage": null,
+  "arch_score": null,
+  "started_at": "2026-04-21T23:21:32.790140",
+  "completed_at": "2026-04-21T23:21:32.790140",
+  "duration_seconds": null,
+  "lessons_from_turn": [],
+  "what_to_try_next": null
+}

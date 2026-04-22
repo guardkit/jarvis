@@ -1,0 +1,95 @@
+{
+  "task_id": "TASK-J001-002",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/__init__.py",
+    "pyproject.toml"
+  ],
+  "files_created": [
+    "src/jarvis/shared/__init__.py",
+    "src/jarvis/shared/constants.py",
+    "src/jarvis/shared/exceptions.py",
+    "tests/test_shared.py"
+  ],
+  "tests_written": [
+    "tests/test_shared.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "29 passed in 0.03s \u2014 all tests for version, Adapter enum, exception hierarchy, import boundaries, and re-exports pass",
+  "implementation_notes": "Implemented src/jarvis/shared/ package with constants.py (VERSION, Adapter StrEnum, DEFAULT_ADAPTER), exceptions.py (JarvisError, ConfigurationError, SessionNotFoundError), and __init__.py re-exporting all public names. Updated src/jarvis/__init__.py to export __version__ = '0.1.0'. Fixed pyproject.toml build-backend typo (hatchling.backends -> hatchling.build) and types-click version constraint (>=8 -> >=7.1) inherited from TASK-J001-001. All files pass ruff lint, ruff format, and mypy strict checks.",
+  "concerns": [
+    "pyproject.toml had build-backend typo from TASK-J001-001 (hatchling.backends instead of hatchling.build) \u2014 fixed as prerequisite for running tests",
+    "pyproject.toml had invalid types-click>=8 constraint from TASK-J001-001 (no such version exists) \u2014 fixed to >=7.1"
+  ],
+  "requirements_addressed": [
+    "AC-001: from jarvis import __version__ returns '0.1.0'",
+    "AC-002: from jarvis.shared.constants import Adapter; Adapter.CLI.value == 'cli'",
+    "AC-003: JarvisError, SessionNotFoundError, ConfigurationError all importable with correct subclass relationships",
+    "AC-004: No imports from jarvis.config, jarvis.sessions, jarvis.agents, jarvis.infrastructure, jarvis.cli (verified by AST and runtime import checks)",
+    "AC-005: All modified files pass ruff lint, ruff format, and mypy strict with zero errors"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`from jarvis import __version__` returns `\"0.1.0\"`.",
+      "status": "complete",
+      "evidence": "Created src/jarvis/__init__.py with `__version__ = \"0.1.0\"`. Test class TestVersion (3 tests) verifies the value, type, and consistency with jarvis.shared.constants.VERSION.",
+      "test_file": "tests/test_shared.py",
+      "implementation_files": [
+        "src/jarvis/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`from jarvis.shared.constants import Adapter; Adapter.CLI.value == \"cli\"`.",
+      "status": "complete",
+      "evidence": "Created src/jarvis/shared/constants.py with Adapter(StrEnum) having CLI='cli', TELEGRAM='telegram', DASHBOARD='dashboard', REACHY='reachy'. Also exports VERSION='0.1.0' and DEFAULT_ADAPTER=Adapter.CLI. Test class TestAdapter (9 tests) verifies all member values, str-enum behavior, member count, default adapter, and importability from jarvis.shared.",
+      "test_file": "tests/test_shared.py",
+      "implementation_files": [
+        "src/jarvis/shared/constants.py",
+        "src/jarvis/shared/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`JarvisError`, `SessionNotFoundError`, `ConfigurationError` all importable; subclass relationship holds.",
+      "status": "complete",
+      "evidence": "Created src/jarvis/shared/exceptions.py with JarvisError(Exception), ConfigurationError(JarvisError), SessionNotFoundError(JarvisError). Test class TestExceptions (10 tests) verifies subclass relationships, catchability, instantiation with messages, sibling non-relationship, and re-export from jarvis.shared.",
+      "test_file": "tests/test_shared.py",
+      "implementation_files": [
+        "src/jarvis/shared/exceptions.py",
+        "src/jarvis/shared/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "No imports from `jarvis.config`, `jarvis.sessions`, `jarvis.agents`, `jarvis.infrastructure`, `jarvis.cli` (enforced by import graph test in TASK-J001-009).",
+      "status": "complete",
+      "evidence": "All three shared module files (constants.py, exceptions.py, __init__.py) only import from stdlib and jarvis.shared.*. Test class TestImportBoundaries (4 tests) verifies both at runtime (checking sys.modules after import) and statically (AST parsing each file for forbidden import/from-import statements).",
+      "test_file": "tests/test_shared.py",
+      "implementation_files": [
+        "src/jarvis/shared/__init__.py",
+        "src/jarvis/shared/constants.py",
+        "src/jarvis/shared/exceptions.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran `ruff check` (All checks passed!), `ruff format --check` (5 files already formatted), and `mypy --strict` (Success: no issues found in 4 source files) on all implementation and test files. Zero errors.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/__init__.py",
+        "src/jarvis/shared/__init__.py",
+        "src/jarvis/shared/constants.py",
+        "src/jarvis/shared/exceptions.py",
+        "tests/test_shared.py"
+      ]
+    }
+  ],
+  "success": true
+}
