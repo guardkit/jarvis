@@ -576,6 +576,161 @@ TASK-J001-FIX-004 complete. Summary:
 
 
 
+# ===========================================================================
+# 2026-04-22 — Phase 1 Step 7 regression debug + Step 8 day-1 validation
+# ===========================================================================
+
+# Step 7: kicked off the regression check per phase1-build-plan.md §Step 7
+# (pasted the plan block into zsh, which produced a pile of `command not
+# found` warnings for the literal prose lines — harmless, the real commands
+# underneath still ran).
+
+uv sync --dev
+uv run pytest tests/ -v --tb=short --cov=src/jarvis
+
+# 339 passing / 2 failing:
+#   1. test_build_system.py::TestAC004EntryPoint::test_jarvis_version_command
+#      — subprocess's sys.executable resolved to /usr/local/bin/python
+#        (system Python 3.14), where jarvis isn't installed. Root cause:
+#        `uv sync --dev` in uv 0.11.2 binds to PEP 735 [dependency-groups],
+#        which this project didn't declare; dev deps lived under
+#        [project.optional-dependencies].dev, so pytest was never installed
+#        into .venv/bin, and `uv run pytest` silently fell through $PATH to
+#        the system 3.14 pytest. 339 other tests passed by accident because
+#        system 3.14's global site-packages happens to include langchain,
+#        openai, etc.
+#   2. test_supervisor.py::TestBuildSupervisorReturnsGraph
+#        ::test_returns_compiled_state_graph — the only test in that class
+#        that did NOT patch init_chat_model, so it attempted to construct a
+#        real AsyncOpenAI client and failed without OPENAI_API_KEY. Bug in
+#        the test, not the production code; contradicts AC-001's own
+#        "without network" docstring.
+
+# Investigation confirmed (a) .venv was Python 3.12.4 per pyvenv.cfg but
+# lacked pytest; (b) the 3.14 framework had pytest 9.0.2 globally. Fix was
+# two-layered: patch the AC-001 test to use the fake_llm fixture, and move
+# dev deps to PEP 735 [dependency-groups].dev so bare `uv sync` hydrates
+# them. Also updated README Quickstart to use `uv sync` + `uv run` (removing
+# the pip-install dance), adjusted TestAC004ReadmeQuickstart to expect
+# "uv sync" instead of "pip install", and swept phase2/3/4-build-plan.md so
+# they don't re-introduce `uv sync --dev`.
+
+# Verified on a clean venv:
+rm -rf .venv && uv sync
+uv run pytest tests/ --tb=short --cov=src/jarvis   # 341 passed
+uv run ruff check src/jarvis/ tests/               # clean
+uv run mypy src/jarvis/                            # clean
+
+# Commit 84daf08:
+#   "Fix phase-1 regression: move dev deps to PEP 735 [dependency-groups]"
+#   9 files changed, +183/-57.
+
+# ---------------------------------------------------------------------------
+# Step 8: Day-1 conversation validation.
+# Pasted the plan block again — zsh took `<provider API key env var>` as
+# input redirection (`< provider`) and errored. The `<ADR-pinned default>`
+# line WAS a valid quoted export though, and so JARVIS_SUPERVISOR_MODEL got
+# set to the literal placeholder "<ADR-pinned default>" in the shell.
+
+unset JARVIS_SUPERVISOR_MODEL    # cleared the stale export
+uv run jarvis health             # → "Provider 'openai' requires OPENAI_BASE_URL"
+
+# .env already existed with OPENAI_API_KEY and GOOGLE_API_KEY but no JARVIS_
+# prefix — invisible to JarvisConfig. Rewrote to use cloud OpenAI (Path A
+# from the options I offered). *Keys from the first paste were rotated
+# immediately — they got captured in the chat transcript before we caught
+# it.*
+
+# With .env populated, jarvis health *still* failed:
+#   "The api_key client option must be set..."
+# Root cause: pydantic-settings reads .env into JarvisConfig but does NOT
+# export to os.environ. langchain's AsyncOpenAI reads OPENAI_API_KEY from
+# os.environ directly. Nothing bridged the two.
+
+# Fix (Option 2 — proper, not just a shell `set -a; source .env` hack):
+#   src/jarvis/cli/main.py — call load_dotenv(override=False) at the Click
+#     group callback so .env seeds os.environ before any subcommand runs.
+#   tests/conftest.py — autouse `_isolate_dotenv` fixture that chdirs to
+#     tmp_path, so JarvisConfig's relative env_file=".env" resolves to a
+#     nonexistent file during tests (the operator's real .env was leaking
+#     into tests that had been passing only because .env didn't exist).
+#   tests/test_cli.py — autouse `_stub_load_dotenv` + new TestDotenvBridge
+#     class (3 tests: version/no-args invoke load_dotenv; override=False).
+
+# Verified:
+uv run jarvis health
+# Building supervisor graph with model=openai:gpt-4o-mini
+# Supervisor graph compiled successfully
+# supervisor: ok
+# memory store: ready
+
+uv run jarvis chat
+# → supervisor responds correctly on first turn. BUT:
+#   > Remember that my DDD Southwest talk is on 16 May.
+#   [ack]
+#   > When is my DDD Southwest talk?
+#   I couldn't find any information about your DDD Southwest talk.
+
+# Within-session recall broken. Root cause: build_supervisor called
+# create_deep_agent(...) without checkpointer=, defaulting to None. The
+# SessionManager.invoke() flow passes config={"configurable": {"thread_id":
+# session.thread_id}} every turn (DDR-004), but without a saver, thread_id
+# keys nothing and each turn starts empty. All existing tests passed
+# because they mock create_deep_agent and AsyncMock the `ainvoke` call —
+# they never exercise the real DeepAgents middleware with a real
+# checkpointer. Live OpenAI traffic was the only path that exposed it.
+
+# Fix captured as TASK-J001-FIX-005:
+#   src/jarvis/agents/supervisor.py — import InMemorySaver from
+#     langgraph.checkpoint.memory; pass checkpointer=InMemorySaver() to
+#     create_deep_agent(). Within-process recall now works; cross-process
+#     recall still requires a persistent saver + persistent store, which
+#     lands in FEAT-JARVIS-007.
+#   tests/test_supervisor.py — new TestWithinSessionRecall class (4
+#     regression guards): graph.checkpointer is not None; it's an
+#     InMemorySaver specifically (pins the Phase 1 choice); create_deep_agent
+#     was called with a non-None checkpointer= kwarg (catches DeepAgents
+#     parameter renames); two build_supervisor calls produce graphs with
+#     distinct savers (guards the idempotency contract).
+#   tasks/completed/TASK-J001-FIX-005/TASK-J001-FIX-005.md — task record.
+#   docs/research/ideas/phase1-build-plan.md — Success Criterion #4 split
+#     into within-session (now met) + cross-session (deferred to
+#     FEAT-JARVIS-007) halves; status log + narrative status updated.
+
+uv run pytest tests/                 # 348 passed (+3 dotenv, +4 recall)
+uv run ruff check src/jarvis/ tests/ # clean
+uv run mypy src/jarvis/              # clean
+
+# Commit c38c8e5:
+#   "Fix day-1 multi-turn recall and .env→os.environ bridging (FIX-005)"
+#   7 files changed, +296/-4.
+
+# Live re-verification on the committed code:
+uv run jarvis chat
+# > Remember that my DDD SouthWest Talk is 16th May
+# Got it! Your DDD SouthWest Talk is scheduled for May 16th.
+# > When is my DDD SouthWest Talk?
+# Your DDD SouthWest Talk is on May 16th.
+
+# Phase 1 is closed. Next: push c38c8e5 to origin/main, then FEAT-JARVIS-002.
+
+# ---------------------------------------------------------------------------
+# Lessons worth carrying into Phase 2:
+#   1. Two ways .env can leak into production code and tests: pydantic's
+#      env_file relative path, and any code that reads os.environ directly
+#      (langchain clients). Both need explicit handling.
+#   2. Mocking create_deep_agent and AsyncMock-ing ainvoke in unit tests is
+#      necessary (avoids token spend) but not sufficient — at least one test
+#      per feature should exercise the *real* compiled graph with a real
+#      saver and real store, even if the model is faked. FIX-005 would have
+#      been caught at test time by such a test.
+#   3. `uv sync --dev` vs `uv sync --extra dev` behaves very differently
+#      depending on where dev deps are declared. Using [dependency-groups]
+#      is the least-surprise path and means bare `uv sync` Just Works.
+# ===========================================================================
+
+
+
 
 
 
