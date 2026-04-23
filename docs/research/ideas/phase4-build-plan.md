@@ -66,7 +66,7 @@ After Phase 4, Rich can send "morning briefing" to the Telegram bot from his pho
 
 Expected at Phase 4 start:
 
-- NATS client + fleet registration + `NATSKVManifestRegistry`-backed catalogue + real `call_specialist` round-trip
+- NATS client + fleet registration + `NATSKVManifestRegistry`-backed catalogue + real `dispatch_by_capability` round-trip (renamed from `call_specialist` per [FEAT-JARVIS-002 DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md))
 - Real `queue_build` publish to JetStream + `pipeline.stage-complete.*` subscription + CLI rendering of between-prompt notifications
 - `JarvisRoutingHistoryEntry` Pydantic shape + trace-rich writes for specialist dispatch + build-queue dispatch (schema authoritative per ADR-FLEET-001)
 - Graphiti-unavailable + NATS-unavailable fallback behaviours
@@ -214,9 +214,9 @@ The adapter registers its own `AgentManifest` on `fleet.register` so it's discov
 
 - `src/jarvis/skills/morning_briefing.py` — `MorningBriefingSkill`. Intent signatures include "morning briefing", "what's on today", "brief me", "catch me up on today". Composes `get_calendar_events` + `list_available_capabilities` + `SessionManager.recent_sessions_summary` + Graphiti read of yesterday's routing history. Memory: writes `last_morning_briefing_{date, highlights}`; reads prior `highlights` for continuity.
 
-- `src/jarvis/skills/talk_prep.py` — `TalkPrepSkill`. Intent signatures include "talk prep", "DDD Southwest prep", "prep the talk". Composes Graphiti read of talk-project-tagged entries + `long_research` subagent + `quick_local` summariser. Memory: writes `talk_prep_sessions` (append), `talk_prep_open_questions`, `talk_prep_rehearsal_count`; reads all of these. **Pattern C slot reservation section** clearly marked with `# --- FEAT-JARVIS-010 Pattern C ambient nudges land here (v1.5) ---` and no-op `async def maybe_emit_ambient_nudge(session, memory_store): return None`.
+- `src/jarvis/skills/talk_prep.py` — `TalkPrepSkill`. Intent signatures include "talk prep", "DDD Southwest prep", "prep the talk". Composes Graphiti read of talk-project-tagged entries + `jarvis-reasoner` with `role=researcher` for requested research + `role=planner` for summarisation (per [FEAT-JARVIS-003 DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md) / [DDR-011](../../design/FEAT-JARVIS-003/decisions/DDR-011-role-enum-closed-v1.md); the scope-doc `long_research` + `quick_local` subagents are retired). Memory: writes `talk_prep_sessions` (append), `talk_prep_open_questions`, `talk_prep_rehearsal_count`; reads all of these. **Pattern C slot reservation section** clearly marked with `# --- FEAT-JARVIS-010 Pattern C ambient nudges land here (v1.5) ---` and no-op `async def maybe_emit_ambient_nudge(session, memory_store): return None`.
 
-- `src/jarvis/skills/project_status.py` — `ProjectStatusSkill`. Intent signatures include "project status", "how is X doing", "status update on Y". Composes Graphiti read scoped to project + optional `call_specialist(agent_id="architect", ...)` + `quick_local` synthesis. Memory: reads `active_projects`, `project_last_status_query`; writes updates.
+- `src/jarvis/skills/project_status.py` — `ProjectStatusSkill`. Intent signatures include "project status", "how is X doing", "status update on Y". Composes Graphiti read scoped to project + optional `dispatch_by_capability(tool_name="<architect-capability>", ...)` (per [FEAT-JARVIS-002 DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md); renamed from `call_specialist`) + `jarvis-reasoner` with `role=planner` for synthesis (per [FEAT-JARVIS-003 DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md)). Memory: reads `active_projects`, `project_last_status_query`; writes updates.
 
 ### Change 3: `invoke_skill` tool (`src/jarvis/tools/skills.py`)
 
@@ -517,7 +517,7 @@ Expected:
   - adapter_ingress resolves/creates session for the chat
   - Supervisor recognises intent → invoke_skill("morning_briefing")
   - Skill composes: get_calendar_events stub + recent_sessions_summary + Graphiti read of yesterday's routing history
-  - quick_local subagent summarises
+  - jarvis-reasoner subagent (role=planner) summarises (per FEAT-JARVIS-003 DDR-010/011)
   - SkillResult returned
   - Supervisor formats as markdown reply
   - JarvisNotificationPayload published to jarvis.notification.telegram
@@ -629,12 +629,12 @@ Building on Phase 3's timeline (Phase 3: 30 Apr – 6 May 2026):
 
 | Priority | Phase | Content |
 |----------|-------|---------|
-| **v1 shipped** | — | Jarvis v1: supervisor + 4 subagents + dispatch tools + fleet registration + specialist round-trip + Forge build queue + stage-complete notifications + Telegram adapter + three skills + Memory Store. Daily use begins. |
+| **v1 shipped** | — | Jarvis v1: supervisor + 1 async subagent with role-dispatch (`jarvis-reasoner` × critic/researcher/planner) + `escalate_to_frontier` attended-only tool + dispatch tools + fleet registration + specialist round-trip + Forge build queue + stage-complete notifications + Telegram adapter + three skills + Memory Store. Daily use begins. |
 | **v1.1** | — | FEAT-JARVIS-011 (`jarvis purge-traces` CLI) — GDPR-clean per ADR-FLEET-001. Small, targeted hardening. |
 | **v1.5 (post-DDD)** | Phase 5 | FEAT-JARVIS-008 (Learning Flywheel) — `jarvis.learning` reader on `jarvis_routing_history` data accumulated through Phase 3 + Phase 4 + v1 daily use. `CalibrationAdjustment` entities + Rich-in-the-loop CLI surface. |
 | **v1.5** | — | FEAT-JARVIS-009 — Dashboard + Reachy adapters (same `nats-asyncio-service` pattern as Telegram; `jarvis.command.{dashboard,reachy}` / `jarvis.notification.{dashboard,reachy}`). |
 | **v1.5** | — | FEAT-JARVIS-010 — `talk-prep` Pattern C ambient nudges. Implements the slot reserved in `talk_prep.py`. Target: retrospective support for DDD Southwest + next-talk prep. First real Pattern C graduation. |
-| **v1.5** | — | Real calendar integration (replaces `get_calendar_events` stub), persistent Memory Store backend, real `system.health.vllm` producer for `quick_local` fallback. |
+| **v1.5** | — | Real calendar integration (replaces `get_calendar_events` stub), persistent Memory Store backend, live llama-swap `/running` + `/log` reads (replaces FEAT-JARVIS-003 DDR-015's stub) feeding the swap-aware voice-latency policy (ADR-ARCH-012). The scope-doc's `quick_local` cloud-cheap-tier fallback is retired. |
 
 ---
 

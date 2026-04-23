@@ -1,5 +1,15 @@
 # Phase 2: Dispatch Foundations — Core Tools, Dispatch Tools & Async Subagents — Scope Document
 
+> **⚠️ PARTIALLY SUPERSEDED (2026-04-23).** This scope was written on 2026-04-20 *before* the `/system-arch` session produced [ADR-ARCH-001](../../architecture/decisions/ADR-ARCH-001-local-first-inference-via-llama-swap.md) (no cloud LLMs on unattended paths), [ADR-ARCH-011](../../architecture/decisions/ADR-ARCH-011-single-jarvis-reasoner-subagent.md) (single `jarvis-reasoner` subagent), [ADR-ARCH-012](../../architecture/decisions/ADR-ARCH-012-swap-aware-voice-latency-policy.md) (swap-aware voice policy retires JA6), and [ADR-ARCH-027](../../architecture/decisions/ADR-ARCH-027-attended-only-cloud-escape-hatch.md) (attended-only `escalate_to_frontier`).
+>
+> The **FEAT-JARVIS-003 four-cloud-subagent roster** (`deep_reasoner` / `adversarial_critic` / `long_research` / `quick_local`) is retired. Replaced by one `jarvis-reasoner` AsyncSubAgent with a `role` kwarg + an attended-only `escalate_to_frontier` tool. The **JA6 cloud-cheap-tier `quick_local` fallback** is retired — replaced by swap-aware llama-swap reads per ADR-ARCH-012.
+>
+> Reconciled in [FEAT-JARVIS-002 design](../../design/FEAT-JARVIS-002/design.md) §11 (contradiction C2) and [FEAT-JARVIS-003 design](../../design/FEAT-JARVIS-003/design.md) + [DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md) + [DDR-014](../../design/FEAT-JARVIS-003/decisions/DDR-014-escalate-to-frontier-in-dispatch-tool-module.md) + [DDR-015](../../design/FEAT-JARVIS-003/decisions/DDR-015-llamaswap-adapter-with-stubbed-health.md).
+>
+> See [docs/history/superseded-designs.md](../../history/superseded-designs.md) for the full retirement narrative.
+>
+> **FEAT-JARVIS-002 sections (general tools, capability catalogue, dispatch tools) remain authoritative.** Only the FEAT-JARVIS-003 subagent/fallback material is superseded.
+
 ## For: Claude Code `/system-design` → `/feature-spec` → `/feature-plan` → AutoBuild (per feature)
 ## Date: 20 April 2026
 ## Status: Blocked on Phase 1 completion (FEAT-JARVIS-001 merged + day-1 conversation validated). Ready for `/system-design FEAT-JARVIS-002` once Phase 1 closes.

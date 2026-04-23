@@ -30,7 +30,7 @@
 
 The phase where Jarvis joins the fleet for real. Two features, tightly coupled:
 
-- **FEAT-JARVIS-004** — NATS integration: Jarvis registers on `fleet.register` (ADR-J-P4), discovers specialists via `NATSKVManifestRegistry`, dispatches via `agents.command.{agent_id}` / `agents.result.{agent_id}` with timeout + retry-with-redirect. Phase 2's stubbed `call_specialist` becomes real.
+- **FEAT-JARVIS-004** — NATS integration: Jarvis registers on `fleet.register` (ADR-J-P4), discovers specialists via `NATSKVManifestRegistry`, dispatches via `agents.command.{agent_id}` / `agents.result.{agent_id}` with timeout + retry-with-redirect. Phase 2's stubbed `dispatch_by_capability` becomes real.
 - **FEAT-JARVIS-005** — Forge integration: `queue_build` publishes `BuildQueuedPayload` to `pipeline.build-queued.{feature_id}` per ADR-SP-014 Pattern A. Jarvis subscribes to `pipeline.stage-complete.*` and surfaces matching notifications back to Rich via the CLI adapter.
 
 Phase 3 also lights up the **first live ADR-FLEET-001 trace-rich writes** to `jarvis_routing_history`. Every specialist dispatch and every build queue writes a schema-compliant decision record. The schema is authoritative from here onward — retrofits are expensive and `jarvis.learning` (FEAT-JARVIS-008, v1.5) reads these records.
@@ -42,7 +42,7 @@ The Phase 3 close criterion is the end-to-end test: Jarvis queues a Rich-chosen 
 - Not Telegram, Dashboard, or Reachy adapters. Still CLI-only. FEAT-JARVIS-006 (Phase 4) adds Telegram.
 - Not skills. FEAT-JARVIS-007 (Phase 4) adds `morning-briefing`, `talk-prep`, `project-status`.
 - Not `jarvis.learning`. Writes to `jarvis_routing_history` land for the first time, but the *reader* defers to v1.5 (FEAT-JARVIS-008).
-- Not the real `system.health.vllm` signal for `quick_local` fallback. Still stubbed from Phase 2. Real health-signal producer is v1.5.
+- Not live llama-swap `/running` + `/log` health reads for the swap-aware voice policy (ADR-ARCH-012). Still stubbed per [FEAT-JARVIS-003 DDR-015](../../design/FEAT-JARVIS-003/decisions/DDR-015-llamaswap-adapter-with-stubbed-health.md). Live reads land with FEAT-JARVIS-004's transport swap if scheduled; otherwise v1.5.
 - Not GDPR trace purge (`jarvis purge-traces`). FEAT-JARVIS-011 (v1.1).
 - Not horizontal scaling. Single Jarvis process per user, per GB10 (mirrors Forge ADR-ARCH-027).
 
@@ -51,7 +51,7 @@ The Phase 3 close criterion is the end-to-end test: Jarvis queues a Rich-chosen 
 1. All Phase 1 + Phase 2 tests still pass (zero regressions).
 2. Jarvis registers on `fleet.register` at startup; registration is visible in the in-process test NATS server.
 3. `list_available_capabilities` returns real capabilities from `NATSKVManifestRegistry`.
-4. `call_specialist` round-trips with a mocked specialist consumer in integration tests (request → response; timeout → retry-with-redirect; all-specialists-exhausted → structured error).
+4. `dispatch_by_capability` round-trips with a mocked specialist consumer in integration tests (request → response; timeout → retry-with-redirect; all-specialists-exhausted → structured error).
 5. `queue_build` publishes real `BuildQueuedPayload` to `pipeline.build-queued.{feature_id}` in integration tests.
 6. `pipeline.stage-complete.*` subscription routes correlation-matched notifications to `jarvis.notification.forge-stage-complete.*`; CLI adapter surfaces them between prompts.
 7. `jarvis_routing_history` trace-rich writes land for every specialist dispatch and every build queue; schema matches ADR-FLEET-001 + Jarvis-specific extensions.
@@ -68,13 +68,14 @@ The Phase 3 close criterion is the end-to-end test: Jarvis queues a Rich-chosen 
 Expected at Phase 3 start:
 
 - 10 tools registered on supervisor (4 general + 3 capability + 2 dispatch + implicit subagent primitives)
-- 4 async subagents declared at startup (`deep_reasoner`, `adversarial_critic`, `long_research`, `quick_local`)
-- Supervisor system prompt teaches "cheapest-that-fits, escalate on need" across tools + subagents
-- `langgraph.json` + ASGI transport spinning 5 graphs
-- Routing-e2e test passes: 7 canned prompts route to expected tools/subagents
-- `call_specialist` and `queue_build` are stubbed transport but build real `nats-core` payloads
+- 1 async subagent declared at startup (`jarvis-reasoner`, gpt-oss-120b via llama-swap) with role-dispatch (`critic` / `researcher` / `planner`) per [ADR-ARCH-011](../../architecture/decisions/ADR-ARCH-011-single-jarvis-reasoner-subagent.md) + [FEAT-JARVIS-003 DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md). **(Scope-doc's four-subagent roster retired — see [superseded-designs.md](../../history/superseded-designs.md).)**
+- `escalate_to_frontier` tool available on attended sessions only, constitutionally gated per [ADR-ARCH-027](../../architecture/decisions/ADR-ARCH-027-attended-only-cloud-escape-hatch.md) + [FEAT-JARVIS-003 DDR-014](../../design/FEAT-JARVIS-003/decisions/DDR-014-escalate-to-frontier-in-dispatch-tool-module.md)
+- Supervisor system prompt teaches "cheapest-that-fits, escalate on need" across tools + role-dispatched subagent + frontier escape
+- `langgraph.json` at repo root + ASGI transport spinning 2 graphs (supervisor + `jarvis_reasoner`) per [FEAT-JARVIS-003 DDR-013](../../design/FEAT-JARVIS-003/decisions/DDR-013-langgraph-json-at-repo-root.md)
+- Routing-e2e test passes: 7 canned prompts route to expected tools/role-dispatched subagent invocations
+- `dispatch_by_capability` (renamed from `dispatch_by_capability` per [FEAT-JARVIS-002 DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md)) and `queue_build` are stubbed transport but build real `nats-core` payloads
 - `CapabilityDescriptor` Pydantic shape landed — designed for Phase 3's stub-to-real swap
-- `quick_local` fallback hook landed with stubbed health signal
+- Swap-aware voice-latency hook landed via `LlamaSwapAdapter` with stubbed `/running` + `/log` reads per [ADR-ARCH-012](../../architecture/decisions/ADR-ARCH-012-swap-aware-voice-latency-policy.md) + [FEAT-JARVIS-003 DDR-015](../../design/FEAT-JARVIS-003/decisions/DDR-015-llamaswap-adapter-with-stubbed-health.md) (the scope-doc `quick_local` fallback hook is retired)
 
 **Gaps Phase 3 closes:**
 
@@ -151,7 +152,7 @@ Manifest contents: `agent_id="jarvis"`, `role="general_purpose_agent"`, capabili
 - Stub YAML (`stub_capabilities.yaml`) stays in-tree as a test + local-dev fallback; production uses NATS.
 - `CapabilityDescriptor` Pydantic shape unchanged from Phase 2.
 
-### Change 4: Real `call_specialist` (`src/jarvis/tools/dispatch.py`)
+### Change 4: Real `dispatch_by_capability` (`src/jarvis/tools/dispatch.py`)
 
 **File:** `src/jarvis/tools/dispatch.py` (UPDATED)
 
@@ -173,7 +174,7 @@ Manifest contents: `agent_id="jarvis"`, `role="general_purpose_agent"`, capabili
 
 `pyproject.toml` gains `graphiti-core`.
 
-Writes live at the `call_specialist` + `queue_build` call boundaries — wrapped around the dispatch so success / timeout / redirect outcomes are all captured.
+Writes live at the `dispatch_by_capability` + `queue_build` call boundaries — wrapped around the dispatch so success / timeout / redirect outcomes are all captured.
 
 ### Change 6: Lifecycle integration (`src/jarvis/infrastructure/lifecycle.py`)
 
@@ -195,7 +196,7 @@ New fields: `nats_url`, `nats_credentials_path`, `graphiti_endpoint`, `graphiti_
 
 - `tests/test_fleet_registration.py` — register at startup, heartbeat fires, deregister on shutdown
 - `tests/test_capabilities_real.py` — `NATSKVManifestRegistry`-backed catalogue reads; cache behaviour; KV watch invalidation
-- `tests/test_dispatch_call_specialist.py` (UPDATED from Phase 2) — round-trip with mocked specialist consumer; timeout; retry-with-redirect; exhausted-alternatives error
+- `tests/test_dispatch_by_capability.py` (UPDATED from Phase 2) — round-trip with mocked specialist consumer; timeout; retry-with-redirect; exhausted-alternatives error
 - `tests/test_routing_history_writes.py` — schema-compliant writes on happy/timeout/redirect paths against in-memory Graphiti stub
 - `tests/test_graphiti_unavailable.py` — Jarvis starts; dispatches succeed; traces logged WARN
 - `tests/test_nats_unavailable.py` — Jarvis starts; dispatch tools return structured errors Rich can see
@@ -321,7 +322,7 @@ cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
   --context .guardkit/context-manifest.yaml
 ```
 
-Expected output: `docs/design/FEAT-JARVIS-004/design.md` — NATS client wiring, fleet-registration lifecycle, `NATSKVManifestRegistry` integration, `call_specialist` timeout/retry/redirect policy, `JarvisRoutingHistoryEntry` full Pydantic shape (resolves JA1), Graphiti write fire-and-forget pattern, fallback behaviour ADRs (Graphiti-unavailable, NATS-unavailable).
+Expected output: `docs/design/FEAT-JARVIS-004/design.md` — NATS client wiring, fleet-registration lifecycle, `NATSKVManifestRegistry` integration, `dispatch_by_capability` timeout/retry/redirect policy, `JarvisRoutingHistoryEntry` full Pydantic shape (resolves JA1), Graphiti write fire-and-forget pattern, fallback behaviour ADRs (Graphiti-unavailable, NATS-unavailable).
 
 ### Step 2: /system-design FEAT-JARVIS-005
 
@@ -418,7 +419,7 @@ Suggested commit order:
 3. `infrastructure/fleet_registration.py` + `tests/test_fleet_registration.py`.
 4. `infrastructure/routing_history.py` — Pydantic schema, write function, Graphiti client + schema unit tests.
 5. `tools/capabilities.py` update: stub → `NATSKVManifestRegistry`; integration tests.
-6. `tools/dispatch.py` update: `call_specialist` real transport (round-trip + timeout + redirect); integration tests + trace-write integration.
+6. `tools/dispatch.py` update: `dispatch_by_capability` real transport (round-trip + timeout + redirect); integration tests + trace-write integration.
 7. `infrastructure/lifecycle.py` update: NATS connect → Graphiti connect → register → heartbeat; drain + deregister.
 8. Fallback tests (`test_graphiti_unavailable.py`, `test_nats_unavailable.py`).
 9. Contract tests against `nats-core` (`test_contract_nats_core.py`).
@@ -524,12 +525,12 @@ Record the session and the Graphiti trace dump — this is Phase 3's evidence ar
 | `src/jarvis/infrastructure/forge_notifications.py` | FEAT-JARVIS-005 | **NEW** — `pipeline.stage-complete.*` subscriber + `jarvis.notification.*` router |
 | `src/jarvis/infrastructure/lifecycle.py` | FEAT-JARVIS-004, -005 | **UPDATED** — NATS + Graphiti startup; register + heartbeat; drain + deregister; start notification subscriber |
 | `src/jarvis/tools/capabilities.py` | FEAT-JARVIS-004 | **UPDATED** — stub → `NATSKVManifestRegistry` |
-| `src/jarvis/tools/dispatch.py` | FEAT-JARVIS-004, -005 | **UPDATED** — `call_specialist` real transport; `queue_build` real JetStream publish |
+| `src/jarvis/tools/dispatch.py` | FEAT-JARVIS-004, -005 | **UPDATED** — `dispatch_by_capability` real transport; `queue_build` real JetStream publish |
 | `src/jarvis/sessions/manager.py` | FEAT-JARVIS-005 | **UPDATED** — `pending_notifications()` |
 | `src/jarvis/cli/main.py` | FEAT-JARVIS-005 | **UPDATED** — render between-prompt notifications |
 | `tests/test_fleet_registration.py` | FEAT-JARVIS-004 | **NEW** |
 | `tests/test_capabilities_real.py` | FEAT-JARVIS-004 | **NEW** |
-| `tests/test_dispatch_call_specialist.py` | FEAT-JARVIS-004 | **UPDATED** — real transport integration tests |
+| `tests/test_dispatch_by_capability.py` | FEAT-JARVIS-004 | **UPDATED** — real transport integration tests |
 | `tests/test_dispatch_queue_build.py` | FEAT-JARVIS-005 | **UPDATED** — real JetStream publish |
 | `tests/test_forge_notifications.py` | FEAT-JARVIS-005 | **NEW** |
 | `tests/test_routing_history_writes.py` | FEAT-JARVIS-004, -005 | **NEW** — both dispatch + queue-build paths |
@@ -560,7 +561,7 @@ All paths relative to `/Users/richardwoollcott/Projects/appmilla_github/jarvis/`
 6. **No `jarvis.learning` reader.** Writes only. Deferred to v1.5 (FEAT-JARVIS-008).
 7. **No new adapters.** CLI only. Telegram is Phase 4.
 8. **Fallback behaviours are structural.** Graphiti-unavailable → WARN + continue. NATS-unavailable → structured error, not crash. These are design invariants; tests assert them.
-9. **`quick_local` fallback health signal still stubbed.** Real signal is v1.5.
+9. **`LlamaSwapAdapter` health reads still stubbed** per [FEAT-JARVIS-003 DDR-015](../../design/FEAT-JARVIS-003/decisions/DDR-015-llamaswap-adapter-with-stubbed-health.md). Live `/running` + `/log` lands with FEAT-JARVIS-004's transport swap (or v1.5 — verify at `/system-design`). The scope-doc's `quick_local` cloud-cheap-tier fallback is retired (ADR-ARCH-012).
 10. **Scope-preserving rules from conversation starter §2.** No new agent repos; no fleet-decision changes mid-build.
 
 ---
@@ -573,7 +574,7 @@ All paths relative to `/Users/richardwoollcott/Projects/appmilla_github/jarvis/`
 | `NATSKVManifestRegistry` cache behaviour differs from Forge's production usage | Use Forge's existing test fixtures if exportable; otherwise contract test the cache-plus-watch behaviour against the same `nats-core` primitives Forge uses. |
 | `ADR-FLEET-001` schema field ambiguity when implementing | `/system-design FEAT-JARVIS-004` is where the full Pydantic shape lands (resolving JA1). If ambiguity remains post-design, raise via ADR-FLEET-002 before writing begins — retrofits are expensive. |
 | Graphiti write latency hurts dispatch latency | Fire-and-forget async writes. Dispatch returns to supervisor without waiting. Write failures log WARN, not ERROR. |
-| `call_specialist` timeout too short: legitimate specialists time out | ADR-pinned default from `/system-design`; test coverage for 30s, 60s, 120s boundaries; configurable per-invocation via context dict. |
+| `dispatch_by_capability` timeout too short: legitimate specialists time out | ADR-pinned default from `/system-design`; test coverage for 30s, 60s, 120s boundaries; configurable per-invocation via context dict. |
 | Retry-with-redirect causes loops if two specialists both time out | Max retry count (e.g. 2 total attempts); loop guard via visited-set on `agent_id`. |
 | Forge end-to-end test fails because Rich-chosen feature is too ambitious | Prefer candidate (a) docstring polish — smallest, safest, most-obviously-succeeds first real run. Reserve (b) or (c) for a follow-up end-to-end test. |
 | `pipeline.stage-complete.*` subscription leaks across sessions / users | Correlation-ID filter is mandatory; test covers "stage-complete for another correlation_id is ignored". |
@@ -590,7 +591,7 @@ Building on Phase 2's timeline (Phase 2: 25–29 April 2026):
 |-----|----------|--------|
 | 1 (30 Apr) | Step 1 — `/system-design FEAT-JARVIS-004`. Step 3 — `/feature-spec FEAT-JARVIS-004`. | Design doc + Gherkin scenarios for FEAT-JARVIS-004. |
 | 2 (1 May) | Step 5 — `/feature-plan FEAT-JARVIS-004`. Step 7 — begin AutoBuild FEAT-JARVIS-004 (NATS client + fleet registration + routing_history schema). | Task breakdown + first commits. |
-| 3 (2 May) | Step 7 cont — complete AutoBuild FEAT-JARVIS-004 (capabilities integration + real `call_specialist` + fallback tests + contract tests). Step 8 — `/task-review`. Step 11 — regression check. | FEAT-JARVIS-004 closed. |
+| 3 (2 May) | Step 7 cont — complete AutoBuild FEAT-JARVIS-004 (capabilities integration + real `dispatch_by_capability` + fallback tests + contract tests). Step 8 — `/task-review`. Step 11 — regression check. | FEAT-JARVIS-004 closed. |
 | 4 (3 May) | Step 2 — `/system-design FEAT-JARVIS-005`. Step 4 — `/feature-spec FEAT-JARVIS-005`. Step 6 — `/feature-plan FEAT-JARVIS-005`. | Design + spec + plan. |
 | 5 (4 May) | Step 9 — AutoBuild FEAT-JARVIS-005 (real `queue_build` + forge notifications + CLI rendering). Step 10 — `/task-review`. | FEAT-JARVIS-005 code-complete. |
 | 6 (5 May) | Step 11 — full regression. Step 12 — integration-server check. Step 13 — Rich picks FEAT-JARVIS-INTERNAL-*** candidate + `/feature-spec`/`plan` it. | Integration tests green; internal feature ready for Step 14. |

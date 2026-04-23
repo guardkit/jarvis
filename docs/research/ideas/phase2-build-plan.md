@@ -1,5 +1,13 @@
 # Phase 2 Build Plan — Dispatch Foundations: Core Tools, Dispatch Tools & Async Subagents
 
+> **⚠️ PARTIALLY SUPERSEDED (2026-04-23).** This plan was written on 2026-04-20 *before* the `/system-arch` session produced [ADR-ARCH-001](../../architecture/decisions/ADR-ARCH-001-local-first-inference-via-llama-swap.md) (local-first; no cloud LLMs on unattended paths), [ADR-ARCH-011](../../architecture/decisions/ADR-ARCH-011-single-jarvis-reasoner-subagent.md) (single `jarvis-reasoner` subagent with role-dispatch), [ADR-ARCH-012](../../architecture/decisions/ADR-ARCH-012-swap-aware-voice-latency-policy.md) (swap-aware voice-latency policy supersedes JA6), and [ADR-ARCH-027](../../architecture/decisions/ADR-ARCH-027-attended-only-cloud-escape-hatch.md) (attended-only `escalate_to_frontier`).
+>
+> The **FEAT-JARVIS-003 four-cloud-subagent roster** (`deep_reasoner`/`adversarial_critic`/`long_research`/`quick_local`) and the **JA6 cloud-cheap-tier fallback hook** are retired. Reconciled in [FEAT-JARVIS-002 design](../../design/FEAT-JARVIS-002/design.md) §11 (C2) and [FEAT-JARVIS-003 design](../../design/FEAT-JARVIS-003/design.md) + its [DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md) + [DDR-015](../../design/FEAT-JARVIS-003/decisions/DDR-015-llamaswap-adapter-with-stubbed-health.md).
+>
+> See [docs/history/superseded-designs.md](../../history/superseded-designs.md) for the full retirement narrative.
+>
+> **FEAT-JARVIS-002 sections remain authoritative.** Everything in this plan that is FEAT-JARVIS-003-shaped is the old design — read the FEAT-JARVIS-003 design doc for the canonical shape.
+
 ## For: Giving Jarvis's supervisor its dispatch vocabulary — the tools it reaches for and the subagents it delegates to. First phase where "one reasoning model that knows which reasoning model to use" works in practice.
 ## Date: 20 April 2026
 ## Status: Blocked on Phase 1 completion (FEAT-JARVIS-001 merged + day-1 conversation validated + ruff/mypy/pytest green). Ready for `/system-design FEAT-JARVIS-002` once Phase 1 closes.

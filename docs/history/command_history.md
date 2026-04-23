@@ -915,6 +915,59 @@ Next steps (per phase2-build-plan.md)
 AutoBuild in commit order: config → types → general → capabilities → dispatch → prompt → supervisor factory → supervisor-with-tools test.
 
 
+/system-design FEAT-JARVIS-003 \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md \
+  --context docs/research/ideas/jarvis-vision.md \
+  --context docs/research/ideas/jarvis-architecture-conversation-starter.md \
+  --context docs/architecture/ARCHITECTURE.md \
+  --context docs/architecture/decisions/ADR-J-001-deepagents-pin.md \
+  --context docs/architecture/decisions/ADR-J-002-supervisor-factory.md \
+  --context docs/design/FEAT-JARVIS-001/design.md \
+  --context docs/design/FEAT-JARVIS-002/design.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-031-async-subagents-for-long-running-work.md \
+  --context ../specialist-agent/docs/reviews/deepagents-sdk-2026-04.md \
+  --context ../forge/docs/research/ideas/fleet-architecture-v3-coherence-via-flywheel.md \
+  --context src/jarvis/agents/supervisor.py \
+  --context src/jarvis/prompts/supervisor_prompt.py \
+  --context src/jarvis/config/settings.py \
+  --context .guardkit/context-manifest.yaml
+
+
+  Phase 6 — Summary
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ SYSTEM DESIGN COMPLETE — FEAT-JARVIS-003
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Created under docs/design/FEAT-JARVIS-003/:
+
+
+FEAT-JARVIS-003/
+├── design.md                                        ← main design doc (~31 KB)
+├── contracts/
+│   ├── API-subagent.md                              ← AsyncSubAgent entry + input schema
+│   ├── API-tools.md                                 ← escalate_to_frontier + 5 middleware tools
+│   └── API-internal.md                              ← module-level Python API
+├── models/
+│   └── DM-subagent-types.md                         ← RoleName, AsyncTaskInput, SwapStatus,
+│                                                    #   FrontierTarget, FrontierEscalationContext
+├── diagrams/
+│   └── jarvis-reasoning-l3.md                       ← C4 L3 (review gate PENDING)
+└── decisions/
+    ├── DDR-010-single-async-subagent-supersedes-four-roster.md     ← Reconciles scope with ADR-ARCH-001/011
+    ├── DDR-011-role-enum-closed-v1.md                              ← critic/researcher/planner
+    ├── DDR-012-subagent-module-import-compilation.md               ← Fail-fast at startup
+    ├── DDR-013-langgraph-json-at-repo-root.md                      ← Matches Forge ADR-ARCH-031
+    ├── DDR-014-escalate-to-frontier-in-dispatch-tool-module.md     ← Three-layer belt+braces
+    └── DDR-015-llamaswap-adapter-with-stubbed-health.md            ← Retires JA6 cleanly
+Next steps:
+
+Approve / revise the C4 L3 diagram above.
+Approve / skip Graphiti seeding (commands above).
+Proceed to /feature-spec FEAT-JARVIS-003 — Gherkin scenarios grounded in this design.
+Then /feature-plan FEAT-JARVIS-003 — task breakdown with adjusted commit order (single subagent + frontier tool).
+Then AutoBuild per phase2-build-plan.md Step 8, adjusted to the reframed shape (config → llamaswap adapter → role prompts → jarvis_reasoner graph → subagent_registry → escalate_to_frontier → supervisor prompt update → supervisor factory update → langgraph.json → tests).
+The scope doc's C2 contradiction from FEAT-JARVIS-002 is now fully resolved. The thesis — one reasoning model that knows which reasoning model to use — survives at full strength as role-dispatch + constitutional frontier escape.
 
 
 

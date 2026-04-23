@@ -115,19 +115,19 @@ Each skill in its own module under `src/jarvis/skills/`:
 
 **`src/jarvis/skills/morning_briefing.py`** — `MorningBriefingSkill`:
 - Intent: "morning briefing", "what's on today", "brief me", "catch me up on today".
-- Composes: `get_calendar_events(window="today")` (still stubbed from Phase 2 — v1 returns canned or empty list; v1.5 wires real calendar), `list_available_capabilities()` (to note any newly-online specialists), `SessionManager.recent_sessions_summary()` (a new Phase 4 addition — see Change 4), Graphiti read of recent `jarvis_routing_history` entries for yesterday (fed through `adversarial_critic` subagent if Rich asked for evaluation, else through `quick_local`).
+- Composes: `get_calendar_events(window="today")` (still stubbed from Phase 2 — v1 returns canned or empty list; v1.5 wires real calendar), `list_available_capabilities()` (to note any newly-online specialists), `SessionManager.recent_sessions_summary()` (a new Phase 4 addition — see Change 4), Graphiti read of recent `jarvis_routing_history` entries for yesterday (fed through `jarvis-reasoner` with `role=critic` if Rich asked for evaluation, else `role=planner` for default summarisation — per [FEAT-JARVIS-003 DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md) / [DDR-011](../../design/FEAT-JARVIS-003/decisions/DDR-011-role-enum-closed-v1.md); the scope-doc `adversarial_critic` + `quick_local` subagents are retired).
 - Memory Store: writes `last_morning_briefing_date`, `last_morning_briefing_highlights` (list of 3-5 items); reads `last_morning_briefing_highlights` to note continuity ("yesterday's top item was X — update?").
 - Returns a structured briefing the supervisor renders as markdown.
 
 **`src/jarvis/skills/talk_prep.py`** — `TalkPrepSkill`:
 - Intent: "talk prep", "DDD Southwest prep", "prep the talk", "what should I practise for the talk".
-- Composes: Graphiti read of `jarvis_routing_history` entries tagged with the talk project, `long_research` subagent for any requested research on DDD-Southwest-relevant topics, `quick_local` for quick summaries.
+- Composes: Graphiti read of `jarvis_routing_history` entries tagged with the talk project, `jarvis-reasoner` with `role=researcher` for any requested research on DDD-Southwest-relevant topics, `role=planner` for quick summaries (per [FEAT-JARVIS-003 DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md) / [DDR-011](../../design/FEAT-JARVIS-003/decisions/DDR-011-role-enum-closed-v1.md); the scope-doc `long_research` + `quick_local` subagents are retired).
 - Memory Store: writes `talk_prep_sessions` (append-only list of what each prep session covered, with dates), `talk_prep_open_questions` (running list), `talk_prep_rehearsal_count`; reads all of these on each invocation so the skill knows what's been covered and what's outstanding.
 - **Pattern C slot reservation (Q10.5):** the skill module includes a clearly marked `# --- FEAT-JARVIS-010 Pattern C ambient nudges land here (v1.5) ---` section with a no-op stub `async def maybe_emit_ambient_nudge(...)`. v1 `talk-prep` is command-pattern only; the ambient watcher loop that calls `maybe_emit_ambient_nudge` on a schedule/trigger is the v1.5 FEAT-JARVIS-010 feature.
 
 **`src/jarvis/skills/project_status.py`** — `ProjectStatusSkill`:
 - Intent: "project status", "how is X doing", "status update on Y", "where am I on Z".
-- Composes: Graphiti read of `jarvis_routing_history` entries scoped to the mentioned project, `call_specialist(agent_id="architect", ...)` optionally for a C4-view freshness check if project context suggests architecture questions, `quick_local` for synthesis.
+- Composes: Graphiti read of `jarvis_routing_history` entries scoped to the mentioned project, `dispatch_by_capability(tool_name="<architect-capability>", ...)` optionally for a C4-view freshness check if project context suggests architecture questions (renamed from `call_specialist` per [FEAT-JARVIS-002 DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md)), `jarvis-reasoner` with `role=planner` for synthesis (per [FEAT-JARVIS-003 DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md)).
 - Memory Store: reads `active_projects` (list of project IDs Rich has interacted with), `project_last_status_query` (per-project timestamp); writes updates to both.
 - Returns a structured status summary per project.
 
@@ -175,7 +175,7 @@ Per ADR-FLEET-001, skill invocations are trace-rich records:
 ## Do-Not-Change
 
 1. **Fleet v3 D40–D46, ADR-J-P1..P10, ADR-FLEET-001, ADR-SP-014/016/017.** Phase 4 is first real consumer of P3 (skills) and P5 (adapters).
-2. **Phase 1 + Phase 2 + Phase 3 outputs.** Tools, subagents, `call_specialist`/`queue_build` transports, supervisor prompt sections, `CapabilityDescriptor`, `JarvisRoutingHistoryEntry` Pydantic shapes.
+2. **Phase 1 + Phase 2 + Phase 3 outputs.** Tools, subagent (single `jarvis-reasoner` with role-dispatch per [FEAT-JARVIS-003 DDR-010](../../design/FEAT-JARVIS-003/decisions/DDR-010-single-async-subagent-supersedes-four-roster.md)), `dispatch_by_capability` / `queue_build` transports (renamed from `call_specialist` per [FEAT-JARVIS-002 DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md)), supervisor prompt sections, `CapabilityDescriptor`, `JarvisRoutingHistoryEntry` Pydantic shapes.
 3. **`nats-core` Pydantic models already defined.** Additions to `nats-core` in Change 4 are strictly additive (new payloads, new topic constants) — no modifications to existing shapes.
 4. **Singular topic convention (ADR-SP-016).** `jarvis.command.cli`, `jarvis.command.telegram`, `jarvis.notification.cli`, `jarvis.notification.telegram` — singular throughout.
 5. **`ADR-FLEET-001` schema authoritative.** Skill trace records use the existing schema + existing Jarvis-specific extensions + a new `skill_name` field added via an explicit `ADR-FLEET-00X` append-only extension, not via silent schema change.

@@ -2,14 +2,14 @@
 
 ## For: Claude Code `/system-design` → `/feature-spec` → `/feature-plan` → AutoBuild (per feature)
 ## Date: 20 April 2026
-## Status: Blocked on Phase 2 completion (FEAT-JARVIS-002 + FEAT-JARVIS-003 merged, routing-e2e test green, `langgraph dev` spinning 5 graphs cleanly). Ready for `/system-design FEAT-JARVIS-004` once Phase 2 closes.
+## Status: Blocked on Phase 2 completion (FEAT-JARVIS-002 + FEAT-JARVIS-003 merged, routing-e2e test green, `langgraph dev` spinning 2 graphs cleanly per [FEAT-JARVIS-003 DDR-013](../../design/FEAT-JARVIS-003/decisions/DDR-013-langgraph-json-at-repo-root.md)). Ready for `/system-design FEAT-JARVIS-004` once Phase 2 closes.
 ## Context: Phase 2 shipped the dispatch tools with stubbed transports. Phase 3 swaps the stubs for real NATS — Jarvis registers on `fleet.register`, discovers specialist capabilities via `NATSKVManifestRegistry`, dispatches via `agents.command.{agent_id}`, and publishes `BuildQueuedPayload` to `pipeline.build-queued.{feature_id}`. This is also where ADR-FLEET-001 trace-richness writes to `jarvis_routing_history` go live for the first time.
 
 ---
 
 ## Motivation
 
-After Phase 2, Jarvis's supervisor can reason about dispatch — it picks `call_specialist` vs `queue_build` vs subagent, and the reasoning over tool descriptions works. But the dispatch tools are stubs. Nothing actually reaches the specialist-agent fleet or the Forge pipeline. Phase 3 fixes that.
+After Phase 2, Jarvis's supervisor can reason about dispatch — it picks `dispatch_by_capability` vs `queue_build` vs subagent, and the reasoning over tool descriptions works. But the dispatch tools are stubs. Nothing actually reaches the specialist-agent fleet or the Forge pipeline. Phase 3 fixes that.
 
 Two features, tightly coupled:
 
@@ -28,7 +28,7 @@ After Phase 3, Jarvis v1 is *functionally complete for dispatch*. The supervisor
 
 ### FEAT-JARVIS-004: NATS Fleet Registration & Specialist Dispatch
 
-**Problem:** Phase 2's `call_specialist` is stubbed transport. The tool builds a real `CommandPayload` (via `nats-core`), logs as if publishing, and returns a stubbed `SpecialistResult`. Phase 2's `list_available_capabilities` reads from a 4-row YAML stub. Neither talks to NATS. Phase 3 replaces both with real NATS integration, and — critically — establishes Jarvis's own fleet membership by registering an `AgentManifest` on `fleet.register`. Fleet registration matters: ADR-J-P4 (Jarvis registers on `fleet.register`) is what lets other agents (Forge emitting `jarvis.notification.*`, future agents wanting Jarvis's GPA-level tools) discover Jarvis. It's not a nice-to-have; it's the symmetric property of the fleet contract.
+**Problem:** Phase 2's `dispatch_by_capability` is stubbed transport. The tool builds a real `CommandPayload` (via `nats-core`), logs as if publishing, and returns a stubbed `SpecialistResult`. Phase 2's `list_available_capabilities` reads from a 4-row YAML stub. Neither talks to NATS. Phase 3 replaces both with real NATS integration, and — critically — establishes Jarvis's own fleet membership by registering an `AgentManifest` on `fleet.register`. Fleet registration matters: ADR-J-P4 (Jarvis registers on `fleet.register`) is what lets other agents (Forge emitting `jarvis.notification.*`, future agents wanting Jarvis's GPA-level tools) discover Jarvis. It's not a nice-to-have; it's the symmetric property of the fleet contract.
 
 **Changes required:**
 
@@ -69,9 +69,9 @@ Phase 2's stub-backed `list_available_capabilities` becomes real:
 - `capabilities_subscribe_updates()` wires a KV-watch callback so capability changes (new specialist role coming online, heartbeat timeout) are picked up without a restart.
 - Stub `stub_capabilities.yaml` remains in-tree as a fallback for tests and for local dev when NATS is unavailable, but is no longer the production source.
 
-#### 4. `call_specialist` real transport (`src/jarvis/tools/dispatch.py`)
+#### 4. `dispatch_by_capability` real transport (`src/jarvis/tools/dispatch.py`)
 
-Phase 2's stubbed `call_specialist` is rewritten:
+Phase 2's stubbed `dispatch_by_capability` is rewritten:
 
 - Publishes `CommandPayload` to `agents.command.{agent_id}` (singular per ADR-SP-016).
 - Awaits `ResultPayload` on `agents.result.{agent_id}` with a configurable timeout (default from `/system-design` ADR — probable range: 30–120 seconds).
@@ -105,8 +105,8 @@ The schema is authoritative for the rest of v1 and beyond. Retrofits are expensi
 - Integration tests using an **in-process `nats-py` test server** (not real `nats-infrastructure` — a Phase 3 soft-prereq that's not yet running on GB10 per the conversation starter):
   - Jarvis registers on `fleet.register` at startup; manifest is queryable from the registry.
   - `list_available_capabilities` returns capabilities for agents registered on the test server.
-  - `call_specialist` round-trips with a mocked specialist consumer — the consumer subscribes to `agents.command.jarvis-test-specialist`, returns a canned `ResultPayload`, and Jarvis's supervisor sees the result.
-  - `call_specialist` timeout path: no consumer reply; Jarvis times out; if another registered agent matches the capability, retry-with-redirect fires; if not, structured error returned.
+  - `dispatch_by_capability` round-trips with a mocked specialist consumer — the consumer subscribes to `agents.command.jarvis-test-specialist`, returns a canned `ResultPayload`, and Jarvis's supervisor sees the result.
+  - `dispatch_by_capability` timeout path: no consumer reply; Jarvis times out; if another registered agent matches the capability, retry-with-redirect fires; if not, structured error returned.
   - `jarvis_routing_history` trace-rich writes land to an in-memory Graphiti stub matching the ADR-FLEET-001 schema.
 - Unit tests for `routing_history.py` schema construction — verify every field is populated correctly under happy path + timeout + redirect scenarios.
 - Contract tests: assert the real `CommandPayload` / `ResultPayload` / `AgentManifest` from `nats-core` match what Jarvis emits + consumes.
@@ -125,7 +125,7 @@ The schema is authoritative for the rest of v1 and beyond. Retrofits are expensi
 - `triggered_by="jarvis"` (hardcoded).
 - `originating_adapter` pulled from session metadata (CLI in Phase 3; Telegram/Dashboard/Reachy as FEAT-JARVIS-006+ lands).
 - `correlation_id` generated fresh per queue.
-- `parent_request_id` from session metadata if Rich's request has a prior request ID (e.g. a redirect from a `call_specialist` that rerouted to a build).
+- `parent_request_id` from session metadata if Rich's request has a prior request ID (e.g. a redirect from a `dispatch_by_capability` that rerouted to a build).
 - Returns a `QueueBuildAck` with the `correlation_id` so Rich can follow progress.
 - Fire-and-forget; no await for Forge to pick up the job. Durable in JetStream per ADR-SP-017 retention policy.
 
@@ -181,8 +181,8 @@ Phase 3 scope note: this test case's FEAT-JARVIS-INTERNAL-*** feature is built b
 1. All Phase 1 + Phase 2 tests still pass (no regressions).
 2. Jarvis registers on `fleet.register` at startup; registration is visible to the in-process test NATS server + (when available) the GB10 NATS server.
 3. `list_available_capabilities` returns real capabilities from `NATSKVManifestRegistry` (plus registered test specialists in integration tests).
-4. `call_specialist` round-trips with a mocked specialist consumer in integration tests — request `CommandPayload`, response `ResultPayload`, supervisor surfaces result.
-5. `call_specialist` timeout path + retry-with-redirect work as specified.
+4. `dispatch_by_capability` round-trips with a mocked specialist consumer in integration tests — request `CommandPayload`, response `ResultPayload`, supervisor surfaces result.
+5. `dispatch_by_capability` timeout path + retry-with-redirect work as specified.
 6. `queue_build` publishes real `BuildQueuedPayload` to `pipeline.build-queued.{feature_id}` in integration tests.
 7. `pipeline.stage-complete.*` subscription routes matching notifications to `jarvis.notification.forge-stage-complete.*` and the CLI adapter surfaces them.
 8. `jarvis_routing_history` trace-rich writes land for every specialist dispatch and every build queue dispatch — schema matches ADR-FLEET-001.
@@ -205,12 +205,12 @@ Phase 3 scope note: this test case's FEAT-JARVIS-INTERNAL-*** feature is built b
 | `src/jarvis/infrastructure/forge_notifications.py` | FEAT-JARVIS-005 | **NEW** — `pipeline.stage-complete.*` subscriber + `jarvis.notification.*` router |
 | `src/jarvis/infrastructure/lifecycle.py` | FEAT-JARVIS-004, -005 | **UPDATED** — NATS connect on startup, Graphiti connect on startup, register on fleet, start notification subscriber; drain + deregister on shutdown |
 | `src/jarvis/tools/capabilities.py` | FEAT-JARVIS-004 | **UPDATED** — stub replaced with `NATSKVManifestRegistry` integration; signatures + Pydantic shape unchanged |
-| `src/jarvis/tools/dispatch.py` | FEAT-JARVIS-004, -005 | **UPDATED** — `call_specialist` real transport (round-trip + timeout + retry); `queue_build` real transport (JetStream publish + correlation tracking) |
+| `src/jarvis/tools/dispatch.py` | FEAT-JARVIS-004, -005 | **UPDATED** — `dispatch_by_capability` real transport (round-trip + timeout + retry); `queue_build` real transport (JetStream publish + correlation tracking) |
 | `src/jarvis/sessions/manager.py` | FEAT-JARVIS-005 | **UPDATED** — surfaces pending Forge notifications on next CLI prompt cycle |
 | `src/jarvis/cli/main.py` | FEAT-JARVIS-005 | **UPDATED** — renders incoming `jarvis.notification.forge-stage-complete.*` between prompts in `jarvis chat` |
 | `tests/test_fleet_registration.py` | FEAT-JARVIS-004 | **NEW** — registration + heartbeat + deregister |
 | `tests/test_capabilities_real.py` | FEAT-JARVIS-004 | **NEW** — `NATSKVManifestRegistry`-backed catalogue reads |
-| `tests/test_dispatch_call_specialist.py` | FEAT-JARVIS-004 | **UPDATED** — Phase 2 stub tests + new integration tests (round-trip, timeout, redirect) |
+| `tests/test_dispatch_by_capability.py` | FEAT-JARVIS-004 | **UPDATED** — Phase 2 stub tests + new integration tests (round-trip, timeout, redirect). Renamed from `test_dispatch_call_specialist.py` per [FEAT-JARVIS-002 DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md). |
 | `tests/test_dispatch_queue_build.py` | FEAT-JARVIS-005 | **UPDATED** — Phase 2 stub tests + new integration test (real JetStream publish) |
 | `tests/test_forge_notifications.py` | FEAT-JARVIS-005 | **NEW** — stage-complete subscription + routing + correlation filter |
 | `tests/test_routing_history_writes.py` | FEAT-JARVIS-004, -005 | **NEW** — schema-compliant writes on dispatch + queue-build + redirect paths |
@@ -231,10 +231,10 @@ All paths relative to `/Users/richardwoollcott/Projects/appmilla_github/jarvis/`
 
 ## Open Questions `/system-design` Resolves (for Phase 3's benefit)
 
-- **`call_specialist` timeout default.** 30s? 60s? 120s? Depends on specialist-agent typical response latency.
+- **`dispatch_by_capability` timeout default.** 30s? 60s? 120s? Depends on specialist-agent typical response latency.
 - **Redirect policy details.** When retry-with-redirect fires, does Jarvis prefer same-role with different `agent_id`, or different-role with matching capability? Per ADR-J-P4 spirit: prefer same-capability match.
 - **Graphiti write batching.** Every dispatch write separately, or batched per session? Latency/cost tradeoff. Default recommendation: per-dispatch, fire-and-forget.
-- **Concurrent dispatch cap.** How many in-flight `call_specialist` / `queue_build` invocations before throttling? Related to JA2 (ambient watcher ceiling) but distinct — this is for synchronous supervisor-initiated dispatch.
+- **Concurrent dispatch cap.** How many in-flight `dispatch_by_capability` / `queue_build` invocations before throttling? Related to JA2 (ambient watcher ceiling) but distinct — this is for synchronous supervisor-initiated dispatch.
 - **JA1 full resolution.** Exact Pydantic shape of `jarvis_routing_history` entries — Phase 3 commits the schema. `/system-design FEAT-JARVIS-004` is where the exact field list lands (building on ADR-FLEET-001's base + Jarvis-specific extensions noted above).
 - **`jarvis.notification.forge-stage-complete.*` routing.** Is the router a dedicated module or a method on `SessionManager`? Impacts how FEAT-JARVIS-006 (Telegram) slots in.
 - **Rich's FEAT-JARVIS-005 test case choice.** Which of the three candidates (docstring polish / trace-schema refinement / skill scaffolding) becomes FEAT-JARVIS-INTERNAL-001's concrete spec. Resolve before Step 11 (the end-to-end test).
