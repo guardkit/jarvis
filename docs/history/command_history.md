@@ -734,6 +734,189 @@ uv run jarvis chat
 
 
 
+/system-design FEAT-JARVIS-002 \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md \
+  --context docs/research/ideas/jarvis-vision.md \
+  --context docs/research/ideas/jarvis-architecture-conversation-starter.md \
+  --context docs/research/ideas/phase1-supervisor-scaffolding-scope.md \
+  --context docs/research/ideas/phase1-build-plan.md \
+  --context docs/architecture/ARCHITECTURE.md \
+  --context docs/architecture/decisions/ADR-J-001-deepagents-pin.md \
+  --context docs/architecture/decisions/ADR-J-002-supervisor-factory.md \
+  --context docs/architecture/decisions/ADR-J-003-layer-structure.md \
+  --context docs/design/FEAT-JARVIS-001/design.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-015-capability-driven-dispatch.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-016-fleet-is-the-catalogue.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-019-no-static-behavioural-config.md \
+  --context ../forge/docs/research/forge-pipeline-architecture.md \
+  --context ../nats-core/docs/design/contracts/agent-manifest-contract.md \
+  --context ../nats-core/src/nats_core/manifest.py \
+  --context ../nats-core/src/nats_core/topics.py \
+  --context ../nats-core/src/nats_core/payloads/ \
+  --context src/jarvis/agents/supervisor.py \
+  --context src/jarvis/prompts/supervisor_prompt.py \
+  --context .guardkit/context-manifest.yaml
+
+
+
+📋 Design Summary
+Feature: FEAT-JARVIS-002 — Core Tools & Capability-Driven Dispatch Tools
+
+9 tools shipped on the Phase 1 supervisor:
+
+Cluster	Tools	Transport
+General	read_file, search_web, get_calendar_events, calculate	real (fs / Tavily / stub / asteval)
+Capability catalogue	list_available_capabilities, capabilities_refresh, capabilities_subscribe_updates	real read / no-op / no-op over in-memory stub registry
+Dispatch	dispatch_by_capability, queue_build	stubbed — real nats-core payloads built and logged; no network I/O
+5 DDRs captured:
+
+DDR-005 — Dispatch tool is dispatch_by_capability(tool_name, payload_json, intent_pattern=None, timeout_seconds=60), superseding scope-doc call_specialist(agent_id, ...) (aligns with ADR-ARCH-003 / ADR-ARCH-016-equivalent — no hardcoded agent_id).
+DDR-006 — Tavily as v1 web-search provider behind a swappable protocol.
+DDR-007 — asteval for calculate (AST-based, no eval, 1 s time cap).
+DDR-008 — Capabilities reach the supervisor via BOTH {available_capabilities} prompt injection AND the list_available_capabilities tool.
+DDR-009 — Stub-transport semantics: build real nats-core payloads, log with JARVIS_DISPATCH_STUB / JARVIS_QUEUE_BUILD_STUB grep anchors, 60 s default timeout, no in-tool retry.
+2 contradictions with scope doc resolved:
+
+C1 — call_specialist(agent_id=...) vs fleet-wide capability-driven pattern → resolved via DDR-005 (rename + re-shape).
+C2 — four cloud subagents vs ADR-ARCH-011 (single jarvis-reasoner on gpt-oss-120b) → flagged and deferred to /system-design FEAT-JARVIS-003.
+
+🔍 Review gate — your decision
+Look for:
+
+Cyclic imports or leaking state (caps must not import factory).
+Separation of concerns (dispatch depends on caps, not vice versa).
+Missing persistence: Phase 2 has none (in-memory stub + no NATS) — acceptable per scope?
+Any module with too many dependencies.
+[A]pprove — I'll seed to Graphiti next
+[R]evise — tell me what to change and I'll regenerate
+[Reject] — drop this design and restart
+
+Waiting for your call before proceeding to seeding.
+
+A
+Approved. Proceeding to Graphiti seeding.
+
+Update Todos
+
+Load all context files (ADRs, nats-core payloads, supervisor code)
+
+Design API contracts (tool surfaces) for FEAT-JARVIS-002
+
+Design data models (CapabilityDescriptor, SpecialistResult, QueueBuildAck, WebResult, CalendarEvent)
+
+Run contradiction detection against existing ADR-ARCH corpus
+
+Draft DDRs (dispatch name, Tavily, asteval, capabilities delivery, stub semantics)
+
+Write C4 L3 diagram
+
+Present C4 L3 review gate to user + await approval
+
+Offer Graphiti seeding commands
+Quick Graphiti reachability probe before offering commands.
+
+Bash Check Graphiti connectivity via guardkit CLI
+IN
+guardkit graphiti status 2>&1 | head -20
+
+OUT
+╔════════════════════════════════════════╗
+║       Graphiti Knowledge Status        ║
+╚════════════════════════════════════════╝
+
+  Status: ENABLED
+INFO:guardkit.knowledge.falkordb_workaround:[Graphiti] Applied FalkorDB workaround: handle_multiple_group_ids patched for single group_id support (upstream PR #1170)
+INFO:guardkit.knowledge.falkordb_workaround:[Graphiti] Applied FalkorDB workaround: build_fulltext_query patched to remove group_id filter (redundant on FalkorDB)
+INFO:guardkit.knowledge.falkordb_workaround:[Graphiti] Applied FalkorDB workaround: edge_fulltext_search patched for O(n) startNode/endNode (upstream issue #1272)
+INFO:guardkit.knowledge.falkordb_workaround:[Graphiti] Applied FalkorDB workaround: edge_bfs_search patched for O(n) startNode/endNode (upstream issue #1272)
+INFO:guardkit.knowledge.graphiti_client:Connected to FalkorDB via graphiti-core at whitestocks:6379
+INFO:httpx:HTTP Request: POST http://promaxgb10-41b1:8001/v1/embeddings "HTTP/1.1 200 OK"
+
+  System Knowledge:
+INFO:httpx:HTTP Request: POST http://promaxgb10-41b1:8001/v1/embeddings "HTTP/1.1 200 OK"
+    • product_knowledge: 84
+INFO:httpx:HTTP Request: POST http://promaxgb10-41b1:8001/v1/embeddings "HTTP/1.1 200 OK"
+    • command_workflows: 100
+INFO:httpx:HTTP Request: POST http://promaxgb10-41b1:8001/v1/embeddings "HTTP/1.1 200 OK"
+    • patterns: 100
+Graphiti is reachable. Here are the seeding commands — 9 commands total (1 top-level design.md + 2 contracts + 2 models + 5 DDRs).
+
+
+# Top-level design doc — indexed to project_design
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/design.md \
+  --group project_design
+
+# API contracts — indexed to project_design
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/contracts/API-tools.md \
+  --group project_design
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/contracts/API-internal.md \
+  --group project_design
+
+# Data models — indexed to project_design
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/models/DM-tool-types.md \
+  --group project_design
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/models/DM-stub-registry.md \
+  --group project_design
+
+# DDRs — indexed to architecture_decisions (matches how FEAT-JARVIS-001 DDRs were seeded)
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md \
+  --group architecture_decisions
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/decisions/DDR-006-tavily-as-web-search-provider.md \
+  --group architecture_decisions
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/decisions/DDR-007-asteval-for-calculate.md \
+  --group architecture_decisions
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/decisions/DDR-008-capabilities-both-tool-and-prompt-injection.md \
+  --group architecture_decisions
+guardkit graphiti add-context docs/design/FEAT-JARVIS-002/decisions/DDR-009-dispatch-stub-transport-semantics.md \
+  --group architecture_decisions
+Want me to run these now? [Y]es / [N]o (I'll seed later)
+
+Each seeding call takes ~5–20 s (embedding + entity extraction); the whole batch is ~1–3 min. I'll run them sequentially so failures are easy to isolate.
+
+Y
+
+✅ SYSTEM DESIGN COMPLETE — FEAT-JARVIS-002
+All 10 artefacts seeded successfully.
+
+Graphiti seeding results
+#	Artefact	Episode	Nodes	Edges
+1	design.md	full_doc	—	—
+2	contracts/API-tools.md	full_doc	—	—
+3	contracts/API-internal.md	full_doc	26	52
+4	models/DM-tool-types.md	full_doc	6	10
+5	models/DM-stub-registry.md	full_doc	15	16
+6	DDR-005 (dispatch_by_capability)	adr	10	4
+7	DDR-006 (Tavily)	adr	11	5
+8	DDR-007 (asteval)	adr	5	5
+9	DDR-008 (capabilities delivery)	adr	7	9
+10	DDR-009 (stub transport semantics)	adr	21	40
+Cosmetic warnings: all 5 DDRs got "Missing required section: Status" because I wrote **Status:** Accepted (bold field) rather than ## Status (heading). Parser still accepted and indexed them. Easy fix for future consistency if needed — the FEAT-JARVIS-001 DDRs may use the same convention.
+
+Files written
+
+docs/design/FEAT-JARVIS-002/
+├── design.md
+├── contracts/API-tools.md
+├── contracts/API-internal.md
+├── models/DM-tool-types.md
+├── models/DM-stub-registry.md
+├── diagrams/fleet-dispatch-l3.md           (reviewed + approved, not seeded)
+└── decisions/
+    ├── DDR-005-dispatch-by-capability-supersedes-call-specialist.md
+    ├── DDR-006-tavily-as-web-search-provider.md
+    ├── DDR-007-asteval-for-calculate.md
+    ├── DDR-008-capabilities-both-tool-and-prompt-injection.md
+    └── DDR-009-dispatch-stub-transport-semantics.md
+Next steps (per phase2-build-plan.md)
+/system-design FEAT-JARVIS-003 — async subagents (needs reconciliation with ADR-ARCH-011's single-reasoner supersede — flagged in contradiction C2).
+/feature-spec FEAT-JARVIS-002 — Gherkin scenarios grounded in this design.
+/feature-plan FEAT-JARVIS-002 — task breakdown per phase2-build-plan.md Step 7.
+AutoBuild in commit order: config → types → general → capabilities → dispatch → prompt → supervisor factory → supervisor-with-tools test.
+
+
+
+
 
 
 
