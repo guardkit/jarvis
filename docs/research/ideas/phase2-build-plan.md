@@ -22,13 +22,13 @@
 |------|------|---------|
 | 2026-04-20 | `phase2-dispatch-foundations-scope.md` written | This document's companion scope doc — input to `/system-design FEAT-JARVIS-002` and `/system-design FEAT-JARVIS-003`. |
 | 2026-04-20 | `phase2-build-plan.md` written | This document. |
-| *pending* | Phase 1 close | All Phase 1 success criteria met, day-1 conversation validated, commits landed. |
-| *pending* | `/system-design FEAT-JARVIS-002` | Design doc for FEAT-JARVIS-002. |
-| *pending* | `/system-design FEAT-JARVIS-003` | Design doc for FEAT-JARVIS-003. |
+| 2026-04-22 | Phase 1 close | All Phase 1 success criteria met, day-1 multi-turn recall validated, commits landed (`bce53d8` Phase 1 closeout + Step 7/8 + FIX-005). |
+| 2026-04-23 | `/system-design FEAT-JARVIS-002` | Design doc at [`docs/design/FEAT-JARVIS-002/design.md`](../../design/FEAT-JARVIS-002/design.md). 5 DDRs landed (DDR-005..009). Resolved contradiction **C1**: `call_specialist(agent_id=…)` → `dispatch_by_capability(tool_name=…)` per [DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md). Flagged **C2** (four-cloud-subagents) for FEAT-JARVIS-003. |
+| 2026-04-23 | `/system-design FEAT-JARVIS-003` | Design doc at [`docs/design/FEAT-JARVIS-003/design.md`](../../design/FEAT-JARVIS-003/design.md). 6 DDRs landed (DDR-010..015). **Scope-doc four-cloud-subagent roster + JA6 fallback retired** per [ADR-ARCH-001](../../architecture/decisions/ADR-ARCH-001-local-first-inference-via-llama-swap.md) / [ADR-ARCH-011](../../architecture/decisions/ADR-ARCH-011-single-jarvis-reasoner-subagent.md) / [ADR-ARCH-012](../../architecture/decisions/ADR-ARCH-012-swap-aware-voice-latency-policy.md) / [ADR-ARCH-027](../../architecture/decisions/ADR-ARCH-027-attended-only-cloud-escape-hatch.md). **See [docs/history/superseded-designs.md](../../history/superseded-designs.md)** for the full reframe narrative — this plan's FEAT-JARVIS-003 sections from "What Phase 2 IS" onward refer to the retired design; the authoritative shape is in the FEAT-JARVIS-003 design doc. C4 L3 diagram approved; Graphiti seeding running. Commit `b309d79`. |
 | *pending* | `/feature-spec FEAT-JARVIS-002` | Gherkin scenarios for FEAT-JARVIS-002. |
-| *pending* | `/feature-spec FEAT-JARVIS-003` | Gherkin scenarios for FEAT-JARVIS-003. |
+| *pending* | `/feature-spec FEAT-JARVIS-003` | Gherkin scenarios for FEAT-JARVIS-003 — consumes the reframed design (single subagent + role-dispatch + `escalate_to_frontier`), not this plan's FEAT-JARVIS-003 section. |
 | *pending* | `/feature-plan FEAT-JARVIS-002` | Task breakdown for FEAT-JARVIS-002. |
-| *pending* | `/feature-plan FEAT-JARVIS-003` | Task breakdown for FEAT-JARVIS-003. |
+| *pending* | `/feature-plan FEAT-JARVIS-003` | Task breakdown for FEAT-JARVIS-003 — per reframed design's adjusted commit order (config → llamaswap adapter → role prompts → jarvis_reasoner graph → subagent_registry → escalate_to_frontier → supervisor prompt → supervisor factory → `langgraph.json` → tests). |
 
 ---
 
