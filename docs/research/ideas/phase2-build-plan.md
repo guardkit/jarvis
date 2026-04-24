@@ -25,7 +25,7 @@
 | 2026-04-22 | Phase 1 close | All Phase 1 success criteria met, day-1 multi-turn recall validated, commits landed (`bce53d8` Phase 1 closeout + Step 7/8 + FIX-005). |
 | 2026-04-23 | `/system-design FEAT-JARVIS-002` | Design doc at [`docs/design/FEAT-JARVIS-002/design.md`](../../design/FEAT-JARVIS-002/design.md). 5 DDRs landed (DDR-005..009). Resolved contradiction **C1**: `call_specialist(agent_id=…)` → `dispatch_by_capability(tool_name=…)` per [DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md). Flagged **C2** (four-cloud-subagents) for FEAT-JARVIS-003. |
 | 2026-04-23 | `/system-design FEAT-JARVIS-003` | Design doc at [`docs/design/FEAT-JARVIS-003/design.md`](../../design/FEAT-JARVIS-003/design.md). 6 DDRs landed (DDR-010..015). **Scope-doc four-cloud-subagent roster + JA6 fallback retired** per [ADR-ARCH-001](../../architecture/decisions/ADR-ARCH-001-local-first-inference-via-llama-swap.md) / [ADR-ARCH-011](../../architecture/decisions/ADR-ARCH-011-single-jarvis-reasoner-subagent.md) / [ADR-ARCH-012](../../architecture/decisions/ADR-ARCH-012-swap-aware-voice-latency-policy.md) / [ADR-ARCH-027](../../architecture/decisions/ADR-ARCH-027-attended-only-cloud-escape-hatch.md). **See [docs/history/superseded-designs.md](../../history/superseded-designs.md)** for the full reframe narrative — this plan's FEAT-JARVIS-003 sections from "What Phase 2 IS" onward refer to the retired design; the authoritative shape is in the FEAT-JARVIS-003 design doc. C4 L3 diagram approved; Graphiti seeding running. Commit `b309d79`. |
-| *pending* | `/feature-spec FEAT-JARVIS-002` | Gherkin scenarios for FEAT-JARVIS-002. |
+| 2026-04-24 | `/feature-spec FEAT-JARVIS-002` | Gherkin scenarios landed at [`features/feat-jarvis-002-core-tools-and-dispatch/`](../../../features/feat-jarvis-002-core-tools-and-dispatch/). 42 scenarios across 5 groups (Key Examples, Boundary, Negative, Edge, Security/Concurrency/Integration) — 9 @key-example, 8 @boundary, 17 @negative, 14 @edge-case, 7 @smoke. 6 assumptions recorded (1 high / 4 medium / 1 low). 1 low-confidence assumption (ASSUM-006: snapshot-isolation semantics for Phase 3) flagged for review at FEAT-JARVIS-004 time. `dispatch_by_capability` naming honoured per DDR-005 (the command was phrased around the superseded `call_specialist` name). |
 | *pending* | `/feature-spec FEAT-JARVIS-003` | Gherkin scenarios for FEAT-JARVIS-003 — consumes the reframed design (single subagent + role-dispatch + `escalate_to_frontier`), not this plan's FEAT-JARVIS-003 section. |
 | *pending* | `/feature-plan FEAT-JARVIS-002` | Task breakdown for FEAT-JARVIS-002. |
 | *pending* | `/feature-plan FEAT-JARVIS-003` | Task breakdown for FEAT-JARVIS-003 — per reframed design's adjusted commit order (config → llamaswap adapter → role prompts → jarvis_reasoner graph → subagent_registry → escalate_to_frontier → supervisor prompt → supervisor factory → `langgraph.json` → tests). |
@@ -394,18 +394,25 @@ Expected output: `docs/design/FEAT-JARVIS-003/design.md` — four subagent modul
 
 ### Step 5: /feature-plan FEAT-JARVIS-002
 
+After the 2026-04-24 `/feature-spec` run the concrete feature directory is
+`features/feat-jarvis-002-core-tools-and-dispatch/` — use the explicit paths
+below rather than the original wildcard form so the context resolver pulls
+only this feature's artefacts:
+
 ```bash
 /feature-plan "Core Tools & Capability-Driven Dispatch Tools" \
-  --context features/feat-jarvis-002-*/feat-jarvis-002-*_summary.md \
-  --context features/feat-jarvis-002-*/feat-jarvis-002-*.feature \
-  --context features/feat-jarvis-002-*/feat-jarvis-002-*_assumptions.yaml \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_summary.md \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch.feature \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_assumptions.yaml \
   --context docs/design/FEAT-JARVIS-002/design.md \
   --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
   --context docs/research/ideas/phase2-build-plan.md \
   --context .guardkit/context-manifest.yaml
 ```
 
-Resolve any low-confidence assumptions before Step 7.
+Resolve the 1 low-confidence assumption (ASSUM-006 — snapshot-isolation semantics
+for Phase 3) and any medium-confidence assumptions flagged at Coach review
+before Step 7.
 
 ### Step 6: /feature-plan FEAT-JARVIS-003
 

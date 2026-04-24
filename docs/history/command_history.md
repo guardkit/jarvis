@@ -973,4 +973,72 @@ The scope doc's C2 contradiction from FEAT-JARVIS-002 is now fully resolved. The
 
 
 
+
+
+
+/feature-spec "Core Tools & Capability-Driven Dispatch Tools: general tools (read_file, search_web, get_calendar_events stub, calculate), capability catalogue reader over stub registry, dispatch tools (call_specialist, queue_build) with stubbed transports matching nats-core payloads" \
+  --context docs/design/FEAT-JARVIS-002/design.md \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md \
+  --context docs/architecture/ARCHITECTURE.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-015-capability-driven-dispatch.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-016-fleet-is-the-catalogue.md \
+  --context ../nats-core/src/nats_core/manifest.py \
+  --context ../nats-core/src/nats_core/payloads/ \
+  --context src/jarvis/agents/supervisor.py \
+  --context .guardkit/context-manifest.yaml
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE SPEC COMPLETE: Core Tools & Capability-Driven Dispatch Tools
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Files written:
+features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch.feature
+features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_assumptions.yaml
+features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_summary.md
+
+Scenarios: 42 total
+@key-example: 9    @boundary: 8
+@negative: 17      @edge-case: 14
+@smoke: 7          @regression: 0
+
+Assumptions: 6 total
+high: 1 (auto-proceed)
+medium: 4 (Coach review recommended)
+low: 1 (human review required)
+
+REVIEW REQUIRED: 1 low-confidence assumption needs verification (ASSUM-006 — snapshot-isolation semantics for Phase 3)
+See: features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_assumptions.yaml
+
+Deferred: 0 scenario groups
+
+Next steps:
+Review: features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch.feature
+Pass to feature-plan:
+
+
+/feature-plan "Core Tools & Capability-Driven Dispatch Tools" \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_summary.md \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch.feature \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_assumptions.yaml \
+  --context docs/design/FEAT-JARVIS-002/design.md \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md \
+  --context .guardkit/context-manifest.yaml
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Note on the scope-doc name drift: the command argument mentioned call_specialist and queue_build; I mapped call_specialist to dispatch_by_capability(tool_name, payload_json, intent_pattern=None, timeout_seconds=60) per DDR-005, which the authoritative design doc records as the corrected contract.
+
+
+
+
+
+
+
+
+
+
+
+
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-001 --verbose --max-turns 30
