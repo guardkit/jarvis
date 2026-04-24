@@ -1,0 +1,290 @@
+id: FEAT-J002
+name: Core Tools & Capability-Driven Dispatch Tools
+description: 'Populate src/jarvis/tools/ with 9 LangChain tools (read_file, search_web,
+  calculate, get_calendar_events, list_available_capabilities, capabilities_refresh,
+  capabilities_subscribe_updates, dispatch_by_capability, queue_build) plus stub registry
+  loader, correlation-id primitive, stub-response-hook contract, and supervisor wiring.
+  Envelope-first concurrent fan-out approach (Option B, review score 12/12). DDR-009
+  swap-point discipline: two primary grep anchors guard FEAT-JARVIS-004/005 transport
+  swap.'
+created: '2026-04-24T08:20:24.884175'
+status: planned
+complexity: 6
+estimated_tasks: 23
+tasks:
+- id: TASK-J002-001
+  name: Extend JarvisConfig with Phase 2 fields
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-001-extend-jarvisconfig-with-phase-2-fields.md
+  complexity: 2
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+- id: TASK-J002-002
+  name: Write canonical stub_capabilities.yaml
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-002-write-canonical-stub-capabilities-yaml.md
+  complexity: 1
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 15
+- id: TASK-J002-003
+  name: Define CapabilityDescriptor + CapabilityToolSummary Pydantic models
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-003-define-capabilitydescriptor-capabilitytoolsummary-pydantic-m.md
+  complexity: 2
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+- id: TASK-J002-004
+  name: Define WebResult, CalendarEvent, DispatchError Pydantic models
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-004-define-webresult-calendarevent-dispatcherror-pydantic-models.md
+  complexity: 2
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+- id: TASK-J002-005
+  name: Correlation-ID primitive module
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-005-correlation-id-primitive-module.md
+  complexity: 2
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+- id: TASK-J002-007
+  name: Stub-response-hook contract for dispatch
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-007-stub-response-hook-contract-for-dispatch.md
+  complexity: 2
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+- id: TASK-J002-023
+  name: pyproject + dependency management
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-023-pyproject-dependency-management.md
+  complexity: 2
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+- id: TASK-J002-006
+  name: Stub registry loader
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-006-stub-registry-loader-load-stub-registry.md
+  complexity: 3
+  dependencies:
+  - TASK-J002-003
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 33
+- id: TASK-J002-008
+  name: Implement read_file tool
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-008-implement-read-file-tool.md
+  complexity: 4
+  dependencies:
+  - TASK-J002-001
+  - TASK-J002-004
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 50
+- id: TASK-J002-009
+  name: Implement search_web tool
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-009-implement-search-web-tool.md
+  complexity: 5
+  dependencies:
+  - TASK-J002-001
+  - TASK-J002-004
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 75
+- id: TASK-J002-010
+  name: Implement get_calendar_events tool
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-010-implement-get-calendar-events-tool.md
+  complexity: 2
+  dependencies:
+  - TASK-J002-004
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+- id: TASK-J002-011
+  name: Implement calculate tool
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-011-implement-calculate-tool.md
+  complexity: 4
+  dependencies:
+  - TASK-J002-004
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 50
+- id: TASK-J002-012
+  name: Implement list_available_capabilities + refresh + subscribe tools
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-012-implement-list-available-capabilities-refresh-subscribe-tool.md
+  complexity: 3
+  dependencies:
+  - TASK-J002-003
+  - TASK-J002-006
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 33
+- id: TASK-J002-013
+  name: Implement dispatch_by_capability tool
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-013-implement-dispatch-by-capability-tool.md
+  complexity: 7
+  dependencies:
+  - TASK-J002-003
+  - TASK-J002-004
+  - TASK-J002-005
+  - TASK-J002-007
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 170
+- id: TASK-J002-014
+  name: Implement queue_build tool
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-014-implement-queue-build-tool.md
+  complexity: 6
+  dependencies:
+  - TASK-J002-004
+  - TASK-J002-005
+  - TASK-J002-007
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 113
+- id: TASK-J002-016
+  name: Extend supervisor_prompt with Tool-Usage section + available_capabilities
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-016-extend-supervisor-prompt-with-tool-usage-section-available-c.md
+  complexity: 3
+  dependencies:
+  - TASK-J002-003
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 33
+- id: TASK-J002-015
+  name: assemble_tool_list + tools package __init__ re-exports
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-015-assemble-tool-list-tools-package-init-re-exports.md
+  complexity: 3
+  dependencies:
+  - TASK-J002-008
+  - TASK-J002-009
+  - TASK-J002-010
+  - TASK-J002-011
+  - TASK-J002-012
+  - TASK-J002-013
+  - TASK-J002-014
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 33
+- id: TASK-J002-017
+  name: Extend build_supervisor signature and lifecycle wiring
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-017-extend-build-supervisor-signature-and-lifecycle-wiring.md
+  complexity: 4
+  dependencies:
+  - TASK-J002-015
+  - TASK-J002-016
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 50
+- id: TASK-J002-018
+  name: Unit tests for tool types
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-018-unit-tests-for-tool-types-types-py-capabilities-py-models.md
+  complexity: 3
+  dependencies:
+  - TASK-J002-003
+  - TASK-J002-004
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 33
+- id: TASK-J002-019
+  name: Unit tests for general tools
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-019-unit-tests-for-general-tools.md
+  complexity: 5
+  dependencies:
+  - TASK-J002-008
+  - TASK-J002-009
+  - TASK-J002-010
+  - TASK-J002-011
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 75
+- id: TASK-J002-020
+  name: Unit tests for capability tools + snapshot isolation
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-020-unit-tests-for-capability-tools-snapshot-isolation.md
+  complexity: 4
+  dependencies:
+  - TASK-J002-006
+  - TASK-J002-012
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 50
+- id: TASK-J002-021
+  name: Unit tests for dispatch tools + swap-point grep invariant
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-021-unit-tests-for-dispatch-tools-swap-point-grep-invariant.md
+  complexity: 6
+  dependencies:
+  - TASK-J002-007
+  - TASK-J002-013
+  - TASK-J002-014
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 113
+- id: TASK-J002-022
+  name: Integration test supervisor-with-tools + nine-tool wiring
+  file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-022-integration-test-supervisor-with-tools-nine-tool-wiring-prom.md
+  complexity: 5
+  dependencies:
+  - TASK-J002-017
+  - TASK-J002-018
+  - TASK-J002-019
+  - TASK-J002-020
+  - TASK-J002-021
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 75
+orchestration:
+  parallel_groups:
+  - - TASK-J002-001
+    - TASK-J002-002
+    - TASK-J002-003
+    - TASK-J002-004
+    - TASK-J002-005
+    - TASK-J002-007
+    - TASK-J002-023
+  - - TASK-J002-006
+    - TASK-J002-008
+    - TASK-J002-009
+    - TASK-J002-010
+    - TASK-J002-011
+    - TASK-J002-013
+    - TASK-J002-014
+    - TASK-J002-016
+    - TASK-J002-018
+  - - TASK-J002-012
+    - TASK-J002-019
+    - TASK-J002-021
+  - - TASK-J002-015
+    - TASK-J002-020
+  - - TASK-J002-017
+  - - TASK-J002-022
+  estimated_duration_minutes: 1155
+  recommended_parallel: 4

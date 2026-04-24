@@ -23,6 +23,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
   # ---------------------------------------------------------------------------
 
   # Why: Core path for read_file — the supervisor reads a valid workspace file
+  @task:TASK-J002-008
   @key-example @smoke
   Scenario: Reading a UTF-8 text file inside the workspace returns its contents
     Given a UTF-8 text file exists inside the workspace
@@ -30,6 +31,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     Then the tool returns the file contents as a string
 
   # Why: Core path for search_web with the configured Tavily provider
+  @task:TASK-J002-009
   @key-example @smoke
   Scenario: Searching the web with a configured provider returns result summaries
     Given the web-search provider is configured with a valid key
@@ -37,12 +39,14 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     Then the tool returns a list of search results with titles, URLs, snippets, and scores
 
   # Why: Core path for calculate — arithmetic is delegated, not reasoned
+  @task:TASK-J002-011
   @key-example @smoke
   Scenario: Evaluating a supported arithmetic expression returns a numeric result
     When the supervisor asks the calculator to evaluate "15% of 847"
     Then the tool returns the computed numeric result as a string
 
   # Why: Stubbed calendar returns empty list with stable signature for later skills
+  @task:TASK-J002-010
   @key-example @smoke
   Scenario: Retrieving calendar events in Phase 2 returns an empty list
     When the supervisor requests calendar events for today
@@ -50,12 +54,14 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And the returned shape matches the signature expected by the morning-briefing skill
 
   # Why: Capability catalogue is the fleet-is-catalogue pattern
+  @task:TASK-J002-012
   @key-example @smoke
   Scenario: Listing available capabilities returns the current stub registry
     When the supervisor requests the capability catalogue
     Then the tool returns all four registered descriptors with their roles, descriptions, cost and latency signals, and tool lists
 
   # Why: Core dispatch path — capability-driven resolution to a specialist
+  @task:TASK-J002-013
   @key-example @smoke
   Scenario: Dispatching by capability resolves a specialist and returns a successful result
     Given the reasoning model has identified run_architecture_session as the required capability
@@ -65,6 +71,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And the dispatch is recorded for trace-richness compatibility
 
   # Why: Core queue_build path — Forge receives a valid build request
+  @task:TASK-J002-014
   @key-example @smoke
   Scenario: Queueing a build for a planned feature returns an acknowledgement
     Given the user has an already-planned feature with a valid feature id and repo
@@ -73,12 +80,14 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And the constructed build-queued payload records Jarvis as the trigger and the terminal adapter as the origin
 
   # Why: Capabilities are also injected into the supervisor prompt (DDR-008)
+  @task:TASK-J002-016
   @key-example
   Scenario: The capability catalogue is injected into the supervisor system prompt at session start
     When the supervisor graph is built with the stub registry
     Then the rendered system prompt contains a block for each registered capability including its role, description, cost signal, latency signal, and tools
 
   # Why: Assembly is a single wiring point for the nine tools
+  @task:TASK-J002-015
   @key-example
   Scenario: The supervisor is built with all nine Phase 2 tools wired
     When the tool list is assembled with the configuration and the capability registry
@@ -90,6 +99,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
   # ---------------------------------------------------------------------------
 
   # Why: Just-inside / just-outside boundary for file size limit
+  @task:TASK-J002-008
   @boundary
   Scenario Outline: read_file enforces the one megabyte file size limit
     Given a text file exists inside the workspace with size <size>
@@ -104,6 +114,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
       | 10 megabytes          | the tool rejects the file as too large               |
 
   # Why: max_results range for search_web is 1..10
+  @task:TASK-J002-009
   @boundary
   Scenario Outline: search_web accepts max_results only within its documented range
     Given the web-search provider is configured with a valid key
@@ -119,6 +130,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
       | 11    | the tool rejects the request as invalid max_results                |
 
   # Why: dispatch timeout bounds 5..600
+  @task:TASK-J002-013
   @boundary
   Scenario Outline: dispatch_by_capability accepts timeout_seconds only within 5 to 600
     Given the reasoning model has identified a resolvable capability
@@ -134,18 +146,21 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
       | 601   | the tool rejects the request as invalid timeout           |
 
   # Why: calculate boundary around division-by-zero
+  @task:TASK-J002-011
   @boundary @negative
   Scenario: Calculating an expression that divides by zero returns a structured error
     When the supervisor asks the calculator to evaluate an expression that divides by zero
     Then the tool returns a structured error indicating division by zero
 
   # Why: calculate boundary around numeric overflow
+  @task:TASK-J002-011
   @boundary @negative
   Scenario: Calculating an expression that exceeds the float range returns an overflow error
     When the supervisor asks the calculator to evaluate an expression whose result exceeds the representable float range
     Then the tool returns a structured error indicating overflow
 
   # Why: feature_id pattern boundary for queue_build
+  @task:TASK-J002-014
   @boundary
   Scenario Outline: queue_build validates feature_id against the documented pattern
     Given the user has a planned feature in a valid repository
@@ -161,6 +176,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
       | BUG-JARVIS-001        | the tool rejects the feature id as invalid      |
 
   # Why: repo pattern boundary
+  @task:TASK-J002-014
   @boundary
   Scenario Outline: queue_build validates repo against the org/name pattern
     Given the user has a planned feature with a valid feature id
@@ -175,6 +191,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
       | guardkit/jarvis/extra  | the tool rejects the repo as invalid            |
 
   # Why: originating_adapter literal boundary
+  @task:TASK-J002-014
   @boundary
   Scenario Outline: queue_build restricts originating_adapter to the documented values
     Given the user has a planned feature in a valid repository
@@ -195,30 +212,35 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
   # ---------------------------------------------------------------------------
 
   # Why: Path traversal must be refused by read_file
+  @task:TASK-J002-008
   @negative
   Scenario: Reading a path outside the workspace returns a path traversal error
     When the supervisor reads a path that resolves outside the configured workspace root
     Then the tool returns a structured error indicating the path traverses outside the workspace
 
   # Why: Missing files produce structured errors, not exceptions
+  @task:TASK-J002-008
   @negative
   Scenario: Reading a path that does not exist returns a not-found error
     When the supervisor reads a path that does not exist
     Then the tool returns a structured error indicating the file was not found
 
   # Why: Directory reads are rejected
+  @task:TASK-J002-008
   @negative
   Scenario: Reading a directory instead of a file returns a not-a-file error
     When the supervisor reads a path that is a directory
     Then the tool returns a structured error indicating the path is not a file
 
   # Why: Non-UTF-8 files must be refused
+  @task:TASK-J002-008
   @negative
   Scenario: Reading a file with invalid UTF-8 bytes returns an encoding error
     When the supervisor reads a file whose bytes are not valid UTF-8
     Then the tool returns a structured error indicating an encoding problem
 
   # Why: Missing provider key must not raise at startup
+  @task:TASK-J002-009
   @negative
   Scenario: Searching the web without a configured Tavily key returns a configuration error
     Given the web-search provider is configured but no provider key is set
@@ -227,6 +249,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And the supervisor continues running normally
 
   # Why: Empty query is invalid
+  @task:TASK-J002-009
   @negative
   Scenario: Searching the web with an empty query returns an invalid-query error
     Given the web-search provider is configured with a valid key
@@ -234,12 +257,14 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     Then the tool returns a structured error indicating the query must be non-empty
 
   # Why: Invalid window for stub calendar
+  @task:TASK-J002-010
   @negative
   Scenario: Requesting calendar events for an unknown window returns an invalid-window error
     When the supervisor requests calendar events for an unsupported window value
     Then the tool returns a structured error listing the allowed windows
 
   # Why: Calculator must refuse unsafe tokens (no eval)
+  @task:TASK-J002-011
   @negative
   Scenario Outline: Calculator rejects expressions containing unsafe tokens
     When the supervisor asks the calculator to evaluate <expression>
@@ -252,6 +277,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
       | lambda x: x             |
 
   # Why: Capability name must resolve; else structured error
+  @task:TASK-J002-013
   @negative
   Scenario: Dispatching by an unknown capability name returns an unresolved error
     When the supervisor dispatches by a capability name that no registered agent advertises
@@ -260,6 +286,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And the supervisor does not retry the same dispatch
 
   # Why: Payload must be a JSON object literal
+  @task:TASK-J002-013
   @negative
   Scenario Outline: dispatch_by_capability rejects payloads that are not JSON object literals
     Given the reasoning model has identified a resolvable capability
@@ -273,6 +300,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
       | not valid json          |
 
   # Why: Timeout returns structured error even when the stub is configured to time out
+  @task:TASK-J002-013
   @negative
   Scenario: Dispatching by capability with a simulated timeout returns a timeout error
     Given the reasoning model has identified a resolvable capability
@@ -285,6 +313,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
   # ---------------------------------------------------------------------------
 
   # Why: Startup-fatal misconfiguration at the stub registry path
+  @task:TASK-J002-006
   @edge-case @negative
   Scenario: Starting Jarvis with a missing stub capabilities file fails fast at startup
     Given the configured stub capabilities path does not exist
@@ -292,6 +321,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     Then startup fails with a file-not-found error before the supervisor is built
 
   # Why: Malformed YAML or invalid descriptor is startup-fatal
+  @task:TASK-J002-006
   @edge-case @negative
   Scenario: Starting Jarvis with a malformed stub capabilities file fails fast at startup
     Given the configured stub capabilities file contains a descriptor with an invalid agent id
@@ -299,12 +329,14 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     Then startup fails with a validation error before the supervisor is built
 
   # Why: Empty registry still renders a safe prompt block
+  @task:TASK-J002-017
   @edge-case
   Scenario: Building the supervisor with no registered capabilities renders a safe prompt fallback
     When the supervisor graph is built with an empty capability list
     Then the rendered system prompt contains the text "No capabilities currently registered."
 
   # Why: Stubs return OK strings so reasoning model can trust them
+  @task:TASK-J002-012
   @edge-case
   Scenario: capabilities_refresh and capabilities_subscribe_updates return OK acknowledgements in Phase 2
     When the supervisor calls the refresh tool
@@ -312,6 +344,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     Then each tool returns an OK acknowledgement noting that live updates arrive in Phase 3
 
   # Why: Intent pattern fallback when exact tool name not found
+  @task:TASK-J002-013
   @edge-case
   Scenario: Dispatching by capability falls back to intent pattern matching when no exact tool match exists
     Given no registered agent advertises the requested tool name
@@ -321,6 +354,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And the returned result identifies the resolved agent
 
   # Why: nats-core payload shape honesty — stubbed transport, real schema
+  @task:TASK-J002-013
   @edge-case
   Scenario: Stubbed dispatches construct real nats-core payloads before logging
     When the supervisor dispatches by capability via the Phase 2 stub
@@ -328,6 +362,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And a log line prefixed with JARVIS_DISPATCH_STUB is emitted containing the resolved agent, tool name, correlation id, and latency
 
   # Why: Same honesty for queue_build
+  @task:TASK-J002-014
   @edge-case
   Scenario: Stubbed queue_build constructs a real BuildQueuedPayload before logging
     When the supervisor queues a valid build via the Phase 2 stub
@@ -335,6 +370,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And a log line prefixed with JARVIS_QUEUE_BUILD_STUB is emitted containing the feature id, repo, and correlation id
 
   # Why: Tools must never raise, even on Pydantic validation failure
+  @task:TASK-J002-019
   @edge-case
   Scenario Outline: Every tool converts internal errors into structured strings rather than raising
     When the supervisor invokes <tool> with input that would cause an internal error
@@ -357,6 +393,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
 
   # Why: Defence in depth — symlinks and null bytes are path-traversal vectors
   # [ASSUMPTION: confidence=medium] Symlinks resolving outside workspace and paths containing null bytes are rejected via the existing path-traversal error category, reusing DeepAgents built-in filesystem guards
+  @task:TASK-J002-008
   @edge-case @negative
   Scenario Outline: read_file rejects paths that evade the workspace guard
     When the supervisor reads a path that is <path_kind>
@@ -370,6 +407,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
 
   # Why: Prompt-injection payloads in search results must surface as data, not instructions
   # [ASSUMPTION: confidence=medium] search_web is a thin provider wrapper — hostile snippet text is returned verbatim and the tool itself does not perform any side-effecting action
+  @task:TASK-J002-009
   @edge-case
   Scenario: search_web preserves and surfaces hostile snippet content as data without acting on it
     Given the web-search provider returns a snippet whose text attempts to instruct the reasoning model to call queue_build or dispatch_by_capability
@@ -379,6 +417,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
 
   # Why: Concurrent dispatches must not share correlation state
   # [ASSUMPTION: confidence=medium] Each dispatch generates a fresh UUID4 correlation id independent of session thread, producing distinct log lines
+  @task:TASK-J002-013
   @edge-case
   Scenario: Concurrent dispatch_by_capability calls produce distinct correlation ids and independent log lines
     When the supervisor issues two dispatch_by_capability calls in parallel within the same session
@@ -387,6 +426,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
 
   # Why: Snapshot ordering contract matters ahead of Phase 3 live updates
   # [ASSUMPTION: confidence=low] Phase 2 refresh is a no-op so the snapshot-isolation scenario is recorded as a forward-looking invariant for Phase 3
+  @task:TASK-J002-012
   @edge-case
   Scenario: list_available_capabilities returns a stable snapshot even when refresh is called concurrently
     Given the capability registry has been loaded from the stub YAML
@@ -395,6 +435,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And capabilities_refresh returns its OK acknowledgement without mutating the snapshot mid-read
 
   # Why: Provider unavailability must degrade, not crash
+  @task:TASK-J002-009
   @edge-case @negative
   Scenario: search_web surfaces provider unavailability as a DEGRADED result
     Given the web-search provider is configured with a valid key
@@ -404,6 +445,7 @@ Feature: Core Tools & Capability-Driven Dispatch Tools
     And the returned string includes the provider status for diagnostics
 
   # Why: Specialist-side failures must be reported with enough context to reason
+  @task:TASK-J002-013
   @edge-case @negative
   Scenario: dispatch_by_capability surfaces specialist-side failures as structured errors
     Given the reasoning model has identified a resolvable capability

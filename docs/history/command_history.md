@@ -1031,6 +1031,24 @@ Pass to feature-plan:
 Note on the scope-doc name drift: the command argument mentioned call_specialist and queue_build; I mapped call_specialist to dispatch_by_capability(tool_name, payload_json, intent_pattern=None, timeout_seconds=60) per DDR-005, which the authoritative design doc records as the corrected contract.
 
 
+so the build plan shows the next step as Step 4: /feature-spec FEAT-JARVIS-003 but if I do /feature-plan "Core Tools & Capability-Driven Dispatch Tools" I can then get the autobuild of that feature running and fallback to step 4 in parallel?
+Yes — the planning/spec work for 003 is document-only, so it's safe to parallelise while 002 builds:
+
+/feature-plan 002 → AutoBuild 002 (Step 7)
+In parallel: /feature-spec 003 → /feature-plan 003 (Steps 4 + 6)
+Once 002 AutoBuild merges, kick off AutoBuild 003 (Step 8)
+Caveat: AutoBuild 002 and AutoBuild 003 both edit src/jarvis/agents/supervisor.py and src/jarvis/prompts/supervisor_prompt.py, so keep those sequential to avoid conflicts. The spec/plan docs for 003 are isolated under docs/design/FEAT-JARVIS-003/ and features/feat-jarvis-003-*/, so no contention there.
+
+
+/feature-plan "Core Tools & Capability-Driven Dispatch Tools" \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_summary.md \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch.feature \
+  --context features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch_assumptions.yaml \
+  --context docs/design/FEAT-JARVIS-002/design.md \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md \
+  --context .guardkit/context-manifest.yaml
+
 
 
 
