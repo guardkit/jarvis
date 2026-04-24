@@ -410,7 +410,7 @@ Expected output: `docs/design/FEAT-JARVIS-003/design.md` — four subagent modul
   --context .guardkit/context-manifest.yaml
 ```
 
-### Step 5: /feature-plan FEAT-JARVIS-002
+### Step 5: /feature-plan FEAT-JARVIS-002 ✅ Complete (2026-04-24)
 
 After the 2026-04-24 `/feature-spec` run the concrete feature directory is
 `features/feat-jarvis-002-core-tools-and-dispatch/` — use the explicit paths
@@ -428,9 +428,45 @@ only this feature's artefacts:
   --context .guardkit/context-manifest.yaml
 ```
 
-Resolve the 1 low-confidence assumption (ASSUM-006 — snapshot-isolation semantics
-for Phase 3) and any medium-confidence assumptions flagged at Coach review
-before Step 7.
+**Outputs (commit `76ca5ff`):**
+
+- Decision review: [`.claude/reviews/TASK-REV-J002-review-report.md`](../../../.claude/reviews/TASK-REV-J002-review-report.md) (881 lines, 3 options analysed, Option B ★ selected 12/12)
+- AutoBuild feature: [`.guardkit/features/FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) (23 subtasks, auto-detected 6 waves, aggregate complexity 6)
+- Implementation guide: [`tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/IMPLEMENTATION-GUIDE.md`](../../../tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/IMPLEMENTATION-GUIDE.md) (Mermaid data-flow + sequence + dependency diagrams + §4 Integration Contracts)
+- Feature README: [`tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/README.md`](../../../tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/README.md) (subtask index)
+- Review task (status `review_complete`): [`tasks/in_review/TASK-REV-J002-plan-core-tools-and-dispatch.md`](../../../tasks/in_review/TASK-REV-J002-plan-core-tools-and-dispatch.md)
+- BDD-linked feature file: all 42 scenarios in the `.feature` now carry `@task:TASK-J002-xxx` tags activating the R2 BDD oracle during `/task-work` Phase 4
+- Task generator: [`scripts/gen_feat_j002_tasks.py`](../../../scripts/gen_feat_j002_tasks.py) (regeneratable source-of-truth for the 23 task markdown files)
+
+**Approach adopted:** Option B — *envelope-first, concurrent fan-out*. Wave 1
+lands primitives (config fields, `CapabilityDescriptor` / `CapabilityToolSummary`,
+`WebResult` / `CalendarEvent` / `DispatchError`, `new_correlation_id` helper,
+`_stub_response_hook` contract, `pyproject` deps). Wave 2 parallelises the 9
+`@tool` implementations. Wave 3 wires `assemble_tool_list` +
+`build_supervisor`. Wave 4 runs unit test suites. Wave 5 runs the integration
+test. DDR-009 swap-point discipline preserved — two primary grep anchors
+(`JARVIS_DISPATCH_STUB`, `JARVIS_QUEUE_BUILD_STUB`) guard the FEAT-JARVIS-004/005
+transport swap.
+
+**Quality gates:** 0 unverifiable AC (R1 linter); 0 missing task files, 0 bad
+deps, 0 intra-wave conflicts, 0 invalid `task_type` values (pre-flight). R3
+smoke-gates deliberately deferred (non-blocking notice at generation time —
+add a `smoke_gates:` block to `FEAT-J002.yaml` before `/feature-build` if
+between-wave smoke checks are wanted).
+
+**Source-of-truth reconciliation.** The `/feature-plan` reviewer flagged that
+the review-task description used invented tool names
+(`write_workspace_file` / `list_workspace` / `ingest_capability_registry` /
+`dispatch_to_agent` / `dispatch_subscribe`) that appear nowhere in the
+authoritative context. Resolved by adopting the 9-tool set from the `.feature`,
+`design.md`, and DDR-005 (`read_file`, `search_web`, `calculate`,
+`get_calendar_events`, `list_available_capabilities`, `capabilities_refresh`,
+`capabilities_subscribe_updates`, `dispatch_by_capability`, `queue_build`).
+
+**Ready for Step 7.** The 1 low-confidence assumption (ASSUM-006 —
+snapshot-isolation semantics for Phase 3) stays deferred to FEAT-JARVIS-004
+per the review's open-questions section; it is not a blocker for Phase 2
+implementation.
 
 ### Step 6: /feature-plan FEAT-JARVIS-003
 
@@ -535,7 +571,7 @@ Record the session — evidence for the Phase 2 close.
 | `src/jarvis/tools/general.py` | FEAT-JARVIS-002 | **NEW** — 4 general tools |
 | `src/jarvis/tools/types.py` | FEAT-JARVIS-002 | **NEW** — `WebResult`, `CalendarEvent` |
 | `src/jarvis/tools/capabilities.py` | FEAT-JARVIS-002 | **NEW** — `CapabilityDescriptor`, catalogue reader, refresh/subscribe stubs |
-| `src/jarvis/tools/dispatch.py` | FEAT-JARVIS-002 | **NEW** — `call_specialist`, `queue_build` (stubbed transports, real `nats-core` payloads) |
+| `src/jarvis/tools/dispatch.py` | FEAT-JARVIS-002 | **NEW** — `dispatch_by_capability`, `queue_build` (stubbed transports, real `nats-core` payloads). Renamed from `call_specialist` per [DDR-005](../../design/FEAT-JARVIS-002/decisions/DDR-005-dispatch-by-capability-supersedes-call-specialist.md). |
 | `src/jarvis/prompts/supervisor_prompt.py` | FEAT-JARVIS-002, -003 | **UPDATED** — tool-usage section (002), subagent-routing section (003) |
 | `src/jarvis/agents/supervisor.py` | FEAT-JARVIS-002, -003 | **UPDATED** — tool list + `async_subagents` wiring |
 | `src/jarvis/agents/subagent_registry.py` | FEAT-JARVIS-003 | **NEW** — `build_async_subagents(config)` |
@@ -569,7 +605,7 @@ All paths relative to `/Users/richardwoollcott/Projects/appmilla_github/jarvis/`
 3. **Phase 1 supervisor prompt's attended-conversation posture.** Preserve verbatim; append new sections.
 4. **`create_deep_agent()` / `create_agent()` factory choice** pinned in ADR-J-002.
 5. **Subagent descriptions are the contract.** Post-landing changes require explicit commit-message justification. Learning flywheel (v1.5) will measure against them.
-6. **No NATS transport in Phase 2.** `call_specialist` + `queue_build` log-stub only. `nats-py` is NOT a Phase 2 dependency. `nats-core` Pydantic models ARE imported (pure data, no network).
+6. **No NATS transport in Phase 2.** `dispatch_by_capability` + `queue_build` log-stub only (per DDR-005, renamed from `call_specialist`). `nats-py` is NOT a Phase 2 dependency. `nats-core` Pydantic models ARE imported (pure data, no network).
 7. **Scope-preserving rules from conversation starter §2.** No new agent repos, no fleet-decision changes mid-build, trace-richness schema shape honoured from day one.
 8. **Singular topic convention (ADR-SP-016).** Any reference to NATS topics (in stub logs, docstrings) uses singular form.
 9. **ASGI transport.** Phase 2 commits to ASGI per ADR-J-P7. HTTP transport is a v1.5+ consideration.
@@ -589,7 +625,7 @@ All paths relative to `/Users/richardwoollcott/Projects/appmilla_github/jarvis/`
 | `langgraph.json` validation fails with multi-graph config | `langgraph dev --no-browser` smoke test in Step 10. DeepAgents 0.5.3 docs confirm multi-graph ASGI — if broken, raise to Anthropic/LangChain support. |
 | `quick_local` fallback test brittle | Use a clear health-signal injection interface (`fake_health_signal` fixture); test the *branch*, not the fallback model's behaviour. |
 | AutoBuild mega-commits | `/feature-plan` enumerates commit boundaries; split at `/task-review` if violated. |
-| `call_specialist` / `queue_build` stub behaviour drifts from real NATS in FEAT-JARVIS-004/005 | Stubbed transports build **real** `CommandPayload`/`BuildQueuedPayload` via `nats-core`; only the "publish" step is logged. Swap is transport-level only. |
+| `dispatch_by_capability` / `queue_build` stub behaviour drifts from real NATS in FEAT-JARVIS-004/005 | Stubbed transports build **real** `CommandPayload`/`BuildQueuedPayload` via `nats-core`; only the "publish" step is logged. Swap is transport-level only. DDR-009 grep anchors (`JARVIS_DISPATCH_STUB`, `JARVIS_QUEUE_BUILD_STUB`) asserted by TASK-J002-021's subprocess grep test. |
 
 ---
 
