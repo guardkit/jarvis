@@ -91,8 +91,14 @@ class TestAC001SignatureAndDecorator:
         assert params["parent_request_id"].default is None
 
     def test_return_annotation_is_str(self) -> None:
-        sig = _undecorated_signature()
-        assert sig.return_annotation is str
+        # Source uses ``from __future__ import annotations`` so the raw
+        # signature carries string annotations. Use ``get_type_hints`` to
+        # resolve them.
+        from typing import get_type_hints
+
+        func = queue_build.func  # type: ignore[attr-defined]
+        hints = get_type_hints(func)
+        assert hints["return"] is str
 
 
 # ---------------------------------------------------------------------------

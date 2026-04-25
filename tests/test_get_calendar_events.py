@@ -25,7 +25,6 @@ from jarvis.tools.general import (
     get_calendar_events,
 )
 
-
 # ---------------------------------------------------------------------------
 # Module locations used by the docstring byte-for-byte assertion (AC-002).
 # ---------------------------------------------------------------------------

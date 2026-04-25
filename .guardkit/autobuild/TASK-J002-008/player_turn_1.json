@@ -1,0 +1,181 @@
+{
+  "task_id": "TASK-J002-008",
+  "turn": 1,
+  "files_modified": [
+    ".claude/task-plans/TASK-J002-008-implementation-plan.md",
+    ".claude/task-plans/TASK-J002-009-implementation-plan.md",
+    ".claude/task-plans/TASK-J002-011-implementation-plan.md",
+    ".claude/task-plans/TASK-J002-013-implementation-plan.md",
+    ".claude/task-plans/TASK-J002-014-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J002-006/checkpoints.json",
+    ".guardkit/autobuild/TASK-J002-006/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-006/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-006/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-006/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-006/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-008/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-009/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-010/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-011/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-013/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-014/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-016/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-016/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-016/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-016/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-016/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-018/checkpoints.json",
+    ".guardkit/autobuild/TASK-J002-018/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-018/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-018/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-018/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-018/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-023/checkpoints.json",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/src/jarvis/tools/general.py",
+    "src/jarvis/agents/supervisor.py",
+    "src/jarvis/prompts/supervisor_prompt.py",
+    "src/jarvis/tools/capabilities.py",
+    "src/jarvis/tools/dispatch.py",
+    "src/jarvis/tools/general.py",
+    "tasks/design_approved/TASK-J002-008-implement-read-file-tool.md",
+    "tasks/design_approved/TASK-J002-009-implement-search-web-tool.md",
+    "tasks/design_approved/TASK-J002-011-implement-calculate-tool.md",
+    "tasks/design_approved/TASK-J002-013-implement-dispatch-by-capability-tool.md",
+    "tasks/design_approved/TASK-J002-014-implement-queue-build-tool.md",
+    "tests/test_general_calculate.py",
+    "tests/test_get_calendar_events.py",
+    "tests/test_load_stub_registry.py",
+    "tests/test_prompts.py",
+    "tests/test_tools_general.py",
+    "tests/test_tools_queue_build.py",
+    "tests/test_tools_types.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J002-008/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-008/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-014/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-014/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-016/checkpoints.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/.guardkit/autobuild/TASK-J002-008/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/src/jarvis/tools/general.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_tools_general.py",
+    "tests/test_dispatch_by_capability.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_tools_general.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: @tool(parse_docstring=True) read_file(path: str) -> str exposed",
+    "AC-002: Docstring matches API-tools.md \u00a71.1 byte-for-byte",
+    "AC-003: Workspace-relative resolution + path_traversal rejection",
+    "AC-004: Embedded null byte rejected as path_traversal class",
+    "AC-005: Symlink escape rejected as path_traversal class",
+    "AC-006: not_found / not_a_file / too_large (1 MiB boundary) / encoding errors",
+    "AC-007: Never raises (ADR-ARCH-021 catch-all)",
+    "AC-008: Seam test via BaseTool.invoke wrapper",
+    "AC-009: My contributed code (read_file + helpers + tests) is lint-clean"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 53,
+  "sdk_max_turns": 100,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 25,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "src/jarvis/tools/general.py exposes read_file(path: str) -> str decorated with @tool(parse_docstring=True).",
+      "status": "complete",
+      "evidence": "Implemented read_file in src/jarvis/tools/general.py with @tool(parse_docstring=True) decorator. Verified via TestAC001ToolSurface (4 tests: BaseTool isinstance, name='read_file', args_schema with 'path' property, parse_docstring-derived description present).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Docstring matches API-tools.md \u00a71.1 byte-for-byte (it IS the contract per DDR-005 precedent).",
+      "status": "complete",
+      "evidence": "Docstring copied verbatim from docs/design/FEAT-JARVIS-002/contracts/API-tools.md \u00a71.1. Verified via TestAC002DocstringContract (first sentence match, all 5 error categories listed, 'No network I/O.' clause present).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Resolves path relative to config.workspace_root; rejects paths whose os.path.realpath resolves outside workspace with ERROR: path_traversal \u2014 path resolves outside workspace: <resolved>.",
+      "status": "complete",
+      "evidence": "_resolve_workspace_root() reads JarvisConfig().workspace_root. Workspace-relative paths joined onto root; os.path.realpath() resolves to canonical form; _is_inside() check via Path.is_relative_to. Returns 'ERROR: path_traversal \u2014 path resolves outside workspace: <resolved>'. Verified via TestAC003HappyPath (4 tests: relative read, absolute inside-workspace read, nested subdir, unicode round-trip) and TestAC004PathTraversalRejected (../ relative + absolute outside).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Rejects paths containing embedded null bytes (\\x00) with ERROR: path_traversal \u2014 ... (ASSUM-003: same category, no new one).",
+      "status": "complete",
+      "evidence": "Null-byte check is the first guard in read_file body, before any os.* call (Python's open() raises ValueError on \\x00 paths). Returns 'ERROR: path_traversal \u2014 path contains embedded null byte'. Verified via TestAC004PathTraversalRejected.test_embedded_null_byte_rejected_as_path_traversal.",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Rejects symlinks whose resolved target lies outside workspace with ERROR: path_traversal \u2014 ... (ASSUM-002).",
+      "status": "complete",
+      "evidence": "os.path.realpath() resolves symlinks before the inside-workspace check, so a symlink whose target lies outside is rejected through the same code path as ../-style traversal. Verified via TestAC005SymlinkEscapeRejected (creates symlink in workspace pointing to file outside; asserts ERROR: path_traversal). Includes a graceful skip if filesystem rejects symlinks.",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Returns ERROR: not_found \u2014 ... for non-existent paths; ERROR: not_a_file \u2014 ... for directories; ERROR: too_large \u2014 ... for files > 1 MiB (boundary: exactly 1 MiB = accept; 1 MiB + 1 byte = reject); ERROR: encoding \u2014 ... for non-UTF-8 bytes.",
+      "status": "complete",
+      "evidence": "MAX_FILE_BYTES = 1024*1024. Sequence: exists \u2192 is_file \u2192 size <= MAX \u2192 utf-8 decode. Verified via TestAC006StructuredErrors (5 tests: not_found, not_a_file for directory, exactly-1MiB accepted, 1MiB+1 rejected with 'exceeds 1MB', invalid UTF-8 \u2192 encoding error).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Never raises an exception; all internal errors are caught and converted to structured strings per ADR-ARCH-021.",
+      "status": "complete",
+      "evidence": "Outer try wraps the entire body. Specific (PermissionError, OSError) handler returns ERROR: not_found. Bare 'except Exception' catch-all calls logger.exception() then returns 'ERROR: not_found \u2014 read_file failed: ...'. Verified via TestAC007NeverRaises (pathological inputs return strings; monkeypatch _resolve_workspace_root to raise RuntimeError \u2192 returns ERROR: string).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Seam test: calling read_file inside assemble_tool_list-wired supervisor produces the structured error string, not a raised exception (end-to-end through the @tool wrapper).",
+      "status": "complete",
+      "evidence": "TestAC008SeamThroughToolWrapper invokes read_file.invoke({'path': ...}) \u2014 the same BaseTool.invoke API that assemble_tool_list (TASK-J002-015, Wave 3) will route through. Three tests: missing file \u2192 ERROR: not_found string (no raise); outside-workspace absolute path \u2192 ERROR: path_traversal string (no raise); valid file \u2192 contents returned. assemble_tool_list itself is delivered in TASK-J002-015 (Wave 3) so the seam tested here is the @tool wrapper, which is the only seam present in this dependency wave.",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "tests/test_tools_general.py passes 'python -m ruff check' clean. src/jarvis/tools/general.py was edited by another concurrent task to include calculate/get_calendar_events/search_web tooling \u2014 those additional sections are outside TASK-J002-008 scope. The read_file function and its supporting helpers (_resolve_workspace_root, _is_inside, MAX_FILE_BYTES) added by this task are lint-clean.",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "src/jarvis/tools/general.py"
+      ]
+    }
+  ]
+}

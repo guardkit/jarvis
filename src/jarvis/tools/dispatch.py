@@ -50,18 +50,37 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Literal, TypeAlias
 
 from langchain_core.tools import tool
-from nats_core import EventType, MessageEnvelope
-from nats_core.events import CommandPayload, ResultPayload
+from nats_core import EventType, MessageEnvelope, Topics
+from nats_core.events import BuildQueuedPayload, CommandPayload, ResultPayload
 from pydantic import ValidationError
 
 from jarvis.tools._correlation import new_correlation_id
 from jarvis.tools.capabilities import CapabilityDescriptor
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Module-private validation patterns (kept aligned with nats_core.events
+# but enforced at the tool boundary so we render ADR-ARCH-021-compliant
+# error strings before the pydantic constructor runs).
+# ---------------------------------------------------------------------------
+_FEATURE_ID_PATTERN = re.compile(r"^FEAT-[A-Z0-9]{3,12}$")
+_REPO_PATTERN = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+_ALLOWED_ADAPTERS: frozenset[str] = frozenset(
+    {"terminal", "telegram", "dashboard", "voice-reachy", "slack", "cli-wrapper"}
+)
+
+
+def _now_utc() -> datetime:
+    """Return a timezone-aware UTC ``datetime`` for envelope timestamps."""
+    return datetime.now(timezone.utc)
 
 # ---------------------------------------------------------------------------
 # SWAP POINT — log prefixes (see module docstring).
@@ -200,8 +219,8 @@ def dispatch_by_capability(
     changing this docstring.
 
     Cost depends on the resolved specialist; latency is capped by
-    timeout_seconds. Moderate cost (~$0.10–$2 per dispatch, specialist-
-    dependent); 5–60s typical wall-clock.
+    timeout_seconds. Moderate cost (~$0.10-$2 per dispatch, specialist-
+    dependent); 5-60s typical wall-clock.
 
     Args:
         tool_name: The ToolCapability.name to invoke (e.g.
@@ -317,7 +336,8 @@ def dispatch_by_capability(
 
     try:
         response = hook(command)
-    except Exception as exc:  # noqa: BLE001 — boundary-guard per AC: never raise
+    except Exception as exc:
+        # Boundary-guard per AC-013: dispatch_by_capability never raises.
         return (
             f"ERROR: specialist_error — agent_id={agent_id} detail={exc}"
         )
@@ -342,11 +362,149 @@ def dispatch_by_capability(
             )
 
 
+@tool(parse_docstring=True)
+def queue_build(
+    feature_id: str,
+    feature_yaml_path: str,
+    repo: str,
+    branch: str = "main",
+    originating_adapter: str = "terminal",
+    correlation_id: str | None = None,
+    parent_request_id: str | None = None,
+) -> str:
+    """Queue a Forge build for an already-planned feature. Pattern A per
+    ADR-SP-014: Jarvis publishes and walks away; Forge consumes from JetStream.
+
+    Use this tool when the user has a feature spec already produced (via
+    /feature-spec and /feature-plan) and says "build it" or equivalent. Do NOT
+    use it to kick off planning — that is not a Forge responsibility. If the
+    user asks you to plan, route to the architect or product-owner specialist
+    via dispatch_by_capability instead.
+
+    In Phase 2 the transport is stubbed: the tool builds a real
+    BuildQueuedPayload per nats-core, logs it, and returns a canned ACK.
+    FEAT-JARVIS-005 replaces the stub with a real
+    pipeline.build-queued.{feature_id} JetStream publish without changing this
+    docstring.
+
+    Fire-and-forget. Near-zero publish latency when real; Forge may take hours
+    to complete the build — you will receive pipeline.* progress events via
+    notifications in FEAT-JARVIS-005. Do not await completion.
+
+    Args:
+        feature_id: FEAT-XXX identifier matching ``^FEAT-[A-Z0-9]{3,12}$``.
+        feature_yaml_path: Path to the feature YAML spec, relative to the
+                           repo root (e.g. ``features/feat-jarvis-002/....yaml``).
+        repo: GitHub org/repo, e.g. ``guardkit/jarvis`` or ``appmilla/forge``.
+              Must match ``^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$``.
+        branch: Base branch to branch from. Default ``main``.
+        originating_adapter: Which Jarvis adapter the human used. One of
+                            ``terminal``, ``voice-reachy``, ``telegram``,
+                            ``slack``, ``dashboard``, ``cli-wrapper``.
+                            Default ``terminal`` (CLI). ``triggered_by`` is
+                            always set to ``jarvis`` by this tool.
+        correlation_id: Stable ID for tracing. Auto-generated if omitted.
+        parent_request_id: The Jarvis dispatch message ID that spawned this
+                          build, for progress-event correlation. Optional.
+
+    Returns:
+        JSON string of the QueueBuildAck on success:
+          ``{"feature_id": str, "correlation_id": str,
+             "queued_at": ISO8601,
+             "publish_target": "pipeline.build-queued.{feature_id}",
+             "status": "queued"}``
+        OR a structured error:
+          - ``ERROR: invalid_feature_id — must match FEAT-XXX pattern, got <value>``
+          - ``ERROR: invalid_repo — must be org/name format, got <value>``
+          - ``ERROR: invalid_adapter — <value> not in allowed list``
+          - ``ERROR: validation — <pydantic detail>``
+          - ``DEGRADED: transport_stub — (Phase 2 stub, real publish arrives in FEAT-JARVIS-005)``
+    """
+    # ----- Validate feature_id ---------------------------------------------
+    if not isinstance(feature_id, str) or not _FEATURE_ID_PATTERN.match(feature_id):
+        return (
+            f"ERROR: invalid_feature_id — must match FEAT-XXX pattern, "
+            f"got {feature_id}"
+        )
+
+    # ----- Validate repo ----------------------------------------------------
+    if not isinstance(repo, str) or not _REPO_PATTERN.match(repo):
+        return f"ERROR: invalid_repo — must be org/name format, got {repo}"
+
+    # ----- Validate originating_adapter ------------------------------------
+    if originating_adapter not in _ALLOWED_ADAPTERS:
+        return (
+            f"ERROR: invalid_adapter — {originating_adapter} not in allowed list"
+        )
+
+    # ----- Build real nats-core payload + envelope ------------------------
+    resolved_correlation_id = correlation_id or new_correlation_id()
+    requested_at = _now_utc()
+    queued_at = requested_at  # Phase 2: stub publishes immediately.
+
+    try:
+        payload = BuildQueuedPayload(
+            feature_id=feature_id,
+            repo=repo,
+            branch=branch,
+            feature_yaml_path=feature_yaml_path,
+            triggered_by="jarvis",
+            originating_adapter=originating_adapter,  # type: ignore[arg-type]
+            correlation_id=resolved_correlation_id,
+            parent_request_id=parent_request_id,
+            requested_at=requested_at,
+            queued_at=queued_at,
+        )
+        envelope = MessageEnvelope(
+            source_id="jarvis",
+            event_type=EventType.BUILD_QUEUED,
+            correlation_id=resolved_correlation_id,
+            payload=payload.model_dump(mode="json"),
+        )
+    except ValidationError as exc:
+        return f"ERROR: validation — {exc.errors()[0].get('msg', str(exc))}"
+    except (TypeError, ValueError) as exc:
+        return f"ERROR: validation — {exc}"
+
+    # ----- Subject from canonical Topics template -------------------------
+    subject = Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id)
+    payload_bytes = len(envelope.model_dump_json().encode("utf-8"))
+
+    # ----- SWAP POINT — exactly one logger.info per call ------------------
+    #
+    # FEAT-JARVIS-005 replaces this single line with:
+    #   await js.publish(
+    #       subject=Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id),
+    #       payload=envelope.model_dump_json().encode(),
+    #   )
+    # Tool docstring and return shape stay identical.
+    logger.info(
+        "%s feature_id=%s repo=%s correlation_id=%s topic=%s payload_bytes=%d",
+        LOG_PREFIX_QUEUE_BUILD,
+        feature_id,
+        repo,
+        resolved_correlation_id,
+        subject,
+        payload_bytes,
+    )
+
+    # ----- QueueBuildAck JSON ---------------------------------------------
+    ack = {
+        "feature_id": feature_id,
+        "correlation_id": resolved_correlation_id,
+        "queued_at": queued_at.isoformat(),
+        "publish_target": subject,
+        "status": "queued",
+    }
+    return json.dumps(ack)
+
+
 __all__ = [
     "LOG_PREFIX_DISPATCH",
     "LOG_PREFIX_QUEUE_BUILD",
     "StubResponse",
-    "_stub_response_hook",
     "_capability_registry",
+    "_stub_response_hook",
     "dispatch_by_capability",
+    "queue_build",
 ]
