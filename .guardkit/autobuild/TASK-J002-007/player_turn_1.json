@@ -1,0 +1,81 @@
+{
+  "task_id": "TASK-J002-007",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    "tests/test_tools_dispatch_contract.py"
+  ],
+  "tests_written": [
+    "tests/test_tools_dispatch_contract.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "tests/test_tools_dispatch_contract.py: 17 passed (0.18s). Full suite (excluding the pre-existing test_build_system::test_jarvis_version_command, which fails because /usr/local/bin/python is not a uv-managed venv and the test message itself instructs operators to use `uv run pytest`): 423 passed.",
+  "implementation_notes": "Implemented the DDR-009 swap-point seam in src/jarvis/tools/dispatch.py. The file was already present from a previous checkpoint with byte-identical content to what this task requires; my Write produced no diff (verified via `git diff src/jarvis/tools/dispatch.py` which returned empty). I added a fresh tests/test_tools_dispatch_contract.py covering all five acceptance criteria.\n\nKey design decisions:\n- StubResponse is encoded as a TypeAlias union of three tagged tuples: tuple[Literal['success'], ResultPayload] | tuple[Literal['timeout']] | tuple[Literal['specialist_error'], str]. Tagged-tuple form was chosen over TypedDict so consumers can pattern-match on the leading literal in a `match` statement (per the swap-point comment block in dispatch.py).\n- _stub_response_hook is annotated as `Callable[[CommandPayload], StubResponse] | None`, default None. Test fixtures (and only test fixtures) write a callable here to simulate timeout/error round-trips. FEAT-JARVIS-004 will replace it with a real `await nats.request(...)` call.\n- LOG_PREFIX_DISPATCH = 'JARVIS_DISPATCH_STUB' and LOG_PREFIX_QUEUE_BUILD = 'JARVIS_QUEUE_BUILD_STUB' are the only two lines in src/jarvis/ that contain those literals, satisfying the AC-005 grep-count-of-2 invariant. After TASK-J002-013/014 land, two `logger.info(LOG_PREFIX_*)` usages will bring the count to 4 (TASK-J002-021 owns that post-wiring assertion).\n- The module docstring carries an explicit 'SWAP POINT' section that names all three anchors by their identifier (`_stub_response_hook`, `LOG_PREFIX_DISPATCH`, `LOG_PREFIX_QUEUE_BUILD`) and calls out FEAT-JARVIS-004's NATS-round-trip swap by reference. Critically, the docstring does NOT inline the literal anchor strings \u2014 if it did, the AC-005 grep count would jump to 4 in dispatch.py alone. The contract test `test_module_docstring_does_not_inline_the_grep_anchor_strings` pins this invariant.\n\nTest design:\n- Five test classes (one per AC) using the pattern documented in .claude/rules/testing.md: AAA / focused / mock external dependencies / descriptive names.\n- The grep tests use `grep -rIn` (capital I, ignore-binary) so a stale local __pycache__/*.pyc cannot disturb the count when running locally without a clean checkout.\n- The grep token is constructed via concatenation in the test file so the test file itself contributes zero matches to the AC-005 grep \u2014 keeping the invariant scoped to src/jarvis/.\n- Test class names follow `TestAC00XDescription` per the existing TASK-J001 conventions in the suite.",
+  "concerns": [
+    "tests/test_build_system.py::TestAC004EntryPoint::test_jarvis_version_command fails when running `python -m pytest` directly because /usr/local/bin/python lacks the jarvis package. The test's own assertion message says: 'Run via `uv run pytest` so the project's pinned venv is used.' This is a pre-existing harness issue unrelated to TASK-J002-007 and is documented as a known runner-environment requirement.",
+    "The dispatch.py file was already byte-identical at HEAD before this turn (carried by a `[guardkit-checkpoint] Turn 1 complete` commit, presumably from an earlier autobuild run). My Write produced no diff. If the orchestrator expected a fresh creation, the work is materially complete and validated by the new contract tests; the implementation just happens to already be at the required state."
+  ],
+  "requirements_addressed": [
+    "AC-001: _stub_response_hook module-level Callable attribute defaults to None",
+    "AC-002: StubResponse type alias covers success | timeout | specialist_error variants",
+    "AC-003: LOG_PREFIX_DISPATCH and LOG_PREFIX_QUEUE_BUILD constants defined",
+    "AC-004: Module docstring carries SWAP POINT section naming the three anchors and FEAT-JARVIS-004's NATS-round-trip replacement",
+    "AC-005: grep returns exactly 2 lines pre-wiring; pre-Wave-2 baseline pinned by contract test"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/tools/dispatch.py` defines a module-level attribute `_stub_response_hook: Callable[[CommandPayload], StubResponse] | None = None`.",
+      "status": "complete",
+      "evidence": "src/jarvis/tools/dispatch.py defines `_stub_response_hook: Callable[[CommandPayload], StubResponse] | None = None` at module scope (line ~92) with the documented default of None. CommandPayload is imported from nats_core.events; the StubResponse alias precedes the attribute. Three tests (TestAC001StubResponseHookAttribute) verify (a) the attribute exists and defaults to None, (b) the type-hint introspects to Optional[Callable[[CommandPayload], StubResponse]], and (c) it is writable at runtime so test fixtures can monkeypatch it.",
+      "test_file": "tests/test_tools_dispatch_contract.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Defines `StubResponse` as a typed dict / Literal union covering `(\"success\", ResultPayload) | (\"timeout\",) | (\"specialist_error\", str)`.",
+      "status": "complete",
+      "evidence": "StubResponse is exposed as a TypeAlias union of three tagged tuples \u2014 tuple[Literal['success'], ResultPayload] | tuple[Literal['timeout']] | tuple[Literal['specialist_error'], str] \u2014 matching the AC verbatim. Five tests (TestAC002StubResponseAlias) use typing.get_args to verify the alias is exposed, has exactly three variants, and each variant has the required (Literal[tag], payload) shape. ResultPayload is imported from nats_core.events to keep the schema aligned with the real Phase 3 transport.",
+      "test_file": "tests/test_tools_dispatch_contract.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Defines module-level string constants `LOG_PREFIX_DISPATCH = \"JARVIS_DISPATCH_STUB\"` and `LOG_PREFIX_QUEUE_BUILD = \"JARVIS_QUEUE_BUILD_STUB\"`.",
+      "status": "complete",
+      "evidence": "Both constants are declared at module scope in src/jarvis/tools/dispatch.py with the exact literal values (no concatenation, no f-string) so they appear unbroken on a single source line each \u2014 the prerequisite for the AC-005 grep invariant. Three tests (TestAC003LogPrefixConstants) assert each value via concatenation in the test (`'JARVIS_DISPATCH' + '_STUB'`) so the test file itself does not pollute the grep count, plus a type-check that both are str.",
+      "test_file": "tests/test_tools_dispatch_contract.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Module docstring carries a \"SWAP POINT\" section naming the two grep anchors and stating that FEAT-JARVIS-004 replaces `_stub_response_hook` with a real NATS round-trip.",
+      "status": "complete",
+      "evidence": "The module docstring contains an explicit 'SWAP POINT' section (heading + underline) that enumerates all three named anchors \u2014 `_stub_response_hook`, `LOG_PREFIX_DISPATCH`, `LOG_PREFIX_QUEUE_BUILD` \u2014 by identifier, and explicitly states 'FEAT-JARVIS-004 replaces `_stub_response_hook` with a real NATS request/reply round-trip (await nats.request(...) on the agents.command.{agent_id} subject)'. Four tests (TestAC004ModuleDocstringSwapPoint) verify (a) the SWAP POINT heading is present, (b) all three anchor names appear in the docstring, (c) FEAT-JARVIS-004 + NATS + 'round-trip' appear, and (d) the docstring deliberately does NOT inline the literal anchor strings (which would break AC-005).",
+      "test_file": "tests/test_tools_dispatch_contract.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] `grep -rn \"JARVIS_DISPATCH_STUB\\|JARVIS_QUEUE_BUILD_STUB\" src/jarvis/` returns exactly two lines (the two constant definitions) pre-feature wiring; after TASK-J002-013 and TASK-J002-014 land, it returns exactly four (two definitions + two `logger.info` usages).",
+      "status": "complete",
+      "evidence": "Verified manually: `grep -rIn 'JARVIS_DISPATCH_STUB\\|JARVIS_QUEUE_BUILD_STUB' src/jarvis/` returns exactly two lines, both in src/jarvis/tools/dispatch.py \u2014 the LOG_PREFIX_DISPATCH and LOG_PREFIX_QUEUE_BUILD constant definitions. The literal strings appear nowhere else in src/jarvis/ (Grep tool confirmed 'No matches found' for any other module). Two tests (TestAC005GrepCountPreWiring) use subprocess.run on the actual grep binary to assert (a) src/jarvis/tools/dispatch.py contains exactly two grep-anchor lines and (b) the global pre-wiring count is 2 (with a graceful skip path that hands off to TASK-J002-021's stricter post-wiring assertion once Wave 2 lands the dispatch tools).",
+      "test_file": "tests/test_tools_dispatch_contract.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    }
+  ],
+  "success": true
+}
