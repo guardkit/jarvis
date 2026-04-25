@@ -1,3 +1,9 @@
+# ruff: noqa: RUF002
+# ^ Tool docstrings are reproduced *byte-for-byte* from
+#   docs/design/FEAT-JARVIS-002/contracts/API-tools.md. The contract uses
+#   Unicode en-dashes; the reasoning model reads docstrings verbatim, so
+#   we deliberately preserve those characters rather than substitute
+#   ASCII hyphens.
 """General-purpose tools for the Jarvis supervisor.
 
 Hosts the four ``general`` tools consumed by the reasoning model via the
@@ -52,7 +58,7 @@ import re
 from pathlib import Path
 from typing import Any, Final, Literal
 
-from asteval import Interpreter
+from asteval import Interpreter  # type: ignore[import-untyped]
 from langchain_core.tools import tool
 from pydantic import SecretStr
 
@@ -156,9 +162,7 @@ class TavilyProvider:
         )
         response = client.invoke({"query": query})
         if not isinstance(response, dict):
-            raise RuntimeError(
-                f"non-dict response: {type(response).__name__}"
-            )
+            raise RuntimeError(f"non-dict response: {type(response).__name__}")
         return response
 
 
@@ -231,7 +235,9 @@ def _coerce_results(
                 snippet=snippet_raw,
                 score=score,
             )
-        except Exception:  # noqa: BLE001 — never raise across tool boundary
+        except Exception:
+            # ADR-ARCH-021 — never raise across the tool boundary; skip
+            # the malformed row and continue with the remainder.
             continue
         coerced.append(web.model_dump())
     return coerced
@@ -267,28 +273,21 @@ def search_web(query: str, max_results: int = 5) -> str:
         if not isinstance(query, str) or not query.strip():
             return "ERROR: invalid_query — query must be non-empty"
         if isinstance(max_results, bool) or not isinstance(max_results, int):
-            return (
-                "ERROR: invalid_max_results — must be between 1 and 10, "
-                f"got {max_results!r}"
-            )
+            return f"ERROR: invalid_max_results — must be between 1 and 10, got {max_results!r}"
         if max_results < 1 or max_results > 10:
-            return (
-                "ERROR: invalid_max_results — must be between 1 and 10, "
-                f"got {max_results}"
-            )
+            return f"ERROR: invalid_max_results — must be between 1 and 10, got {max_results}"
 
         # ---- Provider configuration ----------------------------------------
         api_key = _resolve_api_key(_config)
         if api_key is None:
-            return (
-                "ERROR: config_missing — tavily_api_key not set in JarvisConfig"
-            )
+            return "ERROR: config_missing — tavily_api_key not set in JarvisConfig"
 
         # ---- Provider call (every exception becomes DEGRADED) --------------
         try:
             provider = _provider_factory(api_key)
             response = provider.search(query, max_results)
-        except Exception as exc:  # noqa: BLE001 — never raise across tool boundary
+        except Exception as exc:
+            # ADR-ARCH-021 — provider exceptions become structured errors.
             logger.warning("search_web provider error: %s", exc)
             return f"DEGRADED: provider_unavailable — Tavily returned {exc}"
 
@@ -299,22 +298,14 @@ def search_web(query: str, max_results: int = 5) -> str:
                 f"non-dict response ({type(response).__name__})"
             )
         if "error" in response and response["error"] is not None:
-            return (
-                "DEGRADED: provider_unavailable — Tavily returned "
-                f"{response['error']}"
-            )
+            return f"DEGRADED: provider_unavailable — Tavily returned {response['error']}"
         explicit_status = response.get("status")
         if explicit_status not in (None, "success", 200, "ok", "OK"):
-            return (
-                "DEGRADED: provider_unavailable — Tavily returned "
-                f"{explicit_status}"
-            )
+            return f"DEGRADED: provider_unavailable — Tavily returned {explicit_status}"
 
         raw_results = response.get("results")
         if raw_results is None:
-            return (
-                "DEGRADED: provider_unavailable — Tavily returned no results"
-            )
+            return "DEGRADED: provider_unavailable — Tavily returned no results"
         if not isinstance(raw_results, list):
             return (
                 "DEGRADED: provider_unavailable — Tavily returned "
@@ -324,7 +315,8 @@ def search_web(query: str, max_results: int = 5) -> str:
         coerced = _coerce_results(raw_results, max_results)
         return json.dumps(coerced)
 
-    except Exception as exc:  # noqa: BLE001 — last-line never-raise guard
+    except Exception as exc:
+        # ADR-ARCH-021 last-line never-raise guard.
         logger.exception("search_web unexpected failure: %s", exc)
         return f"DEGRADED: provider_unavailable — Tavily returned {exc}"
 
@@ -432,9 +424,6 @@ def _evaluate_expression(expression: str) -> str:
     §1.4. Never raises — the public :func:`calculate` tool relies on this
     invariant to honour ADR-ARCH-021.
     """
-    if not isinstance(expression, str):
-        return "ERROR: parse_error — expression must be a string"
-
     stripped = expression.strip()
     if not stripped:
         return "ERROR: parse_error — empty expression"
@@ -484,9 +473,7 @@ def _evaluate_expression(expression: str) -> str:
 
     # Boundary-trap arithmetic explosions that ``asteval`` did not surface
     # via ``interp.error`` (e.g. ``float('inf')`` slipping through).
-    if isinstance(result, float) and (
-        result == float("inf") or result == float("-inf")
-    ):
+    if isinstance(result, float) and (result == float("inf") or result == float("-inf")):
         return "ERROR: overflow — result exceeds float range"
 
     return _format_calculate_result(result)
@@ -613,24 +600,17 @@ def read_file(path: str) -> str:
         resolved = Path(os.path.realpath(candidate))
 
         if not _is_inside(resolved, workspace):
-            return (
-                "ERROR: path_traversal — path resolves outside workspace: "
-                f"{resolved}"
-            )
+            return f"ERROR: path_traversal — path resolves outside workspace: {resolved}"
 
         if not resolved.exists():
             return f"ERROR: not_found — path does not exist: {path}"
 
         if not resolved.is_file():
-            return (
-                f"ERROR: not_a_file — path is a directory or special file: {path}"
-            )
+            return f"ERROR: not_a_file — path is a directory or special file: {path}"
 
         size = resolved.stat().st_size
         if size > MAX_FILE_BYTES:
-            return (
-                f"ERROR: too_large — file exceeds 1MB, refusing to read: {path}"
-            )
+            return f"ERROR: too_large — file exceeds 1MB, refusing to read: {path}"
 
         try:
             return resolved.read_text(encoding="utf-8")
@@ -646,7 +626,7 @@ def read_file(path: str) -> str:
         # crashing the tool turn.
         logger.warning("read_file OS error for %r: %s", path, exc)
         return f"ERROR: not_found — path does not exist: {path}"
-    except Exception as exc:  # noqa: BLE001 — ADR-ARCH-021 catch-all
+    except Exception as exc:
         # Catch-all per ADR-ARCH-021 / langchain-tool-decorator-specialist:
         # tools must never raise. Log with full stack so operators can
         # diagnose unexpected failures, then return a structured string.
@@ -685,10 +665,7 @@ def get_calendar_events(
     # never raise; we always return a structured ERROR string.
     try:
         if window not in _ALLOWED_WINDOWS:
-            return (
-                "ERROR: invalid_window — must be one of "
-                f"today/tomorrow/this_week, got {window}"
-            )
+            return f"ERROR: invalid_window — must be one of today/tomorrow/this_week, got {window}"
         # Phase 2 stub — real provider lands in v1.5.
         return json.dumps([])
     except Exception as exc:

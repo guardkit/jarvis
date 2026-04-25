@@ -1,3 +1,8 @@
+# ruff: noqa: RUF001
+# ^ The expected docstring below is the API-tools.md section 1.2 contract
+#   reproduced byte-for-byte. The contract uses Unicode en-dashes; RUF001
+#   flags those as "ambiguous" but we need them verbatim to compare
+#   against the source-of-truth docstring.
 """Tests for ``jarvis.tools.general.search_web`` — TASK-J002-009.
 
 Covers acceptance criteria:
@@ -169,7 +174,7 @@ class TestAC002DocstringMatchesContract:
         "\n"
         "Returns:\n"
         "    JSON array of WebResult objects:\n"
-        "      ``[{\"title\": str, \"url\": str, \"snippet\": str, \"score\": float}, ...]``\n"
+        '      ``[{"title": str, "url": str, "snippet": str, "score": float}, ...]``\n'
         "    OR a structured error:\n"
         "      - ``ERROR: config_missing — tavily_api_key not set in JarvisConfig``\n"
         "      - ``ERROR: invalid_query — query must be non-empty``\n"
@@ -207,13 +212,9 @@ class TestAC002DocstringMatchesContract:
 class TestAC003ConfigMissing:
     """Returns the ``config_missing`` error when no Tavily key is wired."""
 
-    def test_returns_config_missing_when_config_is_none(
-        self, cleared_config: None
-    ) -> None:
+    def test_returns_config_missing_when_config_is_none(self, cleared_config: None) -> None:
         result = search_web.invoke({"query": "anything", "max_results": 3})
-        assert (
-            result == "ERROR: config_missing — tavily_api_key not set in JarvisConfig"
-        )
+        assert result == "ERROR: config_missing — tavily_api_key not set in JarvisConfig"
 
     def test_returns_config_missing_when_key_is_none(self) -> None:
         with patch.dict("os.environ", {}, clear=True):
@@ -224,10 +225,7 @@ class TestAC003ConfigMissing:
         configure(cfg)
         try:
             result = search_web.invoke({"query": "anything"})
-            assert (
-                result
-                == "ERROR: config_missing — tavily_api_key not set in JarvisConfig"
-            )
+            assert result == "ERROR: config_missing — tavily_api_key not set in JarvisConfig"
         finally:
             configure(None)
 
@@ -240,10 +238,7 @@ class TestAC003ConfigMissing:
         configure(cfg)
         try:
             result = search_web.invoke({"query": "anything"})
-            assert (
-                result
-                == "ERROR: config_missing — tavily_api_key not set in JarvisConfig"
-            )
+            assert result == "ERROR: config_missing — tavily_api_key not set in JarvisConfig"
         finally:
             configure(None)
 
@@ -270,13 +265,9 @@ class TestAC005InvalidMaxResults:
     """``max_results`` outside [1, 10] is rejected; boundaries are accepted."""
 
     @pytest.mark.parametrize("bad", [0, -1, 11, 100])
-    def test_out_of_range_rejected(
-        self, bad: int, configured_jarvis: JarvisConfig
-    ) -> None:
+    def test_out_of_range_rejected(self, bad: int, configured_jarvis: JarvisConfig) -> None:
         result = search_web.invoke({"query": "valid", "max_results": bad})
-        assert result == (
-            f"ERROR: invalid_max_results — must be between 1 and 10, got {bad}"
-        )
+        assert result == (f"ERROR: invalid_max_results — must be between 1 and 10, got {bad}")
 
     @pytest.mark.parametrize("good", [1, 5, 10])
     def test_boundaries_accepted(
@@ -331,9 +322,7 @@ class TestAC006DegradedProviderUnavailable:
 
         monkeypatch.setattr(general, "_provider_factory", _ErrorProvider)
         result = search_web.invoke({"query": "ping"})
-        assert (
-            result == "DEGRADED: provider_unavailable — Tavily returned rate_limited"
-        )
+        assert result == "DEGRADED: provider_unavailable — Tavily returned rate_limited"
 
     def test_degraded_when_results_field_missing(
         self,
@@ -489,9 +478,7 @@ class TestAC010SeamTestThroughToolWrapper:
     ) -> None:
         # Calling via ``invoke`` exercises the @tool wrapper —
         # input validation, schema parsing, and the tool boundary.
-        result_str = search_web.invoke(
-            {"query": "important question", "max_results": 5}
-        )
+        result_str = search_web.invoke({"query": "important question", "max_results": 5})
         # The tool must return a string (the @tool wrapper would
         # otherwise interpose).
         assert isinstance(result_str, str)

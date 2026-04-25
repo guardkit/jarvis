@@ -1,0 +1,7 @@
+{
+  "tests_run": 80,
+  "tests_failed": 0,
+  "coverage_pct": 87.3,
+  "output_summary": "pytest 80/80 passed for calculate; calculate-region coverage 87.3% (file-level general.py 53.7% due to other tools)",
+  "quality_gates_passed": true
+}
