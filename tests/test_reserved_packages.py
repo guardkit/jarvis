@@ -13,9 +13,16 @@ from types import ModuleType
 
 import pytest
 
-# The eight reserved-empty packages specified in ADR-ARCH-006
+# Reserved-empty packages per ADR-ARCH-006.
+#
+# ``jarvis.tools`` was reserved-empty during Phase 1 but is **populated**
+# in Phase 2 (FEAT-JARVIS-002): TASK-J002-015 wires the public tool
+# surface (``assemble_tool_list``, re-exports from ``general``,
+# ``capabilities``, ``dispatch``) into ``__init__.py``, so the empty-
+# namespace contract no longer applies to it. The boundary discipline —
+# domain modules consume the package surface, never the submodules —
+# is enforced by :mod:`tests.test_import_graph` instead.
 RESERVED_PACKAGES = [
-    "jarvis.tools",
     "jarvis.subagents",
     "jarvis.skills",
     "jarvis.routing",

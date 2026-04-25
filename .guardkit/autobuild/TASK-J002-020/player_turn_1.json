@@ -1,0 +1,56 @@
+{
+  "task_id": "TASK-J002-020",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    "tests/test_tools_capabilities.py"
+  ],
+  "tests_written": [
+    "tests/test_tools_capabilities.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "15 tests pass in tests/test_tools_capabilities.py (0.16s). All 115 capability-related tests pass when run together (test_tools_capabilities.py + test_capabilities.py + test_load_stub_registry.py + test_stub_capabilities.py).",
+  "implementation_notes": "Created tests/test_tools_capabilities.py \u2014 a focused, self-contained pytest suite covering the AC-001/002/003 scenarios from TASK-J002-020. The file exercises load_stub_registry against the canonical Phase 2 stub YAML (4 descriptors, agent_ids architect-agent/product-owner-agent/ideation-agent/forge), the three @tool functions (list_available_capabilities, capabilities_refresh, capabilities_subscribe_updates), startup-fatal failures on missing/malformed YAML, duplicate-agent_id rejection, and snapshot isolation via concurrent.futures.ThreadPoolExecutor with a threading.Barrier to force genuine overlap between list_available_capabilities and capabilities_refresh. The OK-string assertions are byte-equal against module constants AND against literal values to catch drift in either direction. Implementation files (src/jarvis/tools/capabilities.py, src/jarvis/config/stub_capabilities.yaml) were already in place from prior tasks (TASK-J002-006 / TASK-J002-012) \u2014 this task is pure test authoring per its task_type=testing.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `tests/test_tools_capabilities.py` covers: stub YAML loads into 4 descriptors; `list_available_capabilities` returns JSON of 4 descriptors; refresh/subscribe OK acks; startup-fatal on missing YAML; startup-fatal on malformed YAML (invalid agent_id uppercase); snapshot isolation (concurrent `list_available_capabilities` + `capabilities_refresh` via `concurrent.futures` \u2014 both succeed, snapshot unchanged).",
+      "status": "complete",
+      "evidence": "Created tests/test_tools_capabilities.py with six test classes: TestStubYamlLoadsFourDescriptors (canonical YAML loads to 4 CapabilityDescriptor instances with documented agent_ids), TestStartupFatalOnMissingYaml (FileNotFoundError on missing path, error message includes path), TestStartupFatalOnMalformedYaml (uppercase agent_id raises pydantic.ValidationError), TestListAvailableCapabilitiesReturnsFourDescriptors (JSON array of 4 entries with matching shape), TestRefreshAndSubscribeOkAcks (refresh + subscribe return byte-exact OK strings, idempotent), TestSnapshotIsolationUnderConcurrentRefresh (concurrent.futures.ThreadPoolExecutor + threading.Barrier ensures real overlap; both calls succeed, snapshot agent_ids unchanged, registry binding unchanged after repeated 8-iteration race). 15/15 tests pass.",
+      "test_file": "tests/test_tools_capabilities.py",
+      "implementation_files": [
+        "tests/test_tools_capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Byte-equal check on the `OK:` strings from refresh and subscribe.",
+      "status": "complete",
+      "evidence": "TestRefreshAndSubscribeOkAcks asserts capabilities_refresh.invoke({}) == EXPECTED_REFRESH_OK and capabilities_subscribe_updates.invoke({}) == EXPECTED_SUBSCRIBE_OK using literal == comparison (not substring/prefix matching) against the API-tools.md \u00a72.2/\u00a72.3 contract strings. test_module_constants_match_expected_ok_strings additionally pins the module-level _REFRESH_OK_MESSAGE / _SUBSCRIBE_OK_MESSAGE constants to the same values, so drift in either the runtime invocation OR the module constants fails the suite.",
+      "test_file": "tests/test_tools_capabilities.py",
+      "implementation_files": [
+        "tests/test_tools_capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Duplicate-agent_id YAML is rejected by loader.",
+      "status": "complete",
+      "evidence": "TestDuplicateAgentIdRejected.test_duplicate_agent_id_raises_value_error_naming_offender writes a YAML file with two entries sharing agent_id='twin' (with a third unique entry between them to exercise mid-list detection), invokes load_stub_registry, and asserts that ValueError is raised with the offending id 'twin' present in the error message \u2014 matching the loader's documented contract (capabilities.py L214-221).",
+      "test_file": "tests/test_tools_capabilities.py",
+      "implementation_files": [
+        "tests/test_tools_capabilities.py"
+      ]
+    }
+  ],
+  "success": true
+}

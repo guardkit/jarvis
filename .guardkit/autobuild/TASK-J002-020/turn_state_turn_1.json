@@ -1,0 +1,30 @@
+{
+  "id": "TURN-FEAT-J002-1",
+  "feature_id": "FEAT-J002",
+  "task_id": "TASK-J002-020",
+  "turn_number": 1,
+  "player_summary": "Implementation attempt",
+  "player_decision": "approve",
+  "coach_decision": "approve",
+  "coach_feedback": null,
+  "mode": "fresh_start",
+  "blockers_found": [],
+  "progress_summary": "Turn 1: approve",
+  "acceptance_criteria_status": {
+    "AC-001": "verified",
+    "AC-002": "verified",
+    "AC-003": "verified"
+  },
+  "files_modified": [
+    "tests/test_tools_capabilities.py"
+  ],
+  "tests_passed": null,
+  "tests_failed": null,
+  "coverage": null,
+  "arch_score": null,
+  "started_at": "2026-04-25T17:17:09.912905",
+  "completed_at": "2026-04-25T17:17:09.912905",
+  "duration_seconds": null,
+  "lessons_from_turn": [],
+  "what_to_try_next": null
+}
