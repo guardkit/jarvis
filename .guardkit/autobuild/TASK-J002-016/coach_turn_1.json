@@ -1,0 +1,123 @@
+{
+  "task_id": "TASK-J002-016",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_prompts.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_prompts.py::TestAC004TestConfigFixture::test_test_config_validate_provider_keys_succeeds\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/conftest.py:105: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\ntests/test_prompts.py::TestAC004TestConfigFixture::test_test_config_validate_provider_keys_succeeds\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_prompts.py:404: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n======================== 54 passed, 9 warnings in 1.65s ========================",
+      "duration_seconds": 3.17242169380188
+    },
+    "requirements": {
+      "criteria_total": 5,
+      "criteria_met": 5,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/prompts/supervisor_prompt.py` `SUPERVISOR_SYSTEM_PROMPT` gains a `{available_capabilities}` placeholder inserted after the attended-conversation section and before the Trace Richness section.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added a '## Available Capabilities' section containing the {available_capabilities} placeholder. Section sits after '## Attended-Conversation Posture' and before '## Trace Richness'. Verified by tests TestJ002016AvailableCapabilitiesPlaceholder.test_prompt_has_available_capabilities_placeholder, .test_placeholder_after_attended_conversation, .test_placeholder_before_trace_richness, .test_available_capabilities_section_heading_present.",
+      "notes": "Added a '## Available Capabilities' section containing the {available_capabilities} placeholder. Section sits after '## Attended-Conversation Posture' and before '## Trace Richness'. Verified by tests TestJ002016AvailableCapabilitiesPlaceholder.test_prompt_has_available_capabilities_placeholder, .test_placeholder_after_attended_conversation, .test_placeholder_before_trace_richness, .test_available_capabilities_section_heading_present."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Gains a `## Tool Usage` section with the preference list from design \u00a710 (prefer calculate over mental arithmetic; list_available_capabilities at most once per session; prefer dispatch_by_capability over repeating specialist work; queue_build only when feature explicitly named; return structured-error strings as-is).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added a '## Tool Usage' section containing five bullet preferences directly mirroring design \u00a710: (1) prefer `calculate` over mental arithmetic, (2) call `list_available_capabilities` at most once per session, (3) prefer `dispatch_by_capability` over repeating specialist work in-process, (4) use `queue_build` only when the user's request explicitly names a feature, (5) return structured-error strings as-is. Verified by all 7 tests in TestJ002016ToolUsageSection.",
+      "notes": "Added a '## Tool Usage' section containing five bullet preferences directly mirroring design \u00a710: (1) prefer `calculate` over mental arithmetic, (2) call `list_available_capabilities` at most once per session, (3) prefer `dispatch_by_capability` over repeating specialist work in-process, (4) use `queue_build` only when the user's request explicitly names a feature, (5) return structured-error strings as-is. Verified by all 7 tests in TestJ002016ToolUsageSection."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Phase 1 content is preserved verbatim (TASK-J001-004 scope invariant): attended-conversation posture, identity, model-selection philosophy unchanged; no mention of `call_specialist`, `start_async_task`, `morning-briefing`, named subagents, or skills.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Identity, Attended-Conversation Posture, and Model-Selection Philosophy sections are byte-identical to their Phase 1 wording. Verified by TestJ002016Phase1ScopePreserved.test_identity_section_preserved_verbatim / .test_attended_conversation_section_preserved_verbatim / .test_model_selection_philosophy_preserved_verbatim, plus negative tests .test_no_call_specialist_reference, .test_no_start_async_task_reference, .test_no_morning_briefing_reference, .test_no_named_subagents, .test_no_skill_references. The pre-existing TestAC005ScopeInvariant.FORBIDDEN_TERMS list was updated to swap queue_build (now in scope per AC-002) for start_async_task (still out of scope until FEAT-JARVIS-003).",
+      "notes": "Identity, Attended-Conversation Posture, and Model-Selection Philosophy sections are byte-identical to their Phase 1 wording. Verified by TestJ002016Phase1ScopePreserved.test_identity_section_preserved_verbatim / .test_attended_conversation_section_preserved_verbatim / .test_model_selection_philosophy_preserved_verbatim, plus negative tests .test_no_call_specialist_reference, .test_no_start_async_task_reference, .test_no_morning_briefing_reference, .test_no_named_subagents, .test_no_skill_references. The pre-existing TestAC005ScopeInvariant.FORBIDDEN_TERMS list was updated to swap queue_build (now in scope per AC-002) for start_async_task (still out of scope until FEAT-JARVIS-003)."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "The `{domain_prompt}` placeholder remains at the bottom of the prompt (per existing domain-prompt-injection pattern).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "{domain_prompt} is the final templated value of SUPERVISOR_SYSTEM_PROMPT, immediately under the '## Domain-Specific Instructions' heading. No new section headings are added after it. Verified by TestJ002016AvailableCapabilitiesPlaceholder.test_domain_prompt_placeholder_remains_at_bottom which asserts no '##' marker appears at or after the {domain_prompt} index.",
+      "notes": "{domain_prompt} is the final templated value of SUPERVISOR_SYSTEM_PROMPT, immediately under the '## Domain-Specific Instructions' heading. No new section headings are added after it. Verified by TestJ002016AvailableCapabilitiesPlaceholder.test_domain_prompt_placeholder_remains_at_bottom which asserts no '##' marker appears at or after the {domain_prompt} index."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `ruff check` and `ruff format --check` on all three modified files (supervisor_prompt.py, supervisor.py, test_prompts.py): 'All checks passed!' and '3 files already formatted'. Ran `mypy src/jarvis/prompts/supervisor_prompt.py src/jarvis/agents/supervisor.py`: 'Success: no issues found in 2 source files'. Full pytest suite: 583 passed, 0 failed.",
+      "notes": "Ran `ruff check` and `ruff format --check` on all three modified files (supervisor_prompt.py, supervisor.py, test_prompts.py): 'All checks passed!' and '3 files already formatted'. Ran `mypy src/jarvis/prompts/supervisor_prompt.py src/jarvis/agents/supervisor.py`: 'Success: no issues found in 2 source files'. Full pytest suite: 583 passed, 0 failed."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/prompts/supervisor_prompt.py` `SUPERVISOR_SYSTEM_PROMPT` gains a `{available_capabilities}` placeholder inserted after the attended-conversation section and before the Trace Richness section.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added a '## Available Capabilities' section containing the {available_capabilities} placeholder. Section sits after '## Attended-Conversation Posture' and before '## Trace Richness'. Verified by tests TestJ002016AvailableCapabilitiesPlaceholder.test_prompt_has_available_capabilities_placeholder, .test_placeholder_after_attended_conversation, .test_placeholder_before_trace_richness, .test_available_capabilities_section_heading_present.",
+        "notes": "Added a '## Available Capabilities' section containing the {available_capabilities} placeholder. Section sits after '## Attended-Conversation Posture' and before '## Trace Richness'. Verified by tests TestJ002016AvailableCapabilitiesPlaceholder.test_prompt_has_available_capabilities_placeholder, .test_placeholder_after_attended_conversation, .test_placeholder_before_trace_richness, .test_available_capabilities_section_heading_present."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Gains a `## Tool Usage` section with the preference list from design \u00a710 (prefer calculate over mental arithmetic; list_available_capabilities at most once per session; prefer dispatch_by_capability over repeating specialist work; queue_build only when feature explicitly named; return structured-error strings as-is).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added a '## Tool Usage' section containing five bullet preferences directly mirroring design \u00a710: (1) prefer `calculate` over mental arithmetic, (2) call `list_available_capabilities` at most once per session, (3) prefer `dispatch_by_capability` over repeating specialist work in-process, (4) use `queue_build` only when the user's request explicitly names a feature, (5) return structured-error strings as-is. Verified by all 7 tests in TestJ002016ToolUsageSection.",
+        "notes": "Added a '## Tool Usage' section containing five bullet preferences directly mirroring design \u00a710: (1) prefer `calculate` over mental arithmetic, (2) call `list_available_capabilities` at most once per session, (3) prefer `dispatch_by_capability` over repeating specialist work in-process, (4) use `queue_build` only when the user's request explicitly names a feature, (5) return structured-error strings as-is. Verified by all 7 tests in TestJ002016ToolUsageSection."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Phase 1 content is preserved verbatim (TASK-J001-004 scope invariant): attended-conversation posture, identity, model-selection philosophy unchanged; no mention of `call_specialist`, `start_async_task`, `morning-briefing`, named subagents, or skills.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Identity, Attended-Conversation Posture, and Model-Selection Philosophy sections are byte-identical to their Phase 1 wording. Verified by TestJ002016Phase1ScopePreserved.test_identity_section_preserved_verbatim / .test_attended_conversation_section_preserved_verbatim / .test_model_selection_philosophy_preserved_verbatim, plus negative tests .test_no_call_specialist_reference, .test_no_start_async_task_reference, .test_no_morning_briefing_reference, .test_no_named_subagents, .test_no_skill_references. The pre-existing TestAC005ScopeInvariant.FORBIDDEN_TERMS list was updated to swap queue_build (now in scope per AC-002) for start_async_task (still out of scope until FEAT-JARVIS-003).",
+        "notes": "Identity, Attended-Conversation Posture, and Model-Selection Philosophy sections are byte-identical to their Phase 1 wording. Verified by TestJ002016Phase1ScopePreserved.test_identity_section_preserved_verbatim / .test_attended_conversation_section_preserved_verbatim / .test_model_selection_philosophy_preserved_verbatim, plus negative tests .test_no_call_specialist_reference, .test_no_start_async_task_reference, .test_no_morning_briefing_reference, .test_no_named_subagents, .test_no_skill_references. The pre-existing TestAC005ScopeInvariant.FORBIDDEN_TERMS list was updated to swap queue_build (now in scope per AC-002) for start_async_task (still out of scope until FEAT-JARVIS-003)."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "The `{domain_prompt}` placeholder remains at the bottom of the prompt (per existing domain-prompt-injection pattern).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "{domain_prompt} is the final templated value of SUPERVISOR_SYSTEM_PROMPT, immediately under the '## Domain-Specific Instructions' heading. No new section headings are added after it. Verified by TestJ002016AvailableCapabilitiesPlaceholder.test_domain_prompt_placeholder_remains_at_bottom which asserts no '##' marker appears at or after the {domain_prompt} index.",
+        "notes": "{domain_prompt} is the final templated value of SUPERVISOR_SYSTEM_PROMPT, immediately under the '## Domain-Specific Instructions' heading. No new section headings are added after it. Verified by TestJ002016AvailableCapabilitiesPlaceholder.test_domain_prompt_placeholder_remains_at_bottom which asserts no '##' marker appears at or after the {domain_prompt} index."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `ruff check` and `ruff format --check` on all three modified files (supervisor_prompt.py, supervisor.py, test_prompts.py): 'All checks passed!' and '3 files already formatted'. Ran `mypy src/jarvis/prompts/supervisor_prompt.py src/jarvis/agents/supervisor.py`: 'Success: no issues found in 2 source files'. Full pytest suite: 583 passed, 0 failed.",
+        "notes": "Ran `ruff check` and `ruff format --check` on all three modified files (supervisor_prompt.py, supervisor.py, test_prompts.py): 'All checks passed!' and '3 files already formatted'. Ran `mypy src/jarvis/prompts/supervisor_prompt.py src/jarvis/agents/supervisor.py`: 'Success: no issues found in 2 source files'. Full pytest suite: 583 passed, 0 failed."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 285 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1008/5200 tokens\n\n### \ud83c\udfa8 Relevant Patterns\n- USES_TYPE_HINT\n- HAS_FILED_TYPE\n\n### \u26a0\ufe0f Warnings\n- HAS_ROOT_CAUSE\n- USES_ENDPOINT\n\n### \ud83c\udfad Role Constraints\n- INVOLVES_WORKFLOW_ENTITY\n- MUST_CONSULT_BEFORE_MODIFYING\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- USE_CASE_OF\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}

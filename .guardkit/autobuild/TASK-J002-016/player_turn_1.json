@@ -1,0 +1,83 @@
+{
+  "task_id": "TASK-J002-016",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/prompts/supervisor_prompt.py",
+    "src/jarvis/agents/supervisor.py",
+    "tests/test_prompts.py"
+  ],
+  "files_created": [],
+  "tests_written": [
+    "tests/test_prompts.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "583 passed, 55 warnings in 2.92s. The 4 new test classes (TestJ002016AvailableCapabilitiesPlaceholder, TestJ002016ToolUsageSection, TestJ002016Phase1ScopePreserved, TestJ002016BuildSupervisorFormatCompat) cover AC-001..AC-005 and pass cleanly. Existing tests (test_prompts.py legacy classes, test_supervisor.py, test_supervisor_no_llm_call.py, test_smoke_end_to_end.py, test_sessions.py) all still pass after the {available_capabilities} placeholder was added because build_supervisor was extended with a safe default. Ruff lint + format clean; mypy clean.",
+  "implementation_notes": "Added a new '## Available Capabilities' section (containing the {available_capabilities} placeholder) and a '## Tool Usage' preference-list section to SUPERVISOR_SYSTEM_PROMPT, inserted between the Attended-Conversation Posture and Trace Richness sections per AC-001. The Tool Usage list mirrors design \u00a710 verbatim in spirit: prefer calculate over mental arithmetic, list_available_capabilities at most once per session, prefer dispatch_by_capability over repeating specialist work, queue_build only when a feature is explicitly named, and return structured-error strings as-is. Phase 1 content (Identity, Attended-Conversation Posture, Model-Selection Philosophy, Trace Richness) is preserved verbatim line-for-line \u2014 verified by TestJ002016Phase1ScopePreserved. The {domain_prompt} placeholder remains the last templated value at the very bottom of the prompt under '## Domain-Specific Instructions'. Updated the module docstring to describe the new placeholder and to remove queue_build from the now-out-of-date forbidden list (queue_build is in scope for FEAT-JARVIS-002 per AC-002 and DDR-009). Added a minimal _DEFAULT_AVAILABLE_CAPABILITIES = 'No capabilities currently registered.' to jarvis.agents.supervisor and threaded it into the .format() call so existing build_supervisor callers keep working without raising KeyError; TASK-J002-017 will replace this default with rendered CapabilityDescriptor.as_prompt_block() output. Updated tests/test_prompts.py: removed queue_build from FORBIDDEN_TERMS (now allowed by AC-003 scope), added start_async_task to FORBIDDEN_TERMS (still out of scope per AC-003), and updated the format-resolution test to include all three placeholders.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/prompts/supervisor_prompt.py` `SUPERVISOR_SYSTEM_PROMPT` gains a `{available_capabilities}` placeholder inserted after the attended-conversation section and before the Trace Richness section.",
+      "status": "complete",
+      "evidence": "Added a '## Available Capabilities' section containing the {available_capabilities} placeholder. Section sits after '## Attended-Conversation Posture' and before '## Trace Richness'. Verified by tests TestJ002016AvailableCapabilitiesPlaceholder.test_prompt_has_available_capabilities_placeholder, .test_placeholder_after_attended_conversation, .test_placeholder_before_trace_richness, .test_available_capabilities_section_heading_present.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Gains a `## Tool Usage` section with the preference list from design \u00a710 (prefer calculate over mental arithmetic; list_available_capabilities at most once per session; prefer dispatch_by_capability over repeating specialist work; queue_build only when feature explicitly named; return structured-error strings as-is).",
+      "status": "complete",
+      "evidence": "Added a '## Tool Usage' section containing five bullet preferences directly mirroring design \u00a710: (1) prefer `calculate` over mental arithmetic, (2) call `list_available_capabilities` at most once per session, (3) prefer `dispatch_by_capability` over repeating specialist work in-process, (4) use `queue_build` only when the user's request explicitly names a feature, (5) return structured-error strings as-is. Verified by all 7 tests in TestJ002016ToolUsageSection.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Phase 1 content is preserved verbatim (TASK-J001-004 scope invariant): attended-conversation posture, identity, model-selection philosophy unchanged; no mention of `call_specialist`, `start_async_task`, `morning-briefing`, named subagents, or skills.",
+      "status": "complete",
+      "evidence": "Identity, Attended-Conversation Posture, and Model-Selection Philosophy sections are byte-identical to their Phase 1 wording. Verified by TestJ002016Phase1ScopePreserved.test_identity_section_preserved_verbatim / .test_attended_conversation_section_preserved_verbatim / .test_model_selection_philosophy_preserved_verbatim, plus negative tests .test_no_call_specialist_reference, .test_no_start_async_task_reference, .test_no_morning_briefing_reference, .test_no_named_subagents, .test_no_skill_references. The pre-existing TestAC005ScopeInvariant.FORBIDDEN_TERMS list was updated to swap queue_build (now in scope per AC-002) for start_async_task (still out of scope until FEAT-JARVIS-003).",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py",
+        "tests/test_prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] The `{domain_prompt}` placeholder remains at the bottom of the prompt (per existing domain-prompt-injection pattern).",
+      "status": "complete",
+      "evidence": "{domain_prompt} is the final templated value of SUPERVISOR_SYSTEM_PROMPT, immediately under the '## Domain-Specific Instructions' heading. No new section headings are added after it. Verified by TestJ002016AvailableCapabilitiesPlaceholder.test_domain_prompt_placeholder_remains_at_bottom which asserts no '##' marker appears at or after the {domain_prompt} index.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran `ruff check` and `ruff format --check` on all three modified files (supervisor_prompt.py, supervisor.py, test_prompts.py): 'All checks passed!' and '3 files already formatted'. Ran `mypy src/jarvis/prompts/supervisor_prompt.py src/jarvis/agents/supervisor.py`: 'Success: no issues found in 2 source files'. Full pytest suite: 583 passed, 0 failed.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py",
+        "src/jarvis/agents/supervisor.py",
+        "tests/test_prompts.py"
+      ]
+    }
+  ],
+  "success": true
+}
