@@ -52,7 +52,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal, TypeAlias
 
 from langchain_core.tools import tool
@@ -80,7 +80,8 @@ _ALLOWED_ADAPTERS: frozenset[str] = frozenset(
 
 def _now_utc() -> datetime:
     """Return a timezone-aware UTC ``datetime`` for envelope timestamps."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
+
 
 # ---------------------------------------------------------------------------
 # SWAP POINT — log prefixes (see module docstring).
@@ -109,7 +110,13 @@ LOG_PREFIX_QUEUE_BUILD: str = "JARVIS_QUEUE_BUILD_STUB"
 # Phase 3 (FEAT-JARVIS-004) removes the hook entirely; this alias is the
 # stub-only contract and disappears with the swap.
 # ---------------------------------------------------------------------------
-StubResponse: TypeAlias = (
+# NOTE: Retain ``TypeAlias`` (PEP 613) form rather than the ``type`` keyword
+# (PEP 695). The TASK-J002-007 swap-point contract tests call
+# ``typing.get_args(dispatch.StubResponse)`` and require the result to expose
+# the three Union variants directly. ``type`` keyword aliases produce a
+# ``TypeAliasType`` whose variants are only accessible via ``__value__``,
+# which would silently break those tests.
+StubResponse: TypeAlias = (  # noqa: UP040 — see preceding comment.
     tuple[Literal["success"], ResultPayload]
     | tuple[Literal["timeout"]]
     | tuple[Literal["specialist_error"], str]
@@ -181,10 +188,7 @@ def _resolve_agent_id(
 
     if intent_pattern:
         for descriptor in sorted_descriptors:
-            if (
-                intent_pattern in descriptor.role
-                or intent_pattern in descriptor.description
-            ):
+            if intent_pattern in descriptor.role or intent_pattern in descriptor.description:
                 return descriptor.agent_id
 
     return None
@@ -255,37 +259,23 @@ def dispatch_by_capability(
 
     # ----- Validate timeout_seconds -----------------------------------------
     if not isinstance(timeout_seconds, int) or isinstance(timeout_seconds, bool):
-        return (
-            f"ERROR: invalid_timeout — timeout_seconds must be 5..600, "
-            f"got {timeout_seconds!r}"
-        )
+        return f"ERROR: invalid_timeout — timeout_seconds must be 5..600, got {timeout_seconds!r}"
     if timeout_seconds < 5 or timeout_seconds > 600:
-        return (
-            f"ERROR: invalid_timeout — timeout_seconds must be 5..600, "
-            f"got {timeout_seconds}"
-        )
+        return f"ERROR: invalid_timeout — timeout_seconds must be 5..600, got {timeout_seconds}"
 
     # ----- Validate payload_json is a JSON object literal -------------------
     stripped = payload_json.lstrip() if isinstance(payload_json, str) else ""
     if not stripped.startswith("{"):
-        return (
-            "ERROR: invalid_payload — payload_json is not a JSON object literal"
-        )
+        return "ERROR: invalid_payload — payload_json is not a JSON object literal"
     try:
         parsed_args = json.loads(payload_json)
     except (ValueError, TypeError):
-        return (
-            "ERROR: invalid_payload — payload_json is not a JSON object literal"
-        )
+        return "ERROR: invalid_payload — payload_json is not a JSON object literal"
     if not isinstance(parsed_args, dict):
-        return (
-            "ERROR: invalid_payload — payload_json is not a JSON object literal"
-        )
+        return "ERROR: invalid_payload — payload_json is not a JSON object literal"
 
     # ----- Resolve agent_id -------------------------------------------------
-    agent_id = _resolve_agent_id(
-        tool_name, intent_pattern, _capability_registry
-    )
+    agent_id = _resolve_agent_id(tool_name, intent_pattern, _capability_registry)
     if agent_id is None:
         return (
             f"ERROR: unresolved — no capability matches "
@@ -338,9 +328,7 @@ def dispatch_by_capability(
         response = hook(command)
     except Exception as exc:
         # Boundary-guard per AC-013: dispatch_by_capability never raises.
-        return (
-            f"ERROR: specialist_error — agent_id={agent_id} detail={exc}"
-        )
+        return f"ERROR: specialist_error — agent_id={agent_id} detail={exc}"
 
     match response:
         case ("success", ResultPayload() as result):
@@ -351,10 +339,7 @@ def dispatch_by_capability(
                 f"timeout_seconds={timeout_seconds}"
             )
         case ("specialist_error", str() as reason):
-            return (
-                f"ERROR: specialist_error — agent_id={agent_id} "
-                f"detail={reason}"
-            )
+            return f"ERROR: specialist_error — agent_id={agent_id} detail={reason}"
         case _:
             return (
                 f"ERROR: specialist_error — agent_id={agent_id} "
@@ -422,10 +407,7 @@ def queue_build(
     """
     # ----- Validate feature_id ---------------------------------------------
     if not isinstance(feature_id, str) or not _FEATURE_ID_PATTERN.match(feature_id):
-        return (
-            f"ERROR: invalid_feature_id — must match FEAT-XXX pattern, "
-            f"got {feature_id}"
-        )
+        return f"ERROR: invalid_feature_id — must match FEAT-XXX pattern, got {feature_id}"
 
     # ----- Validate repo ----------------------------------------------------
     if not isinstance(repo, str) or not _REPO_PATTERN.match(repo):
@@ -433,9 +415,7 @@ def queue_build(
 
     # ----- Validate originating_adapter ------------------------------------
     if originating_adapter not in _ALLOWED_ADAPTERS:
-        return (
-            f"ERROR: invalid_adapter — {originating_adapter} not in allowed list"
-        )
+        return f"ERROR: invalid_adapter — {originating_adapter} not in allowed list"
 
     # ----- Build real nats-core payload + envelope ------------------------
     resolved_correlation_id = correlation_id or new_correlation_id()

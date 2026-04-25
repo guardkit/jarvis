@@ -18,9 +18,7 @@ from nats_core.events import CommandPayload, ResultPayload
 from jarvis.tools import dispatch
 from jarvis.tools.capabilities import CapabilityDescriptor, CapabilityToolSummary
 
-UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-)
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 
 
 # ---------------------------------------------------------------------------
@@ -111,9 +109,7 @@ class TestAC001ToolExposure:
     ) -> None:
         schema = dispatch.dispatch_by_capability.args_schema.model_json_schema()
         props = schema["properties"]
-        assert {"tool_name", "payload_json", "intent_pattern", "timeout_seconds"} <= set(
-            props
-        )
+        assert {"tool_name", "payload_json", "intent_pattern", "timeout_seconds"} <= set(props)
 
 
 # ---------------------------------------------------------------------------
@@ -227,13 +223,13 @@ class TestAC004PayloadValidation:
     @pytest.mark.parametrize(
         "bad",
         [
-            "[1, 2, 3]",       # JSON array
-            '"a string"',       # JSON string
-            "42",                # JSON number
-            "null",              # JSON null
+            "[1, 2, 3]",  # JSON array
+            '"a string"',  # JSON string
+            "42",  # JSON number
+            "null",  # JSON null
             "not json at all",  # not JSON
-            "",                   # empty
-            "  {bad",             # malformed
+            "",  # empty
+            "  {bad",  # malformed
         ],
     )
     def test_non_object_payload_returns_invalid_payload(
@@ -246,9 +242,7 @@ class TestAC004PayloadValidation:
             tool_name="review_spec",
             payload_json=bad,
         )
-        assert result == (
-            "ERROR: invalid_payload — payload_json is not a JSON object literal"
-        )
+        assert result == ("ERROR: invalid_payload — payload_json is not a JSON object literal")
 
     def test_valid_object_payload_round_trips_into_command_args(
         self,
@@ -259,12 +253,15 @@ class TestAC004PayloadValidation:
 
         def hook(cmd: CommandPayload) -> tuple:
             captured.append(cmd)
-            return ("success", ResultPayload(
-                command=cmd.command,
-                result={"echoed": cmd.args},
-                correlation_id=cmd.correlation_id,
-                success=True,
-            ))
+            return (
+                "success",
+                ResultPayload(
+                    command=cmd.command,
+                    result={"echoed": cmd.args},
+                    correlation_id=cmd.correlation_id,
+                    success=True,
+                ),
+            )
 
         dispatch._stub_response_hook = hook
         result = _invoke(
@@ -294,9 +291,7 @@ class TestAC005TimeoutValidation:
             payload_json="{}",
             timeout_seconds=bad,
         )
-        assert result == (
-            f"ERROR: invalid_timeout — timeout_seconds must be 5..600, got {bad}"
-        )
+        assert result == (f"ERROR: invalid_timeout — timeout_seconds must be 5..600, got {bad}")
 
     @pytest.mark.parametrize("good", [5, 60, 600])
     def test_in_range_timeout_proceeds(
@@ -327,12 +322,15 @@ class TestAC006CommandPayloadConstruction:
 
         def hook(cmd: CommandPayload) -> tuple:
             seen.append(cmd)
-            return ("success", ResultPayload(
-                command=cmd.command,
-                result={},
-                correlation_id=cmd.correlation_id,
-                success=True,
-            ))
+            return (
+                "success",
+                ResultPayload(
+                    command=cmd.command,
+                    result={},
+                    correlation_id=cmd.correlation_id,
+                    success=True,
+                ),
+            )
 
         dispatch._stub_response_hook = hook
         _invoke(
@@ -362,10 +360,7 @@ class TestAC007LogLineShape:
     ) -> None:
         with caplog.at_level(logging.INFO, logger="jarvis.tools.dispatch"):
             _invoke(tool_name="review_spec", payload_json="{}")
-        anchored = [
-            r for r in caplog.records
-            if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()
-        ]
+        anchored = [r for r in caplog.records if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()]
         assert len(anchored) == 1
 
     def test_log_line_contains_required_fields(
@@ -380,8 +375,7 @@ class TestAC007LogLineShape:
                 payload_json='{"a": 1}',
             )
         rendered = next(
-            r.getMessage() for r in caplog.records
-            if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()
+            r.getMessage() for r in caplog.records if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()
         )
         assert rendered.startswith(dispatch.LOG_PREFIX_DISPATCH)
         assert "tool_name=review_spec" in rendered
@@ -423,8 +417,7 @@ class TestAC008StubResponseHook:
             timeout_seconds=30,
         )
         assert result == (
-            "TIMEOUT: agent_id=product-owner tool_name=review_spec "
-            "timeout_seconds=30"
+            "TIMEOUT: agent_id=product-owner tool_name=review_spec timeout_seconds=30"
         )
 
     def test_specialist_error_hook_returns_specialist_error(
@@ -432,16 +425,12 @@ class TestAC008StubResponseHook:
         bound_registry: list[CapabilityDescriptor],
         reset_hook: None,
     ) -> None:
-        dispatch._stub_response_hook = (
-            lambda _cmd: ("specialist_error", "boom")
-        )
+        dispatch._stub_response_hook = lambda _cmd: ("specialist_error", "boom")
         result = _invoke(
             tool_name="review_spec",
             payload_json="{}",
         )
-        assert result == (
-            "ERROR: specialist_error — agent_id=product-owner detail=boom"
-        )
+        assert result == ("ERROR: specialist_error — agent_id=product-owner detail=boom")
 
     def test_success_hook_returns_result_payload_json(
         self,
@@ -492,15 +481,11 @@ class TestAC009Concurrency:
                 t.join()
 
         anchored = [
-            r.getMessage() for r in caplog.records
-            if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()
+            r.getMessage() for r in caplog.records if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()
         ]
         assert len(anchored) == 5
         # Extract correlation_id from each line.
-        cids = [
-            re.search(r"correlation_id=([0-9a-f-]+)", line).group(1)
-            for line in anchored
-        ]
+        cids = [re.search(r"correlation_id=([0-9a-f-]+)", line).group(1) for line in anchored]
         assert len(set(cids)) == 5, (
             f"Concurrent calls must yield distinct correlation_ids; got {cids}"
         )
