@@ -1,0 +1,155 @@
+{
+  "task_id": "TASK-J002-006",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_load_stub_registry.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_load_stub_registry.py ......................                  [100%]\n============================== 22 passed in 0.07s ==============================",
+      "duration_seconds": 0.6893658638000488
+    },
+    "requirements": {
+      "criteria_total": 7,
+      "criteria_met": 7,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/tools/capabilities.py` adds `load_stub_registry(path: Path) -> list[CapabilityDescriptor]`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added the function with signature `def load_stub_registry(path: Path) -> list[CapabilityDescriptor]:` to src/jarvis/tools/capabilities.py and exported it via __all__. TestAC001LoaderSignature asserts the function is exported, in __all__, and has a single `path: Path` parameter (annotation may be the class or the string under `from __future__ import annotations`).",
+      "notes": "Added the function with signature `def load_stub_registry(path: Path) -> list[CapabilityDescriptor]:` to src/jarvis/tools/capabilities.py and exported it via __all__. TestAC001LoaderSignature asserts the function is exported, in __all__, and has a single `path: Path` parameter (annotation may be the class or the string under `from __future__ import annotations`)."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Loads YAML at `path`; validates every entry against `CapabilityDescriptor`; returns list preserving YAML order.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Loader opens path with utf-8 encoding, parses with yaml.safe_load, then constructs each entry via CapabilityDescriptor.model_validate. The list is built with a comprehension that preserves PyYAML's source order. TestAC002LoadAndValidate covers: returns a list of CapabilityDescriptor, preserves a deliberately scrambled order [zebra, apple, mango, banana], round-trips the canonical Phase 2 stub file (architect-agent, product-owner-agent, ideation-agent, forge), nested CapabilityToolSummary coercion, and empty-list handling.",
+      "notes": "Loader opens path with utf-8 encoding, parses with yaml.safe_load, then constructs each entry via CapabilityDescriptor.model_validate. The list is built with a comprehension that preserves PyYAML's source order. TestAC002LoadAndValidate covers: returns a list of CapabilityDescriptor, preserves a deliberately scrambled order [zebra, apple, mango, banana], round-trips the canonical Phase 2 stub file (architect-agent, product-owner-agent, ideation-agent, forge), nested CapabilityToolSummary coercion, and empty-list handling."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Raises `FileNotFoundError` if `path` does not exist (startup-fatal per design \u00a77).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Loader checks `if not path.exists()` first and raises FileNotFoundError with a message containing the path and a `startup-fatal per FEAT-JARVIS-002 design \u00a77` reference. TestAC003MissingFileRaises verifies both that FileNotFoundError is raised on a nonexistent path and that the path is included in the error message.",
+      "notes": "Loader checks `if not path.exists()` first and raises FileNotFoundError with a message containing the path and a `startup-fatal per FEAT-JARVIS-002 design \u00a77` reference. TestAC003MissingFileRaises verifies both that FileNotFoundError is raised on a nonexistent path and that the path is included in the error message."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Raises `pydantic.ValidationError` if any descriptor is malformed (e.g. uppercase `agent_id`).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Loader uses CapabilityDescriptor.model_validate(entry) per entry \u2014 pydantic surfaces ValidationError directly on any failure. TestAC004MalformedEntryRaisesValidationError covers four failure modes: uppercase agent_id ('Architect'), missing required field (no description), unknown risk_level ('catastrophic'), and invalid trust_tier ('rogue'). All raise pydantic.ValidationError.",
+      "notes": "Loader uses CapabilityDescriptor.model_validate(entry) per entry \u2014 pydantic surfaces ValidationError directly on any failure. TestAC004MalformedEntryRaisesValidationError covers four failure modes: uppercase agent_id ('Architect'), missing required field (no description), unknown risk_level ('catastrophic'), and invalid trust_tier ('rogue'). All raise pydantic.ValidationError."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Rejects duplicate `agent_id` entries with a ValueError mentioning the duplicated id.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "After all descriptors are validated, the loader iterates with a `seen: set[str]` and raises `ValueError(f\"Duplicate agent_id {descriptor.agent_id!r} in stub capability registry at {path!s}.\")` on the first repeat. TestAC005DuplicateAgentIdRejected verifies (a) consecutive duplicates raise ValueError with 'twin' in the message, (b) a duplicate split across the middle of the list still triggers a ValueError matching 'first', and (c) malformed entries still raise ValidationError rather than ValueError.",
+      "notes": "After all descriptors are validated, the loader iterates with a `seen: set[str]` and raises `ValueError(f\"Duplicate agent_id {descriptor.agent_id!r} in stub capability registry at {path!s}.\")` on the first repeat. TestAC005DuplicateAgentIdRejected verifies (a) consecutive duplicates raise ValueError with 'twin' in the message, (b) a duplicate split across the middle of the list still triggers a ValueError matching 'first', and (c) malformed entries still raise ValidationError rather than ValueError."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Uses `yaml.safe_load` (never `yaml.load`).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Loader calls `yaml.safe_load(handle)` exactly once with an inline comment citing DM-stub-registry \u00a7Schema. TestAC006UsesSafeLoad verifies (a) yaml.safe_load is invoked once via a wraps-spy, and (b) a static grep over the module source asserts `yaml.load(` (with open paren) does not appear anywhere in capabilities.py.",
+      "notes": "Loader calls `yaml.safe_load(handle)` exactly once with an inline comment citing DM-stub-registry \u00a7Schema. TestAC006UsesSafeLoad verifies (a) yaml.safe_load is invoked once via a wraps-spy, and (b) a static grep over the module source asserts `yaml.load(` (with open paren) does not appear anywhere in capabilities.py."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Verified: `.venv/bin/ruff check src/jarvis/tools/capabilities.py tests/test_load_stub_registry.py` -> 'All checks passed!'; `.venv/bin/ruff format --check ...` -> '2 files already formatted'; `.venv/bin/mypy src/jarvis/tools/capabilities.py` -> 'Success: no issues found in 1 source file'. Full suite: 561 passed, 55 warnings (pre-existing) in 2.70s.",
+      "notes": "Verified: `.venv/bin/ruff check src/jarvis/tools/capabilities.py tests/test_load_stub_registry.py` -> 'All checks passed!'; `.venv/bin/ruff format --check ...` -> '2 files already formatted'; `.venv/bin/mypy src/jarvis/tools/capabilities.py` -> 'Success: no issues found in 1 source file'. Full suite: 561 passed, 55 warnings (pre-existing) in 2.70s."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/tools/capabilities.py` adds `load_stub_registry(path: Path) -> list[CapabilityDescriptor]`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added the function with signature `def load_stub_registry(path: Path) -> list[CapabilityDescriptor]:` to src/jarvis/tools/capabilities.py and exported it via __all__. TestAC001LoaderSignature asserts the function is exported, in __all__, and has a single `path: Path` parameter (annotation may be the class or the string under `from __future__ import annotations`).",
+        "notes": "Added the function with signature `def load_stub_registry(path: Path) -> list[CapabilityDescriptor]:` to src/jarvis/tools/capabilities.py and exported it via __all__. TestAC001LoaderSignature asserts the function is exported, in __all__, and has a single `path: Path` parameter (annotation may be the class or the string under `from __future__ import annotations`)."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Loads YAML at `path`; validates every entry against `CapabilityDescriptor`; returns list preserving YAML order.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Loader opens path with utf-8 encoding, parses with yaml.safe_load, then constructs each entry via CapabilityDescriptor.model_validate. The list is built with a comprehension that preserves PyYAML's source order. TestAC002LoadAndValidate covers: returns a list of CapabilityDescriptor, preserves a deliberately scrambled order [zebra, apple, mango, banana], round-trips the canonical Phase 2 stub file (architect-agent, product-owner-agent, ideation-agent, forge), nested CapabilityToolSummary coercion, and empty-list handling.",
+        "notes": "Loader opens path with utf-8 encoding, parses with yaml.safe_load, then constructs each entry via CapabilityDescriptor.model_validate. The list is built with a comprehension that preserves PyYAML's source order. TestAC002LoadAndValidate covers: returns a list of CapabilityDescriptor, preserves a deliberately scrambled order [zebra, apple, mango, banana], round-trips the canonical Phase 2 stub file (architect-agent, product-owner-agent, ideation-agent, forge), nested CapabilityToolSummary coercion, and empty-list handling."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Raises `FileNotFoundError` if `path` does not exist (startup-fatal per design \u00a77).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Loader checks `if not path.exists()` first and raises FileNotFoundError with a message containing the path and a `startup-fatal per FEAT-JARVIS-002 design \u00a77` reference. TestAC003MissingFileRaises verifies both that FileNotFoundError is raised on a nonexistent path and that the path is included in the error message.",
+        "notes": "Loader checks `if not path.exists()` first and raises FileNotFoundError with a message containing the path and a `startup-fatal per FEAT-JARVIS-002 design \u00a77` reference. TestAC003MissingFileRaises verifies both that FileNotFoundError is raised on a nonexistent path and that the path is included in the error message."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Raises `pydantic.ValidationError` if any descriptor is malformed (e.g. uppercase `agent_id`).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Loader uses CapabilityDescriptor.model_validate(entry) per entry \u2014 pydantic surfaces ValidationError directly on any failure. TestAC004MalformedEntryRaisesValidationError covers four failure modes: uppercase agent_id ('Architect'), missing required field (no description), unknown risk_level ('catastrophic'), and invalid trust_tier ('rogue'). All raise pydantic.ValidationError.",
+        "notes": "Loader uses CapabilityDescriptor.model_validate(entry) per entry \u2014 pydantic surfaces ValidationError directly on any failure. TestAC004MalformedEntryRaisesValidationError covers four failure modes: uppercase agent_id ('Architect'), missing required field (no description), unknown risk_level ('catastrophic'), and invalid trust_tier ('rogue'). All raise pydantic.ValidationError."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Rejects duplicate `agent_id` entries with a ValueError mentioning the duplicated id.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "After all descriptors are validated, the loader iterates with a `seen: set[str]` and raises `ValueError(f\"Duplicate agent_id {descriptor.agent_id!r} in stub capability registry at {path!s}.\")` on the first repeat. TestAC005DuplicateAgentIdRejected verifies (a) consecutive duplicates raise ValueError with 'twin' in the message, (b) a duplicate split across the middle of the list still triggers a ValueError matching 'first', and (c) malformed entries still raise ValidationError rather than ValueError.",
+        "notes": "After all descriptors are validated, the loader iterates with a `seen: set[str]` and raises `ValueError(f\"Duplicate agent_id {descriptor.agent_id!r} in stub capability registry at {path!s}.\")` on the first repeat. TestAC005DuplicateAgentIdRejected verifies (a) consecutive duplicates raise ValueError with 'twin' in the message, (b) a duplicate split across the middle of the list still triggers a ValueError matching 'first', and (c) malformed entries still raise ValidationError rather than ValueError."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Uses `yaml.safe_load` (never `yaml.load`).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Loader calls `yaml.safe_load(handle)` exactly once with an inline comment citing DM-stub-registry \u00a7Schema. TestAC006UsesSafeLoad verifies (a) yaml.safe_load is invoked once via a wraps-spy, and (b) a static grep over the module source asserts `yaml.load(` (with open paren) does not appear anywhere in capabilities.py.",
+        "notes": "Loader calls `yaml.safe_load(handle)` exactly once with an inline comment citing DM-stub-registry \u00a7Schema. TestAC006UsesSafeLoad verifies (a) yaml.safe_load is invoked once via a wraps-spy, and (b) a static grep over the module source asserts `yaml.load(` (with open paren) does not appear anywhere in capabilities.py."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Verified: `.venv/bin/ruff check src/jarvis/tools/capabilities.py tests/test_load_stub_registry.py` -> 'All checks passed!'; `.venv/bin/ruff format --check ...` -> '2 files already formatted'; `.venv/bin/mypy src/jarvis/tools/capabilities.py` -> 'Success: no issues found in 1 source file'. Full suite: 561 passed, 55 warnings (pre-existing) in 2.70s.",
+        "notes": "Verified: `.venv/bin/ruff check src/jarvis/tools/capabilities.py tests/test_load_stub_registry.py` -> 'All checks passed!'; `.venv/bin/ruff format --check ...` -> '2 files already formatted'; `.venv/bin/mypy src/jarvis/tools/capabilities.py` -> 'Success: no issues found in 1 source file'. Full suite: 561 passed, 55 warnings (pre-existing) in 2.70s."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 295 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1233/5200 tokens\n\n### \ud83c\udfa8 Relevant Patterns\n- USES_FUNCTION\n- LOADS_FROM_FILE\n\n### \u26a0\ufe0f Warnings\n- HAS_ROOT_CAUSE\n- HAS_FIX\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE_CONSTRAINT\n- MONITOR_QUALITY_GATES\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_STATE_RECOVERY_STRATEGY\n- HAS_SOURCE\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}
