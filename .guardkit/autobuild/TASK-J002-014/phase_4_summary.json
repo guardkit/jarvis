@@ -1,7 +1,7 @@
 {
-  "tests_run": 789,
+  "tests_run": 821,
   "tests_failed": 0,
   "coverage_pct": 90.0,
-  "output_summary": "789 tests passed (53 in test_tools_queue_build.py); src/jarvis/tools/dispatch.py line coverage 90% via dispatch + queue_build suites.",
+  "output_summary": "821 tests passed (53 in test_tools_queue_build.py); src/jarvis/tools/dispatch.py 90% line coverage; touched modules aggregate 87%.",
   "quality_gates_passed": true
 }

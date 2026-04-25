@@ -1,22 +1,6 @@
 {
   "task_id": "TASK-J002-014",
-  "timestamp": "2026-04-25T16:53:05.835616",
-  "completed": true,
-  "phases": {
-    "phase_3": {
-      "detected": true,
-      "text": "Addressing Coach feedback \u2014 AC-014 lint/format compliance.",
-      "completed": true
-    }
-  },
-  "quality_gates": {
-    "tests_passing": true,
-    "tests_passed": 53,
-    "tests_failed": 0,
-    "coverage": null,
-    "coverage_met": null,
-    "all_passed": true
-  },
+  "turn": 2,
   "files_modified": [
     ".claude/task-plans/TASK-J002-008-implementation-plan.md",
     ".claude/task-plans/TASK-J002-009-implementation-plan.md",
@@ -128,41 +112,32 @@
   "tests_written": [
     "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_tools_queue_build.py"
   ],
-  "summary": "53 tests passed, all quality gates passed",
-  "sdk_turns": {
-    "turns_used": 19,
-    "max_turns": 100,
-    "ceiling_hit": false
-  },
-  "agent_invocations_validation": {
-    "status": "violation",
-    "expected_phases": 3,
-    "actual_invocations": 1,
-    "missing_phases": [
-      "4",
-      "5"
-    ],
-    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 1 completed invocations\n\nMissing phases:\n  - Phase 4 (Testing)\n  - Phase 5 (Code Review)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 3 (Phase 3): Addressing Coach feedback \u2014 AC-014 lint/format compliance. (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
-  },
-  "plan_audit": {
-    "status": "skipped",
-    "severity": null,
-    "violations": 0,
-    "extra_files": [],
-    "missing_files": [],
-    "extra_dependencies": [],
-    "missing_dependencies": [],
-    "loc_variance_pct": null,
-    "discrepancies_count": 0,
-    "message": "no implementation plan on disk"
-  },
-  "unconfirmed_low_confidence_assumptions": {
-    "status": "ok",
-    "unconfirmed": [],
-    "files_scanned": 0,
-    "files_skipped": 0,
-    "message": null
-  },
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: queue_build signature with @tool(parse_docstring=True)",
+    "AC-002: docstring matches API-tools.md \u00a73.2",
+    "AC-003: feature_id pattern validation",
+    "AC-004: repo pattern validation",
+    "AC-005: originating_adapter allowlist",
+    "AC-006: real BuildQueuedPayload construction with provenance + timestamps",
+    "AC-007: real MessageEnvelope construction",
+    "AC-008: single logger.info call with LOG_PREFIX_QUEUE_BUILD-prefixed message",
+    "AC-009: QueueBuildAck JSON return shape",
+    "AC-010: subject via Topics.Pipeline.BUILD_QUEUED.format(...)",
+    "AC-011: pydantic ValidationError caught at tool boundary",
+    "AC-012: never raises",
+    "AC-013: seam test \u2014 round-trip through BuildQueuedPayload.model_validate_json",
+    "AC-014: project-configured lint/format checks pass with zero errors (ruff check + ruff format --check both clean)"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 19,
+  "sdk_max_turns": 100,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 53,
   "completion_promises": [
     {
       "criterion_id": "AC-001",
