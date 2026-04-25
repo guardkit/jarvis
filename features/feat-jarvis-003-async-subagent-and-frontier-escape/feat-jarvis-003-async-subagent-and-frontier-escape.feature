@@ -35,6 +35,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # ---------------------------------------------------------------------------
 
   # Why: Core path — one AsyncSubAgent named jarvis-reasoner is registered (DDR-010, ADR-ARCH-011)
+  @task:TASK-J003-009
   @key-example @smoke
   Scenario: A single jarvis-reasoner async subagent is registered at startup
     When the subagent registry is built from the configuration
@@ -44,6 +45,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And its description names the local model, names the three role modes, states no cloud cost, and warns against use for arithmetic, lookups, and file reads
 
   # Why: Description is the contract with the reasoning model — must carry cost + latency signals
+  @task:TASK-J003-009
   @key-example @smoke
   Scenario: The jarvis-reasoner description carries cost and latency signals the reasoning model can read
     When the supervisor receives the subagent catalogue
@@ -52,6 +54,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the description warns that a cold swap can take two to four minutes and the supervisor will emit a voice acknowledgement if so
 
   # Why: Role-dispatch happy path for CRITIC — the canonical adversarial use-case
+  @task:TASK-J003-008
   @key-example @smoke
   Scenario: Dispatching to the critic role launches an async task and returns a task identifier
     Given the reasoning model wants an adversarial review of an architecture document
@@ -61,6 +64,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the task runs against the local jarvis-reasoner alias
 
   # Why: Role-dispatch happy path for RESEARCHER
+  @task:TASK-J003-008
   @key-example @smoke
   Scenario: Dispatching to the researcher role uses the open-ended research posture
     Given the reasoning model wants open-ended research on a topic
@@ -69,6 +73,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the subagent graph resolves the system prompt for the researcher role
 
   # Why: Role-dispatch happy path for PLANNER
+  @task:TASK-J003-008
   @key-example @smoke
   Scenario: Dispatching to the planner role uses the multi-step planning posture
     Given the reasoning model wants a multi-step plan
@@ -77,6 +82,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the subagent graph resolves the system prompt for the planner role
 
   # Why: Role prompts must exist for every member of the closed RoleName enum (DDR-011)
+  @task:TASK-J003-005
   @key-example
   Scenario: The role prompt registry covers every member of the role enum
     When the role prompt registry is inspected
@@ -86,12 +92,14 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And no extra members are present beyond the closed enum
 
   # Why: AsyncSubAgentMiddleware injects the five operational tools — supervisor sees them
+  @task:TASK-J003-012
   @key-example @smoke
   Scenario: Wiring the async subagent injects the five middleware operational tools
     When the supervisor is built with the jarvis-reasoner async subagent
     Then the supervisor's tool catalogue includes start_async_task, check_async_task, update_async_task, cancel_async_task, and list_async_tasks
 
   # Why: Attended escalation happy path — Rich asks Jarvis to ask Gemini
+  @task:TASK-J003-010
   @key-example @smoke
   Scenario: An attended session can escalate to the default frontier model
     Given the active session is on an attended adapter
@@ -101,6 +109,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the invocation is recorded as a frontier escalation event
 
   # Why: Supervisor prompt teaches both new sections — design.md §10
+  @task:TASK-J003-014
   @key-example
   Scenario: The supervisor system prompt teaches subagent routing and frontier escalation
     When the supervisor system prompt is rendered for a new session
@@ -108,6 +117,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And it includes a Frontier Escalation section that states cloud escalation is only available when Rich asks for it explicitly
 
   # Why: Repo-root langgraph.json declares both graphs with ASGI transport (DDR-013)
+  @task:TASK-J003-016
   @key-example
   Scenario: The repo-root langgraph manifest declares both graphs with ASGI transport
     When the langgraph manifest at the repo root is loaded
@@ -120,6 +130,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # ---------------------------------------------------------------------------
 
   # Why: Role enum is a closed set — only the three members are accepted (DDR-011)
+  @task:TASK-J003-002
   @boundary
   Scenario Outline: The jarvis-reasoner subagent accepts only the three documented role values
     Given the supervisor wants to dispatch to jarvis-reasoner
@@ -135,6 +146,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # Why: Just-outside boundary — anything not in the enum is rejected via structured error
   # [ASSUMPTION: confidence=low] An empty-string role value is treated as unknown_role (not missing_field);
   # RoleName("") raises at enum lookup and the subagent maps that to the unknown_role path
+  @task:TASK-J003-008
   @boundary @negative
   Scenario Outline: Unknown role values are rejected with a structured error
     When the supervisor starts an async task targeting jarvis-reasoner with role <role> and a non-empty prompt
@@ -149,6 +161,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
       | ""             |
 
   # Why: Swap ETA boundary drives ADR-ARCH-012 voice-ack policy
+  @task:TASK-J003-019
   @boundary
   Scenario Outline: Swap status above the voice-ack threshold triggers the supervisor TTS acknowledgement
     Given the active session is on a voice-reactive adapter
@@ -166,6 +179,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # Why: Frontier targets are a closed set — additions require a DDR
   # [ASSUMPTION: confidence=medium] A FrontierTarget value outside the enum is rejected at
   # tool-boundary type validation before any provider is contacted
+  @task:TASK-J003-002
   @boundary
   Scenario Outline: Only documented frontier targets are accepted
     Given the active session is on an attended adapter
@@ -179,12 +193,14 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
       | a value not in the FrontierTarget enum | the call is rejected before any provider is contacted |
 
   # Why: prompt is a required, non-empty field on AsyncTaskInput
+  @task:TASK-J003-003
   @boundary @negative
   Scenario: An async task with an empty prompt is rejected with a missing-field error
     When the supervisor starts an async task targeting jarvis-reasoner with role critic and an empty prompt
     Then the subagent reports an error indicating the prompt field is required
 
   # Why: SwapStatus.eta_seconds invariant: zero means ready, negative is illegal
+  @task:TASK-J003-003
   @boundary
   Scenario Outline: Swap status enforces a non-negative ETA
     When the llama-swap adapter is asked to construct a swap status with eta_seconds <value>
@@ -201,6 +217,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # ---------------------------------------------------------------------------
 
   # Why: Layer 2 of DDR-014 belt+braces — executor assertion on adapter
+  @task:TASK-J003-011
   @negative @smoke
   Scenario: An ambient session is rejected if it somehow invokes escalate_to_frontier
     Given the active session is on an ambient adapter
@@ -209,6 +226,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the error names the offending adapter
 
   # Why: Layer 2 again — executor assertion on async-subagent caller frame
+  @task:TASK-J003-011
   @negative
   Scenario: A call from an async subagent frame is rejected as attended-only
     Given an async subagent invocation is in progress
@@ -217,6 +235,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the error names the async-subagent caller frame
 
   # Why: Layer 3 of DDR-014 — registration absence is the third brace
+  @task:TASK-J003-012
   @negative @smoke
   Scenario: escalate_to_frontier is not present in the ambient tool list at all
     When the ambient tool list is assembled
@@ -224,6 +243,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the assembled list still contains all FEAT-JARVIS-002 tools
 
   # Why: Provider key absence — graceful structured error per ADR-ARCH-021
+  @task:TASK-J003-010
   @negative
   Scenario: Escalating to Gemini without a configured Google API key returns a configuration error
     Given the active session is on an attended adapter
@@ -233,6 +253,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And no outbound request is made to the provider
 
   # Why: Provider key absence for the alternate target
+  @task:TASK-J003-010
   @negative
   Scenario: Escalating to Opus without a configured Anthropic API key returns a configuration error
     Given the active session is on an attended adapter
@@ -242,6 +263,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And no outbound request is made to the provider
 
   # Why: Provider availability — degraded outcome surfaces as DEGRADED prefix
+  @task:TASK-J003-010
   @negative
   Scenario: Frontier provider unavailability returns a degraded result without raising
     Given the active session is on an attended adapter
@@ -251,6 +273,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And no exception propagates to the supervisor
 
   # Why: Subagent never raises — model unavailability is structured per ADR-ARCH-021
+  @task:TASK-J003-007
   @negative
   Scenario: A missing llama-swap alias surfaces as a structured model-unavailable error
     Given the llama-swap alias for jarvis-reasoner cannot be resolved
@@ -259,6 +282,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the error mentions checking the llama-swap running endpoint
 
   # Why: Subagent timeout is a structured TIMEOUT, not an exception
+  @task:TASK-J003-003
   @negative
   Scenario: An async task that exceeds its timeout returns a structured timeout result
     Given an async task targeting jarvis-reasoner is running past the configured timeout
@@ -267,12 +291,14 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the result identifies the affected task
 
   # Why: Subagent input requires both prompt and role — missing role is rejected
+  @task:TASK-J003-003
   @negative
   Scenario: An async task missing the role field is rejected with a structured error
     When the supervisor starts an async task targeting jarvis-reasoner with a non-empty prompt and no role
     Then the subagent reports an error indicating a required field is missing
 
   # Why: Subagent factory must not silently expand its roster — guard against accidental DDR-010 regression
+  @task:TASK-J003-009
   @negative
   Scenario: Adding an unsanctioned subagent does not silently appear in the registry
     When the subagent registry is built from the configuration
@@ -286,6 +312,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # ---------------------------------------------------------------------------
 
   # Why: Acceptance test for FEAT-JARVIS-003 — seven canned routing decisions
+  @task:TASK-J003-023
   @edge-case @smoke
   Scenario Outline: The supervisor routes the seven canned acceptance prompts to the expected tools
     Given the supervisor has been built with all FEAT-JARVIS-002 tools, the jarvis-reasoner subagent, and the attended tool list including escalate_to_frontier
@@ -304,6 +331,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
       | "Build FEAT-JARVIS-EXAMPLE-001 on the jarvis repo."      | queue_build                                                     |
 
   # Why: Backwards-compatibility guarantee — Phase 1 + FEAT-002 callers still work
+  @task:TASK-J003-013
   @edge-case
   Scenario: Building the supervisor without async subagents preserves existing behaviour
     When the supervisor is built without the async-subagents argument
@@ -311,12 +339,14 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the supervisor's tool catalogue does not include the five middleware operational tools
 
   # Why: ambient_tool_factory default — design.md §8 — falls back to attended list minus frontier
+  @task:TASK-J003-015
   @edge-case
   Scenario: Not configuring an ambient tool factory falls back to the attended tools without frontier
     When the supervisor is built with an attended tool list and no ambient tool factory
     Then ambient and learning paths see the attended tool list with escalate_to_frontier removed
 
   # Why: Multiple roles in flight at once — middleware should handle parallel tasks
+  @task:TASK-J003-022
   @edge-case
   Scenario: Two different role-mode tasks can run in parallel without collision
     Given an async task targeting jarvis-reasoner with role critic is running
@@ -326,6 +356,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And neither task overwrites the other's state
 
   # Why: Voice ack on cold swap — exercised on the voice-reactive adapter
+  @task:TASK-J003-019
   @edge-case @smoke
   Scenario: A voice-reactive session above the swap-ETA threshold receives a TTS acknowledgement and the request is queued
     Given the active session is on a voice-reactive adapter
@@ -335,12 +366,14 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the request is queued for dispatch once the swap completes
 
   # Why: Swap status source defaults to stub in Phase 2 — guard against accidental live-wiring
+  @task:TASK-J003-007
   @edge-case
   Scenario: The llama-swap adapter reports a stub source in Phase 2
     When the llama-swap adapter is asked for the current status of any alias
     Then the returned status is marked as coming from the stub source
 
   # Why: Subagent graph compiles at module import — DDR-012
+  @task:TASK-J003-008
   @edge-case
   Scenario: Importing the jarvis-reasoner subagent module compiles its graph
     When the jarvis-reasoner subagent module is imported in a fresh process
@@ -348,6 +381,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And no LLM network call has been made
 
   # Why: Frontier escalation log shape feeds FEAT-JARVIS-004 trace ingestion
+  @task:TASK-J003-004
   @edge-case
   Scenario: A successful frontier escalation logs a structured event with target, session, correlation, adapter, instruction length, and outcome
     Given the active session is on an attended adapter with a known correlation id
@@ -357,6 +391,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the log entry never contains the instruction body
 
   # Why: Description-text invariant guards routing-behaviour regressions
+  @task:TASK-J003-020
   @edge-case @regression
   Scenario: The jarvis-reasoner description does not mention the retired four-subagent roster
     When the subagent description is inspected
@@ -364,6 +399,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And it does not promise cloud-tier reasoning
 
   # Why: Subagent never has further tools — leaf, per design.md §8 and DDR-010
+  @task:TASK-J003-008
   @edge-case
   Scenario: The jarvis-reasoner subagent graph carries no tools of its own
     When the jarvis-reasoner compiled graph is inspected
@@ -376,6 +412,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
 
   # Why: DDR-014 Layer 2 explicit spoof case — attended-session reasoning that tries to
   # call escalate_to_frontier from inside an async-subagent frame must still be rejected
+  @task:TASK-J003-011
   @edge-case @negative @security
   Scenario: A spoofed-ambient invocation from inside an attended session is rejected
     Given the active session is on an attended adapter
@@ -386,6 +423,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And no outbound request is made to any frontier provider
 
   # Why: ADR-ARCH-023 — permissions are constitutional; reasoning cannot mutate them
+  @task:TASK-J003-012
   @edge-case @negative @security
   Scenario: The reasoning model cannot add escalate_to_frontier to the ambient tool list at runtime
     Given the supervisor has been built with attended and ambient tool lists in place
@@ -398,6 +436,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # [ASSUMPTION: confidence=medium] The attended-only error return string does not echo
   # the instruction body — consistent with ADR-ARCH-029 redaction posture applied to
   # structured error strings as well as log fields
+  @task:TASK-J003-011
   @edge-case @negative @security
   Scenario: A prompt-injection instruction does not bypass the attended-only gate
     Given the active session is on an ambient adapter
@@ -410,6 +449,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # to reach a clean cancelled status without hanging
   # [ASSUMPTION: confidence=medium] A cancelled async task surfaces via check_async_task
   # with status cancelled (distinct from complete / running / error)
+  @task:TASK-J003-017
   @edge-case @concurrency
   Scenario: Cancelling a running jarvis-reasoner task transitions it cleanly to a cancelled status
     Given an async task targeting jarvis-reasoner with role researcher is running
@@ -421,6 +461,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # Why: Defensive — checking an unknown task identifier must not raise per ADR-ARCH-021
   # [ASSUMPTION: confidence=medium] An unknown task_id returns a structured no-such-task
   # result rather than raising or silently returning empty
+  @task:TASK-J003-017
   @edge-case @negative
   Scenario: Checking an unknown task identifier returns a structured no-such-task result
     When the supervisor checks the status of a task identifier that was never started
@@ -428,6 +469,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And no exception propagates to the supervisor
 
   # Why: correlation_id is the trace-richness invariant FEAT-JARVIS-004 depends on
+  @task:TASK-J003-022
   @edge-case @integrity
   Scenario: The session correlation identifier propagates from input through to check-task results
     Given the active session has a known correlation identifier
@@ -438,6 +480,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
   # Why: Empty response from the frontier provider is a degraded outcome, not silent success
   # [ASSUMPTION: confidence=medium] An empty body from the frontier provider is mapped to
   # the DEGRADED: provider_unavailable family rather than an ERROR or silent success
+  @task:TASK-J003-010
   @edge-case @negative @integration
   Scenario: An empty frontier response is reported as a degraded outcome
     Given the active session is on an attended adapter
@@ -447,6 +490,7 @@ Feature: Async Subagent for Model Routing + Attended Frontier Escape
     And the structured frontier-escalation log entry records the degraded outcome
 
   # Why: Swap-adapter idempotency — repeated reads stay consistent and never accumulate state
+  @task:TASK-J003-019
   @edge-case @integration
   Scenario: Repeated swap-status reads for the same alias return consistent results
     Given the llama-swap adapter is configured with a stubbed status for jarvis-reasoner
