@@ -53,9 +53,16 @@ DOMAIN_PACKAGES = [
 ]
 
 # Reserved-empty packages — adapter/tool layer that domain must not import
+#
+# ``jarvis.tools`` is no longer reserved-empty after FEAT-JARVIS-002:
+# TASK-J002-015 populates ``jarvis.tools.__init__`` with the public
+# tool surface. Domain modules CAN import the package (they need
+# ``assemble_tool_list``, ``load_stub_registry``, etc.) but MUST NOT
+# import the implementation submodules ``general`` / ``capabilities`` /
+# ``dispatch``. That stricter discipline is enforced by
+# :class:`tests.test_assemble_tool_list.TestAC005NoSubmoduleImports`.
 RESERVED_PACKAGES = [
     "jarvis.adapters",
-    "jarvis.tools",
     "jarvis.subagents",
     "jarvis.skills",
     "jarvis.routing",
