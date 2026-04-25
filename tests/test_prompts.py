@@ -53,16 +53,19 @@ class TestAC001SupervisorPromptImportable:
         assert "{domain_prompt}" in SUPERVISOR_SYSTEM_PROMPT
 
     def test_prompt_format_resolves_without_error(self) -> None:
-        """str.format() with both placeholders does not raise KeyError."""
+        """str.format() with all three placeholders does not raise KeyError."""
         from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 
         result = SUPERVISOR_SYSTEM_PROMPT.format(
             date="2026-04-21",
+            available_capabilities="No capabilities currently registered.",
             domain_prompt="Test domain guidelines.",
         )
         assert "2026-04-21" in result
+        assert "No capabilities currently registered." in result
         assert "Test domain guidelines." in result
         assert "{date}" not in result
+        assert "{available_capabilities}" not in result
         assert "{domain_prompt}" not in result
 
     def test_prompt_mentions_jarvis(self) -> None:
@@ -124,9 +127,13 @@ class TestAC003FakeLlm:
 class TestAC005ScopeInvariant:
     """No mention of tools or subagent names that do not exist yet."""
 
+    # FEAT-JARVIS-002 brings ``queue_build`` and ``dispatch_by_capability`` into
+    # scope (design §10), so they are *not* forbidden any more.  The terms below
+    # remain forbidden — they belong to FEAT-JARVIS-003 (subagent routing) and
+    # FEAT-JARVIS-007 (skills) and have not yet landed.
     FORBIDDEN_TERMS: ClassVar[list[str]] = [
         "call_specialist",
-        "queue_build",
+        "start_async_task",
         "morning-briefing",
         "morning_briefing",
         "talk_prep",

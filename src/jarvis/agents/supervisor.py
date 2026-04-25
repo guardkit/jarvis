@@ -36,6 +36,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _PHASE1_DOMAIN_PROMPT = "No domain-specific instructions configured (Phase 1)."
 
+# ---------------------------------------------------------------------------
+# Default capability-catalogue text injected when no registry is wired.
+# TASK-J002-017 will replace this with rendered ``CapabilityDescriptor``
+# blocks; until then ``build_supervisor`` ships the safe fallback so the
+# ``{available_capabilities}`` placeholder added in TASK-J002-016 resolves.
+# ---------------------------------------------------------------------------
+_DEFAULT_AVAILABLE_CAPABILITIES = "No capabilities currently registered."
+
 
 def build_supervisor(config: JarvisConfig) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Compose and return the Jarvis supervisor compiled graph.
@@ -82,6 +90,7 @@ def build_supervisor(config: JarvisConfig) -> CompiledStateGraph[Any, Any, Any, 
     # 2. Format system prompt with runtime context.
     system_prompt = SUPERVISOR_SYSTEM_PROMPT.format(
         date=datetime.date.today().isoformat(),
+        available_capabilities=_DEFAULT_AVAILABLE_CAPABILITIES,
         domain_prompt=_PHASE1_DOMAIN_PROMPT,
     )
 

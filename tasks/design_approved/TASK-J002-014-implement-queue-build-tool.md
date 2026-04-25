@@ -1,25 +1,82 @@
 ---
-id: TASK-J002-014
-title: Implement queue_build tool
-task_type: feature
-status: blocked
-created: 2026-04-24 06:55:00+00:00
-updated: 2026-04-24 06:55:00+00:00
-priority: high
+autobuild_state:
+  base_branch: main
+  current_turn: 3
+  last_updated: '2026-04-24T21:24:45.621326'
+  max_turns: 30
+  started_at: '2026-04-24T20:51:44.452060'
+  turns:
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T20:51:44.452060'
+    turn: 1
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T21:16:53.773517'
+    turn: 2
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T21:20:56.195739'
+    turn: 3
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
 complexity: 6
-wave: 2
-implementation_mode: task-work
-estimated_minutes: 90
+consumer_context:
+- consumes: new_correlation_id
+  driver: stdlib
+  format_note: new_correlation_id() -> str returning str(uuid.uuid4()); result matches
+    ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$; no shared
+    state; safe under concurrent invocation (ASSUM-001).
+  framework: stdlib uuid.uuid4
+  task: TASK-J002-005
+- consumes: _stub_response_hook + LOG_PREFIX constants
+  driver: stdlib logging + nats_core.events models
+  format_note: '_stub_response_hook: Callable[[CommandPayload], StubResponse] | None
+    = None; module-level LOG_PREFIX_DISPATCH=''JARVIS_DISPATCH_STUB'' and LOG_PREFIX_QUEUE_BUILD=''JARVIS_QUEUE_BUILD_STUB''
+    are the grep anchors. grep -rn must return exactly 4 lines (2 constants + 2 logger.info
+    usages) post-Wave-3.'
+  framework: DDR-009 swap-point discipline
+  task: TASK-J002-007
+created: 2026-04-24 06:55:00+00:00
 dependencies:
 - TASK-J002-004
 - TASK-J002-005
 - TASK-J002-007
-parent_review: TASK-REV-J002
+estimated_minutes: 90
 feature_id: FEAT-J002
-tags:
-- phase-2
-- jarvis
-- feat-jarvis-002
+id: TASK-J002-014
+implementation_mode: task-work
+parent_review: TASK-REV-J002
+priority: high
 scenarios_covered:
 - Queueing a build for a planned feature returns an acknowledgement
 - queue_build validates feature_id against the documented pattern
@@ -27,80 +84,24 @@ scenarios_covered:
 - queue_build restricts originating_adapter to the documented values
 - Stubbed queue_build constructs a real BuildQueuedPayload before logging
 - Every tool converts internal errors into structured strings rather than raising
-consumer_context:
-- task: TASK-J002-005
-  consumes: new_correlation_id
-  framework: stdlib uuid.uuid4
-  driver: stdlib
-  format_note: new_correlation_id() -> str returning str(uuid.uuid4()); result matches
-    ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$; no shared
-    state; safe under concurrent invocation (ASSUM-001).
-- task: TASK-J002-007
-  consumes: _stub_response_hook + LOG_PREFIX constants
-  framework: DDR-009 swap-point discipline
-  driver: stdlib logging + nats_core.events models
-  format_note: '_stub_response_hook: Callable[[CommandPayload], StubResponse] | None
-    = None; module-level LOG_PREFIX_DISPATCH=''JARVIS_DISPATCH_STUB'' and LOG_PREFIX_QUEUE_BUILD=''JARVIS_QUEUE_BUILD_STUB''
-    are the grep anchors. grep -rn must return exactly 4 lines (2 constants + 2 logger.info
-    usages) post-Wave-3.'
+status: design_approved
 swap_point_note: '**PRIMARY DDR-009 SWAP POINT.** Grep anchor: `JARVIS_QUEUE_BUILD_STUB`.
   FEAT-JARVIS-005 replaces the `logger.info` call with `await js.publish(subject=Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id),
   payload=envelope.model_dump_json().encode())`. Tool docstring and return shape untouched.'
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-autobuild_state:
-  current_turn: 3
-  max_turns: 30
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
-  base_branch: main
-  started_at: '2026-04-24T20:51:44.452060'
-  last_updated: '2026-04-24T21:24:45.621326'
-  turns:
-  - turn: 1
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T20:51:44.452060'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
-  - turn: 2
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T21:16:53.773517'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
-  - turn: 3
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T21:20:56.195739'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+  status: pending
+title: Implement queue_build tool
+updated: 2026-04-24 06:55:00+00:00
+wave: 2
 ---
+
 # Implement queue_build tool
 
 **Feature:** FEAT-JARVIS-002 "Core Tools & Capability-Driven Dispatch Tools"

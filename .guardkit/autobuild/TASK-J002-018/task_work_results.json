@@ -1,0 +1,81 @@
+{
+  "task_id": "TASK-J002-018",
+  "timestamp": "2026-04-25T16:30:38.860850",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [],
+  "files_created": [
+    "tests/test_tools_types.py"
+  ],
+  "tests_written": [
+    "tests/test_tools_types.py"
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `tests/test_tools_types.py` added with at least 12 tests covering Pydantic validation for CapabilityDescriptor (valid + invalid agent_id pattern + unknown risk_level), CapabilityToolSummary, WebResult (score bounds), CalendarEvent (end>=start validator), DispatchError (category literal).",
+      "status": "complete",
+      "evidence": "tests/test_tools_types.py created with 35 collected tests (>= 12 minimum). TestCapabilityDescriptorValidation parametrises 6 invalid agent_id values (leading digit, leading hyphen, uppercase, underscore, dot, whitespace) plus a valid construction case and an invalid trust_tier case. TestCapabilityToolSummaryValidation includes valid construction, unknown risk_level rejection ('catastrophic'), and empty tool_name rejection. TestWebResultBounds parametrises score bounds (out-of-range -0.0001/-1.0/1.0001/5.0 rejected; 0.0/0.5/1.0 accepted) and rejects empty url. TestCalendarEventValidator covers end<start rejection, end==start acceptance, and end>start acceptance. TestDispatchErrorCategoryLiteral parametrises all six canonical category Literals plus rejects an unknown 'not_a_category' value. All 35 tests pass.",
+      "test_file": "tests/test_tools_types.py",
+      "implementation_files": [
+        "src/jarvis/tools/types.py",
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] `as_prompt_block` byte-equal assertion against DM-tool-types.md \u00a7\"Prompt-block shape\" example.",
+      "status": "complete",
+      "evidence": "TestAsPromptBlockByteEqual.test_as_prompt_block_byte_equal_to_dm_tool_types_example constructs the architect-agent CapabilityDescriptor with the exact role, description (with embedded newline), cost_signal='moderate', latency_signal='5-30s', trust_tier='specialist', and the two CapabilityToolSummary instances (run_architecture_session/read_only and draft_adr/mutating) from DM-tool-types.md \u00a7'Prompt-block shape'. Asserts as_prompt_block() == expected where expected is the verbatim block from the design doc (header line, blank line, multi-line description, blank line, 'Tools:' header, two indented tool lines with 4-space continuation indent for the embedded newline). A companion test_as_prompt_block_invocation_is_deterministic verifies repeat calls return identical strings.",
+      "test_file": "tests/test_tools_types.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] All tests use `pytest` + `unittest.mock` per .claude/CLAUDE.md rules.",
+      "status": "complete",
+      "evidence": "Test file imports pytest and pydantic.ValidationError plus unittest.mock.patch and unittest.mock.MagicMock. TestPromptBlockMockInteractions exercises the pairing: test_as_prompt_block_called_once_per_descriptor uses patch.object(..., autospec=True) to mock the bound method and assert call shape, and test_double_newline_join_pattern_with_mocked_blocks uses MagicMock(spec=CapabilityDescriptor) to verify the join pattern that the supervisor prompt uses to fill {available_capabilities}. Tests are collected and run with pytest; all 35 pass.",
+      "test_file": "tests/test_tools_types.py",
+      "implementation_files": []
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] No tests require network or filesystem beyond `tmp_path`.",
+      "status": "complete",
+      "evidence": "All 35 tests are pure Pydantic-model construction / method-call / mock assertions. No socket, urllib, requests, httpx, open(), pathlib, or subprocess usage in the file. The autouse _isolate_dotenv fixture in tests/conftest.py already chdirs each test into tmp_path; no test in this file relies on that beyond default isolation. Test suite runs in 0.08s with no external dependencies.",
+      "test_file": "tests/test_tools_types.py",
+      "implementation_files": []
+    }
+  ]
+}

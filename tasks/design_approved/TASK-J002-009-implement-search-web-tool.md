@@ -1,24 +1,65 @@
 ---
-id: TASK-J002-009
-title: Implement search_web tool
-task_type: feature
-status: blocked
-created: 2026-04-24 06:55:00+00:00
-updated: 2026-04-24 06:55:00+00:00
-priority: high
+autobuild_state:
+  base_branch: main
+  current_turn: 3
+  last_updated: '2026-04-24T21:19:33.851076'
+  max_turns: 30
+  started_at: '2026-04-24T20:51:44.411669'
+  turns:
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T20:51:44.411669'
+    turn: 1
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T21:10:33.420716'
+    turn: 2
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T21:16:25.720888'
+    turn: 3
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
 complexity: 5
-wave: 2
-implementation_mode: task-work
-estimated_minutes: 75
+created: 2026-04-24 06:55:00+00:00
 dependencies:
 - TASK-J002-001
 - TASK-J002-004
-parent_review: TASK-REV-J002
+estimated_minutes: 75
 feature_id: FEAT-J002
-tags:
-- phase-2
-- jarvis
-- feat-jarvis-002
+id: TASK-J002-009
+implementation_mode: task-work
+parent_review: TASK-REV-J002
+priority: high
 scenarios_covered:
 - Searching the web with a configured provider returns result summaries
 - search_web accepts max_results only within its documented range
@@ -28,63 +69,23 @@ scenarios_covered:
   on it
 - search_web surfaces provider unavailability as a DEGRADED result
 - Every tool converts internal errors into structured strings rather than raising
+status: design_approved
 swap_point_note: 'Provider abstraction grep anchor: `class TavilyProvider`. A future
   FEAT can swap providers without docstring change per DDR-006.'
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-autobuild_state:
-  current_turn: 3
-  max_turns: 30
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
-  base_branch: main
-  started_at: '2026-04-24T20:51:44.411669'
-  last_updated: '2026-04-24T21:19:33.851076'
-  turns:
-  - turn: 1
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T20:51:44.411669'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
-  - turn: 2
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T21:10:33.420716'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
-  - turn: 3
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T21:16:25.720888'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+  status: pending
+title: Implement search_web tool
+updated: 2026-04-24 06:55:00+00:00
+wave: 2
 ---
+
 # Implement search_web tool
 
 **Feature:** FEAT-JARVIS-002 "Core Tools & Capability-Driven Dispatch Tools"

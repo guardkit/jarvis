@@ -1,78 +1,79 @@
 ---
-id: TASK-J002-011
-title: Implement calculate tool
-task_type: feature
-status: in_review
-created: 2026-04-24 06:55:00+00:00
-updated: 2026-04-24 06:55:00+00:00
-priority: high
+autobuild_state:
+  base_branch: main
+  current_turn: 3
+  last_updated: '2026-04-24T21:16:28.071417'
+  max_turns: 30
+  started_at: '2026-04-24T20:51:44.449705'
+  turns:
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T20:51:44.449705'
+    turn: 1
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T21:07:05.971515'
+    turn: 2
+  - coach_success: true
+    decision: approve
+    feedback: null
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T21:12:38.535339'
+    turn: 3
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
 complexity: 4
-wave: 2
-implementation_mode: task-work
-estimated_minutes: 60
+created: 2026-04-24 06:55:00+00:00
 dependencies:
 - TASK-J002-004
-parent_review: TASK-REV-J002
+estimated_minutes: 60
 feature_id: FEAT-J002
-tags:
-- phase-2
-- jarvis
-- feat-jarvis-002
+id: TASK-J002-011
+implementation_mode: task-work
+parent_review: TASK-REV-J002
+priority: high
 scenarios_covered:
 - Evaluating a supported arithmetic expression returns a numeric result
 - Calculating an expression that divides by zero returns a structured error
 - Calculating an expression that exceeds the float range returns an overflow error
 - Calculator rejects expressions containing unsafe tokens
 - Every tool converts internal errors into structured strings rather than raising
+status: design_approved
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-autobuild_state:
-  current_turn: 3
-  max_turns: 30
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
-  base_branch: main
-  started_at: '2026-04-24T20:51:44.449705'
-  last_updated: '2026-04-24T21:16:28.071417'
-  turns:
-  - turn: 1
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T20:51:44.449705'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
-  - turn: 2
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T21:07:05.971515'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
-  - turn: 3
-    decision: approve
-    feedback: null
-    timestamp: '2026-04-24T21:12:38.535339'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+  status: pending
+title: Implement calculate tool
+updated: 2026-04-24 06:55:00+00:00
+wave: 2
 ---
+
 # Implement calculate tool
 
 **Feature:** FEAT-JARVIS-002 "Core Tools & Capability-Driven Dispatch Tools"

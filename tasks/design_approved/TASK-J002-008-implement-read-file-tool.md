@@ -1,24 +1,65 @@
 ---
-id: TASK-J002-008
-title: Implement read_file tool
-task_type: feature
-status: blocked
-created: 2026-04-24 06:55:00+00:00
-updated: 2026-04-24 06:55:00+00:00
-priority: high
+autobuild_state:
+  base_branch: main
+  current_turn: 3
+  last_updated: '2026-04-24T21:24:11.379593'
+  max_turns: 30
+  started_at: '2026-04-24T20:51:44.457832'
+  turns:
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T20:51:44.457832'
+    turn: 1
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 3 (Implementation), 5 (Code Review). Invoke these agents via
+      the Task tool before re-emitting the report:
+
+      - Phase 3: `the stack-specific Phase-3 specialist` (Implementation)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T21:11:08.167628'
+    turn: 2
+  - coach_success: true
+    decision: feedback
+    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
+      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
+      tool before re-emitting the report:
+
+      - Phase 4: `test-orchestrator` (Testing)
+
+      - Phase 5: `code-reviewer` (Code Review)'
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-24T21:19:15.567814'
+    turn: 3
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
 complexity: 4
-wave: 2
-implementation_mode: task-work
-estimated_minutes: 60
+created: 2026-04-24 06:55:00+00:00
 dependencies:
 - TASK-J002-001
 - TASK-J002-004
-parent_review: TASK-REV-J002
+estimated_minutes: 60
 feature_id: FEAT-J002
-tags:
-- phase-2
-- jarvis
-- feat-jarvis-002
+id: TASK-J002-008
+implementation_mode: task-work
+parent_review: TASK-REV-J002
+priority: high
 scenarios_covered:
 - Reading a UTF-8 text file inside the workspace returns its contents
 - read_file enforces the one megabyte file size limit
@@ -28,61 +69,21 @@ scenarios_covered:
 - Reading a file with invalid UTF-8 bytes returns an encoding error
 - read_file rejects paths that evade the workspace guard
 - Every tool converts internal errors into structured strings rather than raising
+status: design_approved
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-autobuild_state:
-  current_turn: 3
-  max_turns: 30
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
-  base_branch: main
-  started_at: '2026-04-24T20:51:44.457832'
-  last_updated: '2026-04-24T21:24:11.379593'
-  turns:
-  - turn: 1
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T20:51:44.457832'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
-  - turn: 2
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 3 (Implementation), 5 (Code Review). Invoke these agents via
-      the Task tool before re-emitting the report:
-
-      - Phase 3: `the stack-specific Phase-3 specialist` (Implementation)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T21:11:08.167628'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
-  - turn: 3
-    decision: feedback
-    feedback: '- Task-work produced a report with 1 of 3 required agent invocations.
-      Missing phases: 4 (Testing), 5 (Code Review). Invoke these agents via the Task
-      tool before re-emitting the report:
-
-      - Phase 4: `test-orchestrator` (Testing)
-
-      - Phase 5: `code-reviewer` (Code Review)'
-    timestamp: '2026-04-24T21:19:15.567814'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+  status: pending
+title: Implement read_file tool
+updated: 2026-04-24 06:55:00+00:00
+wave: 2
 ---
+
 # Implement read_file tool
 
 **Feature:** FEAT-JARVIS-002 "Core Tools & Capability-Driven Dispatch Tools"

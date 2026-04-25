@@ -1,0 +1,89 @@
+{
+  "task_id": "TASK-J002-006",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/tools/capabilities.py"
+  ],
+  "files_created": [
+    "tests/test_load_stub_registry.py"
+  ],
+  "tests_written": [
+    "tests/test_load_stub_registry.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "22/22 new loader tests pass (test_load_stub_registry.py); full suite 561/561 pass; ruff check + ruff format --check clean; mypy strict clean on capabilities.py.",
+  "implementation_notes": "Added load_stub_registry(path: Path) -> list[CapabilityDescriptor] to src/jarvis/tools/capabilities.py and exported it from __all__. The loader: (1) raises FileNotFoundError with the path in the message when path.exists() is False (startup-fatal per design §7); (2) opens the file with utf-8 encoding and parses with yaml.safe_load (the only YAML call in the file — verified by a static grep test); (3) validates the document root is a mapping with a list-valued 'capabilities' key, raising ValueError otherwise; (4) constructs each CapabilityDescriptor via model_validate, which surfaces pydantic.ValidationError on malformed entries (uppercase agent_id, missing required field, unknown risk_level, invalid trust_tier, etc.); (5) detects duplicate agent_id by walking the result list with a 'seen' set and raises ValueError naming the first duplicate; (6) returns the list in YAML insertion order (PyYAML preserves list order, model_validate is per-element). The companion test module test_load_stub_registry.py has six test classes mirroring AC-001..AC-006 plus a defensive root-shape class. The 'never yaml.load' guard is enforced statically (asserting 'yaml.load(' does not appear in the source) because pyyaml's yaml.safe_load is internally implemented as yaml.load(stream, SafeLoader), so a runtime patch.object on yaml.load would always fire. A round-trip test loads the canonical Phase 2 file at src/jarvis/config/stub_capabilities.yaml and asserts the four expected agent_ids in order.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007"
+  ],
+  "requirements_remaining": [],
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/tools/capabilities.py` adds `load_stub_registry(path: Path) -> list[CapabilityDescriptor]`.",
+      "status": "complete",
+      "evidence": "Added the function with signature `def load_stub_registry(path: Path) -> list[CapabilityDescriptor]:` to src/jarvis/tools/capabilities.py and exported it via __all__. TestAC001LoaderSignature asserts the function is exported, in __all__, and has a single `path: Path` parameter (annotation may be the class or the string under `from __future__ import annotations`).",
+      "test_file": "tests/test_load_stub_registry.py",
+      "implementation_files": ["src/jarvis/tools/capabilities.py"]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Loads YAML at `path`; validates every entry against `CapabilityDescriptor`; returns list preserving YAML order.",
+      "status": "complete",
+      "evidence": "Loader opens path with utf-8 encoding, parses with yaml.safe_load, then constructs each entry via CapabilityDescriptor.model_validate. The list is built with a comprehension that preserves PyYAML's source order. TestAC002LoadAndValidate covers: returns a list of CapabilityDescriptor, preserves a deliberately scrambled order [zebra, apple, mango, banana], round-trips the canonical Phase 2 stub file (architect-agent, product-owner-agent, ideation-agent, forge), nested CapabilityToolSummary coercion, and empty-list handling.",
+      "test_file": "tests/test_load_stub_registry.py",
+      "implementation_files": ["src/jarvis/tools/capabilities.py"]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Raises `FileNotFoundError` if `path` does not exist (startup-fatal per design §7).",
+      "status": "complete",
+      "evidence": "Loader checks `if not path.exists()` first and raises FileNotFoundError with a message containing the path and a `startup-fatal per FEAT-JARVIS-002 design §7` reference. TestAC003MissingFileRaises verifies both that FileNotFoundError is raised on a nonexistent path and that the path is included in the error message.",
+      "test_file": "tests/test_load_stub_registry.py",
+      "implementation_files": ["src/jarvis/tools/capabilities.py"]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Raises `pydantic.ValidationError` if any descriptor is malformed (e.g. uppercase `agent_id`).",
+      "status": "complete",
+      "evidence": "Loader uses CapabilityDescriptor.model_validate(entry) per entry — pydantic surfaces ValidationError directly on any failure. TestAC004MalformedEntryRaisesValidationError covers four failure modes: uppercase agent_id ('Architect'), missing required field (no description), unknown risk_level ('catastrophic'), and invalid trust_tier ('rogue'). All raise pydantic.ValidationError.",
+      "test_file": "tests/test_load_stub_registry.py",
+      "implementation_files": ["src/jarvis/tools/capabilities.py"]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] Rejects duplicate `agent_id` entries with a ValueError mentioning the duplicated id.",
+      "status": "complete",
+      "evidence": "After all descriptors are validated, the loader iterates with a `seen: set[str]` and raises `ValueError(f\"Duplicate agent_id {descriptor.agent_id!r} in stub capability registry at {path!s}.\")` on the first repeat. TestAC005DuplicateAgentIdRejected verifies (a) consecutive duplicates raise ValueError with 'twin' in the message, (b) a duplicate split across the middle of the list still triggers a ValueError matching 'first', and (c) malformed entries still raise ValidationError rather than ValueError.",
+      "test_file": "tests/test_load_stub_registry.py",
+      "implementation_files": ["src/jarvis/tools/capabilities.py"]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] Uses `yaml.safe_load` (never `yaml.load`).",
+      "status": "complete",
+      "evidence": "Loader calls `yaml.safe_load(handle)` exactly once with an inline comment citing DM-stub-registry §Schema. TestAC006UsesSafeLoad verifies (a) yaml.safe_load is invoked once via a wraps-spy, and (b) a static grep over the module source asserts `yaml.load(` (with open paren) does not appear anywhere in capabilities.py.",
+      "test_file": "tests/test_load_stub_registry.py",
+      "implementation_files": ["src/jarvis/tools/capabilities.py"]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Verified: `.venv/bin/ruff check src/jarvis/tools/capabilities.py tests/test_load_stub_registry.py` -> 'All checks passed!'; `.venv/bin/ruff format --check ...` -> '2 files already formatted'; `.venv/bin/mypy src/jarvis/tools/capabilities.py` -> 'Success: no issues found in 1 source file'. Full suite: 561 passed, 55 warnings (pre-existing) in 2.70s.",
+      "test_file": "tests/test_load_stub_registry.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py",
+        "tests/test_load_stub_registry.py"
+      ]
+    }
+  ]
+}
