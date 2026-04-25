@@ -1,0 +1,78 @@
+version: "1.0"
+capabilities:
+
+  - agent_id: architect-agent
+    role: Architect
+    description: >
+      Produces architecture sessions, C4 diagrams, and ADRs for features. Best
+      for "design the system for X", "generate a C4 diagram", "review this
+      architecture against the ADR set". Not for implementation.
+    capability_list:
+      - tool_name: run_architecture_session
+        description: Drive a full /system-arch session from a scope document and emit ARCHITECTURE.md + ADRs.
+        risk_level: read_only
+      - tool_name: draft_adr
+        description: Given a decision + context, emit a single ADR file.
+        risk_level: mutating
+    cost_signal: "moderate (~$0.50-$2 per session)"
+    latency_signal: "5-30 minutes per session"
+    last_heartbeat_at: null
+    trust_tier: specialist
+
+  - agent_id: product-owner-agent
+    role: Product Owner
+    description: >
+      Reviews feature specifications, prioritises work, and refines acceptance
+      criteria. Best for "is this spec complete?", "what's missing from this
+      feature?", "should we build X or Y first?". Not for architectural
+      decisions.
+    capability_list:
+      - tool_name: review_specification
+        description: Evaluate a feature spec for completeness, clarity, and priority.
+        risk_level: read_only
+      - tool_name: refine_acceptance_criteria
+        description: Expand or tighten the Given/When/Then scenarios in a feature spec.
+        risk_level: mutating
+    cost_signal: "low (~$0.10/call)"
+    latency_signal: "30s-2min"
+    last_heartbeat_at: null
+    trust_tier: specialist
+
+  - agent_id: ideation-agent
+    role: Ideation
+    description: >
+      Generates candidate solutions, alternatives, and counter-examples. Best
+      for "what are our options here?", "steelman the opposing view", "what
+      could go wrong?". Not for committing to a decision — delegate that back
+      to Rich or to the architect.
+    capability_list:
+      - tool_name: generate_alternatives
+        description: Produce 3-5 distinct candidate approaches to a stated problem.
+        risk_level: read_only
+      - tool_name: steelman
+        description: Construct the strongest possible argument for the opposing position.
+        risk_level: read_only
+    cost_signal: "low (~$0.05/call)"
+    latency_signal: "10-30s"
+    last_heartbeat_at: null
+    trust_tier: specialist
+
+  - agent_id: forge
+    role: Build Pipeline
+    description: >
+      Executes feature builds end-to-end given a feature YAML. Consumes
+      pipeline.build-queued.{feature_id} from JetStream. Jarvis queues; Forge
+      does the work. Fire-and-forget — progress events arrive via
+      notifications, not by awaiting this dispatch.
+    capability_list:
+      - tool_name: build_feature
+        description: >
+          Synonym surfacing the queue_build tool's semantics into the catalogue so the
+          reasoning model can reason about "Forge" as a dispatch target
+          alongside specialist agents. In practice the reasoning model will
+          invoke the dedicated queue_build tool rather than dispatch_by_capability.
+        risk_level: mutating
+    cost_signal: "high (full GuardKit AutoBuild run)"
+    latency_signal: "15-180min"
+    last_heartbeat_at: null
+    trust_tier: core

@@ -11,6 +11,8 @@ This module belongs to Group E (cross-cutting) per ADR-ARCH-006.
 
 from __future__ import annotations
 
+import logging
+import warnings
 from pathlib import Path
 from typing import Literal
 
@@ -18,6 +20,8 @@ from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from jarvis.shared.exceptions import ConfigurationError
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Provider-key requirements keyed by the provider prefix in supervisor_model.
@@ -50,6 +54,12 @@ class JarvisConfig(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_base_url: str | None = None
     google_api_key: SecretStr | None = None
+
+    # -- Phase 2: web search + workspace settings ----------------------------
+    web_search_provider: Literal["tavily", "none"] = "tavily"
+    tavily_api_key: SecretStr | None = None
+    stub_capabilities_path: Path = Path("src/jarvis/config/stub_capabilities.yaml")
+    workspace_root: Path = Path(".").resolve()
 
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
@@ -104,6 +114,25 @@ class JarvisConfig(BaseSettings):
             raise ConfigurationError(
                 f"{self.memory_store_backend} backend is not implemented in Phase 1"
             )
+
+        # Phase 2: warn (do not raise) if Tavily is selected without an API key.
+        # Web search is optional/best-effort, so a missing key downgrades the
+        # capability rather than breaking startup.
+        if self.web_search_provider == "tavily":
+            tavily_key = self.tavily_api_key
+            tavily_value = (
+                tavily_key.get_secret_value()
+                if isinstance(tavily_key, SecretStr)
+                else tavily_key
+            )
+            if not tavily_value:
+                message = (
+                    "web_search_provider='tavily' but TAVILY_API_KEY "
+                    "(JARVIS_TAVILY_API_KEY) is not set — web search will be "
+                    "disabled."
+                )
+                warnings.warn(message, stacklevel=2)
+                logger.warning(message)
 
         provider = self.supervisor_model.split(":", 1)[0]
 

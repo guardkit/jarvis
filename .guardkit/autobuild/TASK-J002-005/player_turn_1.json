@@ -1,0 +1,91 @@
+{
+  "task_id": "TASK-J002-005",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    "src/jarvis/tools/_correlation.py",
+    "tests/test_correlation.py"
+  ],
+  "tests_written": [
+    "tests/test_correlation.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "6/6 tests passed in tests/test_correlation.py (TestAC001ReturnTypeAndShape x2, TestAC002SingleStdlibDependency x1, TestAC003UniquenessAndFormat x1, TestAC004ConcurrentGenerationDoesNotCrossContaminate x1, TestAC005ModuleDocstringNamesSingleCallsite x1). Ruff lint + format clean. mypy --strict on the module reports 'Success: no issues found'. Sanity re-run including tests/test_reserved_packages.py and tests/test_import_graph.py: 87 passed, 1 warning (unrelated pydantic-v1 / Python 3.14 deprecation in langchain_core).",
+  "implementation_notes": "Created src/jarvis/tools/_correlation.py as the single, canonical callsite for dispatch-path correlation IDs per ASSUM-001. The module imports ONLY the stdlib 'uuid' (no __future__ import, no other imports \u2014 AC-002 strictly mandates a single dependency) and exposes new_correlation_id() -> str returning str(uuid.uuid4()). The module docstring explicitly labels the module as the 'single callsite' for 'dispatch-path correlation IDs', references ASSUM-001, and documents the concurrency-safety rationale (no shared state, uuid.uuid4 reads OS CSPRNG and constructs a fresh UUID per call, safe for many threads/asyncio tasks without locking). Tests are organised into one class per acceptance criterion, mirroring the pytest-agent-testing-specialist pattern: AC-001 verifies return type + UUID4 version + regex; AC-002 walks the module's AST and asserts the import list is exactly ['uuid'] (catches both `import X` and `from X import Y`, including any future __future__ slip); AC-003 generates 10,000 IDs and asserts both distinctness and regex match; AC-004 uses ThreadPoolExecutor(100) with 100 calls per worker to assert 10,000 distinct IDs under concurrency; AC-005 introspects __doc__ for the 'single', 'callsite', 'dispatch', 'correlation', and 'ASSUM-001' tokens.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/tools/_correlation.py` exposes `new_correlation_id() -> str` returning `str(uuid.uuid4())`.",
+      "status": "complete",
+      "evidence": "Module created at src/jarvis/tools/_correlation.py exporting `def new_correlation_id() -> str: return str(uuid.uuid4())`. Verified by TestAC001ReturnTypeAndShape: asserts isinstance(result, str), uuid.UUID(result).version == 4, and UUID4_REGEX matches.",
+      "test_file": "tests/test_correlation.py",
+      "implementation_files": [
+        "src/jarvis/tools/_correlation.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Module has a single dependency: `uuid` from stdlib. No other imports.",
+      "status": "complete",
+      "evidence": "Module contains only `import uuid` \u2014 no __future__ import, no typing import, no other dependency. TestAC002SingleStdlibDependency walks the module AST and asserts the collected import list equals exactly ['uuid'], catching both ast.Import and ast.ImportFrom nodes.",
+      "test_file": "tests/test_correlation.py",
+      "implementation_files": [
+        "src/jarvis/tools/_correlation.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Unit test: 10,000 invocations produce 10,000 distinct strings; every string matches the UUID4 regex `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`.",
+      "status": "complete",
+      "evidence": "TestAC003UniquenessAndFormat::test_ten_thousand_invocations_are_all_distinct_and_well_formed generates 10,000 IDs, asserts len(set(ids)) == 10_000, and asserts every ID matches the exact UUID4_REGEX from the AC. Test passes.",
+      "test_file": "tests/test_correlation.py",
+      "implementation_files": [
+        "src/jarvis/tools/_correlation.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Concurrent test: 100 threads each calling `new_correlation_id()` 100 times produce 10,000 distinct strings (no cross-contamination).",
+      "status": "complete",
+      "evidence": "TestAC004ConcurrentGenerationDoesNotCrossContaminate::test_100_threads_x_100_calls_yield_10000_distinct_ids uses ThreadPoolExecutor(max_workers=100) with a worker that returns 100 IDs each, flattens the 100x100 results, and asserts both len(all_ids) == 10_000 and len(set(all_ids)) == 10_000. Test passes.",
+      "test_file": "tests/test_correlation.py",
+      "implementation_files": [
+        "src/jarvis/tools/_correlation.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] Module docstring names this as the single callsite for dispatch-path correlation IDs per ASSUM-001.",
+      "status": "complete",
+      "evidence": "Module docstring opens with 'Single callsite for dispatch-path correlation IDs (per ASSUM-001).' and the body explicitly states the module is 'the single, canonical callsite' for dispatch-path correlation IDs and references docs/architecture/assumptions.yaml ASSUM-001. TestAC005ModuleDocstringNamesSingleCallsite asserts the tokens 'single', 'callsite', 'dispatch', 'correlation', and 'ASSUM-001' are all present in __doc__.",
+      "test_file": "tests/test_correlation.py",
+      "implementation_files": [
+        "src/jarvis/tools/_correlation.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`ruff check src/jarvis/tools/_correlation.py tests/test_correlation.py` -> 'All checks passed!' (zero errors). `ruff format --check ...` -> '2 files already formatted'. As a bonus, `mypy --strict` (pyproject `[tool.mypy] strict = true`) on src/jarvis/tools/_correlation.py reports 'Success: no issues found in 1 source file'.",
+      "test_file": "tests/test_correlation.py",
+      "implementation_files": [
+        "src/jarvis/tools/_correlation.py",
+        "tests/test_correlation.py"
+      ]
+    }
+  ],
+  "success": true
+}

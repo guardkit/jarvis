@@ -1,0 +1,85 @@
+{
+  "task_id": "TASK-J002-002",
+  "timestamp": "2026-04-25T16:21:47.296351",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [],
+  "files_created": [
+    "src/jarvis/config/stub_capabilities.yaml",
+    "tests/test_stub_capabilities.py"
+  ],
+  "tests_written": [
+    "tests/test_stub_capabilities.py"
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] File exists at `src/jarvis/config/stub_capabilities.yaml` containing exactly four capabilities: `architect-agent`, `product-owner-agent`, `ideation-agent`, `forge`.",
+      "status": "complete",
+      "evidence": "Created src/jarvis/config/stub_capabilities.yaml. tests/test_stub_capabilities.py::TestAC001FileExistsWithFourCapabilities asserts the file exists at that path, parses to a mapping with exactly four entries under `capabilities`, and that the agent_ids list equals ['architect-agent', 'product-owner-agent', 'ideation-agent', 'forge'].",
+      "test_file": "tests/test_stub_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/config/stub_capabilities.yaml"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Content matches byte-for-byte the canonical YAML in DM-stub-registry.md \u00a7\"Canonical Phase 2 content\".",
+      "status": "complete",
+      "evidence": "tests/test_stub_capabilities.py::TestAC002CanonicalByteForByteMatch::test_byte_equal_to_canonical extracts the YAML block bracketed by ```yaml \u2026 ``` immediately following the 'Canonical Phase 2 content' heading in docs/design/FEAT-JARVIS-002/models/DM-stub-registry.md and asserts equality with the file on disk. Both are 3271 UTF-8 bytes (verified with len(...).encode('utf-8')); the test passes.",
+      "test_file": "tests/test_stub_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/config/stub_capabilities.yaml"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] All `agent_id` values are kebab-case; all `tool_name` values are snake_case; all `trust_tier` values are one of `core|specialist|extension`.",
+      "status": "complete",
+      "evidence": "tests/test_stub_capabilities.py::TestAC003NamingAndTrustTier validates every agent_id against the kebab-case regex `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`, every tool_name against the snake_case regex `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, and every trust_tier against the set {'core', 'specialist', 'extension'}. All four agent_ids (architect-agent, product-owner-agent, ideation-agent, forge), all seven tool_names (run_architecture_session, draft_adr, review_specification, refine_acceptance_criteria, generate_alternatives, steelman, build_feature) and all four trust_tiers (specialist, specialist, specialist, core) pass.",
+      "test_file": "tests/test_stub_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/config/stub_capabilities.yaml"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] `forge` entry carries a `build_feature` capability so the reasoning model sees Forge alongside specialists in the catalogue.",
+      "status": "complete",
+      "evidence": "tests/test_stub_capabilities.py::TestAC004ForgeBuildFeatureCapability::test_forge_has_build_feature_capability locates the entry with agent_id == 'forge' and asserts 'build_feature' is in [cap['tool_name'] for cap in forge['capability_list']]. The forge entry's tool exposes the queue_build semantics into the catalogue per DM-stub-registry.md \u00a7'Rationale for the fourth entry'. Companion test test_forge_trust_tier_is_core confirms trust_tier == 'core'.",
+      "test_file": "tests/test_stub_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/config/stub_capabilities.yaml"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "task_id": "TASK-J002-001",
+  "timestamp": "2026-04-25T16:21:40.496301",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    "src/jarvis/config/settings.py"
+  ],
+  "files_created": [
+    "tests/test_config_phase2.py"
+  ],
+  "tests_written": [
+    "tests/test_config_phase2.py"
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `JarvisConfig` gains four fields: `web_search_provider: Literal[\"tavily\",\"none\"] = \"tavily\"`, `tavily_api_key: SecretStr | None = None`, `stub_capabilities_path: Path = Path(\"src/jarvis/config/stub_capabilities.yaml\")`, `workspace_root: Path = Path(\".\").resolve()`.",
+      "status": "complete",
+      "evidence": "Added all four fields to JarvisConfig in src/jarvis/config/settings.py with the exact types and defaults specified. tavily_api_key uses SecretStr for masking. Verified by TestAC001Phase2FieldsExist (8 tests) covering defaults, Literal allowed values, ValidationError on unknown provider, SecretStr wrapping/masking, Path types, and absolute workspace_root.",
+      "test_file": "tests/test_config_phase2.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Env var names respect the `JARVIS_` prefix (JARVIS_WEB_SEARCH_PROVIDER, JARVIS_TAVILY_API_KEY, JARVIS_STUB_CAPABILITIES_PATH, JARVIS_WORKSPACE_ROOT).",
+      "status": "complete",
+      "evidence": "JarvisConfig.model_config keeps env_prefix='JARVIS_', and the field names map automatically. Verified by TestAC002JarvisEnvPrefix (5 tests) which use patch.dict on os.environ to set each of the four JARVIS_-prefixed env vars and assert the corresponding field is populated correctly (including SecretStr wrapping for the tavily key and Path coercion for the path fields), plus a guard test asserting env_prefix is still 'JARVIS_'.",
+      "test_file": "tests/test_config_phase2.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `validate_provider_keys()` emits a warning (not a ConfigurationError) when `web_search_provider == \"tavily\"` and `tavily_api_key is None`.",
+      "status": "complete",
+      "evidence": "Added a Phase 2 block at the start of validate_provider_keys() that calls warnings.warn(...) and logger.warning(...) \u2014 and explicitly does not raise \u2014 when web_search_provider == 'tavily' and tavily_api_key is None or empty. Verified by TestAC003TavilyKeyWarning (5 tests) which use warnings.catch_warnings(record=True) to assert: (a) a warning is emitted, (b) no exception is raised, (c) no warning when the key is set, (d) no warning when provider is 'none', and (e) empty SecretStr also warns.",
+      "test_file": "tests/test_config_phase2.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Phase 1 config tests in `tests/test_config.py` still pass unchanged.",
+      "status": "complete",
+      "evidence": "tests/test_config.py was not modified. Ran `python -m pytest tests/test_config.py -v`: all 45 Phase 1 tests pass (the same 45 that passed on the baseline before my changes). The new Phase 2 tests live in a separate file (tests/test_config_phase2.py) so the Phase 1 test file stays byte-for-byte unchanged.",
+      "test_file": "tests/test_config.py",
+      "implementation_files": []
+    }
+  ]
+}

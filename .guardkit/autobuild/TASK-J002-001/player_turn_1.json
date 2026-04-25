@@ -1,0 +1,67 @@
+{
+  "task_id": "TASK-J002-001",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/config/settings.py"
+  ],
+  "files_created": [
+    "tests/test_config_phase2.py"
+  ],
+  "tests_written": [
+    "tests/test_config_phase2.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "tests/test_config.py: 45/45 passed unchanged (Phase 1 AC-004). tests/test_config_phase2.py: 18/18 passed. Combined: 63 passed in 0.15s. Three unrelated pre-existing failures in tests/test_build_system.py and tests/test_reserved_packages.py exist on the baseline branch and are not affected by this change.",
+  "implementation_notes": "Extended JarvisConfig (src/jarvis/config/settings.py) with four Phase 2 fields placed in a new '-- Phase 2: web search + workspace settings --' block: web_search_provider: Literal['tavily','none']='tavily', tavily_api_key: SecretStr|None=None, stub_capabilities_path: Path=Path('src/jarvis/config/stub_capabilities.yaml'), workspace_root: Path=Path('.').resolve(). The existing SettingsConfigDict(env_prefix='JARVIS_', case_sensitive=False) already maps these to JARVIS_WEB_SEARCH_PROVIDER, JARVIS_TAVILY_API_KEY, JARVIS_STUB_CAPABILITIES_PATH, JARVIS_WORKSPACE_ROOT. Updated validate_provider_keys() so that when web_search_provider == 'tavily' and tavily_api_key is missing/empty, it emits a UserWarning via warnings.warn() and a logger.warning() \u2014 explicitly NOT raising ConfigurationError, since web search is best-effort. tavily_api_key is wrapped in SecretStr for masking parity with the other provider keys. All Phase 1 tests in tests/test_config.py continue to pass byte-for-byte unchanged.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `JarvisConfig` gains four fields: `web_search_provider: Literal[\"tavily\",\"none\"] = \"tavily\"`, `tavily_api_key: SecretStr | None = None`, `stub_capabilities_path: Path = Path(\"src/jarvis/config/stub_capabilities.yaml\")`, `workspace_root: Path = Path(\".\").resolve()`.",
+      "status": "complete",
+      "evidence": "Added all four fields to JarvisConfig in src/jarvis/config/settings.py with the exact types and defaults specified. tavily_api_key uses SecretStr for masking. Verified by TestAC001Phase2FieldsExist (8 tests) covering defaults, Literal allowed values, ValidationError on unknown provider, SecretStr wrapping/masking, Path types, and absolute workspace_root.",
+      "test_file": "tests/test_config_phase2.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Env var names respect the `JARVIS_` prefix (JARVIS_WEB_SEARCH_PROVIDER, JARVIS_TAVILY_API_KEY, JARVIS_STUB_CAPABILITIES_PATH, JARVIS_WORKSPACE_ROOT).",
+      "status": "complete",
+      "evidence": "JarvisConfig.model_config keeps env_prefix='JARVIS_', and the field names map automatically. Verified by TestAC002JarvisEnvPrefix (5 tests) which use patch.dict on os.environ to set each of the four JARVIS_-prefixed env vars and assert the corresponding field is populated correctly (including SecretStr wrapping for the tavily key and Path coercion for the path fields), plus a guard test asserting env_prefix is still 'JARVIS_'.",
+      "test_file": "tests/test_config_phase2.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `validate_provider_keys()` emits a warning (not a ConfigurationError) when `web_search_provider == \"tavily\"` and `tavily_api_key is None`.",
+      "status": "complete",
+      "evidence": "Added a Phase 2 block at the start of validate_provider_keys() that calls warnings.warn(...) and logger.warning(...) \u2014 and explicitly does not raise \u2014 when web_search_provider == 'tavily' and tavily_api_key is None or empty. Verified by TestAC003TavilyKeyWarning (5 tests) which use warnings.catch_warnings(record=True) to assert: (a) a warning is emitted, (b) no exception is raised, (c) no warning when the key is set, (d) no warning when provider is 'none', and (e) empty SecretStr also warns.",
+      "test_file": "tests/test_config_phase2.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Phase 1 config tests in `tests/test_config.py` still pass unchanged.",
+      "status": "complete",
+      "evidence": "tests/test_config.py was not modified. Ran `python -m pytest tests/test_config.py -v`: all 45 Phase 1 tests pass (the same 45 that passed on the baseline before my changes). The new Phase 2 tests live in a separate file (tests/test_config_phase2.py) so the Phase 1 test file stays byte-for-byte unchanged.",
+      "test_file": "tests/test_config.py",
+      "implementation_files": []
+    }
+  ],
+  "success": true
+}

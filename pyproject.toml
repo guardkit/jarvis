@@ -18,6 +18,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
+    # ---- Phase 1 (FEAT-JARVIS-001) — DO NOT MODIFY -----------------------
     "deepagents>=0.5.3,<0.6",
     "langchain-core>=0.3",
     "langgraph>=0.3",
@@ -28,6 +29,16 @@ dependencies = [
     "python-dotenv>=1.0",
     "click>=8.1",
     "pyyaml>=6.0",
+    # ---- Phase 2 (FEAT-JARVIS-002) — TASK-J002-023 -----------------------
+    # Web search provider for `jarvis.tools.general.search_web` (DDR-006).
+    "langchain-tavily>=0.2",
+    # Safe expression evaluator for `jarvis.tools.general.calculate` (DDR-007).
+    "asteval>=0.9.33",
+    # Pydantic payload models for CommandPayload / ResultPayload /
+    # BuildQueuedPayload shape compliance. NOTE: Phase 2 imports the data
+    # classes ONLY — `nats-py` (the live client) is forbidden until Phase 4
+    # per the phase2-dispatch-foundations-scope §Scope Invariants.
+    "nats-core>=0.2",
 ]
 
 [project.optional-dependencies]
