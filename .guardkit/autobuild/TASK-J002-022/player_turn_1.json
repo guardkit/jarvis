@@ -1,0 +1,114 @@
+{
+  "task_id": "TASK-J002-022",
+  "turn": 1,
+  "files_modified": [
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_supervisor_with_tools.py",
+    "tasks/backlog/TASK-J002-022-integration-test-supervisor-with-tools-nine-tool-wiring-prom.md"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J002-022-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J002-017/checkpoints.json",
+    ".guardkit/autobuild/TASK-J002-022/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-022/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-022/turn_context.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/.guardkit/autobuild/TASK-J002-022/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_supervisor_with_tools.py",
+    "tasks/design_approved/TASK-J002-022-integration-test-supervisor-with-tools-nine-tool-wiring-prom.md",
+    "tests/test_supervisor_with_tools.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_supervisor_with_tools.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: 4-entry capability_registry + test_config fixtures + build_app_state invocation",
+    "AC-002: 9 tool names alphabetical in compiled supervisor",
+    "AC-003: Each descriptor's as_prompt_block() appears verbatim in system prompt",
+    "AC-004: Empty registry renders 'No capabilities currently registered.' sentinel",
+    "AC-005: No LLM call / no network during build",
+    "AC-006: Phase 1 test modules untouched and still passing",
+    "AC-007: src/jarvis/tools/ coverage \u2265 80% (actual: 87%)"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 43,
+  "sdk_max_turns": 100,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 7,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "tests/test_supervisor_with_tools.py creates test_config + 4-entry capability_registry fixtures; calls build_app_state(test_config).",
+      "status": "complete",
+      "evidence": "Created tests/test_supervisor_with_tools.py with stub_registry_config fixture (a JarvisConfig variant of test_config pinning stub_capabilities_path to the canonical 4-entry stub yaml) and capability_registry fixture (loads the 4-entry list via load_stub_registry; asserts len==4). Tests in TestAC001NineToolWiring, TestAC003CapabilityBlockInjection, and TestAC005NoLLMCallNoNetwork all invoke build_app_state(stub_registry_config) inside the network-isolated patch context.",
+      "test_file": "tests/test_supervisor_with_tools.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_tools.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Asserts the compiled supervisor graph exposes exactly the 9 tool names in alphabetical order: calculate, capabilities_refresh, capabilities_subscribe_updates, dispatch_by_capability, get_calendar_events, list_available_capabilities, queue_build, read_file, search_web.",
+      "status": "complete",
+      "evidence": "TestAC001NineToolWiring contains three checks: (1) test_compiled_supervisor_exposes_nine_tool_names walks the compiled CompiledStateGraph via _extract_tool_names and asserts every one of the 9 expected names is present (uses the same introspection helper as test_supervisor_lifecycle_wiring.py); (2) test_create_deep_agent_receives_nine_tools_alphabetically wraps create_deep_agent with Mock(wraps=...) and asserts kwargs['tools'] yields exactly EXPECTED_TOOL_NAMES in alphabetical order; (3) test_assemble_tool_list_is_alphabetical pins the assemble_tool_list contract directly. All three pass.",
+      "test_file": "tests/test_supervisor_with_tools.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_tools.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Asserts the rendered system prompt contains the {available_capabilities} block built from 4 descriptors (each as_prompt_block() substring appears verbatim).",
+      "status": "complete",
+      "evidence": "TestAC003CapabilityBlockInjection.test_each_descriptor_block_appears_verbatim_in_system_prompt wraps create_deep_agent with Mock(wraps=...), runs build_app_state, captures the system_prompt kwarg, then asserts: (a) no raw {available_capabilities}/{date}/{domain_prompt} placeholders survived format(); (b) for each of the 4 descriptors, descriptor.as_prompt_block() appears as a substring in the system prompt verbatim. The companion test_blocks_appear_in_alphabetical_agent_id_order also asserts the blocks render in agent_id-sorted order. Both tests pass.",
+      "test_file": "tests/test_supervisor_with_tools.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_tools.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Asserts empty-registry path: build_supervisor(test_config, tools=[], available_capabilities=[]) renders the 'No capabilities currently registered.' sentinel.",
+      "status": "complete",
+      "evidence": "TestAC004EmptyRegistryFallback.test_empty_registry_renders_sentinel calls build_supervisor(test_config, tools=[], available_capabilities=[]) with create_deep_agent wrapped via Mock(wraps=...); inspects kwargs['system_prompt'] and asserts the literal sentinel 'No capabilities currently registered.' is present. Also asserts the result is a CompiledStateGraph and that no descriptor-style header (### \u2026Tools:) leaked through ahead of the sentinel.",
+      "test_file": "tests/test_supervisor_with_tools.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_tools.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "No LLM call is made (FakeListChatModel or equivalent); no network.",
+      "status": "complete",
+      "evidence": "Every test in this file patches jarvis.agents.supervisor.init_chat_model to return the conftest FakeListChatModel fixture (fake_llm) \u2014 no real provider client is constructed. TestAC005NoLLMCallNoNetwork.test_fake_llm_response_cursor_remains_at_zero pins the no-invocation invariant by asserting FakeListChatModel.i (the response cursor that increments on every call) stays at 0 after build_app_state, and verifies init_chat_model was called exactly once with config.supervisor_model. (Note: I cannot use Mock(wraps=fake_llm) because DeepAgents' resolve_model uses isinstance(model, BaseChatModel) for short-circuit \u2014 see comment block in the test class.)",
+      "test_file": "tests/test_supervisor_with_tools.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_tools.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Phase 1 test modules (tests/test_supervisor.py, tests/test_supervisor_no_llm_call.py, tests/test_sessions.py, tests/test_config.py, tests/test_infrastructure.py, tests/test_prompts.py) all still pass unchanged.",
+      "status": "complete",
+      "evidence": "Ran the 6 listed Phase 1 test modules: 167 passed, 0 failed. The new file is purely additive \u2014 no Phase 1 source or Phase 1 test modules were modified. Verified with: pytest tests/test_supervisor.py tests/test_supervisor_no_llm_call.py tests/test_sessions.py tests/test_config.py tests/test_infrastructure.py tests/test_prompts.py.",
+      "test_file": "tests/test_supervisor_with_tools.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_tools.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Coverage of src/jarvis/tools/ \u2265 80%.",
+      "status": "complete",
+      "evidence": "Ran pytest with --cov=src/jarvis/tools across the full suite: TOTAL coverage 87% (450 stmts, 57 missed). Per-module: __init__.py 100%, _correlation.py 100%, capabilities.py 92%, dispatch.py 90%, general.py 81%, types.py 100%. Comfortably above the 80% threshold; all six tool-package modules are individually above 80%.",
+      "test_file": "tests/test_supervisor_with_tools.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_tools.py"
+      ]
+    }
+  ]
+}
