@@ -6,8 +6,20 @@ dataclass that holds all runtime dependencies.
 
 ``build_app_state()`` configures structured logging **before** any validation
 so that configuration errors are emitted as structured events.  It returns a
-fully populated ``AppState`` — supervisor and session manager are always
-wired.
+fully populated ``AppState`` — supervisor, session manager and capability
+registry are always wired.
+
+TASK-J002-017 extended ``build_app_state`` with two additional steps that
+sit between store creation and supervisor build:
+
+1. ``capability_registry = load_stub_registry(config.stub_capabilities_path)``
+   — startup-fatal if the YAML is missing (FEAT-JARVIS-002 design §7).
+2. ``tool_list = assemble_tool_list(config, capability_registry)`` — wires
+   the 9 Phase 2 tools and snapshots the registry into the capability +
+   dispatch tool modules (ASSUM-006 snapshot isolation).
+
+Both seams are imported at module top so tests can patch them via the
+canonical ``jarvis.infrastructure.lifecycle`` namespace.
 """
 
 from __future__ import annotations
@@ -22,6 +34,11 @@ from jarvis.config.settings import JarvisConfig
 from jarvis.infrastructure.logging import configure
 from jarvis.sessions.manager import SessionManager
 from jarvis.shared.exceptions import ConfigurationError
+from jarvis.tools import (
+    CapabilityDescriptor,
+    assemble_tool_list,
+    load_stub_registry,
+)
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
@@ -39,12 +56,18 @@ class AppState:
         supervisor: The compiled LangGraph supervisor graph.
         store: The LangGraph memory store instance.
         session_manager: The session manager wired over supervisor + store.
+        capability_registry: Capability descriptors loaded from the
+            stub registry at startup.  ``build_app_state`` populates this
+            from ``load_stub_registry(config.stub_capabilities_path)``;
+            tests that construct ``AppState`` directly may rely on the
+            empty default.
     """
 
     config: JarvisConfig
     supervisor: CompiledStateGraph[Any, Any, Any, Any]
     store: BaseStore
     session_manager: SessionManager
+    capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list)
 
 
 async def build_app_state(config: JarvisConfig) -> AppState:
@@ -55,9 +78,15 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         2. Validate provider keys — raises :class:`ConfigurationError`
            if the selected provider's credentials are missing.
         3. Build the memory store (``InMemoryStore`` for Phase 1).
-        4. Build the supervisor compiled graph.
-        5. Wire a :class:`SessionManager` over supervisor + store.
-        6. Return an :class:`AppState` with every field populated.
+        4. Load the stub capability registry from
+           ``config.stub_capabilities_path`` — startup-fatal if missing.
+        5. Assemble the 9 Phase 2 tools via ``assemble_tool_list`` (also
+           snapshots the registry into the capability + dispatch tool
+           modules per ASSUM-006).
+        6. Build the supervisor compiled graph with the wired tool list and
+           capability catalogue.
+        7. Wire a :class:`SessionManager` over supervisor + store.
+        8. Return an :class:`AppState` with every field populated.
 
     ``configure()`` is idempotent, so callers are free to configure logging
     themselves at process entry (so that ``pydantic.ValidationError`` at
@@ -72,6 +101,8 @@ async def build_app_state(config: JarvisConfig) -> AppState:
 
     Raises:
         ConfigurationError: If provider key validation fails.
+        FileNotFoundError: If the configured stub capabilities path does
+            not exist (startup-fatal per FEAT-JARVIS-002 design §7).
     """
     # 1. Re-apply logging config at the user-selected level (idempotent).
     configure(config.log_level)
@@ -96,9 +127,31 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     store = InMemoryStore()
     log.info("jarvis_store_ready", backend=config.memory_store_backend)
 
-    # 4. Build supervisor and wire the session manager in a single step so
-    #    AppState is fully populated on return.
-    supervisor = build_supervisor(config)
+    # 4. Load the stub capability registry — startup-fatal if missing.
+    capability_registry = load_stub_registry(config.stub_capabilities_path)
+    log.info(
+        "jarvis_capability_registry_loaded",
+        path=str(config.stub_capabilities_path),
+        count=len(capability_registry),
+    )
+
+    # 5. Assemble the Phase 2 tool list.  This also snapshots
+    # ``capability_registry`` into the capability + dispatch tool modules
+    # per ASSUM-006 so the runtime tools observe the same descriptors as
+    # the supervisor's injected prompt.
+    tool_list = assemble_tool_list(config, capability_registry)
+    log.info("jarvis_tool_list_assembled", count=len(tool_list))
+
+    # 6. Build supervisor with the wired tools and the capability catalogue
+    # so the system prompt's ``{available_capabilities}`` placeholder is
+    # replaced with the rendered descriptors at session start (DDR-008).
+    supervisor = build_supervisor(
+        config,
+        tools=tool_list,
+        available_capabilities=capability_registry,
+    )
+
+    # 7. Wire the session manager so AppState is fully populated on return.
     session_manager = SessionManager(supervisor=supervisor, store=store)
 
     state = AppState(
@@ -106,6 +159,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         supervisor=supervisor,
         store=store,
         session_manager=session_manager,
+        capability_registry=capability_registry,
     )
 
     log.info("jarvis_startup_complete")

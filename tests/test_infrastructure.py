@@ -268,6 +268,14 @@ class TestStartup:
         with (
             patch("sys.stderr", new=captured),
             patch(
+                "jarvis.infrastructure.lifecycle.load_stub_registry",
+                return_value=[],
+            ),
+            patch(
+                "jarvis.infrastructure.lifecycle.assemble_tool_list",
+                return_value=[],
+            ),
+            patch(
                 "jarvis.infrastructure.lifecycle.build_supervisor",
                 return_value=MagicMock(),
             ),
@@ -305,6 +313,14 @@ class TestShutdown:
         with (
             patch("sys.stderr", new=captured),
             patch(
+                "jarvis.infrastructure.lifecycle.load_stub_registry",
+                return_value=[],
+            ),
+            patch(
+                "jarvis.infrastructure.lifecycle.assemble_tool_list",
+                return_value=[],
+            ),
+            patch(
                 "jarvis.infrastructure.lifecycle.build_supervisor",
                 return_value=MagicMock(),
             ),
@@ -325,6 +341,14 @@ class TestShutdown:
         captured = io.StringIO()
         with (
             patch("sys.stderr", new=captured),
+            patch(
+                "jarvis.infrastructure.lifecycle.load_stub_registry",
+                return_value=[],
+            ),
+            patch(
+                "jarvis.infrastructure.lifecycle.assemble_tool_list",
+                return_value=[],
+            ),
             patch(
                 "jarvis.infrastructure.lifecycle.build_supervisor",
                 return_value=MagicMock(),
@@ -348,6 +372,14 @@ class TestShutdown:
         captured = io.StringIO()
         with (
             patch("sys.stderr", new=captured),
+            patch(
+                "jarvis.infrastructure.lifecycle.load_stub_registry",
+                return_value=[],
+            ),
+            patch(
+                "jarvis.infrastructure.lifecycle.assemble_tool_list",
+                return_value=[],
+            ),
             patch(
                 "jarvis.infrastructure.lifecycle.build_supervisor",
                 return_value=MagicMock(),

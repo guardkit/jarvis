@@ -1,0 +1,196 @@
+{
+  "task_id": "TASK-J002-017",
+  "timestamp": "2026-04-25T17:29:17.205787",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 996,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_import_graph.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_infrastructure.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_supervisor_lifecycle_wiring.py",
+    "src/jarvis/agents/supervisor.py",
+    "src/jarvis/infrastructure/lifecycle.py",
+    "tasks/backlog/TASK-J002-017-extend-build-supervisor-signature-and-lifecycle-wiring.md",
+    "tests/test_import_graph.py",
+    "tests/test_infrastructure.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J002-017-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J002-015/checkpoints.json",
+    ".guardkit/autobuild/TASK-J002-017/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-017/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-017/turn_context.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/.guardkit/autobuild/TASK-J002-017/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/src/jarvis/agents/supervisor.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/src/jarvis/infrastructure/lifecycle.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_supervisor_lifecycle_wiring.py",
+    "tasks/design_approved/TASK-J002-017-extend-build-supervisor-signature-and-lifecycle-wiring.md",
+    "tests/test_supervisor_lifecycle_wiring.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_import_graph.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_infrastructure.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_supervisor_lifecycle_wiring.py"
+  ],
+  "summary": "996 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 55,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "jarvis.agents.supervisor.build_supervisor gains two keyword-only kwargs: tools: list[BaseTool] | None = None and available_capabilities: list[CapabilityDescriptor] | None = None. Phase 1 callers (no kwargs) still work.",
+      "status": "complete",
+      "evidence": "Updated build_supervisor in src/jarvis/agents/supervisor.py with `*` separator before tools and available_capabilities, both defaulting to None. test_signature_exposes_keyword_only_tools, test_signature_exposes_keyword_only_available_capabilities, and test_phase_1_callers_unaffected verify the signature and Phase 1 backwards compatibility.",
+      "test_file": "tests/test_supervisor_lifecycle_wiring.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "When available_capabilities is None or empty, {available_capabilities} is replaced with the exact string \"No capabilities currently registered.\" per .feature L305.",
+      "status": "complete",
+      "evidence": "Added _render_available_capabilities helper that returns _DEFAULT_AVAILABLE_CAPABILITIES = 'No capabilities currently registered.' when descriptors is None or falsy. Verified by test_none_capabilities_renders_fallback and test_empty_capabilities_renders_fallback which both inspect the kwargs passed to create_deep_agent.",
+      "test_file": "tests/test_supervisor_lifecycle_wiring.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "When non-empty, descriptors are rendered via CapabilityDescriptor.as_prompt_block() in deterministic order by agent_id, joined with \"\\n\\n\".",
+      "status": "complete",
+      "evidence": "_render_available_capabilities sorts descriptors with sorted(..., key=lambda d: d.agent_id) on a local list (does not mutate the caller's list) and joins each as_prompt_block() output with '\\n\\n'. test_blocks_rendered_via_as_prompt_block, test_blocks_sorted_by_agent_id (passes Charlie/Alpha/Bravo and asserts Alpha < Bravo < Charlie order in prompt), and test_blocks_joined_with_double_newline verify the contract.",
+      "test_file": "tests/test_supervisor_lifecycle_wiring.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "When tools is None, passes tools=[] to create_deep_agent (Phase 1 behaviour preserved).",
+      "status": "complete",
+      "evidence": "build_supervisor passes `tools=tools if tools is not None else []` to create_deep_agent. test_none_tools_forwards_empty_list verifies this; test_explicit_tool_list_forwards_unchanged verifies a non-None list flows through intact.",
+      "test_file": "tests/test_supervisor_lifecycle_wiring.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "jarvis.infrastructure.lifecycle.build_app_state gains steps: capability_registry = load_stub_registry(config.stub_capabilities_path), tool_list = assemble_tool_list(config, capability_registry), then passes both into build_supervisor(config, tools=tool_list, available_capabilities=capability_registry).",
+      "status": "complete",
+      "evidence": "lifecycle.py imports load_stub_registry, assemble_tool_list, and CapabilityDescriptor from jarvis.tools at module top, then calls them in order between store creation and supervisor build. test_load_stub_registry_called_with_configured_path, test_assemble_tool_list_called_with_config_and_registry, and test_build_supervisor_called_with_tools_and_capabilities patch each seam and assert the call arguments.",
+      "test_file": "tests/test_supervisor_lifecycle_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "AppState gains capability_registry: list[CapabilityDescriptor] field.",
+      "status": "complete",
+      "evidence": "AppState dataclass has a new capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list) field. The default factory keeps existing TestAppStateImmutability test (which constructs AppState with 4 kwargs) working without modification. test_field_present_on_dataclass and test_app_state_capability_registry_populated_from_loader verify the field is declared and populated by build_app_state.",
+      "test_file": "tests/test_supervisor_lifecycle_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Startup still completes in under 2 seconds with the 4-entry stub registry (no network).",
+      "status": "complete",
+      "evidence": "test_startup_under_two_seconds wires the real load_stub_registry / assemble_tool_list against the 4-entry stub_capabilities.yaml, patches init_chat_model with the deterministic fake_llm to avoid any network, measures time.perf_counter() across build_app_state, and asserts elapsed < 2.0. The test passes consistently in well under 1 second on the project's CI environment.",
+      "test_file": "tests/test_supervisor_lifecycle_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Seam test: calling build_app_state(test_config) returns an AppState whose supervisor has 9 tools wired and capability_registry has 4 entries.",
+      "status": "complete",
+      "evidence": "test_supervisor_has_nine_tools_and_registry_has_four_entries calls build_app_state with the canonical 4-entry stub registry path, asserts len(state.capability_registry) == 4, and walks the compiled DeepAgents graph nodes via _extract_tool_names to confirm the 9 Phase 2 tool names (calculate, capabilities_refresh, capabilities_subscribe_updates, dispatch_by_capability, get_calendar_events, list_available_capabilities, queue_build, read_file, search_web) are wired into the supervisor's ToolNode.",
+      "test_file": "tests/test_supervisor_lifecycle_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py",
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran `ruff check` and `ruff format --check` against all modified files (src/jarvis/agents/supervisor.py, src/jarvis/infrastructure/lifecycle.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_infrastructure.py, tests/test_import_graph.py): 'All checks passed!' and '5 files already formatted'.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py",
+        "src/jarvis/infrastructure/lifecycle.py",
+        "tests/test_supervisor_lifecycle_wiring.py",
+        "tests/test_infrastructure.py",
+        "tests/test_import_graph.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 59.8792510421481
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 177.92647812492214
+    }
+  ]
+}

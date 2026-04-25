@@ -79,6 +79,7 @@ FORBIDDEN_PREFIXES = tuple(RESERVED_PACKAGES)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _python_files_in_package(package_dotpath: str) -> list[pathlib.Path]:
     """Return all .py files in a package directory (recursively)."""
     parts = package_dotpath.split(".")
@@ -109,6 +110,7 @@ def _extract_imports(filepath: pathlib.Path) -> list[str]:
 # Static AST analysis
 # ---------------------------------------------------------------------------
 
+
 class TestStaticImportGraph:
     """Verify no domain module statically imports from reserved packages."""
 
@@ -116,9 +118,7 @@ class TestStaticImportGraph:
     def test_no_forbidden_static_imports(self, domain_package: str) -> None:
         """Parse all .py files in the domain package and check imports."""
         py_files = _python_files_in_package(domain_package)
-        assert len(py_files) > 0, (
-            f"Expected .py files in {domain_package}"
-        )
+        assert len(py_files) > 0, f"Expected .py files in {domain_package}"
 
         violations: list[str] = []
         for filepath in py_files:
@@ -127,23 +127,26 @@ class TestStaticImportGraph:
                 for prefix in FORBIDDEN_PREFIXES:
                     if imp == prefix or imp.startswith(prefix + "."):
                         rel = filepath.relative_to(_SRC_DIR)
-                        violations.append(
-                            f"{rel}: imports {imp!r} (forbidden prefix {prefix!r})"
-                        )
+                        violations.append(f"{rel}: imports {imp!r} (forbidden prefix {prefix!r})")
 
-        assert violations == [], (
-            f"Forbidden imports found in {domain_package}:\n"
-            + "\n".join(f"  - {v}" for v in violations)
+        assert violations == [], f"Forbidden imports found in {domain_package}:\n" + "\n".join(
+            f"  - {v}" for v in violations
         )
 
     @pytest.mark.parametrize(
         "reserved_name",
-        ["jarvis.adapters", "jarvis.tools"],
+        # ``jarvis.tools`` was reserved-empty in Phase 1 but became the
+        # canonical public tool surface in TASK-J002-015 — domain modules
+        # legitimately import ``assemble_tool_list`` / ``load_stub_registry``
+        # / ``CapabilityDescriptor`` from it (e.g. lifecycle wiring in
+        # TASK-J002-017).  The submodule-level discipline (no direct
+        # ``jarvis.tools.general``/``capabilities``/``dispatch`` imports
+        # outside the package) is enforced by
+        # :class:`tests.test_assemble_tool_list.TestAC005NoSubmoduleImports`.
+        ["jarvis.adapters"],
     )
-    def test_specific_reserved_not_imported_by_any_domain_module(
-        self, reserved_name: str
-    ) -> None:
-        """Explicitly test that jarvis.adapters and jarvis.tools are never imported."""
+    def test_specific_reserved_not_imported_by_any_domain_module(self, reserved_name: str) -> None:
+        """Explicitly test that jarvis.adapters is never imported by domain modules."""
         violations: list[str] = []
         for domain_package in DOMAIN_PACKAGES:
             for filepath in _python_files_in_package(domain_package):
@@ -162,6 +165,7 @@ class TestStaticImportGraph:
 # ---------------------------------------------------------------------------
 # Runtime import analysis
 # ---------------------------------------------------------------------------
+
 
 class TestRuntimeImportGraph:
     """Verify no domain module transitively pulls in reserved packages at runtime."""
@@ -191,6 +195,7 @@ class TestRuntimeImportGraph:
 # ---------------------------------------------------------------------------
 # Shared module boundary — shared must not import from higher-level modules
 # ---------------------------------------------------------------------------
+
 
 class TestSharedModuleBoundary:
     """jarvis.shared must not import from any other jarvis subpackage."""
@@ -227,6 +232,7 @@ class TestSharedModuleBoundary:
 # Cross-check: reserved packages themselves are empty (no outbound imports)
 # ---------------------------------------------------------------------------
 
+
 class TestReservedPackagesAreLeaves:
     """Reserved packages must not import any jarvis subpackages."""
 
@@ -241,6 +247,5 @@ class TestReservedPackagesAreLeaves:
         imports = _extract_imports(init_path)
         jarvis_imports = [i for i in imports if i.startswith("jarvis")]
         assert jarvis_imports == [], (
-            f"{reserved}/__init__.py must not import jarvis modules, "
-            f"found: {jarvis_imports}"
+            f"{reserved}/__init__.py must not import jarvis modules, found: {jarvis_imports}"
         )

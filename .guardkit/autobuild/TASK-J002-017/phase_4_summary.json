@@ -1,0 +1,7 @@
+{
+  "tests_run": 998,
+  "tests_failed": 0,
+  "coverage_pct": 89.01,
+  "output_summary": "pytest: 996 passed, 2 skipped, 0 failed in 3.36s; line coverage 89.01% across src/jarvis (819 stmts, 90 miss)",
+  "quality_gates_passed": true
+}

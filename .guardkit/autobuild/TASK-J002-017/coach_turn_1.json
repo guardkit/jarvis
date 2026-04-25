@@ -1,0 +1,199 @@
+{
+  "task_id": "TASK-J002-017",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_import_graph.py tests/test_infrastructure.py tests/test_supervisor_lifecycle_wiring.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_supervisor_lifecycle_wiring.py::TestAC006AppStateCapabilityRegistry::test_app_state_capability_registry_populated_from_loader\ntests/test_supervisor_lifecycle_wiring.py::TestAC007StartupPerformance::test_startup_under_two_seconds\ntests/test_supervisor_lifecycle_wiring.py::TestAC008Seam::test_supervisor_has_nine_tools_and_registry_has_four_entries\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_supervisor_lifecycle_wiring.py:96: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n======================= 54 passed, 26 warnings in 1.74s ========================",
+      "duration_seconds": 3.069195032119751
+    },
+    "requirements": {
+      "criteria_total": 9,
+      "criteria_met": 9,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`jarvis.agents.supervisor.build_supervisor` gains two keyword-only kwargs: `tools: list[BaseTool] | None = None` and `available_capabilities: list[CapabilityDescriptor] | None = None`. Phase 1 callers (no kwargs) still work.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Updated build_supervisor in src/jarvis/agents/supervisor.py with `*` separator before tools and available_capabilities, both defaulting to None. test_signature_exposes_keyword_only_tools, test_signature_exposes_keyword_only_available_capabilities, and test_phase_1_callers_unaffected verify the signature and Phase 1 backwards compatibility.",
+      "notes": "Updated build_supervisor in src/jarvis/agents/supervisor.py with `*` separator before tools and available_capabilities, both defaulting to None. test_signature_exposes_keyword_only_tools, test_signature_exposes_keyword_only_available_capabilities, and test_phase_1_callers_unaffected verify the signature and Phase 1 backwards compatibility."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "When `available_capabilities` is None or empty, `{available_capabilities}` is replaced with the exact string `\"No capabilities currently registered.\"` per `.feature` L305.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added _render_available_capabilities helper that returns _DEFAULT_AVAILABLE_CAPABILITIES = 'No capabilities currently registered.' when descriptors is None or falsy. Verified by test_none_capabilities_renders_fallback and test_empty_capabilities_renders_fallback which both inspect the kwargs passed to create_deep_agent.",
+      "notes": "Added _render_available_capabilities helper that returns _DEFAULT_AVAILABLE_CAPABILITIES = 'No capabilities currently registered.' when descriptors is None or falsy. Verified by test_none_capabilities_renders_fallback and test_empty_capabilities_renders_fallback which both inspect the kwargs passed to create_deep_agent."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "When non-empty, descriptors are rendered via `CapabilityDescriptor.as_prompt_block()` in deterministic order by `agent_id`, joined with `\"\\n\\n\"`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_render_available_capabilities sorts descriptors with sorted(..., key=lambda d: d.agent_id) on a local list (does not mutate the caller's list) and joins each as_prompt_block() output with '\\n\\n'. test_blocks_rendered_via_as_prompt_block, test_blocks_sorted_by_agent_id (passes Charlie/Alpha/Bravo and asserts Alpha < Bravo < Charlie order in prompt), and test_blocks_joined_with_double_newline verify the contract.",
+      "notes": "_render_available_capabilities sorts descriptors with sorted(..., key=lambda d: d.agent_id) on a local list (does not mutate the caller's list) and joins each as_prompt_block() output with '\\n\\n'. test_blocks_rendered_via_as_prompt_block, test_blocks_sorted_by_agent_id (passes Charlie/Alpha/Bravo and asserts Alpha < Bravo < Charlie order in prompt), and test_blocks_joined_with_double_newline verify the contract."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "When `tools` is None, passes `tools=[]` to `create_deep_agent` (Phase 1 behaviour preserved).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_supervisor passes `tools=tools if tools is not None else []` to create_deep_agent. test_none_tools_forwards_empty_list verifies this; test_explicit_tool_list_forwards_unchanged verifies a non-None list flows through intact.",
+      "notes": "build_supervisor passes `tools=tools if tools is not None else []` to create_deep_agent. test_none_tools_forwards_empty_list verifies this; test_explicit_tool_list_forwards_unchanged verifies a non-None list flows through intact."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`jarvis.infrastructure.lifecycle.build_app_state` gains steps: `capability_registry = load_stub_registry(config.stub_capabilities_path)`, `tool_list = assemble_tool_list(config, capability_registry)`, then passes both into `build_supervisor(config, tools=tool_list, available_capabilities=capability_registry)`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "lifecycle.py imports load_stub_registry, assemble_tool_list, and CapabilityDescriptor from jarvis.tools at module top, then calls them in order between store creation and supervisor build. test_load_stub_registry_called_with_configured_path, test_assemble_tool_list_called_with_config_and_registry, and test_build_supervisor_called_with_tools_and_capabilities patch each seam and assert the call arguments.",
+      "notes": "lifecycle.py imports load_stub_registry, assemble_tool_list, and CapabilityDescriptor from jarvis.tools at module top, then calls them in order between store creation and supervisor build. test_load_stub_registry_called_with_configured_path, test_assemble_tool_list_called_with_config_and_registry, and test_build_supervisor_called_with_tools_and_capabilities patch each seam and assert the call arguments."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`AppState` gains `capability_registry: list[CapabilityDescriptor]` field.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "AppState dataclass has a new capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list) field. The default factory keeps existing TestAppStateImmutability test (which constructs AppState with 4 kwargs) working without modification. test_field_present_on_dataclass and test_app_state_capability_registry_populated_from_loader verify the field is declared and populated by build_app_state.",
+      "notes": "AppState dataclass has a new capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list) field. The default factory keeps existing TestAppStateImmutability test (which constructs AppState with 4 kwargs) working without modification. test_field_present_on_dataclass and test_app_state_capability_registry_populated_from_loader verify the field is declared and populated by build_app_state."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Startup still completes in under 2 seconds with the 4-entry stub registry (no network).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "test_startup_under_two_seconds wires the real load_stub_registry / assemble_tool_list against the 4-entry stub_capabilities.yaml, patches init_chat_model with the deterministic fake_llm to avoid any network, measures time.perf_counter() across build_app_state, and asserts elapsed < 2.0. The test passes consistently in well under 1 second on the project's CI environment.",
+      "notes": "test_startup_under_two_seconds wires the real load_stub_registry / assemble_tool_list against the 4-entry stub_capabilities.yaml, patches init_chat_model with the deterministic fake_llm to avoid any network, measures time.perf_counter() across build_app_state, and asserts elapsed < 2.0. The test passes consistently in well under 1 second on the project's CI environment."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Seam test: calling `build_app_state(test_config)` returns an `AppState` whose `supervisor` has 9 tools wired and `capability_registry` has 4 entries.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "test_supervisor_has_nine_tools_and_registry_has_four_entries calls build_app_state with the canonical 4-entry stub registry path, asserts len(state.capability_registry) == 4, and walks the compiled DeepAgents graph nodes via _extract_tool_names to confirm the 9 Phase 2 tool names (calculate, capabilities_refresh, capabilities_subscribe_updates, dispatch_by_capability, get_calendar_events, list_available_capabilities, queue_build, read_file, search_web) are wired into the supervisor's ToolNode.",
+      "notes": "test_supervisor_has_nine_tools_and_registry_has_four_entries calls build_app_state with the canonical 4-entry stub registry path, asserts len(state.capability_registry) == 4, and walks the compiled DeepAgents graph nodes via _extract_tool_names to confirm the 9 Phase 2 tool names (calculate, capabilities_refresh, capabilities_subscribe_updates, dispatch_by_capability, get_calendar_events, list_available_capabilities, queue_build, read_file, search_web) are wired into the supervisor's ToolNode."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `ruff check` and `ruff format --check` against all modified files (src/jarvis/agents/supervisor.py, src/jarvis/infrastructure/lifecycle.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_infrastructure.py, tests/test_import_graph.py): 'All checks passed!' and '5 files already formatted'.",
+      "notes": "Ran `ruff check` and `ruff format --check` against all modified files (src/jarvis/agents/supervisor.py, src/jarvis/infrastructure/lifecycle.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_infrastructure.py, tests/test_import_graph.py): 'All checks passed!' and '5 files already formatted'."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`jarvis.agents.supervisor.build_supervisor` gains two keyword-only kwargs: `tools: list[BaseTool] | None = None` and `available_capabilities: list[CapabilityDescriptor] | None = None`. Phase 1 callers (no kwargs) still work.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Updated build_supervisor in src/jarvis/agents/supervisor.py with `*` separator before tools and available_capabilities, both defaulting to None. test_signature_exposes_keyword_only_tools, test_signature_exposes_keyword_only_available_capabilities, and test_phase_1_callers_unaffected verify the signature and Phase 1 backwards compatibility.",
+        "notes": "Updated build_supervisor in src/jarvis/agents/supervisor.py with `*` separator before tools and available_capabilities, both defaulting to None. test_signature_exposes_keyword_only_tools, test_signature_exposes_keyword_only_available_capabilities, and test_phase_1_callers_unaffected verify the signature and Phase 1 backwards compatibility."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "When `available_capabilities` is None or empty, `{available_capabilities}` is replaced with the exact string `\"No capabilities currently registered.\"` per `.feature` L305.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added _render_available_capabilities helper that returns _DEFAULT_AVAILABLE_CAPABILITIES = 'No capabilities currently registered.' when descriptors is None or falsy. Verified by test_none_capabilities_renders_fallback and test_empty_capabilities_renders_fallback which both inspect the kwargs passed to create_deep_agent.",
+        "notes": "Added _render_available_capabilities helper that returns _DEFAULT_AVAILABLE_CAPABILITIES = 'No capabilities currently registered.' when descriptors is None or falsy. Verified by test_none_capabilities_renders_fallback and test_empty_capabilities_renders_fallback which both inspect the kwargs passed to create_deep_agent."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "When non-empty, descriptors are rendered via `CapabilityDescriptor.as_prompt_block()` in deterministic order by `agent_id`, joined with `\"\\n\\n\"`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_render_available_capabilities sorts descriptors with sorted(..., key=lambda d: d.agent_id) on a local list (does not mutate the caller's list) and joins each as_prompt_block() output with '\\n\\n'. test_blocks_rendered_via_as_prompt_block, test_blocks_sorted_by_agent_id (passes Charlie/Alpha/Bravo and asserts Alpha < Bravo < Charlie order in prompt), and test_blocks_joined_with_double_newline verify the contract.",
+        "notes": "_render_available_capabilities sorts descriptors with sorted(..., key=lambda d: d.agent_id) on a local list (does not mutate the caller's list) and joins each as_prompt_block() output with '\\n\\n'. test_blocks_rendered_via_as_prompt_block, test_blocks_sorted_by_agent_id (passes Charlie/Alpha/Bravo and asserts Alpha < Bravo < Charlie order in prompt), and test_blocks_joined_with_double_newline verify the contract."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "When `tools` is None, passes `tools=[]` to `create_deep_agent` (Phase 1 behaviour preserved).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_supervisor passes `tools=tools if tools is not None else []` to create_deep_agent. test_none_tools_forwards_empty_list verifies this; test_explicit_tool_list_forwards_unchanged verifies a non-None list flows through intact.",
+        "notes": "build_supervisor passes `tools=tools if tools is not None else []` to create_deep_agent. test_none_tools_forwards_empty_list verifies this; test_explicit_tool_list_forwards_unchanged verifies a non-None list flows through intact."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`jarvis.infrastructure.lifecycle.build_app_state` gains steps: `capability_registry = load_stub_registry(config.stub_capabilities_path)`, `tool_list = assemble_tool_list(config, capability_registry)`, then passes both into `build_supervisor(config, tools=tool_list, available_capabilities=capability_registry)`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "lifecycle.py imports load_stub_registry, assemble_tool_list, and CapabilityDescriptor from jarvis.tools at module top, then calls them in order between store creation and supervisor build. test_load_stub_registry_called_with_configured_path, test_assemble_tool_list_called_with_config_and_registry, and test_build_supervisor_called_with_tools_and_capabilities patch each seam and assert the call arguments.",
+        "notes": "lifecycle.py imports load_stub_registry, assemble_tool_list, and CapabilityDescriptor from jarvis.tools at module top, then calls them in order between store creation and supervisor build. test_load_stub_registry_called_with_configured_path, test_assemble_tool_list_called_with_config_and_registry, and test_build_supervisor_called_with_tools_and_capabilities patch each seam and assert the call arguments."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`AppState` gains `capability_registry: list[CapabilityDescriptor]` field.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "AppState dataclass has a new capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list) field. The default factory keeps existing TestAppStateImmutability test (which constructs AppState with 4 kwargs) working without modification. test_field_present_on_dataclass and test_app_state_capability_registry_populated_from_loader verify the field is declared and populated by build_app_state.",
+        "notes": "AppState dataclass has a new capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list) field. The default factory keeps existing TestAppStateImmutability test (which constructs AppState with 4 kwargs) working without modification. test_field_present_on_dataclass and test_app_state_capability_registry_populated_from_loader verify the field is declared and populated by build_app_state."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Startup still completes in under 2 seconds with the 4-entry stub registry (no network).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "test_startup_under_two_seconds wires the real load_stub_registry / assemble_tool_list against the 4-entry stub_capabilities.yaml, patches init_chat_model with the deterministic fake_llm to avoid any network, measures time.perf_counter() across build_app_state, and asserts elapsed < 2.0. The test passes consistently in well under 1 second on the project's CI environment.",
+        "notes": "test_startup_under_two_seconds wires the real load_stub_registry / assemble_tool_list against the 4-entry stub_capabilities.yaml, patches init_chat_model with the deterministic fake_llm to avoid any network, measures time.perf_counter() across build_app_state, and asserts elapsed < 2.0. The test passes consistently in well under 1 second on the project's CI environment."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "Seam test: calling `build_app_state(test_config)` returns an `AppState` whose `supervisor` has 9 tools wired and `capability_registry` has 4 entries.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "test_supervisor_has_nine_tools_and_registry_has_four_entries calls build_app_state with the canonical 4-entry stub registry path, asserts len(state.capability_registry) == 4, and walks the compiled DeepAgents graph nodes via _extract_tool_names to confirm the 9 Phase 2 tool names (calculate, capabilities_refresh, capabilities_subscribe_updates, dispatch_by_capability, get_calendar_events, list_available_capabilities, queue_build, read_file, search_web) are wired into the supervisor's ToolNode.",
+        "notes": "test_supervisor_has_nine_tools_and_registry_has_four_entries calls build_app_state with the canonical 4-entry stub registry path, asserts len(state.capability_registry) == 4, and walks the compiled DeepAgents graph nodes via _extract_tool_names to confirm the 9 Phase 2 tool names (calculate, capabilities_refresh, capabilities_subscribe_updates, dispatch_by_capability, get_calendar_events, list_available_capabilities, queue_build, read_file, search_web) are wired into the supervisor's ToolNode."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `ruff check` and `ruff format --check` against all modified files (src/jarvis/agents/supervisor.py, src/jarvis/infrastructure/lifecycle.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_infrastructure.py, tests/test_import_graph.py): 'All checks passed!' and '5 files already formatted'.",
+        "notes": "Ran `ruff check` and `ruff format --check` against all modified files (src/jarvis/agents/supervisor.py, src/jarvis/infrastructure/lifecycle.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_infrastructure.py, tests/test_import_graph.py): 'All checks passed!' and '5 files already formatted'."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 261 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1043/5200 tokens\n\n### \ud83c\udfa8 Relevant Patterns\n- HAS_SEQUENCE_STEP\n- HAS_FIELD_TYPE\n\n### \u26a0\ufe0f Warnings\n- OCCURS_IN_MODE\n- USES_ENDPOINT\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE\n- HAS_ROLE_CONSTRAINT\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- CREATED_BY\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}
