@@ -47,6 +47,30 @@ providers = [
     "langchain-google-genai>=2.0",
 ]
 
+# ---------------------------------------------------------------------------
+# uv path sources — Phase 2 (TASK-J002-023) + ADR-ARCH-010
+# ---------------------------------------------------------------------------
+# `nats-core` is installed from the sibling repository per
+# ADR-ARCH-010 (Python 3.12 and DeepAgents pin) — "installed from sibling
+# repo (pip-installed wheel)". The PyPI publication of `nats-core` requires
+# Python >=3.13 which collides with our `requires-python = ">=3.12,<3.13"`
+# pin, so we resolve it from the local sibling working tree where the
+# package's own `requires-python` is `>=3.10`.
+#
+# The canonical layout assumes `nats-core` is a sibling of `jarvis`:
+#
+#   …/appmilla_github/jarvis/        ← this project
+#   …/appmilla_github/nats-core/     ← target of `../nats-core`
+#
+# Note for git worktrees: `uv` resolves the path relative to the directory
+# that contains *this* pyproject.toml. From a worktree at
+# `.guardkit/worktrees/<branch>/` the literal `../nats-core` would resolve
+# to `.guardkit/worktrees/nats-core`, which won't exist. The autobuild
+# workflow places a symlink there pointing at the real sibling so worktrees
+# can lock/sync without rewriting this file.
+[tool.uv.sources]
+nats-core = { path = "../nats-core", editable = true }
+
 [dependency-groups]
 dev = [
     "pytest>=8",

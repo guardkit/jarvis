@@ -1,0 +1,87 @@
+{
+  "task_id": "TASK-J002-003",
+  "timestamp": "2026-04-25T16:25:18.965495",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    "tests/test_reserved_packages.py"
+  ],
+  "files_created": [
+    "src/jarvis/tools/capabilities.py",
+    "tests/test_capabilities.py"
+  ],
+  "tests_written": [
+    "tests/test_capabilities.py"
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/tools/capabilities.py` defines `CapabilityToolSummary(BaseModel)` with fields `tool_name: str (min_length=1)`, `description: str (min_length=1)`, `risk_level: Literal[\"read_only\",\"mutating\",\"destructive\"] = \"read_only\"` and `ConfigDict(extra=\"ignore\")`.",
+      "status": "complete",
+      "evidence": "src/jarvis/tools/capabilities.py defines CapabilityToolSummary(BaseModel) with the exact field set: tool_name: str = Field(min_length=1), description: str = Field(min_length=1), risk_level: Literal['read_only','mutating','destructive'] = 'read_only', and model_config = ConfigDict(extra='ignore'). tests/test_capabilities.py::TestCapabilityToolSummary covers required fields, default risk_level, all three valid risk_level values, ValidationError on invalid risk_level, ValidationError on empty tool_name/description, and the extra='ignore' forward-compatibility behaviour.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Same file defines `CapabilityDescriptor(BaseModel)` with fields `agent_id: str (pattern=r\"^[a-z][a-z0-9-]*$\")`, `role: str`, `description: str`, `capability_list: list[CapabilityToolSummary]`, `cost_signal: str = \"unknown\"`, `latency_signal: str = \"unknown\"`, `last_heartbeat_at: datetime | None = None`, `trust_tier: Literal[\"core\",\"specialist\",\"extension\"] = \"specialist\"`, and `ConfigDict(extra=\"ignore\")`.",
+      "status": "complete",
+      "evidence": "src/jarvis/tools/capabilities.py defines CapabilityDescriptor(BaseModel) with: agent_id: str = Field(pattern=r'^[a-z][a-z0-9-]*$', ...), role: str = Field(min_length=1), description: str = Field(min_length=1), capability_list: list[CapabilityToolSummary] = Field(default_factory=list), cost_signal: str = Field(default='unknown'), latency_signal: str = Field(default='unknown'), last_heartbeat_at: datetime | None = None, trust_tier: Literal['core','specialist','extension'] = 'specialist', and model_config = ConfigDict(extra='ignore'). tests/test_capabilities.py::TestCapabilityDescriptor covers default field values, six valid kebab-case agent_ids, eight invalid agent_id formats (empty, leading digit, leading hyphen, uppercase, underscore, dot, space, all-caps), all three valid trust_tier values, ValidationError on invalid trust_tier, capability_list holding summaries, dict-coercion of capability_list entries, datetime acceptance for last_heartbeat_at, and extra='ignore' stripping unknown fields (e.g. container_id leak).",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `CapabilityDescriptor.as_prompt_block() -> str` renders a deterministic text block whose format matches DM-tool-types.md \u00a7\"Prompt-block shape\" byte-for-byte.",
+      "status": "complete",
+      "evidence": "as_prompt_block() returns '### {agent_id} \u2014 {role} (trust: {trust_tier}, cost: {cost_signal}, latency: {latency_signal})' followed by blank line, description verbatim, blank line, 'Tools:', then one '  - {tool_name} ({risk_level}) \u2014 {description}' line per capability with embedded newlines re-indented to 4-space continuation. tests/test_capabilities.py::TestAsPromptBlock::test_byte_for_byte_matches_dm_tool_types_example asserts == against the literal example from DM-tool-types.md (architect-agent / Architect / specialist / moderate / 5-30s / two tools, including the multi-line run_architecture_session description) and passes. Additional tests cover determinism (same inputs \u2192 same bytes), zero-capability rendering, default cost/latency='unknown' header, trust_tier='core' header, and return type str.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Module has no import of `jarvis.agents.*`, `jarvis.infrastructure.*`, or `jarvis.cli.*`.",
+      "status": "complete",
+      "evidence": "src/jarvis/tools/capabilities.py imports only: __future__.annotations, datetime.datetime, typing.Literal, pydantic.{BaseModel, ConfigDict, Field}. No jarvis.* imports of any kind. tests/test_capabilities.py::TestModuleIsLeaf::test_no_forbidden_static_imports parses the module's AST and asserts no import or from-import targets jarvis.agents, jarvis.infrastructure, or jarvis.cli (or any submodule of those). The pre-existing tests/test_import_graph.py also confirms the wider invariant continues to hold for all domain packages.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    }
+  ]
+}

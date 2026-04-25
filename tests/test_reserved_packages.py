@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib
 import pathlib
 import sys
+from types import ModuleType
 
 import pytest
 
@@ -44,15 +45,34 @@ class TestAC001_AllPackagesImportable:
         assert package in sys.modules
 
 
+def _is_own_submodule(value: object, package: str) -> bool:
+    """Return True if ``value`` is a submodule of ``package``.
+
+    Loaded submodules become attributes of their parent package (Python
+    import-system behaviour). They are *not* public symbols defined by
+    ``__init__.py``, so they should be filtered out before asserting the
+    package's namespace is empty.
+    """
+    return (
+        isinstance(value, ModuleType)
+        and getattr(value, "__name__", "").startswith(package + ".")
+    )
+
+
 class TestAC002_EmptyNamespace:
-    """AC-002: `from jarvis.<pkg> import *` yields nothing (empty namespace)."""
+    """AC-002: ``__init__.py`` itself defines no public symbols.
+
+    Submodules attached to the package by other imports (e.g.
+    ``jarvis.tools.capabilities`` after TASK-J002-003) are filtered out —
+    they are not "exports" of the package's ``__init__.py`` and would not
+    be pulled in by ``from jarvis.<pkg> import *`` without ``__all__``.
+    """
 
     @pytest.mark.parametrize("package", RESERVED_PACKAGES)
     def test_star_import_yields_nothing(self, package: str) -> None:
-        """The namespace of each reserved package must be empty.
+        """The package's own namespace (excl. submodules) must be empty.
 
-        Either __all__ is not defined (dir() returns only dunder attrs)
-        or __all__ is an empty list.
+        Either __all__ is not defined or __all__ is an empty list.
         """
         mod = importlib.import_module(package)
         all_exports = getattr(mod, "__all__", None)
@@ -61,17 +81,25 @@ class TestAC002_EmptyNamespace:
                 f"{package}.__all__ should be empty, got {all_exports}"
             )
         else:
-            # No __all__ — verify no public names exported
-            public_names = [n for n in dir(mod) if not n.startswith("_")]
+            public_names = [
+                n
+                for n in dir(mod)
+                if not n.startswith("_")
+                and not _is_own_submodule(getattr(mod, n, None), package)
+            ]
             assert public_names == [], (
                 f"{package} should have no public names, found {public_names}"
             )
 
     @pytest.mark.parametrize("package", RESERVED_PACKAGES)
     def test_dict_has_no_public_symbols(self, package: str) -> None:
-        """Module __dict__ should contain no public symbols."""
+        """Module __dict__ should contain no public non-submodule symbols."""
         mod = importlib.import_module(package)
-        public = {k for k in mod.__dict__ if not k.startswith("_")}
+        public = {
+            k
+            for k, v in mod.__dict__.items()
+            if not k.startswith("_") and not _is_own_submodule(v, package)
+        }
         assert public == set(), (
             f"{package} should have no public symbols, found {public}"
         )
