@@ -1,10 +1,10 @@
 ---
 id: TASK-J002-002
-title: "Write canonical stub_capabilities.yaml"
+title: Write canonical stub_capabilities.yaml
 task_type: declarative
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 1
 wave: 1
@@ -13,14 +13,39 @@ estimated_minutes: 20
 dependencies: []
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "Listing available capabilities returns the current stub registry"
-swap_point_note: "DELETED in FEAT-JARVIS-004 when NATSKVManifestRegistry wires live reads. Grep anchor: `stub_capabilities.yaml`."
+- Listing available capabilities returns the current stub registry
+swap_point_note: 'DELETED in FEAT-JARVIS-004 when NATSKVManifestRegistry wires live
+  reads. Grep anchor: `stub_capabilities.yaml`.'
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T16:18:47.015156'
+  last_updated: '2026-04-25T16:21:54.642396'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T16:18:47.015156'
+    player_summary: "Created src/jarvis/config/stub_capabilities.yaml by copying the\
+      \ canonical YAML block from docs/design/FEAT-JARVIS-002/models/DM-stub-registry.md\
+      \ \xA7'Canonical Phase 2 content' verbatim. The file declares version: \"1.0\"\
+      \ plus four capability entries \u2014 architect-agent (specialist), product-owner-agent\
+      \ (specialist), ideation-agent (specialist), and forge (core). All agent_id\
+      \ values are kebab-case, all tool_name values are snake_case, all trust_tier\
+      \ values come from the {core, specialist, extension} se"
+    player_success: true
+    coach_success: true
 ---
 # Write canonical stub_capabilities.yaml
 

@@ -1049,11 +1049,126 @@ Caveat: AutoBuild 002 and AutoBuild 003 both edit src/jarvis/agents/supervisor.p
   --context docs/research/ideas/phase2-build-plan.md \
   --context .guardkit/context-manifest.yaml
 
+FEATURE PLANNING COMPLETE — FEAT-J002
+What changed
+Artefact	Path
+Review report	.claude/reviews/TASK-REV-J002-review-report.md (881 lines)
+Review task (status: review_complete)	tasks/in_review/TASK-REV-J002-plan-core-tools-and-dispatch.md
+Implementation guide	tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/IMPLEMENTATION-GUIDE.md
+Feature README	tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/README.md
+23 task files	tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-*.md
+Structured YAML	.guardkit/features/FEAT-J002.yaml
+BDD-linked feature file	features/feat-jarvis-002-core-tools-and-dispatch/feat-jarvis-002-core-tools-and-dispatch.feature — 42 scenarios now carry @task: tags
+Task generator (regeneratable)	scripts/gen_feat_j002_tasks.py
+Plan summary
+Approach: Option B — Envelope-first, concurrent fan-out (review score 12/12)
+Tasks: 23 · Waves: 6 (auto-detected by dependency analysis — more parallelism than the original 5-wave plan because test-018 can run alongside Wave 2)
+Scenario coverage: 42/42 .feature scenarios tagged with @task: for R2 BDD oracle
+Estimated duration: 1155 min serial · ~12–14h wall-clock with parallel execution
+Quality gates
+✅ Pre-flight validation: 0 missing files · 0 bad deps · 0 intra-wave conflicts · 0 orphans · 0 invalid task_types
+✅ AC-quality linter: 0 unverifiable acceptance criteria
+✅ BDD linker: 42/42 scenarios matched (41 ≥ 0.90 confidence, 1 at 0.75)
+ℹ️ R3 smoke-gates not configured (non-blocking notice — between-wave smoke checks won't fire; add a smoke_gates: block to the YAML before /feature-build if you want them)
+One caveat worth surfacing
+The reviewer resolved a source-of-truth conflict in my original review task (my review-task wording used invented tool names write_workspace_file / list_workspace / ingest_capability_registry / dispatch_to_agent / dispatch_subscribe that appear nowhere in the authoritative spec) by adopting the 9-tool surface from the .feature + design.md + DDR-005. The plan you now have is aligned with the authoritative spec, not with my review-task description.
+
+Next steps
+
+/feature-build FEAT-J002        # Autonomous Player-Coach execution (recommended)
+
+# or start Wave 1 manually (7 parallel tasks):
+/task-work TASK-J002-001
+/task-work TASK-J002-002
+/task-work TASK-J002-003
+/task-work TASK-J002-004
+/task-work TASK-J002-005
+/task-work TASK-J002-007
+/task-work TASK-J002-023
+
+
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J002 --verbose --max-turns 30
 
 
 
+/feature-spec "Async Subagents for Model Routing: four AsyncSubAgent instances (deep_reasoner, adversarial_critic, long_research, quick_local) via AsyncSubAgentMiddleware with ASGI transport; cost+latency descriptions; quick_local fallback hook under stubbed GB10 health signal" \
+  --context docs/design/FEAT-JARVIS-003/design.md \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md \
+  --context docs/architecture/ARCHITECTURE.md \
+  --context docs/architecture/decisions/ADR-J-001-deepagents-pin.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-031-async-subagents-for-long-running-work.md \
+  --context ../specialist-agent/docs/reviews/deepagents-sdk-2026-04.md \
+  --context src/jarvis/agents/supervisor.py \
+  --context src/jarvis/tools/general.py \
+  --context .guardkit/context-manifest.yaml
 
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE SPEC COMPLETE: Async Subagent for Model Routing + Attended Frontier Escape
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Files written:
+features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature
+features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape_assumptions.yaml
+features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape_summary.md
+
+Scenarios: 44 total
+@key-example: 10   @boundary: 6
+@negative: 17      @edge-case: 18
+@smoke: 11         @regression: 1
+@security: 3       @concurrency: 1
+@integrity: 1      @integration: 2
+
+Assumptions: 6 total
+high: 0 (auto-proceed)
+medium: 5 (Coach review recommended)
+low: 1 (human review required)
+
+REVIEW REQUIRED: 1 low-confidence assumption needs verification
+See: features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape_assumptions.yaml
+- ASSUM-004: Empty-string role ("") → unknown_role (vs missing_field)
+
+Deferred: 0 scenario groups
+
+Important reframe note: The originating command line names the retired four-cloud-subagent roster (deep_reasoner / adversarial_critic / long_research / quick_local) and the JA6 cloud-fallback hook. These were superseded between scope-doc authorship (2026-04-20) and design-doc landing (2026-04-23) by ADR-ARCH-001 / -011 / -012 / -027. The spec follows the authoritative design (docs/design/FEAT-JARVIS-003/design.md): one jarvis-reasoner AsyncSubAgent with role kwarg, attended-only escalate_to_frontier tool, swap-aware LlamaSwapAdapter with stubbed health.
+
+Next steps:
+Review: features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature
+Pass to feature-plan:
+
+
+/feature-plan "Async Subagent for Model Routing + Attended Frontier Escape" \
+  --context features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape_summary.md \
+  --context features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature \
+  --context features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape_assumptions.yaml \
+  --context docs/design/FEAT-JARVIS-003/design.md \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md \
+  --context .guardkit/context-manifest.yaml
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE PLANNING COMPLETE — FEAT-JARVIS-003
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Artefacts landed:
+
+Review: .claude/reviews/TASK-REV-J003-review-report.md (3 options analysed, Option B ★ 12/12)
+Review task: tasks/in_review/TASK-REV-J003-plan-async-subagent-and-frontier-escape.md (status: review_complete)
+AutoBuild YAML: .guardkit/features/FEAT-J003.yaml — 24 tasks, auto-detected 8 dep-chain waves, 0 unverifiable AC
+Task breakdown: 24 markdown files under tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/
+Implementation guide: IMPLEMENTATION-GUIDE.md — Mermaid data-flow + gate sequence + dependency graph + §4 Integration Contracts (8 load-bearing contracts)
+Feature README: README.md
+BDD-linked feature file: 44/44 scenarios tagged with @task:TASK-J003-xxx (avg confidence 0.88, 0 below threshold) — R2 BDD oracle active during /task-work Phase 4
+Approach adopted: Option B — envelope-first concurrent fan-out. Max task complexity 6 (Coach-Player stall mitigation). Three-layer belt+braces gate split into L1 (010) / L2 (011) / L3 (012) standalone tasks per Context A concerns. Regression (020) + role-propagation integration (022) are standalone.
+
+Non-blocking notices from the planner:
+
+R3 smoke-gates block not declared in YAML — optional, add smoke_gates: before running /feature-build if you want between-wave smoke checks.
+Step 8.5 pre-flight validation skipped (no guardkit feature validate subcommand in this install). generate-feature-yaml --discover already validated all 24 task-file paths and dep chains.
+Ready for Step 8. /feature-build FEAT-J003 — AutoBuild cycle over the 24 subtasks; Coach-Player loop per subtask; R2 BDD oracle runs tagged scenarios per task during /task-work Phase 4.
+
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003 --verbose --max-turns 30
 
 
 

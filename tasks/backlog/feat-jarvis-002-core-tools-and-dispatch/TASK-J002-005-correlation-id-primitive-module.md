@@ -1,10 +1,10 @@
 ---
 id: TASK-J002-005
-title: "Correlation-ID primitive module"
+title: Correlation-ID primitive module
 task_type: feature
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 2
 wave: 1
@@ -13,14 +13,39 @@ estimated_minutes: 30
 dependencies: []
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "Concurrent dispatch_by_capability calls produce distinct correlation ids and independent log lines"
-swap_point_note: "n/a — correlation-id primitive is unchanged across phases."
+- Concurrent dispatch_by_capability calls produce distinct correlation ids and independent
+  log lines
+swap_point_note: "n/a \u2014 correlation-id primitive is unchanged across phases."
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T16:18:47.034279'
+  last_updated: '2026-04-25T16:21:48.885408'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T16:18:47.034279'
+    player_summary: "Created src/jarvis/tools/_correlation.py as the single, canonical\
+      \ callsite for dispatch-path correlation IDs per ASSUM-001. The module imports\
+      \ ONLY the stdlib 'uuid' (no __future__ import, no other imports \u2014 AC-002\
+      \ strictly mandates a single dependency) and exposes new_correlation_id() ->\
+      \ str returning str(uuid.uuid4()). The module docstring explicitly labels the\
+      \ module as the 'single callsite' for 'dispatch-path correlation IDs', references\
+      \ ASSUM-001, and documents the concurrency-safety ration"
+    player_success: true
+    coach_success: true
 ---
 # Correlation-ID primitive module
 

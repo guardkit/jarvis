@@ -1,10 +1,10 @@
 ---
 id: TASK-J002-007
-title: "Stub-response-hook contract for dispatch"
+title: Stub-response-hook contract for dispatch
 task_type: scaffolding
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 2
 wave: 1
@@ -13,15 +13,43 @@ estimated_minutes: 30
 dependencies: []
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "Stubbed dispatches construct real nats-core payloads before logging"
-  - "Stubbed queue_build constructs a real BuildQueuedPayload before logging"
-swap_point_note: "Establishes the grep anchors required by DDR-009. Test TASK-J002-021 asserts the grep-count invariant."
+- Stubbed dispatches construct real nats-core payloads before logging
+- Stubbed queue_build constructs a real BuildQueuedPayload before logging
+swap_point_note: Establishes the grep anchors required by DDR-009. Test TASK-J002-021
+  asserts the grep-count invariant.
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T16:18:47.016472'
+  last_updated: '2026-04-25T16:26:04.923583'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T16:18:47.016472'
+    player_summary: 'Implemented the DDR-009 swap-point seam in src/jarvis/tools/dispatch.py.
+      The file was already present from a previous checkpoint with byte-identical
+      content to what this task requires; my Write produced no diff (verified via
+      `git diff src/jarvis/tools/dispatch.py` which returned empty). I added a fresh
+      tests/test_tools_dispatch_contract.py covering all five acceptance criteria.
+
+
+      Key design decisions:
+
+      - StubResponse is encoded as a TypeAlias union of three tagged tuples: tuple[Literal[''success''],'
+    player_success: true
+    coach_success: true
 ---
 # Stub-response-hook contract for dispatch
 

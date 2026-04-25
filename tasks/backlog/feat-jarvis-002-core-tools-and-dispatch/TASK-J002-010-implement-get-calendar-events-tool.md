@@ -1,28 +1,54 @@
 ---
 id: TASK-J002-010
-title: "Implement get_calendar_events tool"
+title: Implement get_calendar_events tool
 task_type: feature
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 2
 wave: 2
 implementation_mode: direct
 estimated_minutes: 40
-dependencies: ["TASK-J002-004"]
+dependencies:
+- TASK-J002-004
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "Retrieving calendar events in Phase 2 returns an empty list"
-  - "Requesting calendar events for an unknown window returns an invalid-window error"
-  - "Every tool converts internal errors into structured strings rather than raising"
-swap_point_note: "Stub returns empty list; real provider in v1.5. Grep anchor: `Phase 2 stub` inside get_calendar_events docstring."
+- Retrieving calendar events in Phase 2 returns an empty list
+- Requesting calendar events for an unknown window returns an invalid-window error
+- Every tool converts internal errors into structured strings rather than raising
+swap_point_note: 'Stub returns empty list; real provider in v1.5. Grep anchor: `Phase
+  2 stub` inside get_calendar_events docstring.'
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T16:27:08.368595'
+  last_updated: '2026-04-25T16:39:42.452610'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T16:27:08.368595'
+    player_summary: "Added get_calendar_events as a new @tool(parse_docstring=True)\
+      \ function in src/jarvis/tools/general.py alongside the pre-existing read_file/search_web/calculate\
+      \ tools. The argument is annotated with Literal[\"today\", \"tomorrow\", \"\
+      this_week\"] (driving the JSON schema exposed to the reasoning model) and is\
+      \ also captured in a module-level CalendarWindow Literal alias plus an _ALLOWED_WINDOWS\
+      \ tuple that the runtime guard uses. Valid windows return json.dumps([]) ==\
+      \ \"[]\" \u2014 a JSON array of CalendarEven"
+    player_success: true
+    coach_success: true
 ---
 # Implement get_calendar_events tool
 

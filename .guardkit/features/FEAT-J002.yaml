@@ -8,7 +8,7 @@ description: 'Populate src/jarvis/tools/ with 9 LangChain tools (read_file, sear
   swap-point discipline: two primary grep anchors guard FEAT-JARVIS-004/005 transport
   swap.'
 created: '2026-04-24T08:20:24.884175'
-status: planned
+status: completed
 complexity: 6
 estimated_tasks: 23
 tasks:
@@ -17,74 +17,138 @@ tasks:
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-001-extend-jarvisconfig-with-phase-2-fields.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:18:46.935378'
+  completed_at: '2026-04-25T16:27:06.198358'
 - id: TASK-J002-002
   name: Write canonical stub_capabilities.yaml
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-002-write-canonical-stub-capabilities-yaml.md
   complexity: 1
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 15
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:18:46.943378'
+  completed_at: '2026-04-25T16:27:06.206864'
 - id: TASK-J002-003
   name: Define CapabilityDescriptor + CapabilityToolSummary Pydantic models
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-003-define-capabilitydescriptor-capabilitytoolsummary-pydantic-m.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:18:46.951403'
+  completed_at: '2026-04-25T16:27:06.214944'
 - id: TASK-J002-004
   name: Define WebResult, CalendarEvent, DispatchError Pydantic models
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-004-define-webresult-calendarevent-dispatcherror-pydantic-models.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:18:46.959639'
+  completed_at: '2026-04-25T16:27:06.223021'
 - id: TASK-J002-005
   name: Correlation-ID primitive module
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-005-correlation-id-primitive-module.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:18:46.967679'
+  completed_at: '2026-04-25T16:27:06.231107'
 - id: TASK-J002-007
   name: Stub-response-hook contract for dispatch
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-007-stub-response-hook-contract-for-dispatch.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:18:46.975612'
+  completed_at: '2026-04-25T16:27:06.239407'
 - id: TASK-J002-023
   name: pyproject + dependency management
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-023-pyproject-dependency-management.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:18:46.985094'
+  completed_at: '2026-04-25T16:27:06.247640'
 - id: TASK-J002-006
   name: Stub registry loader
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-006-stub-registry-loader-load-stub-registry.md
   complexity: 3
   dependencies:
   - TASK-J002-003
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.238818'
+  completed_at: '2026-04-25T16:59:59.713467'
 - id: TASK-J002-008
   name: Implement read_file tool
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-008-implement-read-file-tool.md
@@ -92,10 +156,18 @@ tasks:
   dependencies:
   - TASK-J002-001
   - TASK-J002-004
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.247110'
+  completed_at: '2026-04-25T16:59:59.722465'
 - id: TASK-J002-009
   name: Implement search_web tool
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-009-implement-search-web-tool.md
@@ -103,30 +175,54 @@ tasks:
   dependencies:
   - TASK-J002-001
   - TASK-J002-004
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.255381'
+  completed_at: '2026-04-25T16:59:59.731373'
 - id: TASK-J002-010
   name: Implement get_calendar_events tool
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-010-implement-get-calendar-events-tool.md
   complexity: 2
   dependencies:
   - TASK-J002-004
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.263598'
+  completed_at: '2026-04-25T16:59:59.739914'
 - id: TASK-J002-011
   name: Implement calculate tool
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-011-implement-calculate-tool.md
   complexity: 4
   dependencies:
   - TASK-J002-004
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.271757'
+  completed_at: '2026-04-25T16:59:59.748718'
 - id: TASK-J002-012
   name: Implement list_available_capabilities + refresh + subscribe tools
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-012-implement-list-available-capabilities-refresh-subscribe-tool.md
@@ -134,10 +230,18 @@ tasks:
   dependencies:
   - TASK-J002-003
   - TASK-J002-006
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T17:00:01.812987'
+  completed_at: '2026-04-25T17:14:15.601528'
 - id: TASK-J002-013
   name: Implement dispatch_by_capability tool
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-013-implement-dispatch-by-capability-tool.md
@@ -147,10 +251,18 @@ tasks:
   - TASK-J002-004
   - TASK-J002-005
   - TASK-J002-007
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 170
+  requires_infrastructure: []
+  result:
+    total_turns: 2
+    final_decision: approved
+    error: null
+  turns_completed: 2
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.279910'
+  completed_at: '2026-04-25T16:59:59.757427'
 - id: TASK-J002-014
   name: Implement queue_build tool
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-014-implement-queue-build-tool.md
@@ -159,20 +271,36 @@ tasks:
   - TASK-J002-004
   - TASK-J002-005
   - TASK-J002-007
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 113
+  requires_infrastructure: []
+  result:
+    total_turns: 2
+    final_decision: approved
+    error: null
+  turns_completed: 2
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.288118'
+  completed_at: '2026-04-25T16:59:59.766411'
 - id: TASK-J002-016
   name: Extend supervisor_prompt with Tool-Usage section + available_capabilities
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-016-extend-supervisor-prompt-with-tool-usage-section-available-c.md
   complexity: 3
   dependencies:
   - TASK-J002-003
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.296288'
+  completed_at: '2026-04-25T16:59:59.775093'
 - id: TASK-J002-015
   name: assemble_tool_list + tools package __init__ re-exports
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-015-assemble-tool-list-tools-package-init-re-exports.md
@@ -185,10 +313,18 @@ tasks:
   - TASK-J002-012
   - TASK-J002-013
   - TASK-J002-014
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T17:14:17.498568'
+  completed_at: '2026-04-25T17:20:52.220582'
 - id: TASK-J002-017
   name: Extend build_supervisor signature and lifecycle wiring
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-017-extend-build-supervisor-signature-and-lifecycle-wiring.md
@@ -196,10 +332,18 @@ tasks:
   dependencies:
   - TASK-J002-015
   - TASK-J002-016
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T17:20:54.430449'
+  completed_at: '2026-04-25T17:33:29.264942'
 - id: TASK-J002-018
   name: Unit tests for tool types
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-018-unit-tests-for-tool-types-types-py-capabilities-py-models.md
@@ -207,10 +351,18 @@ tasks:
   dependencies:
   - TASK-J002-003
   - TASK-J002-004
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T16:27:08.304505'
+  completed_at: '2026-04-25T16:59:59.784066'
 - id: TASK-J002-019
   name: Unit tests for general tools
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-019-unit-tests-for-general-tools.md
@@ -220,10 +372,18 @@ tasks:
   - TASK-J002-009
   - TASK-J002-010
   - TASK-J002-011
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T17:00:01.821953'
+  completed_at: '2026-04-25T17:14:15.611365'
 - id: TASK-J002-020
   name: Unit tests for capability tools + snapshot isolation
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-020-unit-tests-for-capability-tools-snapshot-isolation.md
@@ -231,10 +391,18 @@ tasks:
   dependencies:
   - TASK-J002-006
   - TASK-J002-012
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T17:14:17.507636'
+  completed_at: '2026-04-25T17:20:52.231163'
 - id: TASK-J002-021
   name: Unit tests for dispatch tools + swap-point grep invariant
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-021-unit-tests-for-dispatch-tools-swap-point-grep-invariant.md
@@ -243,10 +411,18 @@ tasks:
   - TASK-J002-007
   - TASK-J002-013
   - TASK-J002-014
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 113
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T17:00:01.830755'
+  completed_at: '2026-04-25T17:14:15.620339'
 - id: TASK-J002-022
   name: Integration test supervisor-with-tools + nine-tool wiring
   file_path: tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/TASK-J002-022-integration-test-supervisor-with-tools-nine-tool-wiring-prom.md
@@ -257,10 +433,18 @@ tasks:
   - TASK-J002-019
   - TASK-J002-020
   - TASK-J002-021
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-25T17:33:31.205126'
+  completed_at: '2026-04-25T17:44:29.274463'
 orchestration:
   parallel_groups:
   - - TASK-J002-001
@@ -288,3 +472,21 @@ orchestration:
   - - TASK-J002-022
   estimated_duration_minutes: 1155
   recommended_parallel: 4
+execution:
+  started_at: '2026-04-25T16:18:46.879281'
+  completed_at: '2026-04-25T17:44:29.295360'
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  total_turns: 25
+  tasks_completed: 23
+  tasks_failed: 0
+  current_wave: 6
+  completed_waves:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  last_updated: '2026-04-25T17:44:29.285306'
+  archived_at: null
+  archived_to: null

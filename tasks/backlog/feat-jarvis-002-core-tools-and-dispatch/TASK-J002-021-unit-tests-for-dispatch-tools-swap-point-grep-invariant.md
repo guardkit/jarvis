@@ -1,45 +1,74 @@
 ---
 id: TASK-J002-021
-title: "Unit tests for dispatch tools + swap-point grep invariant"
+title: Unit tests for dispatch tools + swap-point grep invariant
 task_type: testing
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 6
 wave: 4
 implementation_mode: task-work
 estimated_minutes: 110
-dependencies: ["TASK-J002-007", "TASK-J002-013", "TASK-J002-014"]
+dependencies:
+- TASK-J002-007
+- TASK-J002-013
+- TASK-J002-014
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "Dispatching by capability resolves a specialist and returns a successful result"
-  - "Queueing a build for a planned feature returns an acknowledgement"
-  - "dispatch_by_capability accepts timeout_seconds only within 5 to 600"
-  - "queue_build validates feature_id against the documented pattern"
-  - "queue_build validates repo against the org/name pattern"
-  - "queue_build restricts originating_adapter to the documented values"
-  - "Dispatching by an unknown capability name returns an unresolved error"
-  - "dispatch_by_capability rejects payloads that are not JSON object literals"
-  - "Dispatching by capability with a simulated timeout returns a timeout error"
-  - "Dispatching by capability falls back to intent pattern matching when no exact tool match exists"
-  - "Stubbed dispatches construct real nats-core payloads before logging"
-  - "Stubbed queue_build constructs a real BuildQueuedPayload before logging"
-  - "Concurrent dispatch_by_capability calls produce distinct correlation ids and independent log lines"
-  - "dispatch_by_capability surfaces specialist-side failures as structured errors"
+- Dispatching by capability resolves a specialist and returns a successful result
+- Queueing a build for a planned feature returns an acknowledgement
+- dispatch_by_capability accepts timeout_seconds only within 5 to 600
+- queue_build validates feature_id against the documented pattern
+- queue_build validates repo against the org/name pattern
+- queue_build restricts originating_adapter to the documented values
+- Dispatching by an unknown capability name returns an unresolved error
+- dispatch_by_capability rejects payloads that are not JSON object literals
+- Dispatching by capability with a simulated timeout returns a timeout error
+- Dispatching by capability falls back to intent pattern matching when no exact tool
+  match exists
+- Stubbed dispatches construct real nats-core payloads before logging
+- Stubbed queue_build constructs a real BuildQueuedPayload before logging
+- Concurrent dispatch_by_capability calls produce distinct correlation ids and independent
+  log lines
+- dispatch_by_capability surfaces specialist-side failures as structured errors
 consumer_context:
-  - task: TASK-J002-007
-    consumes: "_stub_response_hook + LOG_PREFIX constants"
-    framework: "DDR-009 swap-point discipline"
-    driver: "stdlib logging + nats_core.events models"
-    format_note: "_stub_response_hook: Callable[[CommandPayload], StubResponse] | None = None; module-level LOG_PREFIX_DISPATCH='JARVIS_DISPATCH_STUB' and LOG_PREFIX_QUEUE_BUILD='JARVIS_QUEUE_BUILD_STUB' are the grep anchors. grep -rn must return exactly 4 lines (2 constants + 2 logger.info usages) post-Wave-3."
-swap_point_note: "Contains the **grep-invariant test** that guards DDR-009. If this test fails, a swap-point anchor has drifted and FEAT-JARVIS-004/005 will lose its landmark."
+- task: TASK-J002-007
+  consumes: _stub_response_hook + LOG_PREFIX constants
+  framework: DDR-009 swap-point discipline
+  driver: stdlib logging + nats_core.events models
+  format_note: '_stub_response_hook: Callable[[CommandPayload], StubResponse] | None
+    = None; module-level LOG_PREFIX_DISPATCH=''JARVIS_DISPATCH_STUB'' and LOG_PREFIX_QUEUE_BUILD=''JARVIS_QUEUE_BUILD_STUB''
+    are the grep anchors. grep -rn must return exactly 4 lines (2 constants + 2 logger.info
+    usages) post-Wave-3.'
+swap_point_note: Contains the **grep-invariant test** that guards DDR-009. If this
+  test fails, a swap-point anchor has drifted and FEAT-JARVIS-004/005 will lose its
+  landmark.
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T17:00:01.852750'
+  last_updated: '2026-04-25T17:14:15.598205'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T17:00:01.852750'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 # Unit tests for dispatch tools + swap-point grep invariant
 

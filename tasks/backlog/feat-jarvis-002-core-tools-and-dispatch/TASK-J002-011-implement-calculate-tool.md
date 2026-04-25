@@ -1,29 +1,49 @@
 ---
 id: TASK-J002-011
-title: "Implement calculate tool"
+title: Implement calculate tool
 task_type: feature
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 4
 wave: 2
 implementation_mode: task-work
 estimated_minutes: 60
-dependencies: ["TASK-J002-004"]
+dependencies:
+- TASK-J002-004
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "Evaluating a supported arithmetic expression returns a numeric result"
-  - "Calculating an expression that divides by zero returns a structured error"
-  - "Calculating an expression that exceeds the float range returns an overflow error"
-  - "Calculator rejects expressions containing unsafe tokens"
-  - "Every tool converts internal errors into structured strings rather than raising"
+- Evaluating a supported arithmetic expression returns a numeric result
+- Calculating an expression that divides by zero returns a structured error
+- Calculating an expression that exceeds the float range returns an overflow error
+- Calculator rejects expressions containing unsafe tokens
+- Every tool converts internal errors into structured strings rather than raising
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T16:27:08.331810'
+  last_updated: '2026-04-25T16:47:29.661089'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T16:27:08.331810'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 # Implement calculate tool
 

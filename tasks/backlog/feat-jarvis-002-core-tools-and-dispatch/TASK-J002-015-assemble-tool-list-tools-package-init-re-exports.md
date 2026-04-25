@@ -1,31 +1,65 @@
 ---
 id: TASK-J002-015
-title: "assemble_tool_list + tools package __init__ re-exports"
+title: assemble_tool_list + tools package __init__ re-exports
 task_type: scaffolding
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 3
 wave: 3
 implementation_mode: direct
 estimated_minutes: 40
-dependencies: ["TASK-J002-008", "TASK-J002-009", "TASK-J002-010", "TASK-J002-011", "TASK-J002-012", "TASK-J002-013", "TASK-J002-014"]
+dependencies:
+- TASK-J002-008
+- TASK-J002-009
+- TASK-J002-010
+- TASK-J002-011
+- TASK-J002-012
+- TASK-J002-013
+- TASK-J002-014
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "The supervisor is built with all nine Phase 2 tools wired"
+- The supervisor is built with all nine Phase 2 tools wired
 consumer_context:
-  - task: TASK-J002-003
-    consumes: "CapabilityDescriptor"
-    framework: "LangChain @tool(parse_docstring=True) + DeepAgents create_deep_agent"
-    driver: "pydantic v2"
-    format_note: "CapabilityDescriptor is a Pydantic v2 BaseModel with ConfigDict(extra='ignore'); agent_id matches ^[a-z][a-z0-9-]*$; trust_tier is Literal['core','specialist','extension']; as_prompt_block() renders deterministic text (see DM-tool-types.md §'Prompt-block shape')."
+- task: TASK-J002-003
+  consumes: CapabilityDescriptor
+  framework: LangChain @tool(parse_docstring=True) + DeepAgents create_deep_agent
+  driver: pydantic v2
+  format_note: "CapabilityDescriptor is a Pydantic v2 BaseModel with ConfigDict(extra='ignore');\
+    \ agent_id matches ^[a-z][a-z0-9-]*$; trust_tier is Literal['core','specialist','extension'];\
+    \ as_prompt_block() renders deterministic text (see DM-tool-types.md \xA7'Prompt-block\
+    \ shape')."
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T17:14:17.526772'
+  last_updated: '2026-04-25T17:20:52.217315'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T17:14:17.526772'
+    player_summary: "Populated src/jarvis/tools/__init__.py to expose the 15-symbol\
+      \ public surface listed in API-internal.md \xA71.1 (4 Pydantic types + 4 general\
+      \ tools + 3 capability catalogue tools + 2 dispatch tools + assemble_tool_list\
+      \ + load_stub_registry). The new assemble_tool_list(config, capability_registry)\
+      \ factory is the single wiring point: it (a) calls jarvis.tools.general.configure(config)\
+      \ so search_web can resolve the active JarvisConfig, (b) snapshot-copies the\
+      \ registry into capabilities._capability_reg"
+    player_success: true
+    coach_success: true
 ---
 # assemble_tool_list + tools package __init__ re-exports
 

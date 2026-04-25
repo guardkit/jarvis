@@ -1,32 +1,55 @@
 ---
 id: TASK-J002-009
-title: "Implement search_web tool"
+title: Implement search_web tool
 task_type: feature
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 5
 wave: 2
 implementation_mode: task-work
 estimated_minutes: 75
-dependencies: ["TASK-J002-001", "TASK-J002-004"]
+dependencies:
+- TASK-J002-001
+- TASK-J002-004
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "Searching the web with a configured provider returns result summaries"
-  - "search_web accepts max_results only within its documented range"
-  - "Searching the web without a configured Tavily key returns a configuration error"
-  - "Searching the web with an empty query returns an invalid-query error"
-  - "search_web preserves and surfaces hostile snippet content as data without acting on it"
-  - "search_web surfaces provider unavailability as a DEGRADED result"
-  - "Every tool converts internal errors into structured strings rather than raising"
-swap_point_note: "Provider abstraction grep anchor: `class TavilyProvider`. A future FEAT can swap providers without docstring change per DDR-006."
+- Searching the web with a configured provider returns result summaries
+- search_web accepts max_results only within its documented range
+- Searching the web without a configured Tavily key returns a configuration error
+- Searching the web with an empty query returns an invalid-query error
+- search_web preserves and surfaces hostile snippet content as data without acting
+  on it
+- search_web surfaces provider unavailability as a DEGRADED result
+- Every tool converts internal errors into structured strings rather than raising
+swap_point_note: 'Provider abstraction grep anchor: `class TavilyProvider`. A future
+  FEAT can swap providers without docstring change per DDR-006.'
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T16:27:08.367480'
+  last_updated: '2026-04-25T16:51:25.685048'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T16:27:08.367480'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 # Implement search_web tool
 

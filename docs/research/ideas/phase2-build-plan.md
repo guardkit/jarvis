@@ -10,7 +10,7 @@
 
 ## For: Giving Jarvis's supervisor its dispatch vocabulary — the tools it reaches for and the subagents it delegates to. First phase where "one reasoning model that knows which reasoning model to use" works in practice.
 ## Date: 20 April 2026
-## Status (2026-04-24): Phase 1 closed (22 Apr). Both `/system-design` runs complete (23 Apr). `/feature-spec` complete for both features (24 Apr). `/feature-plan` complete for FEAT-JARVIS-002 → AutoBuild feature [`FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) (23 subtasks, complexity 6, estimated). **Next: `/feature-plan FEAT-JARVIS-003` → AutoBuild YAML, then `/feature-build FEAT-J002` + `/feature-build FEAT-J003`.**
+## Status (2026-04-24): Phase 1 closed (22 Apr). Both `/system-design` runs complete (23 Apr). `/feature-spec` complete for both features (24 Apr). `/feature-plan` complete for both features (24 Apr) → AutoBuild features [`FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) (23 subtasks, complexity 6) and [`FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) (24 subtasks, complexity 7). **Next: `/feature-build FEAT-J002` + `/feature-build FEAT-J003`.**
 ## Repo: `guardkit/jarvis`
 ## Machine: MacBook Pro M2 Max (planning + build via Claude Code)
 
@@ -24,7 +24,7 @@ The `/feature-plan` command produces structured YAML feature files under
 |---|---|---|---|
 | FEAT-JARVIS-001 | [`FEAT-JARVIS-001.yaml`](../../../.guardkit/features/FEAT-JARVIS-001.yaml) | `tasks/backlog/project-scaffolding-supervisor-sessions/` | ✅ Phase 1 — AutoBuild complete, closed 22 Apr |
 | FEAT-JARVIS-002 | [`FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) | [`tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/`](../../../tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/) | 🟡 Plan landed 24 Apr — 23 subtasks ready for `/feature-build FEAT-J002` |
-| FEAT-JARVIS-003 | *pending — produced by `/feature-plan FEAT-JARVIS-003`* | *pending* | 🔲 Feature spec complete 24 Apr; plan is the next step |
+| FEAT-JARVIS-003 | [`FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) | [`tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/`](../../../tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/) | 🟡 Plan landed 24 Apr — 24 subtasks ready for `/feature-build FEAT-J003` |
 
 `/feature-build FEAT-<id>` executes the AutoBuild cycle — player-coach loop
 per subtask, BDD oracle (R2) for tagged scenarios, and between-wave
@@ -44,9 +44,9 @@ smoke gates (R3) if declared in the YAML.
 | 2026-04-24 | `/feature-spec FEAT-JARVIS-002` | Gherkin scenarios landed at [`features/feat-jarvis-002-core-tools-and-dispatch/`](../../../features/feat-jarvis-002-core-tools-and-dispatch/). 42 scenarios across 5 groups (Key Examples, Boundary, Negative, Edge, Security/Concurrency/Integration) — 9 @key-example, 8 @boundary, 17 @negative, 14 @edge-case, 7 @smoke. 6 assumptions recorded (1 high / 4 medium / 1 low). 1 low-confidence assumption (ASSUM-006: snapshot-isolation semantics for Phase 3) flagged for review at FEAT-JARVIS-004 time. `dispatch_by_capability` naming honoured per DDR-005 (the command was phrased around the superseded `call_specialist` name). |
 | 2026-04-24 | `/feature-spec FEAT-JARVIS-003` | Gherkin scenarios landed at [`features/feat-jarvis-003-async-subagent-and-frontier-escape/`](../../../features/feat-jarvis-003-async-subagent-and-frontier-escape/). 44 scenarios (11 @smoke, 1 @regression). 6 assumptions (0 high / 5 medium / 1 low) — review required. Spec consumes the reframed design per DDR-010..015: single `jarvis-reasoner` subagent with closed-enum `role`, module-import compilation, `langgraph.json` at repo root, `escalate_to_frontier` with three-layer belt+braces gating, `LlamaSwapAdapter` with stubbed health. |
 | 2026-04-24 | `/feature-plan FEAT-JARVIS-002` | AutoBuild feature landed: [`.guardkit/features/FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml). 23 subtasks generated under [`tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/`](../../../tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/), aggregate complexity 6. Envelope-first concurrent fan-out (Option B, review score 12/12). DDR-009 swap-point discipline preserved — two primary grep anchors guard the FEAT-JARVIS-004/005 transport swap. Commit `76ca5ff`. Ready for `/feature-build FEAT-J002`. |
-| *pending* | `/feature-plan FEAT-JARVIS-003` | AutoBuild feature YAML + task breakdown for FEAT-JARVIS-003. Reframed design commit order: config → llamaswap adapter → role prompts → jarvis_reasoner graph → subagent_registry → escalate_to_frontier → supervisor prompt → supervisor factory → `langgraph.json` → tests. Resolve the low-confidence assumption surfaced at `/feature-spec` time before starting. |
+| 2026-04-24 | `/feature-plan FEAT-JARVIS-003` | AutoBuild feature landed: [`.guardkit/features/FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml). 24 subtasks generated under [`tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/`](../../../tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/), aggregate complexity 7. Envelope-first concurrent fan-out (Option B, review score 12/12). Three-layer belt+braces gate split into L1 (010) / L2 (011) / L3 standalone (012) per Context A concern #1. All 44 Gherkin scenarios tagged `@task:TASK-J003-xxx` (avg confidence 0.88, 0 below threshold) — R2 BDD oracle active. ASSUM-004 (low confidence) resolved at `/feature-spec` time (`human_response: confirmed`). |
 | *pending* | `/feature-build FEAT-J002` | AutoBuild cycle over the 23 subtasks in `FEAT-J002.yaml`. Player-coach loop per subtask; R2 BDD oracle runs `@task:TASK-J002-xxx`-tagged scenarios during `/task-work` Phase 4. |
-| *pending* | `/feature-build FEAT-J003` | AutoBuild cycle for FEAT-JARVIS-003 once `/feature-plan FEAT-JARVIS-003` produces the YAML. Preview-feature risk sits here (DeepAgents 0.5.3 `AsyncSubAgentMiddleware` + ASGI multi-graph). |
+| *pending* | `/feature-build FEAT-J003` | AutoBuild cycle over the 24 subtasks in `FEAT-J003.yaml`. Preview-feature risk sits here (DeepAgents 0.5.3 `AsyncSubAgentMiddleware` + ASGI multi-graph); the role-propagation integration test (TASK-J003-022) is the regression surface if the 0.5.3 preview API breaks role-key propagation. |
 
 ---
 
@@ -322,7 +322,7 @@ Matches Forge ADR-ARCH-031 default: single-process, single-container, multiple g
 
 ## GuardKit Command Sequence
 
-### Step 1: /system-design FEAT-JARVIS-002
+### Step 1: /system-design FEAT-JARVIS-002 ✅ Complete (2026-04-23)
 
 ```bash
 cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
@@ -354,7 +354,7 @@ cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
 
 Expected output: `docs/design/FEAT-JARVIS-002/design.md` — tool module boundaries, `CapabilityDescriptor` Pydantic shape, `SpecialistResult` / `QueueBuildAck` shapes, stub registry YAML schema, web-search provider ADR (if pinned here rather than at Phase 1's `/system-arch`), `call_specialist` timeout + retry semantics.
 
-### Step 2: /system-design FEAT-JARVIS-003
+### Step 2: /system-design FEAT-JARVIS-003 ✅ Complete (2026-04-23)
 
 ```bash
 /system-design FEAT-JARVIS-003 \
@@ -378,7 +378,7 @@ Expected output: `docs/design/FEAT-JARVIS-002/design.md` — tool module boundar
 
 Expected output: `docs/design/FEAT-JARVIS-003/design.md` — four subagent module boundaries, `AsyncSubAgent` instantiation pattern, ASGI transport declaration shape, `quick_local` fallback policy (JA6 answer), `langgraph.json` location ADR.
 
-### Step 3: /feature-spec FEAT-JARVIS-002
+### Step 3: /feature-spec FEAT-JARVIS-002 ✅ Complete (2026-04-24)
 
 ```bash
 /feature-spec "Core Tools & Capability-Driven Dispatch Tools: general tools (read_file, search_web, get_calendar_events stub, calculate), capability catalogue reader over stub registry, dispatch tools (call_specialist, queue_build) with stubbed transports matching nats-core payloads" \
@@ -394,7 +394,7 @@ Expected output: `docs/design/FEAT-JARVIS-003/design.md` — four subagent modul
   --context .guardkit/context-manifest.yaml
 ```
 
-### Step 4: /feature-spec FEAT-JARVIS-003
+### Step 4: /feature-spec FEAT-JARVIS-003 ✅ Complete (2026-04-24)
 
 ```bash
 /feature-spec "Async Subagents for Model Routing: four AsyncSubAgent instances (deep_reasoner, adversarial_critic, long_research, quick_local) via AsyncSubAgentMiddleware with ASGI transport; cost+latency descriptions; quick_local fallback hook under stubbed GB10 health signal" \
@@ -468,20 +468,86 @@ snapshot-isolation semantics for Phase 3) stays deferred to FEAT-JARVIS-004
 per the review's open-questions section; it is not a blocker for Phase 2
 implementation.
 
-### Step 6: /feature-plan FEAT-JARVIS-003
+### Step 6: /feature-plan FEAT-JARVIS-003 ✅ Complete (2026-04-24)
+
+After the 2026-04-24 `/feature-spec` run the concrete feature directory is
+`features/feat-jarvis-003-async-subagent-and-frontier-escape/` — use the
+explicit paths below rather than the original wildcard form so the context
+resolver pulls only this feature's artefacts. Note the feature title has
+been reframed from the original *"Async Subagents for Model Routing"* to
+*"Async Subagent for Model Routing + Attended Frontier Escape"* per the
+DDR-010/014 design reframe (single `jarvis-reasoner` subagent + attended-only
+`escalate_to_frontier` tool):
 
 ```bash
-/feature-plan "Async Subagents for Model Routing" \
-  --context features/feat-jarvis-003-*/feat-jarvis-003-*_summary.md \
-  --context features/feat-jarvis-003-*/feat-jarvis-003-*.feature \
-  --context features/feat-jarvis-003-*/feat-jarvis-003-*_assumptions.yaml \
+/feature-plan "Async Subagent for Model Routing + Attended Frontier Escape" \
+  --context features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape_summary.md \
+  --context features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature \
+  --context features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape_assumptions.yaml \
   --context docs/design/FEAT-JARVIS-003/design.md \
   --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
   --context docs/research/ideas/phase2-build-plan.md \
   --context .guardkit/context-manifest.yaml
 ```
 
-Resolve any low-confidence assumptions before Step 8.
+**Outputs (TASK-REV-J003 / FEAT-J003 artefacts):**
+
+- Decision review: [`.claude/reviews/TASK-REV-J003-review-report.md`](../../../.claude/reviews/TASK-REV-J003-review-report.md) (3 options analysed, Option B ★ selected 12/12)
+- AutoBuild feature: [`.guardkit/features/FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) (24 subtasks, auto-detected 8 dep-chain waves, aggregate complexity 7)
+- Implementation guide: [`tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/IMPLEMENTATION-GUIDE.md`](../../../tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/IMPLEMENTATION-GUIDE.md) (Mermaid data-flow + three-layer gate sequence + task dependency graph + §4 Integration Contracts — 8 load-bearing contracts)
+- Feature README: [`tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/README.md`](../../../tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/README.md) (subtask index)
+- Review task (status `review_complete`): [`tasks/in_review/TASK-REV-J003-plan-async-subagent-and-frontier-escape.md`](../../../tasks/in_review/TASK-REV-J003-plan-async-subagent-and-frontier-escape.md)
+- BDD-linked feature file: all 44 scenarios in the `.feature` now carry `@task:TASK-J003-xxx` tags (avg confidence 0.88, 0 below threshold) activating the R2 BDD oracle during `/task-work` Phase 4
+
+**Approach adopted:** Option B — *envelope-first, concurrent fan-out* (mirrors
+the FEAT-J002 rhythm). Wave 1 lands primitives (config fields, RoleName +
+FrontierTarget enums, AsyncTaskInput + SwapStatus + FrontierEscalationContext
+models, ROLE_PROMPTS registry, pyproject deps). Wave 2 lands components
+(LlamaSwapAdapter with stubbed health per DDR-015, `jarvis_reasoner` graph
+with module-import compile per DDR-012, `subagent_registry` per DDR-010, and
+the `escalate_to_frontier` tool split into L1 body + L2 executor assertion per
+DDR-014). Wave 3 wires `assemble_tool_list` with Layer 3 absence (standalone
+task per Context A concern #1), extends `build_supervisor` and the supervisor
+prompt, and completes `lifecycle.startup`. Wave 4 lands `langgraph.json` at
+repo root per DDR-013 and the three unit-test suites. Wave 5 runs the
+regression (no retired-roster strings), the supervisor-with-subagents
+integration test, the role-propagation integration test (standalone per
+Context A concern #4), the seven-prompt acceptance test per design §9, and
+the `langgraph dev --help` smoke.
+
+**Context-A concerns honoured:** (1) Layer 3 tool-registry-absence is a
+standalone task (TASK-J003-012, not merged into TASK-J003-013 `build_supervisor`
+wiring); (2) LlamaSwapAdapter stub shape matches the live-read shape so
+FEAT-JARVIS-004 is a transport swap, not a schema swap (Contract 3 in §4);
+(3) retired-roster-string regression test is standalone (TASK-J003-020);
+(4) role-propagation integration test is standalone (TASK-J003-022);
+(5) max per-task complexity is 6 — three-layer gate split into two short Coach
+loops (L1+L2 as separate tasks) with Layer 3 as its own task.
+
+**Quality gates:** 0 unverifiable AC (R1 linter, integrated transitively via
+the `generate-feature-yaml` producer); `--discover` validated all 24 task-file
+paths + dep chains at generation time; 44/44 BDD scenarios linked above the
+0.60 threshold.
+
+**Assumption resolution:** The 1 low-confidence assumption (ASSUM-004 —
+empty-string `role` value treated as `unknown_role` vs `missing_field`) was
+already marked `human_response: confirmed` in the feature spec's
+`_assumptions.yaml`. It's covered by an explicit unit-test row in
+`TASK-J003-017` (review Finding F2). All five medium-confidence assumptions
+are confirmed and covered by named unit-test rows in TASK-J003-017 /
+TASK-J003-018 / TASK-J003-019.
+
+**Open items (non-blocking):** R3 smoke-gates block deliberately deferred —
+add a `smoke_gates:` block to `FEAT-J003.yaml` before `/feature-build` if
+between-wave smoke checks are wanted. The 0.5.3 `AsyncSubAgent` preview API
+risk (ASSUM-ASYNC-ROLE-PROPAGATION) is surfaced as an explicit integration
+test (TASK-J003-022); if a 0.6 upgrade breaks role-key propagation, that test
+is the regression surface and the design-doc §12 fallback (inline `[role=...]`
+token in the prompt) kicks in.
+
+**Ready for Steps 7 + 8.** Both features can run concurrently as independent
+AutoBuild cycles; FEAT-J002 completes first (tools-before-subagents matches
+the "dispatch is tool selection" framing), then FEAT-J003.
 
 ### Step 7: AutoBuild FEAT-JARVIS-002
 
@@ -496,7 +562,7 @@ The `/feature-plan` run has already enumerated the wave structure and commit ord
 
 ### Step 8: AutoBuild FEAT-JARVIS-003
 
-Precondition: `/feature-plan FEAT-JARVIS-003` must land its AutoBuild YAML first (anticipated path `.guardkit/features/FEAT-J003.yaml`).
+AutoBuild feature YAML: [`.guardkit/features/FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) — 24 subtasks, complexity 7, produced 2026-04-24.
 
 ```bash
 /feature-build FEAT-J003
@@ -638,12 +704,12 @@ Building on Phase 1's timeline (Phase 1: 21–24 April 2026):
 | 1 (23 Apr) | Step 1 + Step 2 — `/system-design FEAT-JARVIS-002` + `/system-design FEAT-JARVIS-003` | `docs/design/FEAT-JARVIS-002/design.md`, `docs/design/FEAT-JARVIS-003/design.md` | ✅ |
 | 2 (24 Apr) | Step 3 + Step 4 — `/feature-spec` for both features | Gherkin scenarios (42 + 44), assumptions, summaries | ✅ |
 | 2 (24 Apr) | Step 5 — `/feature-plan FEAT-JARVIS-002` | AutoBuild YAML `FEAT-J002.yaml` + 23 subtasks | ✅ |
-| 3 (25 Apr) | Step 6 — `/feature-plan FEAT-JARVIS-003` | AutoBuild YAML `FEAT-J003.yaml` + task breakdown | 🔲 |
+| 2 (24 Apr) | Step 6 — `/feature-plan FEAT-JARVIS-003` | AutoBuild YAML `FEAT-J003.yaml` + 24 subtasks | ✅ |
 | 3 (25 Apr) | Step 7 — `/feature-build FEAT-J002` (tools first — low-risk) | Tools + capability reader + dispatch stubs shipping; FEAT-JARVIS-002 tests green | 🔲 |
 | 4 (26 Apr) | Step 8 — `/feature-build FEAT-J003` (single subagent + escalate_to_frontier — preview feature) | `jarvis-reasoner` subagent + ASGI + routing e2e test shipping | 🔲 |
 | 5 (27 Apr) | Step 9 — `/task-review` for both; fix any gaps. Step 10 — regression check. Step 11 — end-to-end routing validation with real models. | Phase 2 closed; evidence recorded | 🔲 |
 
-**Target: Phase 2 complete within the 23–27 Apr window.** Design + spec + FEAT-002 plan landed ahead of the original 25–29 Apr plan. FEAT-JARVIS-003 remains the hardest feature in v1 (preview-feature risk on `AsyncSubAgentMiddleware`, first ASGI multi-graph, three-layer `escalate_to_frontier` gating); budget still accommodates a 1-day overrun if needed.
+**Target: Phase 2 complete within the 23–27 Apr window.** Design + spec + plans for **both** features landed on Day 2 (24 Apr) — one full day ahead of the original 25–29 Apr plan. FEAT-JARVIS-003 remains the hardest feature in v1 (preview-feature risk on `AsyncSubAgentMiddleware`, first ASGI multi-graph, three-layer `escalate_to_frontier` gating); budget still accommodates a 1-day overrun if needed.
 
 ---
 

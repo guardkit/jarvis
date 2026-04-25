@@ -1,10 +1,10 @@
 ---
 id: TASK-J002-004
-title: "Define WebResult, CalendarEvent, DispatchError Pydantic models"
+title: Define WebResult, CalendarEvent, DispatchError Pydantic models
 task_type: declarative
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
+status: in_review
+created: 2026-04-24 06:55:00+00:00
+updated: 2026-04-24 06:55:00+00:00
 priority: high
 complexity: 2
 wave: 1
@@ -13,15 +13,38 @@ estimated_minutes: 40
 dependencies: []
 parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
 scenarios_covered:
-  - "Searching the web with a configured provider returns result summaries"
-  - "Retrieving calendar events in Phase 2 returns an empty list"
-swap_point_note: "n/a — stable schema across phases."
+- Searching the web with a configured provider returns result summaries
+- Retrieving calendar events in Phase 2 returns an empty list
+swap_point_note: "n/a \u2014 stable schema across phases."
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002
+  base_branch: main
+  started_at: '2026-04-25T16:18:47.034703'
+  last_updated: '2026-04-25T16:22:39.235962'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T16:18:47.034703'
+    player_summary: 'Created src/jarvis/tools/types.py with three Pydantic v2 models
+      per docs/design/FEAT-JARVIS-002/models/DM-tool-types.md and docs/architecture/decisions/ADR-ARCH-021-tools-return-structured-errors.md:
+      WebResult (title/url min_length=1, snippet default '''', score in [0,1]); CalendarEvent
+      (id, title, start, end, optional location/description, with @model_validator(mode=''after'')
+      asserting end >= start); DispatchError (Literal-typed category covering the
+      six dispatch failure modes, detail, optional ag'
+    player_success: true
+    coach_success: true
 ---
 # Define WebResult, CalendarEvent, DispatchError Pydantic models
 
