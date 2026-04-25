@@ -1,0 +1,101 @@
+{
+  "task_id": "TASK-J002-002",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_stub_capabilities.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_stub_capabilities.py ............                             [100%]\n============================== 12 passed in 0.05s ==============================",
+      "duration_seconds": 0.7254648208618164
+    },
+    "requirements": {
+      "criteria_total": 4,
+      "criteria_met": 4,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "File exists at `src/jarvis/config/stub_capabilities.yaml` containing exactly four capabilities: `architect-agent`, `product-owner-agent`, `ideation-agent`, `forge`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Created src/jarvis/config/stub_capabilities.yaml. tests/test_stub_capabilities.py::TestAC001FileExistsWithFourCapabilities asserts the file exists at that path, parses to a mapping with exactly four entries under `capabilities`, and that the agent_ids list equals ['architect-agent', 'product-owner-agent', 'ideation-agent', 'forge'].",
+      "notes": "Created src/jarvis/config/stub_capabilities.yaml. tests/test_stub_capabilities.py::TestAC001FileExistsWithFourCapabilities asserts the file exists at that path, parses to a mapping with exactly four entries under `capabilities`, and that the agent_ids list equals ['architect-agent', 'product-owner-agent', 'ideation-agent', 'forge']."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Content matches byte-for-byte the canonical YAML in DM-stub-registry.md \u00a7\"Canonical Phase 2 content\".",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "tests/test_stub_capabilities.py::TestAC002CanonicalByteForByteMatch::test_byte_equal_to_canonical extracts the YAML block bracketed by ```yaml \u2026 ``` immediately following the 'Canonical Phase 2 content' heading in docs/design/FEAT-JARVIS-002/models/DM-stub-registry.md and asserts equality with the file on disk. Both are 3271 UTF-8 bytes (verified with len(...).encode('utf-8')); the test passes.",
+      "notes": "tests/test_stub_capabilities.py::TestAC002CanonicalByteForByteMatch::test_byte_equal_to_canonical extracts the YAML block bracketed by ```yaml \u2026 ``` immediately following the 'Canonical Phase 2 content' heading in docs/design/FEAT-JARVIS-002/models/DM-stub-registry.md and asserts equality with the file on disk. Both are 3271 UTF-8 bytes (verified with len(...).encode('utf-8')); the test passes."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "All `agent_id` values are kebab-case; all `tool_name` values are snake_case; all `trust_tier` values are one of `core|specialist|extension`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "tests/test_stub_capabilities.py::TestAC003NamingAndTrustTier validates every agent_id against the kebab-case regex `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`, every tool_name against the snake_case regex `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, and every trust_tier against the set {'core', 'specialist', 'extension'}. All four agent_ids (architect-agent, product-owner-agent, ideation-agent, forge), all seven tool_names (run_architecture_session, draft_adr, review_specification, refine_acceptance_criteria, generate_alternatives, steelman, build_feature) and all four trust_tiers (specialist, specialist, specialist, core) pass.",
+      "notes": "tests/test_stub_capabilities.py::TestAC003NamingAndTrustTier validates every agent_id against the kebab-case regex `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`, every tool_name against the snake_case regex `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, and every trust_tier against the set {'core', 'specialist', 'extension'}. All four agent_ids (architect-agent, product-owner-agent, ideation-agent, forge), all seven tool_names (run_architecture_session, draft_adr, review_specification, refine_acceptance_criteria, generate_alternatives, steelman, build_feature) and all four trust_tiers (specialist, specialist, specialist, core) pass."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`forge` entry carries a `build_feature` capability so the reasoning model sees Forge alongside specialists in the catalogue.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "tests/test_stub_capabilities.py::TestAC004ForgeBuildFeatureCapability::test_forge_has_build_feature_capability locates the entry with agent_id == 'forge' and asserts 'build_feature' is in [cap['tool_name'] for cap in forge['capability_list']]. The forge entry's tool exposes the queue_build semantics into the catalogue per DM-stub-registry.md \u00a7'Rationale for the fourth entry'. Companion test test_forge_trust_tier_is_core confirms trust_tier == 'core'.",
+      "notes": "tests/test_stub_capabilities.py::TestAC004ForgeBuildFeatureCapability::test_forge_has_build_feature_capability locates the entry with agent_id == 'forge' and asserts 'build_feature' is in [cap['tool_name'] for cap in forge['capability_list']]. The forge entry's tool exposes the queue_build semantics into the catalogue per DM-stub-registry.md \u00a7'Rationale for the fourth entry'. Companion test test_forge_trust_tier_is_core confirms trust_tier == 'core'."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "File exists at `src/jarvis/config/stub_capabilities.yaml` containing exactly four capabilities: `architect-agent`, `product-owner-agent`, `ideation-agent`, `forge`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Created src/jarvis/config/stub_capabilities.yaml. tests/test_stub_capabilities.py::TestAC001FileExistsWithFourCapabilities asserts the file exists at that path, parses to a mapping with exactly four entries under `capabilities`, and that the agent_ids list equals ['architect-agent', 'product-owner-agent', 'ideation-agent', 'forge'].",
+        "notes": "Created src/jarvis/config/stub_capabilities.yaml. tests/test_stub_capabilities.py::TestAC001FileExistsWithFourCapabilities asserts the file exists at that path, parses to a mapping with exactly four entries under `capabilities`, and that the agent_ids list equals ['architect-agent', 'product-owner-agent', 'ideation-agent', 'forge']."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Content matches byte-for-byte the canonical YAML in DM-stub-registry.md \u00a7\"Canonical Phase 2 content\".",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "tests/test_stub_capabilities.py::TestAC002CanonicalByteForByteMatch::test_byte_equal_to_canonical extracts the YAML block bracketed by ```yaml \u2026 ``` immediately following the 'Canonical Phase 2 content' heading in docs/design/FEAT-JARVIS-002/models/DM-stub-registry.md and asserts equality with the file on disk. Both are 3271 UTF-8 bytes (verified with len(...).encode('utf-8')); the test passes.",
+        "notes": "tests/test_stub_capabilities.py::TestAC002CanonicalByteForByteMatch::test_byte_equal_to_canonical extracts the YAML block bracketed by ```yaml \u2026 ``` immediately following the 'Canonical Phase 2 content' heading in docs/design/FEAT-JARVIS-002/models/DM-stub-registry.md and asserts equality with the file on disk. Both are 3271 UTF-8 bytes (verified with len(...).encode('utf-8')); the test passes."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "All `agent_id` values are kebab-case; all `tool_name` values are snake_case; all `trust_tier` values are one of `core|specialist|extension`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "tests/test_stub_capabilities.py::TestAC003NamingAndTrustTier validates every agent_id against the kebab-case regex `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`, every tool_name against the snake_case regex `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, and every trust_tier against the set {'core', 'specialist', 'extension'}. All four agent_ids (architect-agent, product-owner-agent, ideation-agent, forge), all seven tool_names (run_architecture_session, draft_adr, review_specification, refine_acceptance_criteria, generate_alternatives, steelman, build_feature) and all four trust_tiers (specialist, specialist, specialist, core) pass.",
+        "notes": "tests/test_stub_capabilities.py::TestAC003NamingAndTrustTier validates every agent_id against the kebab-case regex `^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`, every tool_name against the snake_case regex `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, and every trust_tier against the set {'core', 'specialist', 'extension'}. All four agent_ids (architect-agent, product-owner-agent, ideation-agent, forge), all seven tool_names (run_architecture_session, draft_adr, review_specification, refine_acceptance_criteria, generate_alternatives, steelman, build_feature) and all four trust_tiers (specialist, specialist, specialist, core) pass."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`forge` entry carries a `build_feature` capability so the reasoning model sees Forge alongside specialists in the catalogue.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "tests/test_stub_capabilities.py::TestAC004ForgeBuildFeatureCapability::test_forge_has_build_feature_capability locates the entry with agent_id == 'forge' and asserts 'build_feature' is in [cap['tool_name'] for cap in forge['capability_list']]. The forge entry's tool exposes the queue_build semantics into the catalogue per DM-stub-registry.md \u00a7'Rationale for the fourth entry'. Companion test test_forge_trust_tier_is_core confirms trust_tier == 'core'.",
+        "notes": "tests/test_stub_capabilities.py::TestAC004ForgeBuildFeatureCapability::test_forge_has_build_feature_capability locates the entry with agent_id == 'forge' and asserts 'build_feature' is in [cap['tool_name'] for cap in forge['capability_list']]. The forge entry's tool exposes the queue_build semantics into the catalogue per DM-stub-registry.md \u00a7'Rationale for the fourth entry'. Companion test test_forge_trust_tier_is_core confirms trust_tier == 'core'."
+      }
+    ]
+  },
+  "issues": [],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 332 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1133/5200 tokens\n\n### \ud83c\udfa8 Relevant Patterns\n- IS_PARAM_TYPE_OF\n- SERIALIZES_TO_FILE_USING\n\n### \u26a0\ufe0f Warnings\n- HAS_ROOT_CAUSE\n- IS_IMPLEMENTED_AS\n\n### \ud83c\udfad Role Constraints\n- ASSESSED_WITH_PRINCIPLE\n- INCLUDES_PRINCIPLE\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_INVOCATION_METHOD\n- IMPLEMENTATION_MODE_INVOKED_BY\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}
