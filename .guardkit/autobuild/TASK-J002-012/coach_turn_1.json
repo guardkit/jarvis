@@ -1,0 +1,183 @@
+{
+  "task_id": "TASK-J002-012",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_capabilities.py tests/test_tools_dispatch.py tests/test_tools_dispatch_contract.py tests/test_tools_general.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_tools_dispatch.py ........................................... [ 52%]\ntests/test_tools_dispatch_contract.py ...............ss                  [ 62%]\ntests/test_tools_general.py ............................................ [ 83%]\ntests/test_tools_general.py::TestScenarioCalculateGroupBDivisionAndOverflow::test_overflow_returns_structured_error[exp(1000)]\n================== 204 passed, 2 skipped, 2 warnings in 0.51s ==================",
+      "duration_seconds": 1.146183967590332
+    },
+    "requirements": {
+      "criteria_total": 8,
+      "criteria_met": 8,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/tools/capabilities.py` exposes three `@tool(parse_docstring=True)` functions: `list_available_capabilities() -> str`, `capabilities_refresh() -> str`, `capabilities_subscribe_updates() -> str`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added the three @tool(parse_docstring=True) decorated functions to src/jarvis/tools/capabilities.py and re-exported them via __all__. TestAC001ToolExposure verifies (a) module attribute presence, (b) the BaseTool.invoke method is callable, and (c) tool.name matches the documented function name for each.",
+      "notes": "Added the three @tool(parse_docstring=True) decorated functions to src/jarvis/tools/capabilities.py and re-exported them via __all__. TestAC001ToolExposure verifies (a) module attribute presence, (b) the BaseTool.invoke method is callable, and (c) tool.name matches the documented function name for each."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Docstrings match API-tools.md \u00a72.1\u20132.3 byte-for-byte.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Each docstring was authored from API-tools.md \u00a72.1, \u00a72.2, and \u00a72.3 verbatim, including the en-dashes the reasoning model reads. TestAC002DocstringContract spot-checks the contract phrases against tool.description and tool.func.__doc__ (parse_docstring=True strips Returns out of description, so the OK strings and ERROR strings are checked against func.__doc__). The test also asserts the 'stubbed in Phase 2' grep anchor appears in capabilities.py (per swap_point_note).",
+      "notes": "Each docstring was authored from API-tools.md \u00a72.1, \u00a72.2, and \u00a72.3 verbatim, including the en-dashes the reasoning model reads. TestAC002DocstringContract spot-checks the contract phrases against tool.description and tool.func.__doc__ (parse_docstring=True strips Returns out of description, so the OK strings and ERROR strings are checked against func.__doc__). The test also asserts the 'stubbed in Phase 2' grep anchor appears in capabilities.py (per swap_point_note)."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`list_available_capabilities` returns JSON-serialised copy of the registry list captured at `assemble_tool_list` time. Snapshot isolation invariant (ASSUM-006): the closed-over list is NOT mutated; a subsequent `capabilities_refresh` does not affect an in-flight call.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "list_available_capabilities captures _capability_registry into a local 'snapshot' reference at call start, then serialises via json.dumps([d.model_dump(mode='json') for d in snapshot]). assemble_tool_list (TASK-J002-015) is documented to assign a fresh list rather than mutate in place, so a concurrent rebinding never affects the in-flight call's snapshot. TestAC003ListReturnsJsonSnapshot verifies JSON shape, the empty-registry case ('[]'), the per-descriptor field round-trip, and that a post-call rebinding to [] does not retro-mutate the JSON returned by an earlier call.",
+      "notes": "list_available_capabilities captures _capability_registry into a local 'snapshot' reference at call start, then serialises via json.dumps([d.model_dump(mode='json') for d in snapshot]). assemble_tool_list (TASK-J002-015) is documented to assign a fresh list rather than mutate in place, so a concurrent rebinding never affects the in-flight call's snapshot. TestAC003ListReturnsJsonSnapshot verifies JSON shape, the empty-registry case ('[]'), the per-descriptor field round-trip, and that a post-call rebinding to [] does not retro-mutate the JSON returned by an earlier call."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`capabilities_refresh` returns the exact string `\"OK: refresh queued (stubbed in Phase 2 \u2014 in-memory registry is always fresh)\"`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Body returns module-level constant _REFRESH_OK_MESSAGE = 'OK: refresh queued (stubbed in Phase 2 \u2014 in-memory registry is always fresh)'. TestAC004CapabilitiesRefreshOk asserts byte-exact equality against EXPECTED_REFRESH_OK and idempotency across repeated calls.",
+      "notes": "Body returns module-level constant _REFRESH_OK_MESSAGE = 'OK: refresh queued (stubbed in Phase 2 \u2014 in-memory registry is always fresh)'. TestAC004CapabilitiesRefreshOk asserts byte-exact equality against EXPECTED_REFRESH_OK and idempotency across repeated calls."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`capabilities_subscribe_updates` returns the exact string `\"OK: subscribed (stubbed in Phase 2 \u2014 no live updates)\"`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Body returns module-level constant _SUBSCRIBE_OK_MESSAGE = 'OK: subscribed (stubbed in Phase 2 \u2014 no live updates)'. TestAC005CapabilitiesSubscribeUpdatesOk asserts byte-exact equality against EXPECTED_SUBSCRIBE_OK and idempotency across repeated calls.",
+      "notes": "Body returns module-level constant _SUBSCRIBE_OK_MESSAGE = 'OK: subscribed (stubbed in Phase 2 \u2014 no live updates)'. TestAC005CapabilitiesSubscribeUpdatesOk asserts byte-exact equality against EXPECTED_SUBSCRIBE_OK and idempotency across repeated calls."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "All three never raise; internal errors wrapped as `ERROR: registry_unavailable \u2014 <detail>`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Each tool wraps its body in try/except Exception and returns f'ERROR: registry_unavailable \u2014 {exc}' on failure (with logger.exception logging full stack). TestAC006NeverRaisesStructuredErrors substitutes a _BoomDescriptor whose model_dump raises RuntimeError into _capability_registry and asserts list_available_capabilities returns a string starting with 'ERROR: registry_unavailable \u2014 ' that contains the exception detail; pytest.fail-guarded calls verify all three tools never propagate exceptions.",
+      "notes": "Each tool wraps its body in try/except Exception and returns f'ERROR: registry_unavailable \u2014 {exc}' on failure (with logger.exception logging full stack). TestAC006NeverRaisesStructuredErrors substitutes a _BoomDescriptor whose model_dump raises RuntimeError into _capability_registry and asserts list_available_capabilities returns a string starting with 'ERROR: registry_unavailable \u2014 ' that contains the exception detail; pytest.fail-guarded calls verify all three tools never propagate exceptions."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Concurrent test: issuing `list_available_capabilities()` and `capabilities_refresh()` in parallel returns the startup snapshot from the former and the OK string from the latter with no mutation of the snapshot between call start and return.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestAC007ConcurrentSnapshotIsolation uses threading.Barrier(2) to synchronise the two calls, then asserts (a) refresh returns EXPECTED_REFRESH_OK, (b) the JSON returned by list contains every agent_id from the bound registry, and (c) repeats the race 8 times to catch any non-deterministic mutation. Snapshot isolation is enforced inside list_available_capabilities by capturing _capability_registry into a local reference before iteration.",
+      "notes": "TestAC007ConcurrentSnapshotIsolation uses threading.Barrier(2) to synchronise the two calls, then asserts (a) refresh returns EXPECTED_REFRESH_OK, (b) the JSON returned by list contains every agent_id from the bound registry, and (c) repeats the race 8 times to catch any non-deterministic mutation. Snapshot isolation is enforced inside list_available_capabilities by capturing _capability_registry into a local reference before iteration."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "ruff check src/jarvis/tools/capabilities.py reports 'All checks passed!'. ruff check tests/test_capabilities.py reports a single pre-existing UP017 finding on line 197 (timezone.utc usage in test_last_heartbeat_at_accepts_datetime, untouched by this task and confirmed via git show HEAD:tests/test_capabilities.py). No new lint errors were introduced \u2014 the B023 closure-over-loop-variable warnings I initially produced in the 8-iteration concurrent test were resolved by hoisting the helper functions out of the for-loop and passing barrier/results in via Thread args.",
+      "notes": "ruff check src/jarvis/tools/capabilities.py reports 'All checks passed!'. ruff check tests/test_capabilities.py reports a single pre-existing UP017 finding on line 197 (timezone.utc usage in test_last_heartbeat_at_accepts_datetime, untouched by this task and confirmed via git show HEAD:tests/test_capabilities.py). No new lint errors were introduced \u2014 the B023 closure-over-loop-variable warnings I initially produced in the 8-iteration concurrent test were resolved by hoisting the helper functions out of the for-loop and passing barrier/results in via Thread args."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/tools/capabilities.py` exposes three `@tool(parse_docstring=True)` functions: `list_available_capabilities() -> str`, `capabilities_refresh() -> str`, `capabilities_subscribe_updates() -> str`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added the three @tool(parse_docstring=True) decorated functions to src/jarvis/tools/capabilities.py and re-exported them via __all__. TestAC001ToolExposure verifies (a) module attribute presence, (b) the BaseTool.invoke method is callable, and (c) tool.name matches the documented function name for each.",
+        "notes": "Added the three @tool(parse_docstring=True) decorated functions to src/jarvis/tools/capabilities.py and re-exported them via __all__. TestAC001ToolExposure verifies (a) module attribute presence, (b) the BaseTool.invoke method is callable, and (c) tool.name matches the documented function name for each."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Docstrings match API-tools.md \u00a72.1\u20132.3 byte-for-byte.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Each docstring was authored from API-tools.md \u00a72.1, \u00a72.2, and \u00a72.3 verbatim, including the en-dashes the reasoning model reads. TestAC002DocstringContract spot-checks the contract phrases against tool.description and tool.func.__doc__ (parse_docstring=True strips Returns out of description, so the OK strings and ERROR strings are checked against func.__doc__). The test also asserts the 'stubbed in Phase 2' grep anchor appears in capabilities.py (per swap_point_note).",
+        "notes": "Each docstring was authored from API-tools.md \u00a72.1, \u00a72.2, and \u00a72.3 verbatim, including the en-dashes the reasoning model reads. TestAC002DocstringContract spot-checks the contract phrases against tool.description and tool.func.__doc__ (parse_docstring=True strips Returns out of description, so the OK strings and ERROR strings are checked against func.__doc__). The test also asserts the 'stubbed in Phase 2' grep anchor appears in capabilities.py (per swap_point_note)."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`list_available_capabilities` returns JSON-serialised copy of the registry list captured at `assemble_tool_list` time. Snapshot isolation invariant (ASSUM-006): the closed-over list is NOT mutated; a subsequent `capabilities_refresh` does not affect an in-flight call.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "list_available_capabilities captures _capability_registry into a local 'snapshot' reference at call start, then serialises via json.dumps([d.model_dump(mode='json') for d in snapshot]). assemble_tool_list (TASK-J002-015) is documented to assign a fresh list rather than mutate in place, so a concurrent rebinding never affects the in-flight call's snapshot. TestAC003ListReturnsJsonSnapshot verifies JSON shape, the empty-registry case ('[]'), the per-descriptor field round-trip, and that a post-call rebinding to [] does not retro-mutate the JSON returned by an earlier call.",
+        "notes": "list_available_capabilities captures _capability_registry into a local 'snapshot' reference at call start, then serialises via json.dumps([d.model_dump(mode='json') for d in snapshot]). assemble_tool_list (TASK-J002-015) is documented to assign a fresh list rather than mutate in place, so a concurrent rebinding never affects the in-flight call's snapshot. TestAC003ListReturnsJsonSnapshot verifies JSON shape, the empty-registry case ('[]'), the per-descriptor field round-trip, and that a post-call rebinding to [] does not retro-mutate the JSON returned by an earlier call."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`capabilities_refresh` returns the exact string `\"OK: refresh queued (stubbed in Phase 2 \u2014 in-memory registry is always fresh)\"`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Body returns module-level constant _REFRESH_OK_MESSAGE = 'OK: refresh queued (stubbed in Phase 2 \u2014 in-memory registry is always fresh)'. TestAC004CapabilitiesRefreshOk asserts byte-exact equality against EXPECTED_REFRESH_OK and idempotency across repeated calls.",
+        "notes": "Body returns module-level constant _REFRESH_OK_MESSAGE = 'OK: refresh queued (stubbed in Phase 2 \u2014 in-memory registry is always fresh)'. TestAC004CapabilitiesRefreshOk asserts byte-exact equality against EXPECTED_REFRESH_OK and idempotency across repeated calls."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`capabilities_subscribe_updates` returns the exact string `\"OK: subscribed (stubbed in Phase 2 \u2014 no live updates)\"`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Body returns module-level constant _SUBSCRIBE_OK_MESSAGE = 'OK: subscribed (stubbed in Phase 2 \u2014 no live updates)'. TestAC005CapabilitiesSubscribeUpdatesOk asserts byte-exact equality against EXPECTED_SUBSCRIBE_OK and idempotency across repeated calls.",
+        "notes": "Body returns module-level constant _SUBSCRIBE_OK_MESSAGE = 'OK: subscribed (stubbed in Phase 2 \u2014 no live updates)'. TestAC005CapabilitiesSubscribeUpdatesOk asserts byte-exact equality against EXPECTED_SUBSCRIBE_OK and idempotency across repeated calls."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "All three never raise; internal errors wrapped as `ERROR: registry_unavailable \u2014 <detail>`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Each tool wraps its body in try/except Exception and returns f'ERROR: registry_unavailable \u2014 {exc}' on failure (with logger.exception logging full stack). TestAC006NeverRaisesStructuredErrors substitutes a _BoomDescriptor whose model_dump raises RuntimeError into _capability_registry and asserts list_available_capabilities returns a string starting with 'ERROR: registry_unavailable \u2014 ' that contains the exception detail; pytest.fail-guarded calls verify all three tools never propagate exceptions.",
+        "notes": "Each tool wraps its body in try/except Exception and returns f'ERROR: registry_unavailable \u2014 {exc}' on failure (with logger.exception logging full stack). TestAC006NeverRaisesStructuredErrors substitutes a _BoomDescriptor whose model_dump raises RuntimeError into _capability_registry and asserts list_available_capabilities returns a string starting with 'ERROR: registry_unavailable \u2014 ' that contains the exception detail; pytest.fail-guarded calls verify all three tools never propagate exceptions."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Concurrent test: issuing `list_available_capabilities()` and `capabilities_refresh()` in parallel returns the startup snapshot from the former and the OK string from the latter with no mutation of the snapshot between call start and return.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestAC007ConcurrentSnapshotIsolation uses threading.Barrier(2) to synchronise the two calls, then asserts (a) refresh returns EXPECTED_REFRESH_OK, (b) the JSON returned by list contains every agent_id from the bound registry, and (c) repeats the race 8 times to catch any non-deterministic mutation. Snapshot isolation is enforced inside list_available_capabilities by capturing _capability_registry into a local reference before iteration.",
+        "notes": "TestAC007ConcurrentSnapshotIsolation uses threading.Barrier(2) to synchronise the two calls, then asserts (a) refresh returns EXPECTED_REFRESH_OK, (b) the JSON returned by list contains every agent_id from the bound registry, and (c) repeats the race 8 times to catch any non-deterministic mutation. Snapshot isolation is enforced inside list_available_capabilities by capturing _capability_registry into a local reference before iteration."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "ruff check src/jarvis/tools/capabilities.py reports 'All checks passed!'. ruff check tests/test_capabilities.py reports a single pre-existing UP017 finding on line 197 (timezone.utc usage in test_last_heartbeat_at_accepts_datetime, untouched by this task and confirmed via git show HEAD:tests/test_capabilities.py). No new lint errors were introduced \u2014 the B023 closure-over-loop-variable warnings I initially produced in the 8-iteration concurrent test were resolved by hoisting the helper functions out of the for-loop and passing barrier/results in via Thread args.",
+        "notes": "ruff check src/jarvis/tools/capabilities.py reports 'All checks passed!'. ruff check tests/test_capabilities.py reports a single pre-existing UP017 finding on line 197 (timezone.utc usage in test_last_heartbeat_at_accepts_datetime, untouched by this task and confirmed via git show HEAD:tests/test_capabilities.py). No new lint errors were introduced \u2014 the B023 closure-over-loop-variable warnings I initially produced in the 8-iteration concurrent test were resolved by hoisting the helper functions out of the for-loop and passing barrier/results in via Thread args."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 244 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 931/5200 tokens\n\n### \ud83c\udfa8 Relevant Patterns\n- IS_PARAM_TYPE_OF\n- APPLIES_TO\n\n### \u26a0\ufe0f Warnings\n- USES\n- IS_IMPLEMENTED_AS\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE\n- DELEGATES_TO\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- INTENDED_FOR\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}
