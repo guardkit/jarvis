@@ -1,0 +1,173 @@
+{
+  "task_id": "TASK-J002-019",
+  "timestamp": "2026-04-25T17:07:55.373479",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 77,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".guardkit/autobuild/TASK-J002-014/checkpoints.json",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_tools_general.py",
+    "src/jarvis/tools/capabilities.py",
+    "src/jarvis/tools/dispatch.py",
+    "tasks/backlog/TASK-J002-012-implement-list-available-capabilities-refresh-subscribe-tool.md",
+    "tasks/backlog/TASK-J002-019-unit-tests-for-general-tools.md",
+    "tasks/backlog/TASK-J002-021-unit-tests-for-dispatch-tools-swap-point-grep-invariant.md",
+    "tests/test_capabilities.py",
+    "tests/test_tools_dispatch_contract.py",
+    "tests/test_tools_general.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J002-012-implementation-plan.md",
+    ".claude/task-plans/TASK-J002-019-implementation-plan.md",
+    ".claude/task-plans/TASK-J002-021-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J002-012/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-019/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-019/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-019/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-021/turn_context.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/.guardkit/autobuild/TASK-J002-019/player_turn_1.json",
+    "tasks/design_approved/TASK-J002-012-implement-list-available-capabilities-refresh-subscribe-tool.md",
+    "tasks/design_approved/TASK-J002-019-unit-tests-for-general-tools.md",
+    "tasks/design_approved/TASK-J002-021-unit-tests-for-dispatch-tools-swap-point-grep-invariant.md",
+    "tests/test_tools_dispatch.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_tools_general.py"
+  ],
+  "summary": "77 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 43,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "tests/test_tools_general.py exercises every Group-A / Group-B / Group-C / Group-D / Group-E scenario in the .feature file that targets a general tool.",
+      "status": "complete",
+      "evidence": "Extended tests/test_tools_general.py with 14 new TestScenario* classes mapping 1:1 to every general-tool Gherkin scenario in features/feat-jarvis-002-core-tools-and-dispatch.feature: Group A (read_file/search_web/calculate/get_calendar_events happy paths \u2014 4 scenarios), Group B (read_file 1MiB outline 4 examples + search_web max_results outline 5 examples + calculate division-by-zero + calculate overflow), Group C (read_file path_traversal/not_found/not_a_file/encoding + search_web missing-key/empty-query + get_calendar_events invalid_window + calculate unsafe-tokens outline 3 examples), Group D (the 'every tool converts errors into structured strings' outline asserted for all 4 general tools), Group E (read_file null-byte + symlink + .. traversal + search_web DEGRADED + hostile-snippet passthrough). Outline tables are reproduced as pytest.mark.parametrize cases.",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "tests/test_tools_general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "read_file: happy path + 1MB-boundary table + traversal + null-byte + symlink + not-found + not-a-file + too-large + encoding (9 scenarios).",
+      "status": "complete",
+      "evidence": "Four new scenario classes plus the original AC-anchored TestAC003-AC008 cover the 9 read_file scenarios: TestScenarioReadFileGroupAUtf8WorkspaceFile (happy path), TestScenarioReadFileGroupB1MibBoundary (4-row Examples table including exactly-1MiB, under-1MiB, over-1MiB, 10MiB), TestScenarioReadFileGroupCNegatives (path_traversal, not_found, not_a_file, encoding \u2014 4 scenarios), TestScenarioReadFileGroupEEvadeWorkspaceGuard (null-byte, symlink-escape, ..-traversal \u2014 3 examples).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "tests/test_tools_general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "search_web: happy path + max_results table + missing key + empty query + DEGRADED + hostile-snippet-passthrough (6 scenarios).",
+      "status": "complete",
+      "evidence": "Four new scenario classes cover the 6 search_web scenarios: TestScenarioSearchWebGroupAConfiguredProvider (happy path returns WebResult JSON array), TestScenarioSearchWebGroupBMaxResultsRange (5-row Examples table for max_results 1/5/10 accepted, 0/11 rejected), TestScenarioSearchWebGroupCNegatives (config_missing + invalid_query empty/whitespace), TestScenarioSearchWebGroupEDegradedAndHostileSnippet (DEGRADED for provider unavailability + hostile snippet preserved verbatim with no side-effecting tool call).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "tests/test_tools_general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "get_calendar_events: stub empty + invalid_window (2 scenarios).",
+      "status": "complete",
+      "evidence": "Two new scenario classes cover both get_calendar_events scenarios: TestScenarioGetCalendarEventsGroupAEmptyList (asserts '[]' is returned for today/tomorrow/this_week including the implicit default-window call expected by the morning-briefing skill shape), TestScenarioGetCalendarEventsGroupCInvalidWindow (asserts the structured 'ERROR: invalid_window \u2014 must be one of today/tomorrow/this_week, got <value>' string and that each allowed window is enumerated for model recoverability).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "tests/test_tools_general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "calculate: happy path + division_by_zero + overflow + unsafe tokens table (4 scenarios).",
+      "status": "complete",
+      "evidence": "Three new scenario classes cover all 4 calculate scenarios: TestScenarioCalculateGroupAArithmetic (happy path '15% of 847' returns the computed numeric string), TestScenarioCalculateGroupBDivisionAndOverflow (division_by_zero parametrized over 4 zero-shapes, overflow over 2 shapes), TestScenarioCalculateGroupCUnsafeTokens (3-row Examples table from .feature line 274 \u2014 __import__, open, lambda \u2014 assert each is rejected with the structured 'ERROR: unsafe_expression \u2014 disallowed token: <token>' string).",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "tests/test_tools_general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Uses fake_tavily_response fixture (monkeypatched Tavily client). No real network.",
+      "status": "complete",
+      "evidence": "Added the fake_tavily_response fixture to tests/test_tools_general.py at module scope. It monkeypatches general._provider_factory with a _FakeProvider whose search() method records (query, max_results) calls under the '_calls' key and returns a canned dict \u2014 identical contract to the fixture in tests/test_search_web.py. All search_web scenario tests consume this fixture (or a tighter monkeypatched stub for DEGRADED / hostile / construction-failure shapes); no test imports langchain_tavily or makes a network call. The configured_jarvis fixture wires a SecretStr API key without touching real env, and cleared_config flushes module-level state between tests.",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "tests/test_tools_general.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Each @tool's 'Every tool converts internal errors into structured strings rather than raising' coverage row is asserted.",
+      "status": "complete",
+      "evidence": "TestScenarioGroupDStructuredErrorPassthroughGeneralTools exercises the .feature outline at lines 374-388 against all four general tools: read_file (force _resolve_workspace_root to raise RuntimeError, assert no exception propagates and result starts with ERROR/TIMEOUT/DEGRADED), search_web (provider __init__ raises during construction, assert DEGRADED prefix), get_calendar_events (None passed to underlying func, assert ERROR: invalid_window), calculate (parametrized over empty/whitespace/div-by-zero/overflow/lambda/gibberish \u2014 all return structured strings without raising). Each test wraps the invocation in try/except + pytest.fail to assert the never-raises invariant explicitly.",
+      "test_file": "tests/test_tools_general.py",
+      "implementation_files": [
+        "tests/test_tools_general.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 43.49827650003135
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 179.81034687510692
+    }
+  ]
+}

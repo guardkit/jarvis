@@ -1,26 +1,34 @@
 ---
-id: TASK-J002-019
-title: "Unit tests for general tools"
-task_type: testing
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
-priority: high
 complexity: 5
-wave: 4
-implementation_mode: task-work
+created: 2026-04-24 06:55:00+00:00
+dependencies:
+- TASK-J002-008
+- TASK-J002-009
+- TASK-J002-010
+- TASK-J002-011
 estimated_minutes: 90
-dependencies: ["TASK-J002-008", "TASK-J002-009", "TASK-J002-010", "TASK-J002-011"]
-parent_review: TASK-REV-J002
 feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
+id: TASK-J002-019
+implementation_mode: task-work
+parent_review: TASK-REV-J002
+priority: high
 scenarios_covered:
-  - "all Group-A/B/C/D general-tool scenarios listed in TASK-J002-008/009/010/011"
+- all Group-A/B/C/D general-tool scenarios listed in TASK-J002-008/009/010/011
+status: design_approved
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
+task_type: testing
 test_results:
-  status: pending
   coverage: null
   last_run: null
+  status: pending
+title: Unit tests for general tools
+updated: 2026-04-24 06:55:00+00:00
+wave: 4
 ---
+
 # Unit tests for general tools
 
 **Feature:** FEAT-JARVIS-002 "Core Tools & Capability-Driven Dispatch Tools"

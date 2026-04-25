@@ -301,11 +301,14 @@ def dispatch_by_capability(
         return f"ERROR: validation — {exc}"
 
     # ----- Emit the single grep-anchor log line -----------------------------
+    # The leading literal in the format string is intentionally the anchor
+    # value (not the symbol) so grep-driven swap workflows in FEAT-JARVIS-004
+    # and the TASK-J002-021 invariant test see exactly 4 lines in this file.
+    # The constant/value equivalence is pinned by test_tools_dispatch_contract.
     topic = f"agents.command.{agent_id}"
     payload_bytes = len(envelope.model_dump_json().encode("utf-8"))
     logger.info(
-        "%s tool_name=%s agent_id=%s correlation_id=%s topic=%s payload_bytes=%d",
-        LOG_PREFIX_DISPATCH,
+        "JARVIS_DISPATCH_STUB tool_name=%s agent_id=%s correlation_id=%s topic=%s payload_bytes=%d",
         tool_name,
         agent_id,
         correlation_id,
@@ -457,10 +460,10 @@ def queue_build(
     #       subject=Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id),
     #       payload=envelope.model_dump_json().encode(),
     #   )
-    # Tool docstring and return shape stay identical.
+    # Tool docstring and return shape stay identical. The leading literal is
+    # the anchor value so the TASK-J002-021 grep invariant pins this line.
     logger.info(
-        "%s feature_id=%s repo=%s correlation_id=%s topic=%s payload_bytes=%d",
-        LOG_PREFIX_QUEUE_BUILD,
+        "JARVIS_QUEUE_BUILD_STUB feature_id=%s repo=%s correlation_id=%s topic=%s payload_bytes=%d",
         feature_id,
         repo,
         resolved_correlation_id,

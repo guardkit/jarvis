@@ -1,36 +1,48 @@
 ---
-id: TASK-J002-012
-title: "Implement list_available_capabilities + refresh + subscribe tools"
-task_type: feature
-status: backlog
-created: 2026-04-24T06:55:00Z
-updated: 2026-04-24T06:55:00Z
-priority: high
 complexity: 3
-wave: 2
-implementation_mode: task-work
-estimated_minutes: 50
-dependencies: ["TASK-J002-003", "TASK-J002-006"]
-parent_review: TASK-REV-J002
-feature_id: FEAT-J002
-tags: [phase-2, jarvis, feat-jarvis-002]
-scenarios_covered:
-  - "Listing available capabilities returns the current stub registry"
-  - "capabilities_refresh and capabilities_subscribe_updates return OK acknowledgements in Phase 2"
-  - "list_available_capabilities returns a stable snapshot even when refresh is called concurrently"
-  - "Every tool converts internal errors into structured strings rather than raising"
 consumer_context:
-  - task: TASK-J002-003
-    consumes: "CapabilityDescriptor"
-    framework: "LangChain @tool(parse_docstring=True) + DeepAgents create_deep_agent"
-    driver: "pydantic v2"
-    format_note: "CapabilityDescriptor is a Pydantic v2 BaseModel with ConfigDict(extra='ignore'); agent_id matches ^[a-z][a-z0-9-]*$; trust_tier is Literal['core','specialist','extension']; as_prompt_block() renders deterministic text (see DM-tool-types.md §'Prompt-block shape')."
-swap_point_note: "`capabilities_refresh` and `capabilities_subscribe_updates` bodies are the Phase 2→3 swap targets. Grep anchor: `stubbed in Phase 2` inside capabilities.py."
+- consumes: CapabilityDescriptor
+  driver: pydantic v2
+  format_note: CapabilityDescriptor is a Pydantic v2 BaseModel with ConfigDict(extra='ignore');
+    agent_id matches ^[a-z][a-z0-9-]*$; trust_tier is Literal['core','specialist','extension'];
+    as_prompt_block() renders deterministic text (see DM-tool-types.md §'Prompt-block
+    shape').
+  framework: LangChain @tool(parse_docstring=True) + DeepAgents create_deep_agent
+  task: TASK-J002-003
+created: 2026-04-24 06:55:00+00:00
+dependencies:
+- TASK-J002-003
+- TASK-J002-006
+estimated_minutes: 50
+feature_id: FEAT-J002
+id: TASK-J002-012
+implementation_mode: task-work
+parent_review: TASK-REV-J002
+priority: high
+scenarios_covered:
+- Listing available capabilities returns the current stub registry
+- capabilities_refresh and capabilities_subscribe_updates return OK acknowledgements
+  in Phase 2
+- list_available_capabilities returns a stable snapshot even when refresh is called
+  concurrently
+- Every tool converts internal errors into structured strings rather than raising
+status: design_approved
+swap_point_note: '`capabilities_refresh` and `capabilities_subscribe_updates` bodies
+  are the Phase 2→3 swap targets. Grep anchor: `stubbed in Phase 2` inside capabilities.py.'
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-002
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
+  status: pending
+title: Implement list_available_capabilities + refresh + subscribe tools
+updated: 2026-04-24 06:55:00+00:00
+wave: 2
 ---
+
 # Implement list_available_capabilities + refresh + subscribe tools
 
 **Feature:** FEAT-JARVIS-002 "Core Tools & Capability-Driven Dispatch Tools"

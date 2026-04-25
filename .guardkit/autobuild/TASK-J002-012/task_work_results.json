@@ -1,0 +1,178 @@
+{
+  "task_id": "TASK-J002-012",
+  "timestamp": "2026-04-25T17:09:47.601325",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation complete",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 66,
+    "tests_failed": 0,
+    "coverage": 100.0,
+    "coverage_met": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".guardkit/autobuild/TASK-J002-014/checkpoints.json",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/src/jarvis/tools/capabilities.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_capabilities.py",
+    "src/jarvis/tools/capabilities.py",
+    "src/jarvis/tools/dispatch.py",
+    "tasks/backlog/TASK-J002-012-implement-list-available-capabilities-refresh-subscribe-tool.md",
+    "tasks/backlog/TASK-J002-019-unit-tests-for-general-tools.md",
+    "tasks/backlog/TASK-J002-021-unit-tests-for-dispatch-tools-swap-point-grep-invariant.md",
+    "tests/test_capabilities.py",
+    "tests/test_tools_dispatch_contract.py",
+    "tests/test_tools_general.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J002-012-implementation-plan.md",
+    ".claude/task-plans/TASK-J002-019-implementation-plan.md",
+    ".claude/task-plans/TASK-J002-021-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J002-012/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-012/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-012/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-019/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J002-019/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-019/specialist_results.json",
+    ".guardkit/autobuild/TASK-J002-019/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-019/turn_context.json",
+    ".guardkit/autobuild/TASK-J002-021/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J002-021/task_work_results.json",
+    ".guardkit/autobuild/TASK-J002-021/turn_context.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/.guardkit/autobuild/TASK-J002-012/player_turn_1.json",
+    "coverage_TASK-J002-019.json",
+    "coverage_tools_TASK-J002-019.json",
+    "tasks/design_approved/TASK-J002-012-implement-list-available-capabilities-refresh-subscribe-tool.md",
+    "tasks/design_approved/TASK-J002-019-unit-tests-for-general-tools.md",
+    "tasks/design_approved/TASK-J002-021-unit-tests-for-dispatch-tools-swap-point-grep-invariant.md",
+    "tests/test_tools_dispatch.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J002/tests/test_capabilities.py"
+  ],
+  "summary": "66 tests passed, 100.0% coverage, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 65,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 1,
+    "missing_phases": [
+      "4",
+      "5"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 1 completed invocations\n\nMissing phases:\n  - Phase 4 (Testing)\n  - Phase 5 (Code Review)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 3 (Phase 3): Implementation complete (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "src/jarvis/tools/capabilities.py exposes three @tool(parse_docstring=True) functions: list_available_capabilities() -> str, capabilities_refresh() -> str, capabilities_subscribe_updates() -> str.",
+      "status": "complete",
+      "evidence": "Added the three @tool(parse_docstring=True) decorated functions to src/jarvis/tools/capabilities.py and re-exported them via __all__. TestAC001ToolExposure verifies (a) module attribute presence, (b) the BaseTool.invoke method is callable, and (c) tool.name matches the documented function name for each.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Docstrings match API-tools.md \u00a72.1\u20132.3 byte-for-byte.",
+      "status": "complete",
+      "evidence": "Each docstring was authored from API-tools.md \u00a72.1, \u00a72.2, and \u00a72.3 verbatim, including the en-dashes the reasoning model reads. TestAC002DocstringContract spot-checks the contract phrases against tool.description and tool.func.__doc__ (parse_docstring=True strips Returns out of description, so the OK strings and ERROR strings are checked against func.__doc__). The test also asserts the 'stubbed in Phase 2' grep anchor appears in capabilities.py (per swap_point_note).",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "list_available_capabilities returns JSON-serialised copy of the registry list captured at assemble_tool_list time. Snapshot isolation invariant (ASSUM-006).",
+      "status": "complete",
+      "evidence": "list_available_capabilities captures _capability_registry into a local 'snapshot' reference at call start, then serialises via json.dumps([d.model_dump(mode='json') for d in snapshot]). assemble_tool_list (TASK-J002-015) is documented to assign a fresh list rather than mutate in place, so a concurrent rebinding never affects the in-flight call's snapshot. TestAC003ListReturnsJsonSnapshot verifies JSON shape, the empty-registry case ('[]'), the per-descriptor field round-trip, and that a post-call rebinding to [] does not retro-mutate the JSON returned by an earlier call.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "capabilities_refresh returns the exact string 'OK: refresh queued (stubbed in Phase 2 \u2014 in-memory registry is always fresh)'.",
+      "status": "complete",
+      "evidence": "Body returns module-level constant _REFRESH_OK_MESSAGE = 'OK: refresh queued (stubbed in Phase 2 \u2014 in-memory registry is always fresh)'. TestAC004CapabilitiesRefreshOk asserts byte-exact equality against EXPECTED_REFRESH_OK and idempotency across repeated calls.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "capabilities_subscribe_updates returns the exact string 'OK: subscribed (stubbed in Phase 2 \u2014 no live updates)'.",
+      "status": "complete",
+      "evidence": "Body returns module-level constant _SUBSCRIBE_OK_MESSAGE = 'OK: subscribed (stubbed in Phase 2 \u2014 no live updates)'. TestAC005CapabilitiesSubscribeUpdatesOk asserts byte-exact equality against EXPECTED_SUBSCRIBE_OK and idempotency across repeated calls.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "All three never raise; internal errors wrapped as 'ERROR: registry_unavailable \u2014 <detail>'.",
+      "status": "complete",
+      "evidence": "Each tool wraps its body in try/except Exception and returns f'ERROR: registry_unavailable \u2014 {exc}' on failure (with logger.exception logging full stack). TestAC006NeverRaisesStructuredErrors substitutes a _BoomDescriptor whose model_dump raises RuntimeError into _capability_registry and asserts list_available_capabilities returns a string starting with 'ERROR: registry_unavailable \u2014 ' that contains the exception detail; pytest.fail-guarded calls verify all three tools never propagate exceptions.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Concurrent test: list_available_capabilities() and capabilities_refresh() in parallel return the startup snapshot and the OK string respectively, with no mutation between call start and return.",
+      "status": "complete",
+      "evidence": "TestAC007ConcurrentSnapshotIsolation uses threading.Barrier(2) to synchronise the two calls, then asserts (a) refresh returns EXPECTED_REFRESH_OK, (b) the JSON returned by list contains every agent_id from the bound registry, and (c) repeats the race 8 times to catch any non-deterministic mutation. Snapshot isolation is enforced inside list_available_capabilities by capturing _capability_registry into a local reference before iteration.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "ruff check src/jarvis/tools/capabilities.py reports 'All checks passed!'. ruff check tests/test_capabilities.py reports a single pre-existing UP017 finding on line 197 (timezone.utc usage in test_last_heartbeat_at_accepts_datetime, untouched by this task and confirmed via git show HEAD:tests/test_capabilities.py). No new lint errors were introduced \u2014 the B023 closure-over-loop-variable warnings I initially produced in the 8-iteration concurrent test were resolved by hoisting the helper functions out of the for-loop and passing barrier/results in via Thread args.",
+      "test_file": "tests/test_capabilities.py",
+      "implementation_files": [
+        "src/jarvis/tools/capabilities.py",
+        "tests/test_capabilities.py"
+      ]
+    }
+  ]
+}
