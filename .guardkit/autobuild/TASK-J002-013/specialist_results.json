@@ -1,12 +1,12 @@
 {
   "phase_4": {
     "status": "passed",
-    "duration_seconds": 140.56689950008877,
+    "duration_seconds": 42.210806833114475,
     "error": null,
     "tests_run": 821,
     "tests_failed": 0,
-    "coverage_pct": 90.0,
-    "output_summary": "821 passed, 0 failed via uv run pytest; 38/38 dispatch_by_capability ACs green; src/jarvis/tools/dispatch.py line coverage 90% (jarvis pkg 89%).",
+    "coverage_pct": 89.0,
+    "output_summary": "821 passed, 0 failed via uv run pytest --cov=src/jarvis; total package line coverage 89% (TOTAL 761 stmts, 84 miss); dispatch.py 90%.",
     "quality_gates_passed": true
   },
   "phase_5": {
