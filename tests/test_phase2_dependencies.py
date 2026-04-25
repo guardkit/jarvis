@@ -269,6 +269,13 @@ class TestAC004Phase1DependenciesUntouched:
         "pytest>=8",
         "pytest-asyncio>=0.24",
         "pytest-cov>=5",
+        # TASK-OPS-BDDM-9 / FEAT-BDDM (2026-04-25): pytest-bdd added to
+        # activate BDD verification for the @task:-tagged Gherkin scenarios
+        # under `features/`. Without it, GuardKit's bdd_runner silently
+        # bypassed BDD results — see jarvis/docs/history/autobuild-FEAT-J002-history.md
+        # for empirical proof. AC-004 still asserts the Phase 1 pins are
+        # not relaxed, tightened, or removed; this addition is permitted.
+        "pytest-bdd>=8.1,<9",
         "ruff>=0.4",
         "mypy>=1.10",
         "types-PyYAML>=6",
