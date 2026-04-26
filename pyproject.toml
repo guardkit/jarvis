@@ -39,12 +39,41 @@ dependencies = [
     # classes ONLY — `nats-py` (the live client) is forbidden until Phase 4
     # per the phase2-dispatch-foundations-scope §Scope Invariants.
     "nats-core>=0.2",
+    # ---- Phase 3 (FEAT-J003-006) — Anthropic SDK -------------------------
+    # `anthropic` is a base dependency so `python -m langgraph dev` (the
+    # default Claude-backed orchestrator path) works without requiring
+    # `pip install .[providers]`. The langchain-anthropic adapter still
+    # lives in `[project.optional-dependencies].providers` for explicit
+    # opt-in, but the underlying SDK is always available.
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]
 providers = [
     "langchain-anthropic>=0.2",
     "langchain-google-genai>=2.0",
+    # Direct Google Gemini SDK — required when the orchestrator targets
+    # Gemini models without going through the langchain-google-genai
+    # adapter (e.g. native Files API, structured output via genai.types).
+    # Added in TASK-J003-006.
+    "google-genai>=0.3.0",
+]
+# `dev` mirrors the PEP 735 `[dependency-groups].dev` entries below for
+# consumers (and CI) that prefer the older PEP 631 extras syntax
+# (`pip install .[dev]`). Added in TASK-J003-006 specifically so
+# `langgraph-cli` — the package that powers `python -m langgraph dev` —
+# is installable without uv. Keep this list in sync with
+# `[dependency-groups].dev`.
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5",
+    "pytest-bdd>=8.1,<9",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "types-PyYAML>=6",
+    "types-click>=7.1",
+    "langgraph-cli>=0.1",
 ]
 
 # ---------------------------------------------------------------------------
@@ -86,6 +115,11 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML>=6",
     "types-click>=7.1",
+    # `langgraph-cli` powers `python -m langgraph dev` (the local dev
+    # server documented in `.claude/CLAUDE.md` Quick Start). Added in
+    # TASK-J003-006. Mirrored into `[project.optional-dependencies].dev`
+    # so non-uv consumers can `pip install .[dev]` and get the same set.
+    "langgraph-cli>=0.1",
 ]
 
 [project.scripts]
