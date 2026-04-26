@@ -34,6 +34,8 @@ htmlcov/
 
 # Runtime logs
 .guardkit/graphiti-query-log.jsonl
+.guardkit/autobuild/**/progress.log
+.guardkit/autobuild/**/events.jsonl
 
 # Per-machine Claude Code overrides
 .claude/settings.local.json
