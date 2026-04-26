@@ -190,7 +190,8 @@ class TestAC008ImportIsSideEffectFree:
     """Re-importing the module performs no I/O, no LLM calls, no network."""
 
     def test_reimport_does_not_perform_io(
-        self, monkeypatch: object  # pytest fixture, type erased to avoid extra imports
+        self,
+        monkeypatch: object,  # pytest fixture, type erased to avoid extra imports
     ) -> None:
         import builtins
         import importlib

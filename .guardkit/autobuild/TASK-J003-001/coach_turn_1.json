@@ -1,0 +1,149 @@
+{
+  "task_id": "TASK-J003-001",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_config_feat_j003.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_config_feat_j003.py .............................             [100%]\ntests/test_config_feat_j003.py::TestAC005NoRegression::test_validate_provider_keys_still_works\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_config_feat_j003.py:261: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n======================== 29 passed, 1 warning in 0.08s =========================",
+      "duration_seconds": 0.9000139236450195
+    },
+    "requirements": {
+      "criteria_total": 7,
+      "criteria_met": 7,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/config/settings.py` gains `llama_swap_base_url: str = \"http://promaxgb10-41b1:9000\"` (env `JARVIS_LLAMA_SWAP_BASE_URL`).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added `llama_swap_base_url: str = \"http://promaxgb10-41b1:9000\"` in the new FEAT-JARVIS-003 block (settings.py line 67). The default JARVIS_ env_prefix binds it to JARVIS_LLAMA_SWAP_BASE_URL. Verified by tests TestAC001LlamaSwapBaseUrl::test_default_llama_swap_base_url_is_gb10, ::test_llama_swap_base_url_is_str, and ::test_jarvis_llama_swap_base_url_env_var.",
+      "notes": "Added `llama_swap_base_url: str = \"http://promaxgb10-41b1:9000\"` in the new FEAT-JARVIS-003 block (settings.py line 67). The default JARVIS_ env_prefix binds it to JARVIS_LLAMA_SWAP_BASE_URL. Verified by tests TestAC001LlamaSwapBaseUrl::test_default_llama_swap_base_url_is_gb10, ::test_llama_swap_base_url_is_str, and ::test_jarvis_llama_swap_base_url_env_var."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`frontier_default_target: Literal[\"GEMINI_3_1_PRO\", \"OPUS_4_7\"] = \"GEMINI_3_1_PRO\"` (env `JARVIS_FRONTIER_DEFAULT_TARGET`).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added `frontier_default_target: Literal[\"GEMINI_3_1_PRO\", \"OPUS_4_7\"] = \"GEMINI_3_1_PRO\"` (settings.py line 71). Bound via the JARVIS_ env_prefix to JARVIS_FRONTIER_DEFAULT_TARGET. Tests TestAC002FrontierDefaultTarget::test_default_frontier_default_target_is_gemini, ::test_frontier_default_target_literal_membership (asserts get_args == {GEMINI_3_1_PRO, OPUS_4_7}), ::test_frontier_default_target_rejects_unknown (raises ValidationError on 'GPT-5'), and ::test_jarvis_frontier_default_target_env_var.",
+      "notes": "Added `frontier_default_target: Literal[\"GEMINI_3_1_PRO\", \"OPUS_4_7\"] = \"GEMINI_3_1_PRO\"` (settings.py line 71). Bound via the JARVIS_ env_prefix to JARVIS_FRONTIER_DEFAULT_TARGET. Tests TestAC002FrontierDefaultTarget::test_default_frontier_default_target_is_gemini, ::test_frontier_default_target_literal_membership (asserts get_args == {GEMINI_3_1_PRO, OPUS_4_7}), ::test_frontier_default_target_rejects_unknown (raises ValidationError on 'GPT-5'), and ::test_jarvis_frontier_default_target_env_var."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`gemini_api_key: SecretStr | None = None` (env `GOOGLE_API_KEY`); `anthropic_api_key: SecretStr | None = None` (env `ANTHROPIC_API_KEY`) \u2014 if not already present from FEAT-001/002.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added `gemini_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices('GOOGLE_API_KEY', 'JARVIS_GEMINI_API_KEY'))` (settings.py lines 76-79). Set populate_by_name=True in SettingsConfigDict so kwargs construction still works. anthropic_api_key was already present from FEAT-J001 (line 53) and is unchanged. Tests TestAC003FrontierProviderKeys::test_default_gemini_api_key_is_none, ::test_gemini_api_key_is_secret_str_when_set, ::test_gemini_api_key_masked_in_repr, ::test_gemini_api_key_reads_unprefixed_google_api_key, ::test_gemini_api_key_falls_back_to_jarvis_prefix, ::test_anthropic_api_key_field_still_present, and ::test_anthropic_api_key_reads_jarvis_prefix.",
+      "notes": "Added `gemini_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices('GOOGLE_API_KEY', 'JARVIS_GEMINI_API_KEY'))` (settings.py lines 76-79). Set populate_by_name=True in SettingsConfigDict so kwargs construction still works. anthropic_api_key was already present from FEAT-J001 (line 53) and is unchanged. Tests TestAC003FrontierProviderKeys::test_default_gemini_api_key_is_none, ::test_gemini_api_key_is_secret_str_when_set, ::test_gemini_api_key_masked_in_repr, ::test_gemini_api_key_reads_unprefixed_google_api_key, ::test_gemini_api_key_falls_back_to_jarvis_prefix, ::test_anthropic_api_key_field_still_present, and ::test_anthropic_api_key_reads_jarvis_prefix."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`attended_adapter_ids: frozenset[str] = frozenset({\"telegram\", \"cli\", \"dashboard\", \"reachy\"})` (ADR-ARCH-016 consumer-surface list).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added `attended_adapter_ids: frozenset[str] = frozenset({'telegram', 'cli', 'dashboard', 'reachy'})` (settings.py line 84) per ADR-ARCH-016. Tests TestAC004AttendedAdapterIds::test_default_attended_adapter_ids_is_arch016_set, ::test_attended_adapter_ids_is_frozenset, ::test_attended_adapter_ids_membership, and ::test_attended_adapter_ids_is_immutable (verifies frozenset rejects .add() calls \u2014 guards constitutional gate integrity).",
+      "notes": "Added `attended_adapter_ids: frozenset[str] = frozenset({'telegram', 'cli', 'dashboard', 'reachy'})` (settings.py line 84) per ADR-ARCH-016. Tests TestAC004AttendedAdapterIds::test_default_attended_adapter_ids_is_arch016_set, ::test_attended_adapter_ids_is_frozenset, ::test_attended_adapter_ids_membership, and ::test_attended_adapter_ids_is_immutable (verifies frozenset rejects .add() calls \u2014 guards constitutional gate integrity)."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "No existing field renamed or removed; Phase 1 + FEAT-J002 call sites still work.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "All four FEAT-J003 fields were appended to JarvisConfig in a new section without touching Phase 1 (log_level, supervisor_model, memory_store_backend, data_dir, anthropic_api_key, openai_api_key, openai_base_url, google_api_key) or Phase 2 (web_search_provider, tavily_api_key, stub_capabilities_path, workspace_root) fields. Confirmed by re-running the existing tests/test_config.py (45 tests) and tests/test_config_phase2.py (18 tests) \u2014 all 63 pass unchanged. TestAC005NoRegression class in test_config_feat_j003.py adds explicit defence-in-depth assertions for the documented defaults of every Phase 1/2 field plus validate_provider_keys() behaviour.",
+      "notes": "All four FEAT-J003 fields were appended to JarvisConfig in a new section without touching Phase 1 (log_level, supervisor_model, memory_store_backend, data_dir, anthropic_api_key, openai_api_key, openai_base_url, google_api_key) or Phase 2 (web_search_provider, tavily_api_key, stub_capabilities_path, workspace_root) fields. Confirmed by re-running the existing tests/test_config.py (45 tests) and tests/test_config_phase2.py (18 tests) \u2014 all 63 pass unchanged. TestAC005NoRegression class in test_config_feat_j003.py adds explicit defence-in-depth assertions for the documented defaults of every Phase 1/2 field plus validate_provider_keys() behaviour."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`.env.example` updated with the four new variables with explanatory comments.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Appended a 'FEAT-JARVIS-003' section to .env.example documenting each of the four new variables \u2014 JARVIS_LLAMA_SWAP_BASE_URL, JARVIS_FRONTIER_DEFAULT_TARGET, GOOGLE_API_KEY (un-prefixed, with note that JARVIS_GEMINI_API_KEY also works as a fallback alias), and JARVIS_ATTENDED_ADAPTER_IDS \u2014 each preceded by an explanatory comment block citing the relevant ADR (ADR-ARCH-012, ADR-ARCH-027, ADR-ARCH-016). Tests TestAC006EnvExampleDocumented::test_env_example_documents_llama_swap_base_url, ::test_env_example_documents_frontier_default_target, ::test_env_example_documents_google_api_key, and ::test_env_example_documents_attended_adapter_ids assert each name appears in the file.",
+      "notes": "Appended a 'FEAT-JARVIS-003' section to .env.example documenting each of the four new variables \u2014 JARVIS_LLAMA_SWAP_BASE_URL, JARVIS_FRONTIER_DEFAULT_TARGET, GOOGLE_API_KEY (un-prefixed, with note that JARVIS_GEMINI_API_KEY also works as a fallback alias), and JARVIS_ATTENDED_ADAPTER_IDS \u2014 each preceded by an explanatory comment block citing the relevant ADR (ADR-ARCH-012, ADR-ARCH-027, ADR-ARCH-016). Tests TestAC006EnvExampleDocumented::test_env_example_documents_llama_swap_base_url, ::test_env_example_documents_frontier_default_target, ::test_env_example_documents_google_api_key, and ::test_env_example_documents_attended_adapter_ids assert each name appears in the file."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "`python -m ruff check src/jarvis/config/settings.py tests/test_config_feat_j003.py` reports 'All checks passed!' and `python -m ruff format --check ...` reports both files are already formatted. ruff is configured in pyproject.toml [tool.ruff.lint] with select = ['E','F','I','W','UP','B','SIM','RUF'] and line-length=100, target-version='py312'.",
+      "notes": "`python -m ruff check src/jarvis/config/settings.py tests/test_config_feat_j003.py` reports 'All checks passed!' and `python -m ruff format --check ...` reports both files are already formatted. ruff is configured in pyproject.toml [tool.ruff.lint] with select = ['E','F','I','W','UP','B','SIM','RUF'] and line-length=100, target-version='py312'."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/config/settings.py` gains `llama_swap_base_url: str = \"http://promaxgb10-41b1:9000\"` (env `JARVIS_LLAMA_SWAP_BASE_URL`).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added `llama_swap_base_url: str = \"http://promaxgb10-41b1:9000\"` in the new FEAT-JARVIS-003 block (settings.py line 67). The default JARVIS_ env_prefix binds it to JARVIS_LLAMA_SWAP_BASE_URL. Verified by tests TestAC001LlamaSwapBaseUrl::test_default_llama_swap_base_url_is_gb10, ::test_llama_swap_base_url_is_str, and ::test_jarvis_llama_swap_base_url_env_var.",
+        "notes": "Added `llama_swap_base_url: str = \"http://promaxgb10-41b1:9000\"` in the new FEAT-JARVIS-003 block (settings.py line 67). The default JARVIS_ env_prefix binds it to JARVIS_LLAMA_SWAP_BASE_URL. Verified by tests TestAC001LlamaSwapBaseUrl::test_default_llama_swap_base_url_is_gb10, ::test_llama_swap_base_url_is_str, and ::test_jarvis_llama_swap_base_url_env_var."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "`frontier_default_target: Literal[\"GEMINI_3_1_PRO\", \"OPUS_4_7\"] = \"GEMINI_3_1_PRO\"` (env `JARVIS_FRONTIER_DEFAULT_TARGET`).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added `frontier_default_target: Literal[\"GEMINI_3_1_PRO\", \"OPUS_4_7\"] = \"GEMINI_3_1_PRO\"` (settings.py line 71). Bound via the JARVIS_ env_prefix to JARVIS_FRONTIER_DEFAULT_TARGET. Tests TestAC002FrontierDefaultTarget::test_default_frontier_default_target_is_gemini, ::test_frontier_default_target_literal_membership (asserts get_args == {GEMINI_3_1_PRO, OPUS_4_7}), ::test_frontier_default_target_rejects_unknown (raises ValidationError on 'GPT-5'), and ::test_jarvis_frontier_default_target_env_var.",
+        "notes": "Added `frontier_default_target: Literal[\"GEMINI_3_1_PRO\", \"OPUS_4_7\"] = \"GEMINI_3_1_PRO\"` (settings.py line 71). Bound via the JARVIS_ env_prefix to JARVIS_FRONTIER_DEFAULT_TARGET. Tests TestAC002FrontierDefaultTarget::test_default_frontier_default_target_is_gemini, ::test_frontier_default_target_literal_membership (asserts get_args == {GEMINI_3_1_PRO, OPUS_4_7}), ::test_frontier_default_target_rejects_unknown (raises ValidationError on 'GPT-5'), and ::test_jarvis_frontier_default_target_env_var."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`gemini_api_key: SecretStr | None = None` (env `GOOGLE_API_KEY`); `anthropic_api_key: SecretStr | None = None` (env `ANTHROPIC_API_KEY`) \u2014 if not already present from FEAT-001/002.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added `gemini_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices('GOOGLE_API_KEY', 'JARVIS_GEMINI_API_KEY'))` (settings.py lines 76-79). Set populate_by_name=True in SettingsConfigDict so kwargs construction still works. anthropic_api_key was already present from FEAT-J001 (line 53) and is unchanged. Tests TestAC003FrontierProviderKeys::test_default_gemini_api_key_is_none, ::test_gemini_api_key_is_secret_str_when_set, ::test_gemini_api_key_masked_in_repr, ::test_gemini_api_key_reads_unprefixed_google_api_key, ::test_gemini_api_key_falls_back_to_jarvis_prefix, ::test_anthropic_api_key_field_still_present, and ::test_anthropic_api_key_reads_jarvis_prefix.",
+        "notes": "Added `gemini_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices('GOOGLE_API_KEY', 'JARVIS_GEMINI_API_KEY'))` (settings.py lines 76-79). Set populate_by_name=True in SettingsConfigDict so kwargs construction still works. anthropic_api_key was already present from FEAT-J001 (line 53) and is unchanged. Tests TestAC003FrontierProviderKeys::test_default_gemini_api_key_is_none, ::test_gemini_api_key_is_secret_str_when_set, ::test_gemini_api_key_masked_in_repr, ::test_gemini_api_key_reads_unprefixed_google_api_key, ::test_gemini_api_key_falls_back_to_jarvis_prefix, ::test_anthropic_api_key_field_still_present, and ::test_anthropic_api_key_reads_jarvis_prefix."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`attended_adapter_ids: frozenset[str] = frozenset({\"telegram\", \"cli\", \"dashboard\", \"reachy\"})` (ADR-ARCH-016 consumer-surface list).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added `attended_adapter_ids: frozenset[str] = frozenset({'telegram', 'cli', 'dashboard', 'reachy'})` (settings.py line 84) per ADR-ARCH-016. Tests TestAC004AttendedAdapterIds::test_default_attended_adapter_ids_is_arch016_set, ::test_attended_adapter_ids_is_frozenset, ::test_attended_adapter_ids_membership, and ::test_attended_adapter_ids_is_immutable (verifies frozenset rejects .add() calls \u2014 guards constitutional gate integrity).",
+        "notes": "Added `attended_adapter_ids: frozenset[str] = frozenset({'telegram', 'cli', 'dashboard', 'reachy'})` (settings.py line 84) per ADR-ARCH-016. Tests TestAC004AttendedAdapterIds::test_default_attended_adapter_ids_is_arch016_set, ::test_attended_adapter_ids_is_frozenset, ::test_attended_adapter_ids_membership, and ::test_attended_adapter_ids_is_immutable (verifies frozenset rejects .add() calls \u2014 guards constitutional gate integrity)."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "No existing field renamed or removed; Phase 1 + FEAT-J002 call sites still work.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "All four FEAT-J003 fields were appended to JarvisConfig in a new section without touching Phase 1 (log_level, supervisor_model, memory_store_backend, data_dir, anthropic_api_key, openai_api_key, openai_base_url, google_api_key) or Phase 2 (web_search_provider, tavily_api_key, stub_capabilities_path, workspace_root) fields. Confirmed by re-running the existing tests/test_config.py (45 tests) and tests/test_config_phase2.py (18 tests) \u2014 all 63 pass unchanged. TestAC005NoRegression class in test_config_feat_j003.py adds explicit defence-in-depth assertions for the documented defaults of every Phase 1/2 field plus validate_provider_keys() behaviour.",
+        "notes": "All four FEAT-J003 fields were appended to JarvisConfig in a new section without touching Phase 1 (log_level, supervisor_model, memory_store_backend, data_dir, anthropic_api_key, openai_api_key, openai_base_url, google_api_key) or Phase 2 (web_search_provider, tavily_api_key, stub_capabilities_path, workspace_root) fields. Confirmed by re-running the existing tests/test_config.py (45 tests) and tests/test_config_phase2.py (18 tests) \u2014 all 63 pass unchanged. TestAC005NoRegression class in test_config_feat_j003.py adds explicit defence-in-depth assertions for the documented defaults of every Phase 1/2 field plus validate_provider_keys() behaviour."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`.env.example` updated with the four new variables with explanatory comments.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Appended a 'FEAT-JARVIS-003' section to .env.example documenting each of the four new variables \u2014 JARVIS_LLAMA_SWAP_BASE_URL, JARVIS_FRONTIER_DEFAULT_TARGET, GOOGLE_API_KEY (un-prefixed, with note that JARVIS_GEMINI_API_KEY also works as a fallback alias), and JARVIS_ATTENDED_ADAPTER_IDS \u2014 each preceded by an explanatory comment block citing the relevant ADR (ADR-ARCH-012, ADR-ARCH-027, ADR-ARCH-016). Tests TestAC006EnvExampleDocumented::test_env_example_documents_llama_swap_base_url, ::test_env_example_documents_frontier_default_target, ::test_env_example_documents_google_api_key, and ::test_env_example_documents_attended_adapter_ids assert each name appears in the file.",
+        "notes": "Appended a 'FEAT-JARVIS-003' section to .env.example documenting each of the four new variables \u2014 JARVIS_LLAMA_SWAP_BASE_URL, JARVIS_FRONTIER_DEFAULT_TARGET, GOOGLE_API_KEY (un-prefixed, with note that JARVIS_GEMINI_API_KEY also works as a fallback alias), and JARVIS_ATTENDED_ADAPTER_IDS \u2014 each preceded by an explanatory comment block citing the relevant ADR (ADR-ARCH-012, ADR-ARCH-027, ADR-ARCH-016). Tests TestAC006EnvExampleDocumented::test_env_example_documents_llama_swap_base_url, ::test_env_example_documents_frontier_default_target, ::test_env_example_documents_google_api_key, and ::test_env_example_documents_attended_adapter_ids assert each name appears in the file."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "`python -m ruff check src/jarvis/config/settings.py tests/test_config_feat_j003.py` reports 'All checks passed!' and `python -m ruff format --check ...` reports both files are already formatted. ruff is configured in pyproject.toml [tool.ruff.lint] with select = ['E','F','I','W','UP','B','SIM','RUF'] and line-length=100, target-version='py312'.",
+        "notes": "`python -m ruff check src/jarvis/config/settings.py tests/test_config_feat_j003.py` reports 'All checks passed!' and `python -m ruff format --check ...` reports both files are already formatted. ruff is configured in pyproject.toml [tool.ruff.lint] with select = ['E','F','I','W','UP','B','SIM','RUF'] and line-length=100, target-version='py312'."
+      }
+    ]
+  },
+  "issues": [],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 312 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1265/5200 tokens\n\n### \u2705 Similar Outcomes\n- REFERENCED_IN\n- USES_LIBRARY\n\n### \ud83c\udfa8 Relevant Patterns\n- HAS_FILED_TYPE\n- IS_USED_IN_PROJECT\n\n### \u26a0\ufe0f Warnings\n- SHOULD_USE_INSTEAD\n- HAS_FIX\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE\n- HAS_ROLE_MUST_DO\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- APPLIES_TO\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}
