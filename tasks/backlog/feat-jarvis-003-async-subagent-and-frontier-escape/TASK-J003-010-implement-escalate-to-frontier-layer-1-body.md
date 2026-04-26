@@ -1,19 +1,38 @@
 ---
 id: TASK-J003-010
-title: Implement escalate_to_frontier Layer 1 (body + docstring + config/provider branches)
+title: Implement escalate_to_frontier Layer 1 (body + docstring + config/provider
+  branches)
 task_type: feature
-status: pending
-created: 2026-04-24T00:00:00Z
-updated: 2026-04-24T00:00:00Z
+status: in_progress
+created: 2026-04-24 00:00:00+00:00
+updated: 2026-04-24 00:00:00+00:00
 priority: high
 complexity: 6
 wave: 2
 implementation_mode: task-work
 estimated_minutes: 113
-dependencies: [TASK-J003-001, TASK-J003-002, TASK-J003-004, TASK-J003-006]
+dependencies:
+- TASK-J003-001
+- TASK-J003-002
+- TASK-J003-004
+- TASK-J003-006
 parent_review: TASK-REV-J003
 feature_id: FEAT-J003
-tags: [phase-2, jarvis, feat-jarvis-003, dispatch, frontier, ddr-014]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-003
+- dispatch
+- frontier
+- ddr-014
+autobuild_state:
+  current_turn: 0
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
+  base_branch: main
+  started_at: '2026-04-26T08:32:58.282126'
+  last_updated: '2026-04-26T08:32:58.282128'
+  turns: []
 ---
 
 # Implement escalate_to_frontier Layer 1 (body + docstring + config/provider branches)

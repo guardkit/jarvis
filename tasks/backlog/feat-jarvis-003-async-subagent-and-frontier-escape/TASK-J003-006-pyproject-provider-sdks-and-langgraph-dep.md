@@ -1,10 +1,10 @@
 ---
 id: TASK-J003-006
-title: pyproject — provider SDKs + langgraph dev dep
+title: "pyproject \u2014 provider SDKs + langgraph dev dep"
 task_type: scaffolding
-status: pending
-created: 2026-04-24T00:00:00Z
-updated: 2026-04-24T00:00:00Z
+status: in_review
+created: 2026-04-24 00:00:00+00:00
+updated: 2026-04-24 00:00:00+00:00
 priority: high
 complexity: 2
 wave: 1
@@ -13,7 +13,33 @@ estimated_minutes: 22
 dependencies: []
 parent_review: TASK-REV-J003
 feature_id: FEAT-J003
-tags: [phase-2, jarvis, feat-jarvis-003, pyproject, dependencies]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-003
+- pyproject
+- dependencies
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
+  base_branch: main
+  started_at: '2026-04-26T08:26:07.380630'
+  last_updated: '2026-04-26T08:32:04.323315'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-26T08:26:07.380630'
+    player_summary: "Manifest-only task (AC-006). Edits to pyproject.toml: (1) added\
+      \ `anthropic>=0.40` to base [project].dependencies so the default Claude-backed\
+      \ orchestrator path works without the `[providers]` extra (AC-002); (2) appended\
+      \ `google-genai>=0.3.0` to [project.optional-dependencies].providers \u2014\
+      \ distinct from the existing `langchain-google-genai` adapter, which only re-exports\
+      \ a subset of the Gemini SDK surface (AC-001); (3) added a new `[project.optional-dependencies].dev`\
+      \ group containing the dev-too"
+    player_success: true
+    coach_success: true
 ---
 
 # pyproject — provider SDKs + langgraph dev dep

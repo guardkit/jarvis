@@ -1,19 +1,34 @@
 ---
 id: TASK-J003-019
-title: Unit tests — LlamaSwapAdapter + swap-aware voice-ack
+title: "Unit tests \u2014 LlamaSwapAdapter + swap-aware voice-ack"
 task_type: testing
-status: pending
-created: 2026-04-24T00:00:00Z
-updated: 2026-04-24T00:00:00Z
+status: in_progress
+created: 2026-04-24 00:00:00+00:00
+updated: 2026-04-24 00:00:00+00:00
 priority: high
 complexity: 5
 wave: 4
 implementation_mode: task-work
 estimated_minutes: 75
-dependencies: [TASK-J003-007, TASK-J003-015]
+dependencies:
+- TASK-J003-007
+- TASK-J003-015
 parent_review: TASK-REV-J003
 feature_id: FEAT-J003
-tags: [phase-2, jarvis, feat-jarvis-003, tests, ddr-015]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-003
+- tests
+- ddr-015
+autobuild_state:
+  current_turn: 0
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
+  base_branch: main
+  started_at: '2026-04-25T21:10:31.980315'
+  last_updated: '2026-04-25T21:10:31.980318'
+  turns: []
 ---
 
 # Unit tests — LlamaSwapAdapter + swap-aware voice-ack

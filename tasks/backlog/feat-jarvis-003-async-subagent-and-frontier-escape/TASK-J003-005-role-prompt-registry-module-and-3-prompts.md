@@ -2,9 +2,9 @@
 id: TASK-J003-005
 title: Role prompt registry module + 3 role prompts
 task_type: declarative
-status: pending
-created: 2026-04-24T00:00:00Z
-updated: 2026-04-24T00:00:00Z
+status: in_review
+created: 2026-04-24 00:00:00+00:00
+updated: 2026-04-24 00:00:00+00:00
 priority: high
 complexity: 3
 wave: 1
@@ -13,7 +13,33 @@ estimated_minutes: 33
 dependencies: []
 parent_review: TASK-REV-J003
 feature_id: FEAT-J003
-tags: [phase-2, jarvis, feat-jarvis-003, prompts, ddr-011]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-003
+- prompts
+- ddr-011
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
+  base_branch: main
+  started_at: '2026-04-26T08:26:07.374741'
+  last_updated: '2026-04-26T08:32:53.394683'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-26T08:26:07.374741'
+    player_summary: "Created src/jarvis/agents/subagents/prompts.py exposing three\
+      \ module-level final system-prompt constants \u2014 CRITIC_PROMPT, RESEARCHER_PROMPT,\
+      \ PLANNER_PROMPT \u2014 plus the exhaustive ROLE_PROMPTS: Mapping[RoleName,\
+      \ str] registry whose keys are exactly the three RoleName enum members and whose\
+      \ values are the matching constants by identity (verified with `is` in tests).\
+      \ Each prompt encodes a distinct posture: CRITIC carries the verbatim word 'adversarial'\
+      \ and an adversarial-evaluation stance; RESEARCHE"
+    player_success: true
+    coach_success: true
 ---
 
 # Role prompt registry module + 3 role prompts

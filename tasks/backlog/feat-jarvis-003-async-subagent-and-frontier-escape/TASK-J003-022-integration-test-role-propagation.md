@@ -1,19 +1,43 @@
 ---
 id: TASK-J003-022
-title: Integration test — role propagation through AsyncSubAgent preview API
+title: "Integration test \u2014 role propagation through AsyncSubAgent preview API"
 task_type: testing
-status: pending
-created: 2026-04-24T00:00:00Z
-updated: 2026-04-24T00:00:00Z
+status: in_review
+created: 2026-04-24 00:00:00+00:00
+updated: 2026-04-24 00:00:00+00:00
 priority: high
 complexity: 5
 wave: 5
 implementation_mode: task-work
 estimated_minutes: 75
-dependencies: [TASK-J003-008, TASK-J003-009]
+dependencies:
+- TASK-J003-008
+- TASK-J003-009
 parent_review: TASK-REV-J003
 feature_id: FEAT-J003
-tags: [phase-2, jarvis, feat-jarvis-003, tests, integration, role-propagation]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-003
+- tests
+- integration
+- role-propagation
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
+  base_branch: main
+  started_at: '2026-04-25T18:37:54.249785'
+  last_updated: '2026-04-25T18:53:56.588592'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T18:37:54.249785'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # Integration test — role propagation through AsyncSubAgent preview API

@@ -8,7 +8,7 @@ description: 'Ship the jarvis-reasoner AsyncSubAgent (single, closed-enum role k
   retired-roster regression, role-propagation integration test, tight subtask granularity
   (max complexity 6).'
 created: '2026-04-24T16:12:54.839602'
-status: planned
+status: in_progress
 complexity: 6
 estimated_tasks: 24
 tasks:
@@ -17,55 +17,85 @@ tasks:
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-001-extend-jarvisconfig-with-feat-j003-fields.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: in_progress
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: '2026-04-26T08:26:07.298329'
+  completed_at: null
 - id: TASK-J003-002
   name: Define RoleName + FrontierTarget closed enums
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-002-define-rolename-frontiertarget-closed-enums.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: in_progress
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: '2026-04-26T08:26:07.306407'
+  completed_at: null
 - id: TASK-J003-003
   name: Define AsyncTaskInput + SwapStatus Pydantic models
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-003-define-asynctaskinput-swapstatus-pydantic-models.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: in_progress
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: '2026-04-26T08:26:07.314090'
+  completed_at: null
 - id: TASK-J003-004
   name: Define FrontierEscalationContext Pydantic model
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-004-define-frontierescalationcontext-pydantic-model.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: in_progress
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: '2026-04-26T08:26:07.322373'
+  completed_at: null
 - id: TASK-J003-005
   name: Role prompt registry module + 3 role prompts
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-005-role-prompt-registry-module-and-3-prompts.md
   complexity: 3
   dependencies: []
-  status: pending
-  description: ''
+  status: in_progress
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: '2026-04-26T08:26:07.330783'
+  completed_at: null
 - id: TASK-J003-006
   name: pyproject provider SDKs and langgraph dev dep
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-006-pyproject-provider-sdks-and-langgraph-dep.md
   complexity: 2
   dependencies: []
-  status: pending
-  description: ''
+  status: in_progress
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: '2026-04-26T08:26:07.339401'
+  completed_at: null
 - id: TASK-J003-007
   name: Implement LlamaSwapAdapter with stubbed health
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-007-implement-llamaswap-adapter-with-stubbed-health.md
@@ -74,9 +104,14 @@ tasks:
   - TASK-J003-001
   - TASK-J003-003
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-008
   name: Implement jarvis_reasoner subagent graph
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-008-implement-jarvis-reasoner-subagent-graph.md
@@ -86,9 +121,14 @@ tasks:
   - TASK-J003-002
   - TASK-J003-005
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 113
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-009
   name: Implement subagent_registry build_async_subagents
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-009-implement-subagent-registry-build-async-subagents.md
@@ -96,9 +136,14 @@ tasks:
   dependencies:
   - TASK-J003-008
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-010
   name: Implement escalate_to_frontier Layer 1 body
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-010-implement-escalate-to-frontier-layer-1-body.md
@@ -109,9 +154,14 @@ tasks:
   - TASK-J003-004
   - TASK-J003-006
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 113
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-011
   name: Implement escalate_to_frontier Layer 2 executor assertion
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-011-implement-escalate-to-frontier-layer-2-executor-assertion.md
@@ -119,9 +169,14 @@ tasks:
   dependencies:
   - TASK-J003-010
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-012
   name: assemble_tool_list session-aware Layer 3 standalone
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-012-assemble-tool-list-session-aware-layer-3.md
@@ -129,9 +184,14 @@ tasks:
   dependencies:
   - TASK-J003-011
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-013
   name: Extend build_supervisor signature
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-013-extend-build-supervisor-signature.md
@@ -140,9 +200,14 @@ tasks:
   - TASK-J003-009
   - TASK-J003-012
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-014
   name: Extend supervisor_prompt Subagent Routing + Frontier Escalation
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-014-extend-supervisor-prompt-subagent-routing-and-frontier-escalation.md
@@ -151,9 +216,14 @@ tasks:
   - TASK-J003-009
   - TASK-J003-011
   status: pending
-  description: ''
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-015
   name: Extend lifecycle startup with subagents and ambient factory
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-015-extend-lifecycle-startup-with-subagents-and-ambient-factory.md
@@ -164,9 +234,14 @@ tasks:
   - TASK-J003-012
   - TASK-J003-013
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-016
   name: langgraph.json at repo root
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-016-langgraph-json-at-repo-root.md
@@ -175,9 +250,14 @@ tasks:
   - TASK-J003-008
   - TASK-J003-015
   status: pending
-  description: ''
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-017
   name: Unit tests subagent layer
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-017-unit-tests-subagent-layer.md
@@ -187,9 +267,14 @@ tasks:
   - TASK-J003-008
   - TASK-J003-009
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-018
   name: Unit tests escalate_to_frontier three layers
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-018-unit-tests-escalate-to-frontier.md
@@ -199,9 +284,14 @@ tasks:
   - TASK-J003-011
   - TASK-J003-012
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 113
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-019
   name: Unit tests LlamaSwapAdapter and voice-ack
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-019-unit-tests-llamaswap-adapter-and-voice-ack.md
@@ -210,9 +300,14 @@ tasks:
   - TASK-J003-007
   - TASK-J003-015
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-020
   name: Regression test no retired-roster strings
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-020-regression-test-no-retired-roster-strings.md
@@ -223,9 +318,14 @@ tasks:
   - TASK-J003-009
   - TASK-J003-014
   status: pending
-  description: ''
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-021
   name: Integration test supervisor_with_subagents
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-021-integration-test-supervisor-with-subagents.md
@@ -234,9 +334,14 @@ tasks:
   - TASK-J003-013
   - TASK-J003-015
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-022
   name: Integration test role propagation
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-022-integration-test-role-propagation.md
@@ -245,9 +350,14 @@ tasks:
   - TASK-J003-008
   - TASK-J003-009
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-023
   name: Acceptance test test_routing_e2e 7 prompts
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-023-acceptance-test-routing-e2e.md
@@ -256,9 +366,14 @@ tasks:
   - TASK-J003-021
   - TASK-J003-022
   status: pending
-  description: ''
   implementation_mode: task-work
   estimated_minutes: 113
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 - id: TASK-J003-024
   name: langgraph.json smoke validation
   file_path: tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/TASK-J003-024-langgraph-json-smoke-validation.md
@@ -266,9 +381,14 @@ tasks:
   dependencies:
   - TASK-J003-016
   status: pending
-  description: ''
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 orchestration:
   parallel_groups:
   - - TASK-J003-001
@@ -297,3 +417,15 @@ orchestration:
     - TASK-J003-024
   estimated_duration_minutes: 1366
   recommended_parallel: 4
+execution:
+  started_at: '2026-04-26T08:26:07.250966'
+  completed_at: null
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
+  total_turns: 0
+  tasks_completed: 0
+  tasks_failed: 0
+  current_wave: 1
+  completed_waves: []
+  last_updated: '2026-04-26T08:26:07.339403'
+  archived_at: null
+  archived_to: null

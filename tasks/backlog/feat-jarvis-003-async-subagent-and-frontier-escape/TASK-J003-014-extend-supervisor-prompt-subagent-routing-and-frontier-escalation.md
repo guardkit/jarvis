@@ -1,19 +1,45 @@
 ---
 id: TASK-J003-014
-title: Extend supervisor_prompt — Subagent Routing + Frontier Escalation sections
+title: "Extend supervisor_prompt \u2014 Subagent Routing + Frontier Escalation sections"
 task_type: declarative
-status: pending
-created: 2026-04-24T00:00:00Z
-updated: 2026-04-24T00:00:00Z
+status: in_review
+created: 2026-04-24 00:00:00+00:00
+updated: 2026-04-24 00:00:00+00:00
 priority: high
 complexity: 3
 wave: 3
 implementation_mode: direct
 estimated_minutes: 33
-dependencies: [TASK-J003-009, TASK-J003-011]
+dependencies:
+- TASK-J003-009
+- TASK-J003-011
 parent_review: TASK-REV-J003
 feature_id: FEAT-J003
-tags: [phase-2, jarvis, feat-jarvis-003, prompt]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-003
+- prompt
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
+  base_branch: main
+  started_at: '2026-04-25T18:37:54.254135'
+  last_updated: '2026-04-25T18:44:42.330380'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-25T18:37:54.254135'
+    player_summary: 'Extended SUPERVISOR_SYSTEM_PROMPT in src/jarvis/prompts/supervisor_prompt.py
+      with two new sections inserted after the existing FEAT-J002 ## Tool Usage section
+      and before ## Model-Selection Philosophy. (1) ## Subagent Routing names jarvis-reasoner
+      verbatim, states it runs locally on gpt-oss-120b behind llama-swap with a cold-warm
+      acknowledgement on the first call, lists the three role modes (critic/researcher/planner)
+      with their postures (adversarial / open-ended research / multi-step planning), '
+    player_success: true
+    coach_success: true
 ---
 
 # Extend supervisor_prompt — Subagent Routing + Frontier Escalation sections

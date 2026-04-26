@@ -1,19 +1,35 @@
 ---
 id: TASK-J003-021
-title: Integration test — supervisor_with_subagents (attended/ambient tool lists + 5 middleware tools)
+title: "Integration test \u2014 supervisor_with_subagents (attended/ambient tool lists\
+  \ + 5 middleware tools)"
 task_type: testing
-status: pending
-created: 2026-04-24T00:00:00Z
-updated: 2026-04-24T00:00:00Z
+status: in_progress
+created: 2026-04-24 00:00:00+00:00
+updated: 2026-04-24 00:00:00+00:00
 priority: high
 complexity: 5
 wave: 5
 implementation_mode: task-work
 estimated_minutes: 75
-dependencies: [TASK-J003-013, TASK-J003-015]
+dependencies:
+- TASK-J003-013
+- TASK-J003-015
 parent_review: TASK-REV-J003
 feature_id: FEAT-J003
-tags: [phase-2, jarvis, feat-jarvis-003, tests, integration]
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-003
+- tests
+- integration
+autobuild_state:
+  current_turn: 0
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
+  base_branch: main
+  started_at: '2026-04-25T21:10:31.981798'
+  last_updated: '2026-04-25T21:10:31.981800'
+  turns: []
 ---
 
 # Integration test — supervisor_with_subagents
