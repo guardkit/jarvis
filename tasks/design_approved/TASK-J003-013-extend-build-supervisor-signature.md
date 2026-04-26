@@ -1,42 +1,42 @@
 ---
-id: TASK-J003-013
-title: Extend build_supervisor signature (async_subagents + ambient_tool_factory)
-task_type: feature
-status: in_review
-created: 2026-04-24 00:00:00+00:00
-updated: 2026-04-24 00:00:00+00:00
-priority: high
+autobuild_state:
+  base_branch: main
+  current_turn: 1
+  last_updated: '2026-04-25T19:10:05.889730'
+  max_turns: 30
+  started_at: '2026-04-25T18:54:34.701008'
+  turns:
+  - coach_success: true
+    decision: approve
+    feedback: null
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-25T18:54:34.701008'
+    turn: 1
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
 complexity: 4
-wave: 3
-implementation_mode: task-work
-estimated_minutes: 50
+created: 2026-04-24 00:00:00+00:00
 dependencies:
 - TASK-J003-009
 - TASK-J003-012
-parent_review: TASK-REV-J003
+estimated_minutes: 50
 feature_id: FEAT-J003
+id: TASK-J003-013
+implementation_mode: task-work
+parent_review: TASK-REV-J003
+priority: high
+status: design_approved
 tags:
 - phase-2
 - jarvis
 - feat-jarvis-003
 - wiring
 - supervisor
-autobuild_state:
-  current_turn: 1
-  max_turns: 30
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
-  base_branch: main
-  started_at: '2026-04-25T18:54:34.701008'
-  last_updated: '2026-04-25T19:10:05.889730'
-  turns:
-  - turn: 1
-    decision: approve
-    feedback: null
-    timestamp: '2026-04-25T18:54:34.701008'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+task_type: feature
+title: Extend build_supervisor signature (async_subagents + ambient_tool_factory)
+updated: 2026-04-24 00:00:00+00:00
+wave: 3
 ---
 
 # Extend build_supervisor signature (async_subagents + ambient_tool_factory)

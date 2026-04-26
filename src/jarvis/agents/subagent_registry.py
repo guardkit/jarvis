@@ -74,11 +74,11 @@ _REASONER_GRAPH_ID: str = "jarvis_reasoner"
 #                                researcher / planner runs.
 # - ``critic`` / ``researcher`` / ``planner`` — the three role modes.
 #
-# Forbidden substrings (asserted by the TASK-J003-020 regression test):
-# ``deep_reasoner``, ``adversarial_critic``, ``long_research``,
-# ``quick_local`` and any cloud-tier promise. Keep this string free of
-# them; new routing copy is authored here, never auto-generated from a
-# legacy roster.
+# Forbidden substrings are enumerated in the TASK-J003-020 regression
+# test (the legacy four-roster names plus any cloud-tier promise). The
+# tokens are deliberately not duplicated here so the source tree stays
+# free of them; new routing copy is authored here, never auto-generated
+# from a legacy roster.
 # ---------------------------------------------------------------------------
 _REASONER_DESCRIPTION: str = (
     "Local Jarvis reasoning subagent backed by the gpt-oss-120b model "

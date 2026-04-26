@@ -29,9 +29,10 @@ Scope invariant (TASK-J001-004 carried into FEAT-JARVIS-002 + FEAT-JARVIS-003):
     not yet exist.  Specifically, it must not mention ``call_specialist``,
     ``start_async_task``, ``morning-briefing``, or ``talk_prep`` — those
     capabilities land in FEAT-JARVIS-007.  It must also NOT reference any
-    of the retired four-roster names (``deep_reasoner``, ``adversarial_critic``,
-    ``long_research``, ``quick_local``); FEAT-JARVIS-003 supersedes that
-    roster with a single ``jarvis-reasoner`` async subagent (ADR-ARCH-011).
+    of the retired four-roster names (the legacy roster is enumerated in the
+    TASK-J003-020 regression test, not duplicated here so the source tree stays
+    free of those tokens); FEAT-JARVIS-003 supersedes that roster with a
+    single ``jarvis-reasoner`` async subagent (ADR-ARCH-011).
     The Phase 2 tool names (``calculate``, ``list_available_capabilities``,
     ``dispatch_by_capability``, ``queue_build``) and the FEAT-JARVIS-003
     additions (the ``jarvis-reasoner`` subagent and the

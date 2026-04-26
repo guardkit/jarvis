@@ -1,21 +1,33 @@
 ---
-id: TASK-J003-018
-title: "Unit tests \u2014 escalate_to_frontier (three layers + degraded paths)"
-task_type: testing
-status: in_review
-created: 2026-04-24 00:00:00+00:00
-updated: 2026-04-24 00:00:00+00:00
-priority: high
+autobuild_state:
+  base_branch: main
+  current_turn: 1
+  last_updated: '2026-04-25T19:07:07.204586'
+  max_turns: 30
+  started_at: '2026-04-25T18:54:34.700394'
+  turns:
+  - coach_success: true
+    decision: approve
+    feedback: null
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-25T18:54:34.700394'
+    turn: 1
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
 complexity: 6
-wave: 4
-implementation_mode: task-work
-estimated_minutes: 113
+created: 2026-04-24 00:00:00+00:00
 dependencies:
 - TASK-J003-010
 - TASK-J003-011
 - TASK-J003-012
-parent_review: TASK-REV-J003
+estimated_minutes: 113
 feature_id: FEAT-J003
+id: TASK-J003-018
+implementation_mode: task-work
+parent_review: TASK-REV-J003
+priority: high
+status: design_approved
 tags:
 - phase-2
 - jarvis
@@ -23,22 +35,10 @@ tags:
 - tests
 - security
 - ddr-014
-autobuild_state:
-  current_turn: 1
-  max_turns: 30
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
-  base_branch: main
-  started_at: '2026-04-25T18:54:34.700394'
-  last_updated: '2026-04-25T19:07:07.204586'
-  turns:
-  - turn: 1
-    decision: approve
-    feedback: null
-    timestamp: '2026-04-25T18:54:34.700394'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+task_type: testing
+title: Unit tests — escalate_to_frontier (three layers + degraded paths)
+updated: 2026-04-24 00:00:00+00:00
+wave: 4
 ---
 
 # Unit tests — escalate_to_frontier (three layers + degraded paths)
