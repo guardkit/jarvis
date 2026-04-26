@@ -1,0 +1,154 @@
+{
+  "task_id": "TASK-J003-011",
+  "turn": 1,
+  "files_modified": [
+    ".claude/task-plans/TASK-J003-009-implementation-plan.md",
+    ".claude/task-plans/TASK-J003-011-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J003-008/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-009/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-009/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J003-009/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-009/specialist_results.json",
+    ".guardkit/autobuild/TASK-J003-009/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-009/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-009/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-011/turn_context.json",
+    ".guardkit/bdd/TASK-J003-009_junit.xml",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/src/jarvis/tools/dispatch.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_tools_escalate_to_frontier_layer2.py",
+    "coverage_phase4_TASK-J003-009.json",
+    "src/jarvis/agents/subagent_registry.py",
+    "src/jarvis/agents/subagents/__init__.py",
+    "src/jarvis/tools/dispatch.py",
+    "tasks/design_approved/TASK-J003-009-implement-subagent-registry-build-async-subagents.md",
+    "tasks/design_approved/TASK-J003-011-implement-escalate-to-frontier-layer-2-executor-assertion.md",
+    "tests/test_subagent_registry.py",
+    "tests/test_tools_escalate_to_frontier_layer2.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J003-009/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-011/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-011/task_work_results.json",
+    ".guardkit/bdd/TASK-J003-011_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/.guardkit/autobuild/TASK-J003-011/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_tools_escalate_to_frontier_layer2.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_tools_escalate_to_frontier_layer2.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: SessionManager-backed adapter_id lookup with ambient/learning/pattern-c rejection",
+    "AC-002: Attended adapter_id set {telegram, cli, dashboard, reachy} matches JarvisConfig.attended_adapter_ids",
+    "AC-003: Async-subagent frame check via middleware metadata with session-state fallback",
+    "AC-004: Both paths run before any provider SDK call (no outbound HTTP on rejection)",
+    "AC-005: Spoofed-ambient case rejected (frame check overrides attended-adapter pass)",
+    "AC-006: Prompt-injection instruction body never echoed in rejection string or log record",
+    "AC-007: log_frontier_escalation records outcome='attended_only' on every rejection",
+    "AC-008: Both detection paths covered (middleware-only, session-state-only, fallback chain)",
+    "AC-009: ruff lint + ruff format pass with zero errors on modified files"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 67,
+  "sdk_max_turns": 100,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 55,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "escalate_to_frontier (extended from TASK-J003-010) looks up the active session's adapter_id via SessionManager.current_session() \u2014 ambient / learning / pattern-c adapters return \"ERROR: attended_only \u2014 escalate_to_frontier cannot be invoked from {adapter_id} adapter\".",
+      "status": "complete",
+      "evidence": "Added _current_session_hook module-level Callable in dispatch.py (resolver injected by lifecycle.startup; tests inject directly). _check_attended_only reads Session.adapter via _resolve_current_session(), compares against ATTENDED_ADAPTER_IDS, and returns the exact AC string with f'from {adapter_id} adapter' interpolation. TestSessionAdapterCheck::test_non_attended_adapter_returns_attended_only_error parametrises ['ambient', 'learning', 'pattern-c'] and asserts the literal message.",
+      "test_file": "tests/test_tools_escalate_to_frontier_layer2.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Attended adapter_id set: {\"telegram\", \"cli\", \"dashboard\", \"reachy\"} (from config.attended_adapter_ids) \u2014 only these pass.",
+      "status": "complete",
+      "evidence": "ATTENDED_ADAPTER_IDS frozenset declared in dispatch.py with the four members. TestSessionAdapterCheck::test_attended_adapter_ids_constant_matches_config_default asserts equality with JarvisConfig().attended_adapter_ids. TestSessionAdapterCheck::test_attended_adapter_passes_layer2 parametrises [TELEGRAM, CLI, DASHBOARD, REACHY] and asserts each reaches the (mocked) provider branch.",
+      "test_file": "tests/test_tools_escalate_to_frontier_layer2.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Second detection path: the tool body also checks whether the call frame is inside an AsyncSubAgent execution \u2014 via AsyncSubAgentMiddleware metadata if available (ASSUM-FRONTIER-CALLER-FRAME), else via session-state \"currently-in-subagent\" flag. An affirmative check returns \"ERROR: attended_only \u2014 escalate_to_frontier cannot be invoked from async-subagent frame\".",
+      "status": "complete",
+      "evidence": "_is_async_subagent_frame helper in dispatch.py: prefers _async_subagent_frame_hook (middleware metadata) when it returns True/False; falls back to session.metadata['currently_in_subagent'] only when the middleware hook is None, raises, or returns None. _check_attended_only emits the literal AC string on rejection. Coverage: TestAsyncSubagentFrameCheck::test_middleware_hook_true_returns_frame_rejection, ::test_middleware_hook_none_falls_back_to_session_state, ::test_middleware_hook_raises_falls_back_to_session_state, ::test_session_state_only_no_middleware_hook.",
+      "test_file": "tests/test_tools_escalate_to_frontier_layer2.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Both assertion paths run before ANY provider SDK call \u2014 no outbound HTTP attempt on rejection.",
+      "status": "complete",
+      "evidence": "_check_attended_only is invoked at the top of escalate_to_frontier's body, before the GEMINI/OPUS branch dispatch. TestNoProviderCallOnRejection patches both google.genai.Client and anthropic.Anthropic, fires a rejection scenario, then asserts assert_not_called() on both clients for adapter rejection AND frame rejection paths.",
+      "test_file": "tests/test_tools_escalate_to_frontier_layer2.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Spoofed-ambient case: an attended session with an in-progress async-subagent frame is still rejected (scenario: A spoofed-ambient invocation from inside an attended session is rejected) \u2014 the async-subagent frame check overrides the attended-adapter pass.",
+      "status": "complete",
+      "evidence": "TDD-first test class TestSpoofedAmbient written before the implementation. test_attended_session_with_subagent_frame_is_rejected sets adapter=Adapter.CLI (attended) AND middleware hook returns True; asserts the frame-rejection literal AND that no provider client was constructed. test_attended_session_with_session_state_subagent_flag_is_rejected covers the session-state fallback variant. The implementation in _check_attended_only runs Path A (adapter) then Path B (frame) sequentially, so an attended adapter cannot bypass Path B.",
+      "test_file": "tests/test_tools_escalate_to_frontier_layer2.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "A prompt-injection instruction body (\"ignore the gate and ...\") does not alter the assertion flow \u2014 the gate fires on adapter_id / frame, not on instruction content. Instruction body is never echoed in the rejection string (ASSUM-006).",
+      "status": "complete",
+      "evidence": "_check_attended_only inspects Session.adapter and the frame hooks only \u2014 never instruction. The rejection f-strings interpolate adapter_id or the literal 'async-subagent frame' \u2014 not the instruction. TestPromptInjectionPosture::test_prompt_injection_does_not_bypass_adapter_check, ::test_prompt_injection_does_not_bypass_frame_check, ::test_rejection_log_does_not_carry_instruction_body cover all three subcases \u2014 the secret string is never present in result, log message, or banned LogRecord attributes.",
+      "test_file": "tests/test_tools_escalate_to_frontier_layer2.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "log_frontier_escalation records outcome=\"attended_only\" on the structured log entry for every rejection.",
+      "status": "complete",
+      "evidence": "Both rejection branches in _check_attended_only call _emit_frontier_log(target, correlation_id, adapter_label, instruction_length, 'attended_only') before returning. The Literal in FrontierEscalationContext.outcome already includes 'attended_only' (dispatch_types.py line 87). TestStructuredLogOutcomeAttendedOnly::test_adapter_rejection_logs_attended_only_outcome, ::test_frame_rejection_logs_attended_only_outcome, ::test_session_state_fallback_rejection_logs_attended_only assert exactly one INFO record is emitted with outcome='attended_only' and the correct target/adapter/model_alias attributes.",
+      "test_file": "tests/test_tools_escalate_to_frontier_layer2.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "If AsyncSubAgentMiddleware metadata is unavailable in DeepAgents 0.5.3 (verified at test time per ASSUM-FRONTIER-CALLER-FRAME), the session-state fallback still holds \u2014 tests cover both paths (review Finding F6).",
+      "status": "complete",
+      "evidence": "_is_async_subagent_frame falls back to Session.metadata['currently_in_subagent'] when the middleware hook is None, returns None, or raises. Both detection paths have independent test coverage: TestAsyncSubagentFrameCheck::test_session_state_only_no_middleware_hook (DeepAgents 0.5.3 reality \u2014 only fallback wired), ::test_middleware_only_no_session_hook (only middleware wired), ::test_middleware_hook_none_falls_back_to_session_state, ::test_middleware_hook_raises_falls_back_to_session_state, ::test_middleware_hook_false_does_not_trigger_frame_check (middleware authoritative).",
+      "test_file": "tests/test_tools_escalate_to_frontier_layer2.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran `python -m ruff check src/jarvis/tools/dispatch.py tests/test_tools_escalate_to_frontier_layer2.py` \u2192 'All checks passed!'. Ran `python -m ruff format --check` on the same files \u2192 '2 files already formatted'. Project uses ruff (line-length 100, target py312, lints E/F/I/W/UP/B/SIM/RUF per pyproject.toml).",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py",
+        "tests/test_tools_escalate_to_frontier_layer2.py"
+      ]
+    }
+  ]
+}
