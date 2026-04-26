@@ -1,0 +1,194 @@
+{
+  "task_id": "TASK-J003-013",
+  "timestamp": "2026-04-26T09:49:46.131366",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1463,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".claude/task-plans/TASK-J003-013-implementation-plan.md",
+    ".claude/task-plans/TASK-J003-018-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J003-013/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-018/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-020/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-020/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-020/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-020/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-020/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-022/checkpoints.json",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/src/jarvis/agents/supervisor.py",
+    "`src/jarvis/agents/supervisor.py",
+    "src/jarvis/agents/subagent_registry.py",
+    "src/jarvis/agents/supervisor.py",
+    "src/jarvis/prompts/supervisor_prompt.py",
+    "tasks/design_approved/TASK-J003-013-extend-build-supervisor-signature.md",
+    "tasks/design_approved/TASK-J003-018-unit-tests-escalate-to-frontier.md",
+    "tests/test_escalate_to_frontier.py",
+    "tests/test_jarvis_reasoner_description.py",
+    "tests/test_no_retired_roster_strings.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J003-013/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-013/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-018/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-018/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-020/checkpoints.json",
+    ".guardkit/bdd/TASK-J003-013_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/.guardkit/autobuild/TASK-J003-013/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_supervisor_extended_signature.py",
+    "`tests/test_supervisor_extended_signature.py",
+    "tests/test_supervisor_extended_signature.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_supervisor_extended_signature.py",
+    "`tests/test_supervisor_extended_signature.py"
+  ],
+  "summary": "1463 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 46,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 1,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_building_the_supervisor_without_async_subagents_preserves_existing_behaviour",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+    ],
+    "tag": "@task:TASK-J003-013"
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 1,
+    "missing_phases": [
+      "4",
+      "5"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 1 completed invocations\n\nMissing phases:\n  - Phase 4 (Testing)\n  - Phase 5 (Code Review)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 3 (Phase 3): Implementation (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "src/jarvis/agents/supervisor.py \u2014 build_supervisor adds two keyword-only parameters: async_subagents: list[AsyncSubAgent] | None = None, ambient_tool_factory: Callable[[], list[BaseTool]] | None = None.",
+      "status": "complete",
+      "evidence": "Both kwargs declared keyword-only (after the * marker) on build_supervisor with default None. Imports added: Callable from collections.abc and AsyncSubAgent under TYPE_CHECKING. Verified by TestAC001SignatureShape.test_async_subagents_is_keyword_only_with_default_none and test_ambient_tool_factory_is_keyword_only_with_default_none.",
+      "test_file": "tests/test_supervisor_extended_signature.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "When async_subagents=None: no async subagents wired; the supervisor's tool catalogue does not include the five AsyncSubAgentMiddleware operational tools (scenario: Building the supervisor without the async-subagents argument preserves existing behaviour).",
+      "status": "complete",
+      "evidence": "build_supervisor passes subagents=list(async_subagents) if async_subagents else [] to create_deep_agent \u2014 an empty list keeps AsyncSubAgentMiddleware out of the middleware stack so its five tools are not injected. Asserted by TestAC002NoAsyncSubagentsByDefault.test_subagents_kwarg_is_empty_list_when_none and test_compiled_graph_omits_async_middleware_tools (the latter walks the realised graph nodes and asserts the intersection with {start,check,update,cancel,list}_async_task[s] is empty).",
+      "test_file": "tests/test_supervisor_extended_signature.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "When async_subagents=[<jarvis-reasoner>]: AsyncSubAgentMiddleware auto-injects start_async_task, check_async_task, update_async_task, cancel_async_task, list_async_tasks into the supervisor's tool catalogue (scenario: Wiring the async subagent injects the five middleware operational tools).",
+      "status": "complete",
+      "evidence": "When async_subagents is non-empty it is forwarded verbatim as subagents=list(async_subagents) to create_deep_agent, which causes deepagents.graph to append AsyncSubAgentMiddleware(async_subagents=\u2026) \u2014 the middleware then registers all five operational tools. Asserted by TestAC003AsyncSubagentInjectsMiddlewareTools.test_subagents_kwarg_carries_supplied_async_specs (kwargs check) and test_compiled_graph_exposes_five_middleware_tools (real-graph introspection \u2014 asserts ASYNC_MIDDLEWARE_TOOL_NAMES \u2286 wired).",
+      "test_file": "tests/test_supervisor_extended_signature.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "When ambient_tool_factory=None: ambient/learning paths fall back to assemble_tool_list(..., include_frontier=False) \u2014 the attended tool list minus escalate_to_frontier (scenario: Not configuring an ambient tool factory falls back to the attended tools without frontier).",
+      "status": "complete",
+      "evidence": "_default_ambient_tool_factory(config, available_capabilities) returns a closure that lazily imports jarvis.tools.assemble_tool_list and calls it with include_frontier=False. The closure is attached to the compiled graph as graph._jarvis_ambient_tool_factory whenever ambient_tool_factory=None. Asserted by TestAC004AmbientFactoryDefault.test_default_factory_is_attached_when_none, test_default_factory_invokes_assemble_tool_list_without_frontier (patches jarvis.tools.assemble_tool_list and asserts kwargs['include_frontier'] is False), and test_default_factory_returns_real_ambient_list_excluding_frontier (end-to-end: invokes the real factory, asserts 'escalate_to_frontier' \u2209 names AND the FEAT-J002 9-tool baseline \u2286 names).",
+      "test_file": "tests/test_supervisor_extended_signature.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "When ambient_tool_factory is supplied: the factory's return value is the canonical ambient tool list.",
+      "status": "complete",
+      "evidence": "When the caller supplies ambient_tool_factory, build_supervisor stores the callable verbatim (no wrapping) on graph._jarvis_ambient_tool_factory. Asserted by TestAC005AmbientFactorySupplied.test_supplied_factory_is_attached_verbatim (asserts attached is my_factory \u2014 identity, not equality), test_supplied_factory_return_value_is_canonical (asserts attached() is canonical_list), and test_supplied_factory_does_not_call_assemble_tool_list (asserts neither the supplied factory nor the assemble_tool_list fallback fires at build time \u2014 the factory is invoked lazily by ambient consumers).",
+      "test_file": "tests/test_supervisor_extended_signature.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Phase 1 + FEAT-J002 call sites that supply only tools= and available_capabilities= still return a valid CompiledStateGraph (backward compat).",
+      "status": "complete",
+      "evidence": "Both new kwargs default to None and only affect behaviour when supplied. Verified by (a) TestAC006BackwardCompatibility.test_phase1_call_site_still_returns_compiled_graph (asserts build_supervisor(config) returns CompiledStateGraph), (b) test_feat_j002_call_site_still_returns_compiled_graph (asserts build_supervisor(config, tools=\u2026, available_capabilities=\u2026) returns CompiledStateGraph), (c) test_feat_j002_call_site_omits_async_middleware_tools (asserts the five middleware tools are absent), AND (d) the entire pre-existing supervisor test suite (52 tests in test_supervisor.py + test_supervisor_no_llm_call.py + test_supervisor_with_tools.py + test_supervisor_lifecycle_wiring.py) continues to pass unchanged.",
+      "test_file": "tests/test_supervisor_extended_signature.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Signature is documented in docstring; parameter order preserves existing ordering (kwargs-only additions).",
+      "status": "complete",
+      "evidence": "build_supervisor's docstring documents both new kwargs by name with default-resolution semantics, plus the resolved-factory attribute (graph._jarvis_ambient_tool_factory). Parameter declaration order is config, *, tools, available_capabilities, async_subagents, ambient_tool_factory \u2014 additions sit AFTER the FEAT-J002 kwargs. Verified by TestAC001SignatureShape.test_phase2_kwargs_still_present, test_kwargs_appear_after_feat_j002_kwargs (asserts idx[available_capabilities] < idx[async_subagents] < idx[ambient_tool_factory]), and test_docstring_documents_new_kwargs.",
+      "test_file": "tests/test_supervisor_extended_signature.py",
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "uv run ruff check src/jarvis/agents/supervisor.py tests/test_supervisor_extended_signature.py \u2192 'All checks passed!' (zero errors). uv run ruff format --check on both files \u2192 '2 files already formatted' (zero diffs).",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/agents/supervisor.py",
+        "tests/test_supervisor_extended_signature.py"
+      ]
+    }
+  ]
+}

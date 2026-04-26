@@ -57,9 +57,7 @@ REQUIRED_LOG_FIELDS: frozenset[str] = frozenset(
 
 # Fields the structured record must NEVER contain — would leak the
 # instruction body into telemetry (ADR-ARCH-029).
-BANNED_LOG_FIELDS: frozenset[str] = frozenset(
-    {"instruction", "instruction_body", "body", "prompt"}
-)
+BANNED_LOG_FIELDS: frozenset[str] = frozenset({"instruction", "instruction_body", "body", "prompt"})
 
 
 # ---------------------------------------------------------------------------
@@ -288,8 +286,7 @@ class TestLayer2AmbientAdapterRejection:
             result = _invoke(target=FrontierTarget.GEMINI_3_1_PRO, instruction="hi")
 
         assert result == (
-            "ERROR: attended_only — escalate_to_frontier cannot be invoked "
-            "from ambient adapter"
+            "ERROR: attended_only — escalate_to_frontier cannot be invoked from ambient adapter"
         )
         gemini_cls.assert_not_called()
 
@@ -439,9 +436,7 @@ class TestLayer3RegistrationAbsence:
         test_config: JarvisConfig,
         alpha_descriptor: CapabilityDescriptor,
     ) -> None:
-        ambient = assemble_tool_list(
-            test_config, [alpha_descriptor], include_frontier=False
-        )
+        ambient = assemble_tool_list(test_config, [alpha_descriptor], include_frontier=False)
         assert escalate_to_frontier not in ambient
         names = [t.name for t in ambient]
         assert "escalate_to_frontier" not in names
@@ -454,14 +449,10 @@ class TestLayer3RegistrationAbsence:
         # Hostile mutation per ADR-ARCH-023 — append the escalation onto a
         # returned ambient list. A subsequent call must produce a fresh list
         # that does NOT contain the escalation.
-        ambient = assemble_tool_list(
-            test_config, [alpha_descriptor], include_frontier=False
-        )
+        ambient = assemble_tool_list(test_config, [alpha_descriptor], include_frontier=False)
         ambient.append(escalate_to_frontier)
 
-        fresh = assemble_tool_list(
-            test_config, [alpha_descriptor], include_frontier=False
-        )
+        fresh = assemble_tool_list(test_config, [alpha_descriptor], include_frontier=False)
         fresh_names = [t.name for t in fresh]
 
         assert escalate_to_frontier not in fresh
