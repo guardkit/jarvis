@@ -1,0 +1,133 @@
+{
+  "task_id": "TASK-J003-005",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_role_prompts.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_role_prompts.py .........................                     [100%]\n======================== 25 passed, 1 warning in 1.59s =========================",
+      "duration_seconds": 3.032644033432007
+    },
+    "requirements": {
+      "criteria_total": 6,
+      "criteria_met": 6,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/agents/subagents/prompts.py` defines three module-level string constants:",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "src/jarvis/agents/subagents/prompts.py defines CRITIC_PROMPT, RESEARCHER_PROMPT, and PLANNER_PROMPT as module-level annotated `: str` constants. TestAC001ConstantsExist asserts each is importable, isinstance(str), and present as a module attribute on jarvis.agents.subagents.prompts.",
+      "notes": "src/jarvis/agents/subagents/prompts.py defines CRITIC_PROMPT, RESEARCHER_PROMPT, and PLANNER_PROMPT as module-level annotated `: str` constants. TestAC001ConstantsExist asserts each is importable, isinstance(str), and present as a module attribute on jarvis.agents.subagents.prompts."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "The same module exposes `ROLE_PROMPTS: Mapping[RoleName, str]` with exactly three entries, one per `RoleName` member. No extra keys.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "CRITIC_PROMPT is annotated `: str` and frames the role as a skeptical reviewer. The verbatim word 'adversarial' appears twice ('adversarial evaluation posture', 'adversarial pressure'). TestAC002CriticPromptAdversarial checks both substring presence and a `\\badversarial\\b` regex word-boundary match.",
+      "notes": "CRITIC_PROMPT is annotated `: str` and frames the role as a skeptical reviewer. The verbatim word 'adversarial' appears twice ('adversarial evaluation posture', 'adversarial pressure'). TestAC002CriticPromptAdversarial checks both substring presence and a `\\badversarial\\b` regex word-boundary match."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Each prompt is non-empty and \u2265 40 characters (enough to carry the role posture) but avoids prescribing specific tools (the subagent is leaf per design \u00a78).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "RESEARCHER_PROMPT is annotated `: str` and contains the verbatim phrase 'open-ended research posture'. TestAC003ResearcherPromptOpenEnded asserts `'open-ended research' in RESEARCHER_PROMPT`.",
+      "notes": "RESEARCHER_PROMPT is annotated `: str` and contains the verbatim phrase 'open-ended research posture'. TestAC003ResearcherPromptOpenEnded asserts `'open-ended research' in RESEARCHER_PROMPT`."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Prompts are plain strings, no `{placeholders}` \u2014 they are final system prompts, not templates.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "PLANNER_PROMPT is annotated `: str` and contains the verbatim phrase 'multi-step planning posture'. TestAC004PlannerPromptMultiStep asserts `'multi-step planning' in PLANNER_PROMPT`.",
+      "notes": "PLANNER_PROMPT is annotated `: str` and contains the verbatim phrase 'multi-step planning posture'. TestAC004PlannerPromptMultiStep asserts `'multi-step planning' in PLANNER_PROMPT`."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`from jarvis.agents.subagents.prompts import ROLE_PROMPTS` is side-effect free; no I/O; no LLM calls.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "ROLE_PROMPTS is declared `Mapping[RoleName, str]` and constructed as a dict literal with exactly three entries keyed by RoleName.CRITIC, RoleName.RESEARCHER, RoleName.PLANNER. TestAC005RolePromptsRegistryShape asserts: isinstance(ROLE_PROMPTS, Mapping); len == 3; set(ROLE_PROMPTS.keys()) == set(RoleName); every key isinstance RoleName; values are str; and each value is identity-equal (`is`) to the corresponding module constant.",
+      "notes": "ROLE_PROMPTS is declared `Mapping[RoleName, str]` and constructed as a dict literal with exactly three entries keyed by RoleName.CRITIC, RoleName.RESEARCHER, RoleName.PLANNER. TestAC005RolePromptsRegistryShape asserts: isinstance(ROLE_PROMPTS, Mapping); len == 3; set(ROLE_PROMPTS.keys()) == set(RoleName); every key isinstance RoleName; values are str; and each value is identity-equal (`is`) to the corresponding module constant."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "All three prompts are multi-sentence and well over 40 characters (CRITIC ~640, RESEARCHER ~590, PLANNER ~620 chars). TestAC006PromptLengthAndPosture asserts: every prompt is non-empty after strip(); len() >= 40; and none mention the supervisor/dispatch tool names read_file, search_web, calculate, list_available_capabilities, refresh_capabilities, subscribe_capabilities, dispatch_by_capability, start_async_task, escalate_to_frontier \u2014 preserving the leaf-subagent contract from design \u00a78.",
+      "notes": "All three prompts are multi-sentence and well over 40 characters (CRITIC ~640, RESEARCHER ~590, PLANNER ~620 chars). TestAC006PromptLengthAndPosture asserts: every prompt is non-empty after strip(); len() >= 40; and none mention the supervisor/dispatch tool names read_file, search_web, calculate, list_available_capabilities, refresh_capabilities, subscribe_capabilities, dispatch_by_capability, start_async_task, escalate_to_frontier \u2014 preserving the leaf-subagent contract from design \u00a78."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/agents/subagents/prompts.py` defines three module-level string constants:",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "src/jarvis/agents/subagents/prompts.py defines CRITIC_PROMPT, RESEARCHER_PROMPT, and PLANNER_PROMPT as module-level annotated `: str` constants. TestAC001ConstantsExist asserts each is importable, isinstance(str), and present as a module attribute on jarvis.agents.subagents.prompts.",
+        "notes": "src/jarvis/agents/subagents/prompts.py defines CRITIC_PROMPT, RESEARCHER_PROMPT, and PLANNER_PROMPT as module-level annotated `: str` constants. TestAC001ConstantsExist asserts each is importable, isinstance(str), and present as a module attribute on jarvis.agents.subagents.prompts."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "The same module exposes `ROLE_PROMPTS: Mapping[RoleName, str]` with exactly three entries, one per `RoleName` member. No extra keys.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "CRITIC_PROMPT is annotated `: str` and frames the role as a skeptical reviewer. The verbatim word 'adversarial' appears twice ('adversarial evaluation posture', 'adversarial pressure'). TestAC002CriticPromptAdversarial checks both substring presence and a `\\badversarial\\b` regex word-boundary match.",
+        "notes": "CRITIC_PROMPT is annotated `: str` and frames the role as a skeptical reviewer. The verbatim word 'adversarial' appears twice ('adversarial evaluation posture', 'adversarial pressure'). TestAC002CriticPromptAdversarial checks both substring presence and a `\\badversarial\\b` regex word-boundary match."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Each prompt is non-empty and \u2265 40 characters (enough to carry the role posture) but avoids prescribing specific tools (the subagent is leaf per design \u00a78).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "RESEARCHER_PROMPT is annotated `: str` and contains the verbatim phrase 'open-ended research posture'. TestAC003ResearcherPromptOpenEnded asserts `'open-ended research' in RESEARCHER_PROMPT`.",
+        "notes": "RESEARCHER_PROMPT is annotated `: str` and contains the verbatim phrase 'open-ended research posture'. TestAC003ResearcherPromptOpenEnded asserts `'open-ended research' in RESEARCHER_PROMPT`."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Prompts are plain strings, no `{placeholders}` \u2014 they are final system prompts, not templates.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "PLANNER_PROMPT is annotated `: str` and contains the verbatim phrase 'multi-step planning posture'. TestAC004PlannerPromptMultiStep asserts `'multi-step planning' in PLANNER_PROMPT`.",
+        "notes": "PLANNER_PROMPT is annotated `: str` and contains the verbatim phrase 'multi-step planning posture'. TestAC004PlannerPromptMultiStep asserts `'multi-step planning' in PLANNER_PROMPT`."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`from jarvis.agents.subagents.prompts import ROLE_PROMPTS` is side-effect free; no I/O; no LLM calls.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "ROLE_PROMPTS is declared `Mapping[RoleName, str]` and constructed as a dict literal with exactly three entries keyed by RoleName.CRITIC, RoleName.RESEARCHER, RoleName.PLANNER. TestAC005RolePromptsRegistryShape asserts: isinstance(ROLE_PROMPTS, Mapping); len == 3; set(ROLE_PROMPTS.keys()) == set(RoleName); every key isinstance RoleName; values are str; and each value is identity-equal (`is`) to the corresponding module constant.",
+        "notes": "ROLE_PROMPTS is declared `Mapping[RoleName, str]` and constructed as a dict literal with exactly three entries keyed by RoleName.CRITIC, RoleName.RESEARCHER, RoleName.PLANNER. TestAC005RolePromptsRegistryShape asserts: isinstance(ROLE_PROMPTS, Mapping); len == 3; set(ROLE_PROMPTS.keys()) == set(RoleName); every key isinstance RoleName; values are str; and each value is identity-equal (`is`) to the corresponding module constant."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "All three prompts are multi-sentence and well over 40 characters (CRITIC ~640, RESEARCHER ~590, PLANNER ~620 chars). TestAC006PromptLengthAndPosture asserts: every prompt is non-empty after strip(); len() >= 40; and none mention the supervisor/dispatch tool names read_file, search_web, calculate, list_available_capabilities, refresh_capabilities, subscribe_capabilities, dispatch_by_capability, start_async_task, escalate_to_frontier \u2014 preserving the leaf-subagent contract from design \u00a78.",
+        "notes": "All three prompts are multi-sentence and well over 40 characters (CRITIC ~640, RESEARCHER ~590, PLANNER ~620 chars). TestAC006PromptLengthAndPosture asserts: every prompt is non-empty after strip(); len() >= 40; and none mention the supervisor/dispatch tool names read_file, search_web, calculate, list_available_capabilities, refresh_capabilities, subscribe_capabilities, dispatch_by_capability, start_async_task, escalate_to_frontier \u2014 preserving the leaf-subagent contract from design \u00a78."
+      }
+    ]
+  },
+  "issues": [],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 331 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1223/5200 tokens\n\n### \u2705 Similar Outcomes\n- CONTAINS_CODE\n- INVOKES_FUNCTION\n\n### \ud83c\udfa8 Relevant Patterns\n- HAS_SEQUENCE_STEP\n- CREATED_AT\n\n### \u26a0\ufe0f Warnings\n- IS_IMPLEMENTED_AS\n- INVOLVES\n\n### \ud83c\udfad Role Constraints\n- PROJECT_INVOLVES\n- INVOLVES_WORKFLOW_ENTITY\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_PROJECT_ID\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}

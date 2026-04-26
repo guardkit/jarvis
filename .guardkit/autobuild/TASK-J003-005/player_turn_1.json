@@ -1,0 +1,126 @@
+{
+  "task_id": "TASK-J003-005",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    "src/jarvis/agents/subagents/prompts.py",
+    "tests/test_role_prompts.py"
+  ],
+  "tests_written": [
+    "tests/test_role_prompts.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "tests/test_role_prompts.py: 25 passed (0.40s). Full project suite: 1167 passed, 2 skipped, 99 warnings (3.94s). ruff check: All checks passed. ruff format --check: clean. mypy --strict on prompts.py + types.py: Success: no issues found in 2 source files.",
+  "implementation_notes": "Created src/jarvis/agents/subagents/prompts.py exposing three module-level final system-prompt constants \u2014 CRITIC_PROMPT, RESEARCHER_PROMPT, PLANNER_PROMPT \u2014 plus the exhaustive ROLE_PROMPTS: Mapping[RoleName, str] registry whose keys are exactly the three RoleName enum members and whose values are the matching constants by identity (verified with `is` in tests). Each prompt encodes a distinct posture: CRITIC carries the verbatim word 'adversarial' and an adversarial-evaluation stance; RESEARCHER carries the verbatim phrase 'open-ended research' and a survey/breadth stance; PLANNER carries the verbatim phrase 'multi-step planning' and a stepwise-decomposition stance. Prompts are plain strings with no `{placeholders}` (final system prompts, not templates), each well over the 40-char minimum, and deliberately avoid naming any of the supervisor/dispatch tool surfaces (read_file, search_web, calculate, list_available_capabilities, refresh_capabilities, subscribe_capabilities, dispatch_by_capability, start_async_task, escalate_to_frontier) because the reasoner subagent is a leaf per design \u00a78. Note: the parallel TASK-J003-002 autobuild had not yet landed when this task started, but RoleName arrived in src/jarvis/agents/subagents/types.py during this turn \u2014 prompts.py imports it from there and all 25 acceptance tests now pass.",
+  "concerns": [
+    "TASK-J003-005 declares dependencies: [] but functionally requires the RoleName enum produced by TASK-J003-002. RoleName is now present in types.py via a parallel autobuild edit observed mid-turn. If task ordering is ever changed so this task runs first, prompts.py will fail to import \u2014 the autobuild orchestrator should either declare the dep or run wave 1 sequentially."
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007",
+    "AC-008",
+    "AC-009"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/agents/subagents/prompts.py` defines three module-level string constants:",
+      "status": "complete",
+      "evidence": "src/jarvis/agents/subagents/prompts.py defines CRITIC_PROMPT, RESEARCHER_PROMPT, and PLANNER_PROMPT as module-level annotated `: str` constants. TestAC001ConstantsExist asserts each is importable, isinstance(str), and present as a module attribute on jarvis.agents.subagents.prompts.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`CRITIC_PROMPT: str` \u2014 adversarial-evaluation posture; the word \"adversarial\" appears verbatim.",
+      "status": "complete",
+      "evidence": "CRITIC_PROMPT is annotated `: str` and frames the role as a skeptical reviewer. The verbatim word 'adversarial' appears twice ('adversarial evaluation posture', 'adversarial pressure'). TestAC002CriticPromptAdversarial checks both substring presence and a `\\badversarial\\b` regex word-boundary match.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`RESEARCHER_PROMPT: str` \u2014 open-ended research posture; the phrase \"open-ended research\" appears verbatim.",
+      "status": "complete",
+      "evidence": "RESEARCHER_PROMPT is annotated `: str` and contains the verbatim phrase 'open-ended research posture'. TestAC003ResearcherPromptOpenEnded asserts `'open-ended research' in RESEARCHER_PROMPT`.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`PLANNER_PROMPT: str` \u2014 multi-step planning posture; the phrase \"multi-step planning\" appears verbatim.",
+      "status": "complete",
+      "evidence": "PLANNER_PROMPT is annotated `: str` and contains the verbatim phrase 'multi-step planning posture'. TestAC004PlannerPromptMultiStep asserts `'multi-step planning' in PLANNER_PROMPT`.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] The same module exposes `ROLE_PROMPTS: Mapping[RoleName, str]` with exactly three entries, one per `RoleName` member. No extra keys.",
+      "status": "complete",
+      "evidence": "ROLE_PROMPTS is declared `Mapping[RoleName, str]` and constructed as a dict literal with exactly three entries keyed by RoleName.CRITIC, RoleName.RESEARCHER, RoleName.PLANNER. TestAC005RolePromptsRegistryShape asserts: isinstance(ROLE_PROMPTS, Mapping); len == 3; set(ROLE_PROMPTS.keys()) == set(RoleName); every key isinstance RoleName; values are str; and each value is identity-equal (`is`) to the corresponding module constant.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] Each prompt is non-empty and \u2265 40 characters (enough to carry the role posture) but avoids prescribing specific tools (the subagent is leaf per design \u00a78).",
+      "status": "complete",
+      "evidence": "All three prompts are multi-sentence and well over 40 characters (CRITIC ~640, RESEARCHER ~590, PLANNER ~620 chars). TestAC006PromptLengthAndPosture asserts: every prompt is non-empty after strip(); len() >= 40; and none mention the supervisor/dispatch tool names read_file, search_web, calculate, list_available_capabilities, refresh_capabilities, subscribe_capabilities, dispatch_by_capability, start_async_task, escalate_to_frontier \u2014 preserving the leaf-subagent contract from design \u00a78.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] Prompts are plain strings, no `{placeholders}` \u2014 they are final system prompts, not templates.",
+      "status": "complete",
+      "evidence": "Each prompt is a plain string-literal concatenation containing only natural-language text \u2014 no `{name}`-style placeholders, no f-string interpolation. TestAC007NoFormatPlaceholders runs the regex `\\{[^{}]*\\}` against each constant and against every value of ROLE_PROMPTS; all four assertions confirm no match.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "[ ] `from jarvis.agents.subagents.prompts import ROLE_PROMPTS` is side-effect free; no I/O; no LLM calls.",
+      "status": "complete",
+      "evidence": "The module body contains only string-literal definitions, a typed dict literal, and one stdlib + one local import (collections.abc.Mapping, jarvis.agents.subagents.types.RoleName) \u2014 no open(), no requests, no LLM client construction. TestAC008ImportIsSideEffectFree force-reimports the module under a builtins.open monkey-patch and asserts no project-data file (.md/.yaml/.yml/.json) was opened, then re-confirms the documented import path resolves to the registry.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`ruff check src/jarvis/agents/subagents/prompts.py tests/test_role_prompts.py` \u2192 'All checks passed!'. `ruff format --check` on the same files \u2192 '2 files already formatted'. `mypy --strict` (project config) on prompts.py + types.py \u2192 'Success: no issues found in 2 source files'. Full project pytest run: 1167 passed, 2 skipped \u2014 no regressions.",
+      "test_file": "tests/test_role_prompts.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/prompts.py",
+        "tests/test_role_prompts.py"
+      ]
+    }
+  ],
+  "success": true
+}

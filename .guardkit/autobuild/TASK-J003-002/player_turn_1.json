@@ -1,0 +1,101 @@
+{
+  "task_id": "TASK-J003-002",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/agents/subagents/__init__.py",
+    "src/jarvis/agents/subagents/types.py"
+  ],
+  "files_created": [
+    "tests/test_subagent_types_role_name.py"
+  ],
+  "tests_written": [
+    "tests/test_subagent_types_role_name.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "33 new tests in tests/test_subagent_types_role_name.py all pass; combined with existing tests/test_dispatch_types_frontier_escalation.py 66/66 pass. Pre-existing failures (test_build_system::test_jarvis_version_command, test_phase2_dependencies::test_jarvis_package_imports, test_phase3_dependencies::test_jarvis_version_unchanged, test_get_calendar_events::test_docstring_matches_api_tools_md_section_1_3_byte_for_byte) reproduce on a clean stash and are unrelated to this change (subprocess uses /usr/local/bin/python without uv venv; calendar docstring drift). Ruff lint + format clean on all modified files.",
+  "implementation_notes": "Added the closed RoleName(str, Enum) to src/jarvis/agents/subagents/types.py alongside the pre-existing AsyncTaskInput, with exactly three lower-case members CRITIC='critic', RESEARCHER='researcher', PLANNER='planner' per DDR-011 / DM-subagent-types \u00a71. No __missing__ override \u2014 RoleName('') raises the default ValueError so the subagent graph can map it to the structured 'unknown_role' branch per ADR-ARCH-021 / ASSUM-004. Updated src/jarvis/agents/subagents/__init__.py to re-export both RoleName and AsyncTaskInput. FrontierTarget(str, Enum) in src/jarvis/tools/dispatch_types.py was already present from a prior task with the exact two members required by AC-002 (GEMINI_3_1_PRO='GEMINI_3_1_PRO', OPUS_4_7='OPUS_4_7') \u2014 left unchanged and added explicit member-set tests in the new test module. The new tests/test_subagent_types_role_name.py covers both enums for: member set + names + values (AC-001 + AC-002), str inheritance and Enum(value) round-trip + member==value comparison (AC-003), ValueError on '' and other non-members plus assertion that no _missing_/__missing__ override is declared (AC-004), and import-time purity via importlib.reload under patched builtins.open + socket.socket (AC-005). Module-level imports already keep both files free of I/O / LLM construction.",
+  "concerns": [
+    "AC-002's literal values (GEMINI_3_1_PRO='GEMINI_3_1_PRO', OPUS_4_7='OPUS_4_7') diverge from DM-subagent-types \u00a75 which documents provider-prefixed init_chat_model aliases ('google_genai:gemini-3.1-pro', 'anthropic:claude-opus-4-7'). Implementation followed the AC text verbatim (per the user-supplied-value rule) and matches the value already shipped in src/jarvis/tools/dispatch_types.py from the prior task. Worth flagging during /factcheck so future work that needs to call init_chat_model() doesn't pass the literal enum value.",
+    "Pre-existing test failures (test_jarvis_version_command, test_jarvis_package_imports, test_jarvis_version_unchanged, test_docstring_matches_api_tools_md_section_1_3_byte_for_byte) are environment- or unrelated-content issues that reproduce on a clean stash; not caused by this change."
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/agents/subagents/types.py` exposes `class RoleName(str, Enum)` with exactly three members: `CRITIC = \"critic\"`, `RESEARCHER = \"researcher\"`, `PLANNER = \"planner\"`.",
+      "status": "complete",
+      "evidence": "Added `class RoleName(str, Enum)` with exactly three members CRITIC='critic', RESEARCHER='researcher', PLANNER='planner' to src/jarvis/agents/subagents/types.py and re-exported from src/jarvis/agents/subagents/__init__.py. Verified by tests TestRoleNameMembers::test_role_name_inherits_from_str_and_enum, ::test_role_name_has_exactly_three_members, ::test_role_name_member_names_are_critic_researcher_planner, ::test_role_name_member_values_are_lowercase_strings.",
+      "test_file": "tests/test_subagent_types_role_name.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/agents/subagents/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] `src/jarvis/tools/dispatch_types.py` (or an existing dispatch types module) exposes `class FrontierTarget(str, Enum)` with exactly two members: `GEMINI_3_1_PRO = \"GEMINI_3_1_PRO\"`, `OPUS_4_7 = \"OPUS_4_7\"`.",
+      "status": "complete",
+      "evidence": "src/jarvis/tools/dispatch_types.py already exposes `class FrontierTarget(str, Enum)` with exactly the required two members (GEMINI_3_1_PRO='GEMINI_3_1_PRO', OPUS_4_7='OPUS_4_7') from a prior FEAT-J003 task. Verified explicitly by tests TestFrontierTargetMembers::test_frontier_target_inherits_from_str_and_enum, ::test_frontier_target_has_exactly_two_members, ::test_frontier_target_member_names_are_gemini_and_opus, ::test_frontier_target_member_values_match_documented_strings.",
+      "test_file": "tests/test_subagent_types_role_name.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Both enums are `str`-valued so `@tool(parse_docstring=True)` argument coercion works with literal strings.",
+      "status": "complete",
+      "evidence": "Both classes declare `(str, Enum)` so `RoleName('critic') is RoleName.CRITIC`, `FrontierTarget('OPUS_4_7') is FrontierTarget.OPUS_4_7`, and `member == member.value` round-trips for every member. Verified by parametrised tests TestStrCoercionRoundTrip::test_role_name_value_lookup_returns_member, ::test_role_name_instance_equals_value_string, ::test_frontier_target_value_lookup_returns_member, ::test_frontier_target_instance_equals_value_string.",
+      "test_file": "tests/test_subagent_types_role_name.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] `RoleName(\"\")` raises `ValueError` (default Python enum behaviour) \u2014 no custom `__missing__`; the subagent graph maps this to `unknown_role` per ASSUM-004.",
+      "status": "complete",
+      "evidence": "RoleName declares no `_missing_` / `__missing__` override, so default Enum behaviour applies. Verified by tests TestUnknownValueRaisesValueError::test_role_name_empty_string_raises_value_error, ::test_role_name_non_member_value_raises_value_error (parametrised over '', 'CRITIC', 'Critic', 'unknown_role', 'deep_reasoner'), ::test_role_name_has_no_custom_missing_override (asserts neither `_missing_` nor `__missing__` is in `RoleName.__dict__`); equivalent assertions for FrontierTarget cover the symmetric case.",
+      "test_file": "tests/test_subagent_types_role_name.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] Module has no side-effects at import; no I/O; no LLM calls.",
+      "status": "complete",
+      "evidence": "Both modules are pure type declarations with module-level imports only (enum.Enum, pydantic primitives, logging types). Verified by tests TestImportPurity::test_subagent_types_reimport_makes_no_filesystem_or_network_call and ::test_dispatch_types_reimport_makes_no_filesystem_or_network_call which patch builtins.open and socket.socket and re-import each module via importlib.reload.",
+      "test_file": "tests/test_subagent_types_role_name.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`python -m ruff check` reports `All checks passed!` for src/jarvis/agents/subagents/types.py, src/jarvis/agents/subagents/__init__.py, src/jarvis/tools/dispatch_types.py, and tests/test_subagent_types_role_name.py. `python -m ruff format --check` reports all four files already formatted (the test file was reformatted once by `ruff format` and then re-verified clean).",
+      "test_file": "tests/test_subagent_types_role_name.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/agents/subagents/__init__.py",
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    }
+  ],
+  "success": true
+}
