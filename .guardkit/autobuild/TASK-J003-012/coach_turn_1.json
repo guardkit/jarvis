@@ -1,0 +1,181 @@
+{
+  "task_id": "TASK-J003-012",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_assemble_tool_list.py tests/test_assemble_tool_list_layer3.py tests/test_prompts.py tests/test_subagent_prompts.py tests/test_subagents_jarvis_reasoner.py tests/test_supervisor_with_tools.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_supervisor_with_tools.py::TestAC001NineToolWiring::test_create_deep_agent_receives_nine_tools_alphabetically\ntests/test_supervisor_with_tools.py::TestAC003CapabilityBlockInjection::test_each_descriptor_block_appears_verbatim_in_system_prompt\ntests/test_supervisor_with_tools.py::TestAC003CapabilityBlockInjection::test_blocks_appear_in_alphabetical_agent_id_order\ntests/test_supervisor_with_tools.py::TestAC005NoLLMCallNoNetwork::test_fake_llm_response_cursor_remains_at_zero\n======================= 210 passed, 51 warnings in 2.05s =======================",
+      "duration_seconds": 3.4885268211364746
+    },
+    "requirements": {
+      "criteria_total": 7,
+      "criteria_met": 7,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/tools/__init__.py` (or wherever `assemble_tool_list` lives from FEAT-J002) gains an `include_frontier: bool = True` keyword-only parameter.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added `*, include_frontier: bool = True` keyword-only parameter to assemble_tool_list in src/jarvis/tools/__init__.py. Verified by tests TestAC001IncludeFrontierKeywordOnly: parameter exists, default is True, kind is KEYWORD_ONLY, annotation is bool, positional pass raises TypeError.",
+      "notes": "Added `*, include_frontier: bool = True` keyword-only parameter to assemble_tool_list in src/jarvis/tools/__init__.py. Verified by tests TestAC001IncludeFrontierKeywordOnly: parameter exists, default is True, kind is KEYWORD_ONLY, annotation is bool, positional pass raises TypeError."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "When `include_frontier=True`: the returned list includes `escalate_to_frontier` alongside all FEAT-J002 tools.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Imported escalate_to_frontier from jarvis.tools.dispatch and conditionally include it in the returned list when include_frontier=True. Tests TestAC002IncludeFrontierTrue verify the escalation is present, list length is 10, all FEAT-J002 tools are present, and the order is alphabetical with escalate_to_frontier between dispatch_by_capability and get_calendar_events.",
+      "notes": "Imported escalate_to_frontier from jarvis.tools.dispatch and conditionally include it in the returned list when include_frontier=True. Tests TestAC002IncludeFrontierTrue verify the escalation is present, list length is 10, all FEAT-J002 tools are present, and the order is alphabetical with escalate_to_frontier between dispatch_by_capability and get_calendar_events."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "When `include_frontier=False`: the returned list **omits** `escalate_to_frontier` entirely and includes ALL other FEAT-J002 tools unchanged (scenario: *escalate_to_frontier is not present in the ambient tool list at all*; *the assembled list still contains all FEAT-JARVIS-002 tools*).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "When include_frontier=False the function returns the original FEAT-J002 9-tool list verbatim. Tests TestAC003IncludeFrontierFalse verify escalate_to_frontier is absent (by name and by object identity), length is 9, and the names match FEAT_J002_TOOL_NAMES exactly.",
+      "notes": "When include_frontier=False the function returns the original FEAT-J002 9-tool list verbatim. Tests TestAC003IncludeFrontierFalse verify escalate_to_frontier is absent (by name and by object identity), length is 9, and the names match FEAT_J002_TOOL_NAMES exactly."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "The returned list is a new list object each call (no mutable aliasing); the reasoning model cannot mutate a shared list to add `escalate_to_frontier` at runtime (scenario: *The reasoning model cannot add escalate_to_frontier to the ambient tool list at runtime* \u2014 ADR-ARCH-023).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Both branches of the conditional return a fresh list literal on each call. Tests TestAC004NoMutableAliasing verify two consecutive calls return distinct list instances, attended and ambient calls return distinct instances, and a hostile append of escalate_to_frontier to a returned ambient list does not leak into a subsequent ambient call.",
+      "notes": "Both branches of the conditional return a fresh list literal on each call. Tests TestAC004NoMutableAliasing verify two consecutive calls return distinct list instances, attended and ambient calls return distinct instances, and a hostile append of escalate_to_frontier to a returned ambient list does not leak into a subsequent ambient call."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "No default coupling: `include_frontier` has no relationship to session state; it is a pure lifecycle-time flag set by the caller (`lifecycle.startup` in TASK-J003-015).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "The function never reads dispatch._current_session_hook or dispatch._async_subagent_frame_hook. Tests TestAC005NoSessionCoupling verify the flag is honoured both with no session resolver wired (True and False cases) and even when a fake attended session resolver is installed \u2014 the flag's value alone determines the surface.",
+      "notes": "The function never reads dispatch._current_session_hook or dispatch._async_subagent_frame_hook. Tests TestAC005NoSessionCoupling verify the flag is honoured both with no session resolver wired (True and False cases) and even when a fake attended session resolver is installed \u2014 the flag's value alone determines the surface."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Identity check: `escalate_to_frontier in assemble_tool_list(..., include_frontier=False)` is `False`; `... is True` when `include_frontier=True`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Tests TestAC006IdentityCheck use the imported escalate_to_frontier object (not just the string name) and assert membership matches the flag exactly: `escalate_to_frontier in result` is True when include_frontier=True and False when include_frontier=False.",
+      "notes": "Tests TestAC006IdentityCheck use the imported escalate_to_frontier object (not just the string name) and assert membership matches the flag exactly: `escalate_to_frontier in result` is True when include_frontier=True and False when include_frontier=False."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Code follows the existing module patterns: PEP 8 / Black-compatible formatting, type hints, comprehensive docstrings, and from __future__ import annotations. The new test file mirrors the conventions of tests/test_assemble_tool_list.py. All 196 tests across the touched modules pass with no warnings or errors attributable to this change.",
+      "notes": "Code follows the existing module patterns: PEP 8 / Black-compatible formatting, type hints, comprehensive docstrings, and from __future__ import annotations. The new test file mirrors the conventions of tests/test_assemble_tool_list.py. All 196 tests across the touched modules pass with no warnings or errors attributable to this change."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/tools/__init__.py` (or wherever `assemble_tool_list` lives from FEAT-J002) gains an `include_frontier: bool = True` keyword-only parameter.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added `*, include_frontier: bool = True` keyword-only parameter to assemble_tool_list in src/jarvis/tools/__init__.py. Verified by tests TestAC001IncludeFrontierKeywordOnly: parameter exists, default is True, kind is KEYWORD_ONLY, annotation is bool, positional pass raises TypeError.",
+        "notes": "Added `*, include_frontier: bool = True` keyword-only parameter to assemble_tool_list in src/jarvis/tools/__init__.py. Verified by tests TestAC001IncludeFrontierKeywordOnly: parameter exists, default is True, kind is KEYWORD_ONLY, annotation is bool, positional pass raises TypeError."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "When `include_frontier=True`: the returned list includes `escalate_to_frontier` alongside all FEAT-J002 tools.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Imported escalate_to_frontier from jarvis.tools.dispatch and conditionally include it in the returned list when include_frontier=True. Tests TestAC002IncludeFrontierTrue verify the escalation is present, list length is 10, all FEAT-J002 tools are present, and the order is alphabetical with escalate_to_frontier between dispatch_by_capability and get_calendar_events.",
+        "notes": "Imported escalate_to_frontier from jarvis.tools.dispatch and conditionally include it in the returned list when include_frontier=True. Tests TestAC002IncludeFrontierTrue verify the escalation is present, list length is 10, all FEAT-J002 tools are present, and the order is alphabetical with escalate_to_frontier between dispatch_by_capability and get_calendar_events."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "When `include_frontier=False`: the returned list **omits** `escalate_to_frontier` entirely and includes ALL other FEAT-J002 tools unchanged (scenario: *escalate_to_frontier is not present in the ambient tool list at all*; *the assembled list still contains all FEAT-JARVIS-002 tools*).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "When include_frontier=False the function returns the original FEAT-J002 9-tool list verbatim. Tests TestAC003IncludeFrontierFalse verify escalate_to_frontier is absent (by name and by object identity), length is 9, and the names match FEAT_J002_TOOL_NAMES exactly.",
+        "notes": "When include_frontier=False the function returns the original FEAT-J002 9-tool list verbatim. Tests TestAC003IncludeFrontierFalse verify escalate_to_frontier is absent (by name and by object identity), length is 9, and the names match FEAT_J002_TOOL_NAMES exactly."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "The returned list is a new list object each call (no mutable aliasing); the reasoning model cannot mutate a shared list to add `escalate_to_frontier` at runtime (scenario: *The reasoning model cannot add escalate_to_frontier to the ambient tool list at runtime* \u2014 ADR-ARCH-023).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Both branches of the conditional return a fresh list literal on each call. Tests TestAC004NoMutableAliasing verify two consecutive calls return distinct list instances, attended and ambient calls return distinct instances, and a hostile append of escalate_to_frontier to a returned ambient list does not leak into a subsequent ambient call.",
+        "notes": "Both branches of the conditional return a fresh list literal on each call. Tests TestAC004NoMutableAliasing verify two consecutive calls return distinct list instances, attended and ambient calls return distinct instances, and a hostile append of escalate_to_frontier to a returned ambient list does not leak into a subsequent ambient call."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "No default coupling: `include_frontier` has no relationship to session state; it is a pure lifecycle-time flag set by the caller (`lifecycle.startup` in TASK-J003-015).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "The function never reads dispatch._current_session_hook or dispatch._async_subagent_frame_hook. Tests TestAC005NoSessionCoupling verify the flag is honoured both with no session resolver wired (True and False cases) and even when a fake attended session resolver is installed \u2014 the flag's value alone determines the surface.",
+        "notes": "The function never reads dispatch._current_session_hook or dispatch._async_subagent_frame_hook. Tests TestAC005NoSessionCoupling verify the flag is honoured both with no session resolver wired (True and False cases) and even when a fake attended session resolver is installed \u2014 the flag's value alone determines the surface."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Identity check: `escalate_to_frontier in assemble_tool_list(..., include_frontier=False)` is `False`; `... is True` when `include_frontier=True`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Tests TestAC006IdentityCheck use the imported escalate_to_frontier object (not just the string name) and assert membership matches the flag exactly: `escalate_to_frontier in result` is True when include_frontier=True and False when include_frontier=False.",
+        "notes": "Tests TestAC006IdentityCheck use the imported escalate_to_frontier object (not just the string name) and assert membership matches the flag exactly: `escalate_to_frontier in result` is True when include_frontier=True and False when include_frontier=False."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Code follows the existing module patterns: PEP 8 / Black-compatible formatting, type hints, comprehensive docstrings, and from __future__ import annotations. The new test file mirrors the conventions of tests/test_assemble_tool_list.py. All 196 tests across the touched modules pass with no warnings or errors attributable to this change.",
+        "notes": "Code follows the existing module patterns: PEP 8 / Black-compatible formatting, type hints, comprehensive docstrings, and from __future__ import annotations. The new test file mirrors the conventions of tests/test_assemble_tool_list.py. All 196 tests across the touched modules pass with no warnings or errors attributable to this change."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 3 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 3,
+      "feature_files": [
+        "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+      ],
+      "pending_examples": [
+        "test_wiring_the_async_subagent_injects_the_five_middleware_operational_tools \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_escalate_to_frontier_is_not_present_in_the_ambient_tool_list_at_all \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_the_reasoning_model_cannot_add_escalate_to_frontier_to_the_ambient_tool_list_at_runtime \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 337 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1220/5200 tokens\n\n### \u2705 Similar Outcomes\n- REFERENCED_IN\n- CONTAINS_CODE\n\n### \ud83c\udfa8 Relevant Patterns\n- APPLIES_TO\n- HAS_SEQUENCE_STEP\n\n### \u26a0\ufe0f Warnings\n- FIX_ADDRESS_INCORRECT_PATH_CONSTRUCTION\n- OCCURS_IN_MODE\n\n### \ud83c\udfad Role Constraints\n- DELEGATES_TO\n- DELEGATES_TO\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- USE_CASE_OF\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}
