@@ -1,0 +1,7 @@
+{
+  "tests_run": 1236,
+  "tests_failed": 0,
+  "coverage_pct": 93.0,
+  "output_summary": "pytest 1236 passed, 2 skipped, 0 failed in 4.50s; coverage on src/jarvis/tools/dispatch.py = 93% (full-suite run)",
+  "quality_gates_passed": true
+}
