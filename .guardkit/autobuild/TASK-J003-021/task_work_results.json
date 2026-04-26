@@ -1,0 +1,175 @@
+{
+  "task_id": "TASK-J003-021",
+  "timestamp": "2026-04-26T10:17:19.224295",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 13,
+    "tests_failed": 0,
+    "coverage": 97.0,
+    "coverage_met": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_supervisor_with_subagents.py",
+    "tasks/backlog/TASK-J003-019-unit-tests-llamaswap-adapter-and-voice-ack.md",
+    "tasks/backlog/TASK-J003-021-integration-test-supervisor-with-subagents.md"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J003-019-implementation-plan.md",
+    ".claude/task-plans/TASK-J003-021-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J003-015/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-016/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-019/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-021/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-021/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-021/turn_context.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/.guardkit/autobuild/TASK-J003-021/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_supervisor_with_subagents.py",
+    "langgraph.json",
+    "tasks/design_approved/TASK-J003-019-unit-tests-llamaswap-adapter-and-voice-ack.md",
+    "tasks/design_approved/TASK-J003-021-integration-test-supervisor-with-subagents.md",
+    "tests/test_adapters_llamaswap.py",
+    "tests/test_langgraph_json.py",
+    "tests/test_supervisor_with_subagents.py",
+    "tests/test_swap_aware_voice_ack.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_supervisor_with_subagents.py"
+  ],
+  "summary": "13 tests passed, 97.0% coverage, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 34,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 1,
+    "missing_phases": [
+      "4",
+      "5"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 1 completed invocations\n\nMissing phases:\n  - Phase 4 (Testing)\n  - Phase 5 (Code Review)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 3 (Phase 3): Implementation (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "tests/test_supervisor_with_subagents.py \u2014 builds the supervisor via build_supervisor(test_config, tools=<FEAT-J002 set>, async_subagents=build_async_subagents(test_config), ambient_tool_factory=lambda: assemble_tool_list(test_config, include_frontier=False)) and asserts the return is a CompiledStateGraph.",
+      "status": "complete",
+      "evidence": "TestAC001SupervisorBuild::test_build_supervisor_with_subagents_returns_compiled_state_graph composes the FEAT-J002 attended tool list (assemble_tool_list with include_frontier=True), wires async_subagents=build_async_subagents(stub_registry_config) and supplies an ambient_tool_factory closure that calls assemble_tool_list(stub_registry_config, capability_registry, include_frontier=False). It then asserts isinstance(graph, CompiledStateGraph). Test passes.",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "The supervisor's tool catalogue includes all FEAT-J002 tools (no regression).",
+      "status": "complete",
+      "evidence": "TestAC002FeatJ002ToolsPresent::test_compiled_graph_exposes_all_feat_j002_tool_names walks the compiled graph via _extract_tool_names() and asserts FEAT_J002_TOOL_NAMES (calculate, capabilities_refresh, capabilities_subscribe_updates, dispatch_by_capability, get_calendar_events, list_available_capabilities, queue_build, read_file, search_web) are all wired.",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "The supervisor's tool catalogue includes the five AsyncSubAgentMiddleware operational tools: start_async_task, check_async_task, update_async_task, cancel_async_task, list_async_tasks (scenario: Wiring the async subagent injects the five middleware operational tools).",
+      "status": "complete",
+      "evidence": "TestAC003AsyncMiddlewareToolsInjected::test_compiled_graph_exposes_all_five_async_middleware_tools walks the compiled supervisor (built with async_subagents=build_async_subagents(config)) and asserts every member of ASYNC_MIDDLEWARE_TOOL_NAMES (the five middleware operational tool names) is present.",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Attended tool list (include_frontier=True) contains escalate_to_frontier.",
+      "status": "complete",
+      "evidence": "TestAC004AttendedListContainsFrontier has two tests: test_attended_list_contains_escalate_to_frontier asserts assemble_tool_list(config, registry, include_frontier=True) contains 'escalate_to_frontier' alongside the FEAT-J002 baseline; test_attended_supervisor_exposes_escalate_to_frontier walks the compiled graph and asserts 'escalate_to_frontier' is wired.",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Ambient tool list (include_frontier=False) excludes escalate_to_frontier AND contains all FEAT-J002 tools (scenario: escalate_to_frontier is not present in the ambient tool list at all + the assembled list still contains all FEAT-JARVIS-002 tools).",
+      "status": "complete",
+      "evidence": "TestAC005AmbientListExcludesFrontier has four tests: test_ambient_list_excludes_escalate_to_frontier asserts 'escalate_to_frontier' NOT in names; test_ambient_list_contains_all_feat_j002_tools asserts the full FEAT-J002 9-tool baseline is preserved; test_ambient_list_has_exactly_nine_tools asserts len==9; test_ambient_factory_attached_to_compiled_graph asserts the supplied closure is attached verbatim to graph._jarvis_ambient_tool_factory and yields the expected ambient surface.",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Backward-compat: build_supervisor(test_config, tools=<FEAT-J002 set>) (no async_subagents) returns a valid CompiledStateGraph WITHOUT the five middleware tools (scenario: Building the supervisor without async subagents preserves existing behaviour).",
+      "status": "complete",
+      "evidence": "TestAC006BackwardCompatNoAsyncSubagents has three tests: test_build_without_async_subagents_returns_compiled_graph asserts isinstance(graph, CompiledStateGraph); test_build_without_async_subagents_omits_middleware_tools asserts wired & ASYNC_MIDDLEWARE_TOOL_NAMES is empty; test_build_without_async_subagents_retains_feat_j002_tools asserts the FEAT-J002 baseline survives.",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "FakeListChatModel; zero LLM network calls.",
+      "status": "complete",
+      "evidence": "TestAC007NoLLMNetworkCall::test_fake_llm_response_cursor_remains_at_zero patches jarvis.agents.supervisor.init_chat_model to return a FakeListChatModel from the conftest fake_llm fixture, asserts mock_init_chat_model.assert_called_once_with(supervisor_model) (proving no real provider client was constructed), and asserts fake_llm.i == 0 after build_supervisor (proving no .invoke/.ainvoke happened during build).",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "uv run pytest tests/test_supervisor_with_subagents.py -v passes with >= 80% coverage on the new test module.",
+      "status": "complete",
+      "evidence": "Verified externally: `uv run pytest tests/test_supervisor_with_subagents.py -v` \u2192 13 passed in 0.52s. Coverage measurement on tests.test_supervisor_with_subagents reports 97% line coverage (157 stmts, 5 missed) \u2014 well above the 80% threshold. Full suite (`uv run pytest tests/`) reports 1513 passed, 2 skipped \u2014 no regressions introduced.",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`uv run ruff check tests/test_supervisor_with_subagents.py` reports 'All checks passed!'. `uv run ruff format tests/test_supervisor_with_subagents.py` reports the file was formatted (idempotent \u2014 already conforms after the single format pass).",
+      "test_file": "tests/test_supervisor_with_subagents.py",
+      "implementation_files": [
+        "tests/test_supervisor_with_subagents.py"
+      ]
+    }
+  ]
+}

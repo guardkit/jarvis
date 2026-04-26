@@ -1,0 +1,17 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "jarvis": {
+      "path": "./src/jarvis/agents/supervisor.py:graph",
+      "transport": "asgi"
+    },
+    "jarvis_reasoner": {
+      "path": "./src/jarvis/agents/subagents/jarvis_reasoner.py:graph",
+      "transport": "asgi"
+    }
+  },
+  "env": ".env",
+  "python_version": "3.12"
+}

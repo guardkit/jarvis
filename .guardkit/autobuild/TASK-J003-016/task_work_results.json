@@ -1,0 +1,145 @@
+{
+  "task_id": "TASK-J003-016",
+  "timestamp": "2026-04-26T10:18:17.380564",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [],
+  "files_created": [
+    "langgraph.json",
+    "tests/test_langgraph_json.py"
+  ],
+  "tests_written": [
+    "tests/test_langgraph_json.py"
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007",
+    "AC-008",
+    "AC-009"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007",
+    "AC-008",
+    "AC-009"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `langgraph.json` lives at repo root (NOT under `src/` per DDR-013).",
+      "status": "complete",
+      "evidence": "Created /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/langgraph.json at the repo root next to pyproject.toml. Tests TestLanggraphJsonLocation::test_manifest_exists_at_repo_root, test_manifest_is_not_under_src, and test_manifest_sits_next_to_pyproject all pass (the second uses src.rglob('langgraph.json') to assert no rogue copy lives under src/).",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] File is valid JSON (parses with `json.loads`).",
+      "status": "complete",
+      "evidence": "json.loads() succeeds on the file content (verified manually and by TestLanggraphJsonValidity::test_manifest_parses_as_json which loads it and asserts the result is a dict). A second test (test_manifest_has_no_trailing_commas) regex-checks for trailing commas as a guardrail.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Declares a graph named `jarvis` bound to the supervisor module (e.g. `\"./src/jarvis/agents/supervisor.py:graph\"` or equivalent path the langgraph CLI can resolve).",
+      "status": "complete",
+      "evidence": "The 'jarvis' graph entry uses the dict form with path='./src/jarvis/agents/supervisor.py:graph' and transport='asgi'. langgraph_cli/config.py _update_graph_paths accepts both string and dict forms (it isinstance-checks and reads data['path']). TestJarvisGraphDeclaration covers: graphs section present, jarvis key declared, path uses module:variable shape, module ends with supervisor.py, and the resolved file exists on disk.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Declares a graph named `jarvis_reasoner` bound to `\"./src/jarvis/agents/subagents/jarvis_reasoner.py:graph\"`.",
+      "status": "complete",
+      "evidence": "The 'jarvis_reasoner' graph entry has path exactly equal to './src/jarvis/agents/subagents/jarvis_reasoner.py:graph'. TestJarvisReasonerGraphDeclaration::test_jarvis_reasoner_path_matches_ddr013 enforces the literal string match and test_jarvis_reasoner_module_exists verifies the file is resolvable on disk (jarvis_reasoner.py already exports a module-level 'graph' compiled at import per DDR-012).",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] Both graphs declare ASGI transport (per ADR-ARCH-031 default; co-deployed).",
+      "status": "complete",
+      "evidence": "Both graph entries are JSON objects with explicit 'transport': 'asgi' fields (not implicit). TestAsgiTransport is parametrised over ['jarvis', 'jarvis_reasoner'] and asserts each entry is a dict whose 'transport' key equals 'asgi'. This makes ASGI transport surface-visible in the manifest, addressing the previous turn's rejection feedback.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] Dependencies section lists `.` so the local package is installable.",
+      "status": "complete",
+      "evidence": "manifest['dependencies'] is the JSON array ['.'], which langgraph CLI reads to install the local package (pyproject.toml is co-located at the repo root). TestDependenciesAndEnv::test_dependencies_lists_dot asserts dependencies is a list and contains '.'.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] Environment block references `.env` so provider keys load.",
+      "status": "complete",
+      "evidence": "manifest['env'] == '.env' so langgraph dev loads the dotenv file from the repo root before compiling graphs. TestDependenciesAndEnv::test_env_references_dotenv pins the literal string match.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "[ ] Scenario anchor: *The repo-root langgraph manifest declares both graphs with ASGI transport*.",
+      "status": "complete",
+      "evidence": "TestScenarioAnchor::test_scenario_anchor_repo_root_manifest_declares_both_graphs_with_asgi encodes the full sentence as a single end-to-end check: it asserts (a) the file lives at REPO_ROOT, (b) {'jarvis','jarvis_reasoner'} is a subset of the graphs dict, (c) each entry is a dict with transport='asgi', (d) each entry's path ends with ':graph'.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "[ ] Lint/format: JSON conventionally formatted (2-space indent); no trailing commas.",
+      "status": "complete",
+      "evidence": "The on-disk file is byte-for-byte equivalent to json.dumps(parsed, indent=2) + '\\n' (TestLintAndFormat::test_json_round_trips_with_two_space_indent). A separate test (test_uses_two_space_indent) walks every line, rejects tabs, and asserts indent widths are multiples of 2. test_no_trailing_commas applies a regex (',\\s*[}\\]]') and asserts no match.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "langgraph.json"
+      ]
+    }
+  ]
+}
