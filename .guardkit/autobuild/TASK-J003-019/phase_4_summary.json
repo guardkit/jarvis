@@ -1,0 +1,7 @@
+{
+  "tests_run": 32,
+  "tests_failed": 0,
+  "coverage_pct": 88.0,
+  "output_summary": "32/32 TASK-J003-019 tests passed (11 adapter + 21 swap-aware voice-ack); adapters 100%, lifecycle 84% (incl. related lifecycle suite) — 88% combined.",
+  "quality_gates_passed": true
+}

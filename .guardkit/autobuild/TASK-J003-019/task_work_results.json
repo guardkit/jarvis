@@ -1,6 +1,22 @@
 {
   "task_id": "TASK-J003-019",
-  "turn": 1,
+  "timestamp": "2026-04-26T10:18:25.526852",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 32,
+    "tests_failed": 0,
+    "coverage": 100.0,
+    "coverage_met": true,
+    "all_passed": true
+  },
   "files_modified": [
     ".claude/task-plans/TASK-J003-019-implementation-plan.md",
     ".claude/task-plans/TASK-J003-021-implementation-plan.md",
@@ -40,28 +56,83 @@
     "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_adapters_llamaswap.py",
     "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_swap_aware_voice_ack.py"
   ],
-  "tests_run": true,
-  "tests_passed": true,
-  "test_output_summary": "",
-  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
-  "concerns": [],
-  "requirements_addressed": [
-    "AC-001: default stub returns SwapStatus(jarvis-reasoner, eta=0, source=stub)",
-    "AC-002: degraded stub callable returning eta=180 flows through unchanged",
-    "AC-003: SwapStatus(eta=-1) raises ValidationError",
-    "AC-004: three successive get_status calls return equivalent SwapStatus, no internal counter mutated",
-    "AC-005: default stub source marker is 'stub'",
-    "AC-006: parametrised ETA boundary table (0/30/31/240/240 with reachy/cli) matches expected emit_ack",
-    "AC-007: voice-reactive session with emit_ack=True captures queued-for-dispatch marker via VoiceAckOutcome.queued; no audio I/O",
-    "AC-008: no network I/O, no live provider calls",
-    "AC-009: pytest passes; coverage on tested modules at 100%",
-    "AC-010: ruff check + ruff format clean"
-  ],
-  "requirements_remaining": [],
-  "sdk_turns_used": 43,
-  "sdk_max_turns": 100,
-  "sdk_ceiling_hit": false,
-  "tests_passed_count": 32,
+  "summary": "32 tests passed, 100.0% coverage, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 43,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 6,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_swap_status_above_the_voiceack_threshold_triggers_the_supervisor_tts_acknowledgement[0-no voice acknowledgement is emitted; the request proceeds directly]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_swap_status_above_the_voiceack_threshold_triggers_the_supervisor_tts_acknowledgement[30-no voice acknowledgement is emitted; the request proceeds directly]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_swap_status_above_the_voiceack_threshold_triggers_the_supervisor_tts_acknowledgement[31-the supervisor emits the voice acknowledgement and queues the request]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_swap_status_above_the_voiceack_threshold_triggers_the_supervisor_tts_acknowledgement[240-the supervisor emits the voice acknowledgement and queues the request]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_a_voicereactive_session_above_the_swapeta_threshold_receives_a_tts_acknowledgement_and_the_request_is_queued",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_repeated_swapstatus_reads_for_the_same_alias_return_consistent_results",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+    ],
+    "tag": "@task:TASK-J003-019"
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 1,
+    "missing_phases": [
+      "4",
+      "5"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 1 completed invocations\n\nMissing phases:\n  - Phase 4 (Testing)\n  - Phase 5 (Code Review)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 3 (Phase 3): Implementation (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
   "completion_promises": [
     {
       "criterion_id": "AC-001",
