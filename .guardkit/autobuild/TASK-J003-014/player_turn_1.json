@@ -1,0 +1,104 @@
+{
+  "task_id": "TASK-J003-014",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/prompts/supervisor_prompt.py",
+    "tests/test_prompts.py"
+  ],
+  "files_created": [],
+  "tests_written": [
+    "tests/test_prompts.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "tests/test_prompts.py \u2014 83 passed, 0 failed. Full supervisor/prompt test scope (test_prompts.py + test_supervisor.py + test_supervisor_lifecycle_wiring.py + test_supervisor_no_llm_call.py) \u2014 128 passed. Pre-existing failures in test_assemble_tool_list_layer3.py, test_assemble_tool_list.py, test_supervisor_with_tools.py, test_build_system.py, test_get_calendar_events.py, test_phase2/3_dependencies.py belong to parallel TASK-J003-012/017 work and environmental issues (`python` vs `uv run`); they were already failing on baseline (verified via git stash) and are unaffected by this task. Ruff lint and ruff format both report clean on the two modified files.",
+  "implementation_notes": "Extended SUPERVISOR_SYSTEM_PROMPT in src/jarvis/prompts/supervisor_prompt.py with two additive sections inserted after the FEAT-J002 ## Tool Usage section and before ## Model-Selection Philosophy. (1) ## Subagent Routing names `jarvis-reasoner` verbatim, states it runs locally on `gpt-oss-120b` behind llama-swap, calls out the cold-warm acknowledgement on first invocation, lists the three role modes (`critic`/`researcher`/`planner`) with their adversarial / open-ended-research / multi-step-planning postures, and warns explicitly against routing arithmetic, lookups, or file reads to it. (2) ## Frontier Escalation states the `escalate_to_frontier` tool is available only when Rich asks for it explicitly (with the trigger phrases `ask Gemini`, `frontier opinion`, `cloud model`), is not a default escalation path, will refuse ambient/learning-driven invocation, defaults to Gemini 3.1 Pro, uses `target=OPUS_4_7` specifically for adversarial critique, and ties spend to a fleet-wide \u00a320\u2013\u00a350/month envelope. The Phase 1 + FEAT-J002 head of the prompt (everything from the opening line through the trailing newline of the ## Tool Usage section) is byte-for-byte unchanged \u2014 the new sections are strictly additive. Updated the module docstring's Scope-Invariant block to reflect that `jarvis-reasoner` and `escalate_to_frontier` are now in scope, and added the four retired roster names (`deep_reasoner`, `adversarial_critic`, `long_research`, `quick_local`) to the explicit forbidden list. Updated two pre-existing tests in test_prompts.py (`test_no_named_subagents` and `test_no_subagent_names_in_prompt`) to drop `jarvis-reasoner` from their forbidden list \u2014 those tests pre-date FEAT-J003 and would otherwise contradict the new acceptance criteria. Added five new test classes (TestJ003014SubagentRoutingSection \u2014 9 tests, TestJ003014FrontierEscalationSection \u2014 10 tests, TestJ003014AdditiveAboveInsertionPoint \u2014 2 tests, TestJ003014RetiredRosterAbsent \u2014 2 tests, TestJ003014RenderedPromptIncludesNewSections \u2014 5 tests) covering every acceptance criterion. Required a per-file `# ruff: noqa: RUF001` directive on supervisor_prompt.py because the \u00a320\u2013\u00a350 budget envelope uses a Unicode en-dash that the task spec demands verbatim \u2014 the same pattern already used in `src/jarvis/tools/general.py` for similar reasons.",
+  "concerns": [
+    "Pre-existing failures in test_assemble_tool_list_layer3.py and test_supervisor_with_tools.py belong to parallel in-flight tasks (TASK-J003-012/017) and were not introduced by this turn; verified by `git stash` baseline comparison."
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/prompts/supervisor_prompt.py` \u2014 `SUPERVISOR_SYSTEM_PROMPT` gains `## Subagent Routing` section after the Tool-Usage section. The section names `jarvis-reasoner` verbatim, states it runs locally on `gpt-oss-120b`, mentions the three role modes (`critic`, `researcher`, `planner`) and their postures, warns against using it for arithmetic/lookups/file reads, and mentions llama-swap cold-warm ack.",
+      "status": "complete",
+      "evidence": "Added a new `## Subagent Routing` section to SUPERVISOR_SYSTEM_PROMPT in src/jarvis/prompts/supervisor_prompt.py, inserted immediately after `## Tool Usage` and before `## Model-Selection Philosophy`. The section names `jarvis-reasoner` verbatim, states it runs locally on `gpt-oss-120b` behind llama-swap, mentions the cold-warm acknowledgement on the first call of a session, lists all three role modes (`critic`, `researcher`, `planner`) with their adversarial-evaluation / open-ended-investigation / multi-step-planning postures, and explicitly warns against routing arithmetic, simple lookups, or file reads to the subagent. Verified by TestJ003014SubagentRoutingSection (9 tests, all green): test_subagent_routing_section_present, test_subagent_routing_after_tool_usage, test_subagent_routing_before_model_selection, test_subagent_routing_names_jarvis_reasoner_verbatim, test_subagent_routing_states_local_gpt_oss_120b, test_subagent_routing_lists_three_role_modes, test_subagent_routing_describes_role_postures, test_subagent_routing_warns_against_arithmetic_lookups_files, test_subagent_routing_mentions_llamaswap_cold_warm_ack.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Same file \u2014 next section `## Frontier Escalation` \u2014 states the `escalate_to_frontier` tool is available **only when Rich asks for it explicitly** (e.g. \"ask Gemini\", \"frontier opinion\", \"cloud model\"), is not a default escalation path, will refuse ambient/learning invocation, default target is Gemini 3.1 Pro, `target=OPUS_4_7` is for adversarial critique specifically, and budget is \u00a320\u2013\u00a350/month fleet-wide.",
+      "status": "complete",
+      "evidence": "Added `## Frontier Escalation` section immediately after `## Subagent Routing` in SUPERVISOR_SYSTEM_PROMPT. The section names `escalate_to_frontier` verbatim, states it is available only when Rich asks for it explicitly, lists the trigger phrases `ask Gemini`, `frontier opinion`, and `cloud model`, declares it is **not** a default escalation path, states the executor will refuse ambient/learning-driven invocation, names `Gemini 3.1 Pro` as the default target, scopes `target=OPUS_4_7` to adversarial critique specifically, and ties spend to a fleet-wide \u00a320\u2013\u00a350/month envelope. Verified by TestJ003014FrontierEscalationSection (10 tests, all green): test_frontier_escalation_section_present, test_frontier_escalation_after_subagent_routing, test_frontier_escalation_before_model_selection, test_frontier_escalation_names_tool_verbatim, test_frontier_escalation_requires_explicit_rich_request, test_frontier_escalation_lists_trigger_phrases, test_frontier_escalation_states_not_default_path, test_frontier_escalation_refuses_ambient_learning, test_frontier_escalation_default_target_gemini_3_1_pro, test_frontier_escalation_opus_target_for_adversarial_critique, test_frontier_escalation_states_budget_envelope.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Both new sections are **additive**: the diff vs the pre-change file adds only these two sections; Phase 1 + FEAT-J002 content is byte-for-byte unchanged above the insertion point (scenario: *The supervisor system prompt teaches subagent routing and frontier escalation*).",
+      "status": "complete",
+      "evidence": "TestJ003014AdditiveAboveInsertionPoint::test_pre_j003_head_byte_for_byte_unchanged constructs the entire pre-FEAT-J003 head of SUPERVISOR_SYSTEM_PROMPT as a literal string (Identity, Attended-Conversation, Available Capabilities, Tool Usage \u2014 exactly as shipped after FEAT-J002) and asserts SUPERVISOR_SYSTEM_PROMPT.startswith(...) of that literal. test_subagent_routing_immediately_follows_tool_usage further asserts that `## Subagent Routing` is the first byte after the FEAT-J002 head, ruling out any silent edits in the gap. Both tests pass. The Model-Selection Philosophy / Trace Richness / Domain-Specific Instructions trailing sections are also untouched (verified by the existing TestJ002016Phase1ScopePreserved tests that continue to pass).",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Prompt contains **none** of the retired roster names: `deep_reasoner`, `adversarial_critic`, `long_research`, `quick_local` (Context A concern #3; asserted by TASK-J003-020 regression test).",
+      "status": "complete",
+      "evidence": "TestJ003014RetiredRosterAbsent::test_no_retired_roster_names lower-cases SUPERVISOR_SYSTEM_PROMPT and iterates over the four retired names (`deep_reasoner`, `adversarial_critic`, `long_research`, `quick_local`), asserting each one is absent. The test passes. The new prose intentionally uses `jarvis-reasoner` instead of the retired plurality, and the role-mode list uses `critic` / `researcher` / `planner` \u2014 none of which contain the retired tokens as substrings. The module docstring's Scope-Invariant block was updated to explicitly forbid these four names going forward.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] Prompt contains no cloud-fallback-for-quick_local language.",
+      "status": "complete",
+      "evidence": "TestJ003014RetiredRosterAbsent::test_no_cloud_fallback_for_quick_local_language asserts none of the retired JA6 cloud-fallback phrases (`vllm fallback`, `gemini-flash-latest`, `cloud cheap-tier`, `fallback to cloud`, `quick_local fallback`) appear anywhere in SUPERVISOR_SYSTEM_PROMPT. Test passes. The new Frontier Escalation section deliberately frames cloud invocation as an attended, explicit, deliberate choice \u2014 never a fallback \u2014 so no fallback-style language was introduced.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] Prompt rendered for a new session includes both new sections verbatim.",
+      "status": "complete",
+      "evidence": "TestJ003014RenderedPromptIncludesNewSections covers the format-time render. test_rendered_prompt_contains_subagent_routing_heading and test_rendered_prompt_contains_frontier_escalation_heading call SUPERVISOR_SYSTEM_PROMPT.format(date=..., available_capabilities=..., domain_prompt=...) and assert both `## Subagent Routing` and `## Frontier Escalation` survive the str.format() pass. test_rendered_prompt_keeps_jarvis_reasoner_token and test_rendered_prompt_keeps_escalate_to_frontier_token confirm the verbatim tokens persist. test_build_supervisor_renders_new_sections drives the full build_supervisor pipeline (with create_deep_agent + init_chat_model patched) and inspects the final system_prompt argument passed to create_deep_agent \u2014 confirming both headings AND the two key tokens (`jarvis-reasoner`, `escalate_to_frontier`) appear in the prompt that would actually be handed to the reasoning model at session start. All five tests pass.",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`python -m ruff check src/jarvis/prompts/supervisor_prompt.py tests/test_prompts.py` returns `All checks passed!` with zero errors. `python -m ruff format --check src/jarvis/prompts/supervisor_prompt.py tests/test_prompts.py` reports both files already formatted. The supervisor_prompt.py file required a top-of-file `# ruff: noqa: RUF001` directive (with an explanatory header comment) because the \u00a320\u2013\u00a350 budget envelope contains a Unicode en-dash that TASK-J003-014 spec demands verbatim \u2014 this follows the existing precedent in src/jarvis/tools/general.py (which uses the same noqa pattern for the same reason in API-tools docstrings).",
+      "test_file": "tests/test_prompts.py",
+      "implementation_files": [
+        "src/jarvis/prompts/supervisor_prompt.py",
+        "tests/test_prompts.py"
+      ]
+    }
+  ],
+  "success": true
+}

@@ -263,11 +263,18 @@ class TestJ002016Phase1ScopePreserved:
         assert "morning_briefing" not in lower
 
     def test_no_named_subagents(self) -> None:
-        """No mention of specific subagent role names."""
+        """No mention of orchestrator-template subagent role names.
+
+        FEAT-JARVIS-003 introduces the ``jarvis-reasoner`` async subagent
+        per ADR-ARCH-011, so that name is no longer forbidden in this
+        prompt.  The orchestrator-template names ``implementer``,
+        ``evaluator`` and ``builder`` remain forbidden — they belong to a
+        different agent topology.
+        """
         from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 
         lower = SUPERVISOR_SYSTEM_PROMPT.lower()
-        for name in ["jarvis-reasoner", "implementer", "evaluator", "builder"]:
+        for name in ["implementer", "evaluator", "builder"]:
             assert name not in lower, f"Forbidden subagent name leaked: {name!r}"
 
     def test_no_skill_references(self) -> None:
@@ -364,12 +371,18 @@ class TestAC005ScopeInvariant:
         assert re.search(r'subagent.*["\']task["\']', SUPERVISOR_SYSTEM_PROMPT.lower()) is None
 
     def test_no_subagent_names_in_prompt(self) -> None:
-        """No specific subagent names (jarvis-reasoner, implementer, evaluator, builder)."""
+        """No orchestrator-template subagent names in the supervisor prompt.
+
+        FEAT-JARVIS-003 makes ``jarvis-reasoner`` a first-class member of
+        the supervisor prompt (TASK-J003-014 ``## Subagent Routing``
+        section), so it is no longer forbidden.  The
+        ``implementer``/``evaluator``/``builder`` triple from the
+        ``langchain-deepagents-orchestrator`` template remains forbidden.
+        """
         from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
 
         lower = SUPERVISOR_SYSTEM_PROMPT.lower()
-        # These are subagent role names from the template — should not be in supervisor prompt
-        for name in ["jarvis-reasoner", "implementer", "evaluator", "builder"]:
+        for name in ["implementer", "evaluator", "builder"]:
             assert name not in lower, f"Subagent name '{name}' found in SUPERVISOR_SYSTEM_PROMPT"
 
 
@@ -449,3 +462,339 @@ class TestAppStateFixture:
 
     def test_app_state_has_store_key(self, app_state: dict[str, Any]) -> None:
         assert "store" in app_state
+
+
+# ---------------------------------------------------------------------------
+# TASK-J003-014 — ## Subagent Routing section
+# ---------------------------------------------------------------------------
+class TestJ003014SubagentRoutingSection:
+    """TASK-J003-014 AC-001 — Subagent Routing section content invariants."""
+
+    def test_subagent_routing_section_present(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "## Subagent Routing" in SUPERVISOR_SYSTEM_PROMPT
+
+    def test_subagent_routing_after_tool_usage(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        tool_usage_idx = SUPERVISOR_SYSTEM_PROMPT.index("## Tool Usage")
+        routing_idx = SUPERVISOR_SYSTEM_PROMPT.index("## Subagent Routing")
+        assert tool_usage_idx < routing_idx
+
+    def test_subagent_routing_before_model_selection(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        routing_idx = SUPERVISOR_SYSTEM_PROMPT.index("## Subagent Routing")
+        model_idx = SUPERVISOR_SYSTEM_PROMPT.index("## Model-Selection Philosophy")
+        assert routing_idx < model_idx
+
+    def test_subagent_routing_names_jarvis_reasoner_verbatim(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "jarvis-reasoner" in SUPERVISOR_SYSTEM_PROMPT
+
+    def test_subagent_routing_states_local_gpt_oss_120b(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "gpt-oss-120b" in SUPERVISOR_SYSTEM_PROMPT
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "locally" in lower or "local" in lower
+
+    def test_subagent_routing_lists_three_role_modes(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        for role in ("critic", "researcher", "planner"):
+            assert role in SUPERVISOR_SYSTEM_PROMPT, f"Role '{role}' missing"
+
+    def test_subagent_routing_describes_role_postures(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "adversarial" in lower
+        # researcher posture — open-ended / investigation
+        assert "open-ended" in lower or "investigation" in lower
+        # planner posture — multi-step / decompose
+        assert "multi-step" in lower or "decompose" in lower
+
+    def test_subagent_routing_warns_against_arithmetic_lookups_files(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "arithmetic" in lower
+        assert "lookups" in lower or "lookup" in lower
+        assert "file reads" in lower or "file read" in lower
+
+    def test_subagent_routing_mentions_llamaswap_cold_warm_ack(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "llama-swap" in lower
+        assert "cold-warm" in lower or ("cold" in lower and "warm" in lower)
+        assert "acknowledge" in lower or "ack" in lower
+
+
+# ---------------------------------------------------------------------------
+# TASK-J003-014 — ## Frontier Escalation section
+# ---------------------------------------------------------------------------
+class TestJ003014FrontierEscalationSection:
+    """TASK-J003-014 AC-002 — Frontier Escalation section content invariants."""
+
+    def test_frontier_escalation_section_present(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "## Frontier Escalation" in SUPERVISOR_SYSTEM_PROMPT
+
+    def test_frontier_escalation_after_subagent_routing(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        routing_idx = SUPERVISOR_SYSTEM_PROMPT.index("## Subagent Routing")
+        frontier_idx = SUPERVISOR_SYSTEM_PROMPT.index("## Frontier Escalation")
+        assert routing_idx < frontier_idx
+
+    def test_frontier_escalation_before_model_selection(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        frontier_idx = SUPERVISOR_SYSTEM_PROMPT.index("## Frontier Escalation")
+        model_idx = SUPERVISOR_SYSTEM_PROMPT.index("## Model-Selection Philosophy")
+        assert frontier_idx < model_idx
+
+    def test_frontier_escalation_names_tool_verbatim(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "escalate_to_frontier" in SUPERVISOR_SYSTEM_PROMPT
+
+    def test_frontier_escalation_requires_explicit_rich_request(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "Rich" in SUPERVISOR_SYSTEM_PROMPT
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "explicitly" in lower
+
+    def test_frontier_escalation_lists_trigger_phrases(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "ask gemini" in lower
+        assert "frontier opinion" in lower
+        assert "cloud model" in lower
+
+    def test_frontier_escalation_states_not_default_path(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "not" in lower and "default" in lower
+
+    def test_frontier_escalation_refuses_ambient_learning(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "refuse" in lower or "reject" in lower
+        assert "ambient" in lower
+        assert "learning" in lower
+
+    def test_frontier_escalation_default_target_gemini_3_1_pro(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "Gemini 3.1 Pro" in SUPERVISOR_SYSTEM_PROMPT
+
+    def test_frontier_escalation_opus_target_for_adversarial_critique(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "OPUS_4_7" in SUPERVISOR_SYSTEM_PROMPT
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "adversarial" in lower
+
+    def test_frontier_escalation_states_budget_envelope(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        # Allow either the en-dash (U+2013) or a plain hyphen between the
+        # bounds, but require both numeric endpoints and the £ symbol.
+        assert "£20" in SUPERVISOR_SYSTEM_PROMPT
+        assert "£50" in SUPERVISOR_SYSTEM_PROMPT or "50" in SUPERVISOR_SYSTEM_PROMPT
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        assert "month" in lower
+        assert "fleet-wide" in lower or "fleet wide" in lower
+
+
+# ---------------------------------------------------------------------------
+# TASK-J003-014 AC-003 — additive: Phase 1 + FEAT-J002 content unchanged above
+# the insertion point.
+# ---------------------------------------------------------------------------
+class TestJ003014AdditiveAboveInsertionPoint:
+    """The two new sections are appended after ``## Tool Usage``; everything
+    above that insertion point must be byte-for-byte identical to the
+    pre-FEAT-J003 prompt.
+    """
+
+    # Pre-FEAT-J003 substring of SUPERVISOR_SYSTEM_PROMPT, ending at the close
+    # of the FEAT-J002 ``## Tool Usage`` section.  Built via concatenation so
+    # this test reads as a literal byte-for-byte assertion.
+    PRE_J003_HEAD: ClassVar[str] = (
+        "You are **Jarvis** — a general-purpose reasoning agent built on the DeepAgents\n"
+        "framework.  You operate as an attended conversation partner: there is always a\n"
+        "human on the other side of this interaction, and your primary job is to help\n"
+        "them think, decide, and act effectively.\n\n"
+        "Today's date: {date}\n\n"
+        "## Identity\n\n"
+        "- You are conversational, concise, and direct.\n"
+        "- You prefer clarity over verbosity.\n"
+        "- When uncertain, you say so and ask for guidance rather than guessing.\n\n"
+        "## Attended-Conversation Posture\n\n"
+        "You are **always** in a conversation with a human.  Every response you produce\n"
+        "will be read by a person.  Adjust your tone, length, and level of detail to\n"
+        "what serves them best in the moment.\n\n"
+        "- For quick questions, give quick answers.\n"
+        "- For complex requests, think step-by-step and show your reasoning.\n"
+        "- Never produce output intended only for machine consumption unless explicitly\n"
+        "  asked.\n\n"
+        "## Available Capabilities\n\n"
+        "The following capabilities are registered for this session.  This list is\n"
+        "authoritative — prefer it over re-discovering the catalogue at runtime.\n\n"
+        "{available_capabilities}\n\n"
+        "## Tool Usage\n\n"
+        "Follow these preferences when selecting and invoking tools:\n\n"
+        "- Prefer the `calculate` tool over mental arithmetic for any non-trivial\n"
+        "  numeric work.\n"
+        "- Call `list_available_capabilities` at most once per session — the catalogue\n"
+        "  injected above is authoritative for the rest of the conversation.\n"
+        "- Prefer `dispatch_by_capability` over repeating specialist work in-process\n"
+        "  when the request matches a registered capability.\n"
+        "- Use `queue_build` only when the user's request explicitly names a feature\n"
+        "  to build.\n"
+        "- When a tool returns a structured-error string, return it to the user as-is\n"
+        "  rather than re-invoking the same tool on the failure.\n\n"
+    )
+
+    def test_pre_j003_head_byte_for_byte_unchanged(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert SUPERVISOR_SYSTEM_PROMPT.startswith(self.PRE_J003_HEAD), (
+            "Phase 1 + FEAT-J002 head of SUPERVISOR_SYSTEM_PROMPT was modified; "
+            "TASK-J003-014 must be additive only."
+        )
+
+    def test_subagent_routing_immediately_follows_tool_usage(self) -> None:
+        """``## Subagent Routing`` is the first new section after ``## Tool Usage``."""
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert SUPERVISOR_SYSTEM_PROMPT.startswith(self.PRE_J003_HEAD)
+        tail = SUPERVISOR_SYSTEM_PROMPT[len(self.PRE_J003_HEAD) :]
+        assert tail.startswith("## Subagent Routing"), (
+            f"Expected ## Subagent Routing immediately after ## Tool Usage, got: {tail[:80]!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TASK-J003-014 AC-004 + AC-005 — retired roster + cloud-fallback language gone
+# ---------------------------------------------------------------------------
+class TestJ003014RetiredRosterAbsent:
+    """No mention of the four-roster names superseded by ADR-ARCH-011."""
+
+    RETIRED_ROSTER_NAMES: ClassVar[list[str]] = [
+        "deep_reasoner",
+        "adversarial_critic",
+        "long_research",
+        "quick_local",
+    ]
+
+    def test_no_retired_roster_names(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        for name in self.RETIRED_ROSTER_NAMES:
+            assert name not in lower, (
+                f"Retired roster name '{name}' must not appear in SUPERVISOR_SYSTEM_PROMPT"
+            )
+
+    def test_no_cloud_fallback_for_quick_local_language(self) -> None:
+        """No cloud-fallback-for-quick_local phrasing."""
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        lower = SUPERVISOR_SYSTEM_PROMPT.lower()
+        # The retired phrases from JA6 cloud-fallback design.
+        forbidden_phrases = [
+            "vllm fallback",
+            "gemini-flash-latest",
+            "cloud cheap-tier",
+            "fallback to cloud",
+            "quick_local fallback",
+        ]
+        for phrase in forbidden_phrases:
+            assert phrase not in lower, f"Retired cloud-fallback phrase leaked: {phrase!r}"
+
+
+# ---------------------------------------------------------------------------
+# TASK-J003-014 AC-006 — rendered prompt for a new session includes both
+# new sections verbatim.
+# ---------------------------------------------------------------------------
+class TestJ003014RenderedPromptIncludesNewSections:
+    """Format-time render must preserve both new section headers verbatim."""
+
+    def test_rendered_prompt_contains_subagent_routing_heading(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        rendered = SUPERVISOR_SYSTEM_PROMPT.format(
+            date="2026-04-26",
+            available_capabilities="No capabilities currently registered.",
+            domain_prompt="Test domain.",
+        )
+        assert "## Subagent Routing" in rendered
+
+    def test_rendered_prompt_contains_frontier_escalation_heading(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        rendered = SUPERVISOR_SYSTEM_PROMPT.format(
+            date="2026-04-26",
+            available_capabilities="No capabilities currently registered.",
+            domain_prompt="Test domain.",
+        )
+        assert "## Frontier Escalation" in rendered
+
+    def test_rendered_prompt_keeps_jarvis_reasoner_token(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        rendered = SUPERVISOR_SYSTEM_PROMPT.format(
+            date="2026-04-26",
+            available_capabilities="No capabilities currently registered.",
+            domain_prompt="Test domain.",
+        )
+        assert "jarvis-reasoner" in rendered
+
+    def test_rendered_prompt_keeps_escalate_to_frontier_token(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        rendered = SUPERVISOR_SYSTEM_PROMPT.format(
+            date="2026-04-26",
+            available_capabilities="No capabilities currently registered.",
+            domain_prompt="Test domain.",
+        )
+        assert "escalate_to_frontier" in rendered
+
+    def test_build_supervisor_renders_new_sections(self, test_config: Any) -> None:
+        """The full build_supervisor pipeline emits both new sections."""
+        from unittest.mock import patch
+
+        captured: dict[str, str] = {}
+
+        def fake_create_deep_agent(**kwargs: Any) -> Any:
+            captured["system_prompt"] = kwargs["system_prompt"]
+            from unittest.mock import MagicMock
+
+            return MagicMock()
+
+        with (
+            patch(
+                "jarvis.agents.supervisor.create_deep_agent",
+                side_effect=fake_create_deep_agent,
+            ),
+            patch("jarvis.agents.supervisor.init_chat_model"),
+        ):
+            from jarvis.agents.supervisor import build_supervisor
+
+            build_supervisor(test_config)
+
+        assert "## Subagent Routing" in captured["system_prompt"]
+        assert "## Frontier Escalation" in captured["system_prompt"]
+        assert "jarvis-reasoner" in captured["system_prompt"]
+        assert "escalate_to_frontier" in captured["system_prompt"]

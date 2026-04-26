@@ -54,15 +54,23 @@ from jarvis.config.settings import JarvisConfig
 from jarvis.tools import CapabilityDescriptor, load_stub_registry
 
 # ---------------------------------------------------------------------------
-# Module constants — the 9 Phase 2 tool names in stable alphabetical order.
-# Mirrors ``jarvis.tools.assemble_tool_list``'s contract; duplicating the list
-# here is intentional so the test acts as a contract check on that module.
+# Module constants — the attended Jarvis tool surface in stable
+# alphabetical order. Mirrors ``jarvis.tools.assemble_tool_list``'s
+# contract; duplicating the list here is intentional so the test acts as
+# a contract check on that module.
+#
+# TASK-J003-012 (Layer 3 of DDR-014) splices ``escalate_to_frontier``
+# alongside the FEAT-J002 9-tool baseline whenever
+# ``include_frontier=True`` (the default). ``lifecycle.startup`` calls
+# ``assemble_tool_list`` without overriding the flag, so the supervisor
+# wired here is the attended 10-tool surface.
 # ---------------------------------------------------------------------------
 EXPECTED_TOOL_NAMES: list[str] = [
     "calculate",
     "capabilities_refresh",
     "capabilities_subscribe_updates",
     "dispatch_by_capability",
+    "escalate_to_frontier",
     "get_calendar_events",
     "list_available_capabilities",
     "queue_build",
@@ -225,13 +233,15 @@ class TestAC001NineToolWiring:
         stub_registry_config: JarvisConfig,
         capability_registry: list[CapabilityDescriptor],
     ) -> None:
-        """Direct contract check on ``assemble_tool_list`` — 9 tools, alphabetical."""
+        """Direct contract check on ``assemble_tool_list`` — attended 10-tool surface."""
         from jarvis.tools import assemble_tool_list
 
         tools = assemble_tool_list(stub_registry_config, capability_registry)
         names = [t.name for t in tools]
         assert names == EXPECTED_TOOL_NAMES
-        assert len(tools) == 9
+        # TASK-J003-012: ``include_frontier`` defaults to True so the
+        # attended supervisor is wired with the 10-tool surface.
+        assert len(tools) == 10
 
 
 # ---------------------------------------------------------------------------
