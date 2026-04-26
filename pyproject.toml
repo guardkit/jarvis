@@ -131,7 +131,41 @@ ignore_missing_imports = true
 # ---------------------------------------------------------------------------
 # pytest — ADR-ARCH-015
 # ---------------------------------------------------------------------------
+# `testpaths` is intentionally NOT extended to include `features/`
+# (TASK-OPS-J002-BDD / TASK-OPS-BDDM-9). The pytest-bdd collection bridge
+# in `features/conftest.py` is still loaded when GuardKit's `bdd_runner`
+# invokes `pytest <path>/...feature` because pytest discovers conftest.py
+# by walking up from each argv path. Adding `features/` to `testpaths`
+# would double-collect every BDD scenario: once via `.feature` argv
+# (through the bridge) and once via direct discovery of the sibling
+# `test_<slug>.py` glue. Keep this scoped to `tests/`.
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "--tb=short -q"
+# Custom markers — registered to silence PytestUnknownMarkWarning when
+# pytest-bdd reflects Gherkin tags as marks. The `task_TASK_J002_*` family
+# is the sanitised form (see `features/conftest.py::_sanitise_tag`) used
+# by `bdd_runner._build_pytest_argv` for the `-m` filter. Generic Gherkin
+# tags (`smoke`, `key-example`, ...) cover the @feat-jarvis-002 feature
+# file's category and example tags.
+markers = [
+    "smoke: smoke / sanity scenarios",
+    "key_example: key-example scenarios",
+    "boundary: boundary / parameter-edge scenarios",
+    "negative: negative / failure-mode scenarios",
+    "edge_case: edge-case scenarios",
+    "feat_jarvis_002: feature-level tag for FEAT-JARVIS-002",
+    "task_TASK_J002_006: scenarios scoped to TASK-J002-006",
+    "task_TASK_J002_008: scenarios scoped to TASK-J002-008",
+    "task_TASK_J002_009: scenarios scoped to TASK-J002-009",
+    "task_TASK_J002_010: scenarios scoped to TASK-J002-010",
+    "task_TASK_J002_011: scenarios scoped to TASK-J002-011",
+    "task_TASK_J002_012: scenarios scoped to TASK-J002-012",
+    "task_TASK_J002_013: scenarios scoped to TASK-J002-013",
+    "task_TASK_J002_014: scenarios scoped to TASK-J002-014",
+    "task_TASK_J002_015: scenarios scoped to TASK-J002-015",
+    "task_TASK_J002_016: scenarios scoped to TASK-J002-016",
+    "task_TASK_J002_017: scenarios scoped to TASK-J002-017",
+    "task_TASK_J002_019: scenarios scoped to TASK-J002-019",
+]
