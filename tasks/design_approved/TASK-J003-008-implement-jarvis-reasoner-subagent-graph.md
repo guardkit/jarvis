@@ -1,20 +1,4 @@
 ---
-autobuild_state:
-  base_branch: main
-  current_turn: 1
-  last_updated: '2026-04-25T18:21:45.166972'
-  max_turns: 30
-  started_at: '2026-04-25T18:04:59.371685'
-  turns:
-  - coach_success: true
-    decision: approve
-    feedback: null
-    player_success: true
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    timestamp: '2026-04-25T18:04:59.371685'
-    turn: 1
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
 complexity: 6
 created: 2026-04-24 00:00:00+00:00
 dependencies:

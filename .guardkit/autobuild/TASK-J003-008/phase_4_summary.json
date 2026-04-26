@@ -1,7 +1,7 @@
 {
-  "tests_run": 199,
+  "tests_run": 141,
   "tests_failed": 0,
   "coverage_pct": 85.0,
-  "output_summary": "199 passed in 1.34s; jarvis_reasoner 85% line coverage (89 stmts/13 miss); llamaswap 100%; combined focal coverage 66%.",
+  "output_summary": "141 passed in 7.08s; jarvis_reasoner 85% (89 stmts/13 miss); llamaswap 100%; adapters 100%; dispatch 54%; combined focal 68%.",
   "quality_gates_passed": true
 }
