@@ -1,0 +1,211 @@
+{
+  "task_id": "TASK-J003-015",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_import_graph.py tests/test_lifecycle_startup_phase3.py tests/test_supervisor_lifecycle_wiring.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_supervisor_lifecycle_wiring.py::TestAC006AppStateCapabilityRegistry::test_app_state_capability_registry_populated_from_loader\ntests/test_supervisor_lifecycle_wiring.py::TestAC007StartupPerformance::test_startup_under_two_seconds\ntests/test_supervisor_lifecycle_wiring.py::TestAC008Seam::test_supervisor_has_nine_tools_and_registry_has_four_entries\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_supervisor_lifecycle_wiring.py:96: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n======================= 65 passed, 41 warnings in 1.73s ========================",
+      "duration_seconds": 3.133449077606201
+    },
+    "requirements": {
+      "criteria_total": 9,
+      "criteria_met": 9,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/infrastructure/lifecycle.py` \u2014 `startup(config)` constructs `llamaswap_adapter = LlamaSwapAdapter(base_url=config.llama_swap_base_url)`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs LlamaSwapAdapter(base_url=config.llama_swap_base_url) at step 5 (line ~331) and stores it on the returned AppState. Verified by TestAC001LlamaSwapAdapterConstruction (2 tests pass).",
+      "notes": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs LlamaSwapAdapter(base_url=config.llama_swap_base_url) at step 5 (line ~331) and stores it on the returned AppState. Verified by TestAC001LlamaSwapAdapterConstruction (2 tests pass)."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`startup` calls `async_subagents = build_async_subagents(config)` and threads it into `build_supervisor(..., async_subagents=async_subagents, ...)`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_app_state imports build_async_subagents from jarvis.agents.subagent_registry, calls it at step 7 (line ~358), and passes the result via async_subagents= kwarg into build_supervisor. Verified by TestAC002AsyncSubagentsThreadedThroughBuildSupervisor (2 tests pass).",
+      "notes": "build_app_state imports build_async_subagents from jarvis.agents.subagent_registry, calls it at step 7 (line ~358), and passes the result via async_subagents= kwarg into build_supervisor. Verified by TestAC002AsyncSubagentsThreadedThroughBuildSupervisor (2 tests pass)."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`startup` assembles attended AND ambient tool lists via `assemble_tool_list(...)` with `include_frontier=True` / `False` respectively, and passes `ambient_tool_factory=lambda: tool_list_ambient` into `build_supervisor`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Steps 8 + 9 of build_app_state call assemble_tool_list(config, capability_registry, include_frontier=True) for the attended 10-tool surface and again with include_frontier=False for the ambient 9-tool surface. Step 10 passes ambient_tool_factory=lambda: tool_list_ambient into build_supervisor. Verified by TestAC003AttendedAndAmbientToolListsAssembled (3 tests pass) and the updated TestAC005LifecycleWiring::test_assemble_tool_list_called_with_config_and_registry in test_supervisor_lifecycle_wiring.py.",
+      "notes": "Steps 8 + 9 of build_app_state call assemble_tool_list(config, capability_registry, include_frontier=True) for the attended 10-tool surface and again with include_frontier=False for the ambient 9-tool surface. Step 10 passes ambient_tool_factory=lambda: tool_list_ambient into build_supervisor. Verified by TestAC003AttendedAndAmbientToolListsAssembled (3 tests pass) and the updated TestAC005LifecycleWiring::test_assemble_tool_list_called_with_config_and_registry in test_supervisor_lifecycle_wiring.py."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`OPENAI_BASE_URL` environment variable is set to `<config.llama_swap_base_url>/v1` before `build_async_subagents` runs (graph compilation reads this).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Step 6 of build_app_state writes os.environ['OPENAI_BASE_URL'] = f'{config.llama_swap_base_url}/v1' BEFORE step 7 calls build_async_subagents. Verified by TestAC004OpenAIBaseUrlEnvVarSetBeforeAsyncSubagents (2 tests pass): one reads the env var post-startup, the other captures the env value inside a side_effect on build_async_subagents to prove ordering.",
+      "notes": "Step 6 of build_app_state writes os.environ['OPENAI_BASE_URL'] = f'{config.llama_swap_base_url}/v1' BEFORE step 7 calls build_async_subagents. Verified by TestAC004OpenAIBaseUrlEnvVarSetBeforeAsyncSubagents (2 tests pass): one reads the env var post-startup, the other captures the env value inside a side_effect on build_async_subagents to prove ordering."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`AppState` is extended to carry `llamaswap_adapter: LlamaSwapAdapter` for later use by the supervisor's swap-aware policy.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "AppState dataclass in src/jarvis/infrastructure/lifecycle.py adds 'llamaswap_adapter: LlamaSwapAdapter | None = None' as a declared field. The default is None so existing direct AppState() constructions in tests are unaffected; build_app_state always populates it. Verified by TestAC005AppStateCarriesLlamaSwapAdapter (2 tests pass).",
+      "notes": "AppState dataclass in src/jarvis/infrastructure/lifecycle.py adds 'llamaswap_adapter: LlamaSwapAdapter | None = None' as a declared field. The default is None so existing direct AppState() constructions in tests are unaffected; build_app_state always populates it. Verified by TestAC005AppStateCarriesLlamaSwapAdapter (2 tests pass)."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Swap-aware voice-ack policy: helper function `should_emit_voice_ack(adapter_id: str, swap_status: SwapStatus) -> bool` returns `True` iff `adapter_id in {\"reachy\"}` (or voice-reactive set from config) AND `swap_status.eta_seconds > 30`. Boundary behaviour: `eta_seconds` of 0 \u2192 `False`; 30 \u2192 `False`; 31 \u2192 `True`; 240 \u2192 `True` (scenario: *Swap status above the voice-ack threshold triggers the supervisor TTS acknowledgement*).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "should_emit_voice_ack in src/jarvis/infrastructure/lifecycle.py uses VOICE_ACK_ETA_THRESHOLD_SECONDS=30 and DEFAULT_VOICE_REACTIVE_ADAPTER_IDS=frozenset({'reachy'}); accepts an optional voice_reactive_adapters override. Verified by TestAC006ShouldEmitVoiceAckBoundaryTable parametrized tests covering ETA 0/30/31/240 boundary plus non-voice-reactive adapter and override cases (6 tests pass).",
+      "notes": "should_emit_voice_ack in src/jarvis/infrastructure/lifecycle.py uses VOICE_ACK_ETA_THRESHOLD_SECONDS=30 and DEFAULT_VOICE_REACTIVE_ADAPTER_IDS=frozenset({'reachy'}); accepts an optional voice_reactive_adapters override. Verified by TestAC006ShouldEmitVoiceAckBoundaryTable parametrized tests covering ETA 0/30/31/240 boundary plus non-voice-reactive adapter and override cases (6 tests pass)."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "When `should_emit_voice_ack` returns `True`, the supervisor emits the TTS ack stub and queues the request for dispatch once the swap completes (scenario: *A voice-reactive session above the swap-ETA threshold receives a TTS acknowledgement and the request is queued*).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "emit_voice_ack_and_queue helper returns a frozen VoiceAckOutcome dataclass with emitted=True/queued=True/ack_text=VOICE_ACK_TTS_TEXT when the policy fires; emitted=False/queued=False/ack_text=None otherwise. Logs voice_ack_emitted via structlog when firing. Verified by TestAC007EmitVoiceAckAndQueue (3 tests pass) covering the firing path, the below-threshold path, and the non-voice-reactive path.",
+      "notes": "emit_voice_ack_and_queue helper returns a frozen VoiceAckOutcome dataclass with emitted=True/queued=True/ack_text=VOICE_ACK_TTS_TEXT when the policy fires; emitted=False/queued=False/ack_text=None otherwise. Logs voice_ack_emitted via structlog when firing. Verified by TestAC007EmitVoiceAckAndQueue (3 tests pass) covering the firing path, the below-threshold path, and the non-voice-reactive path."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Phase 1 + FEAT-J002 startup behaviour preserved: existing AppState fields unchanged; `session_manager`, `store`, `capability_registry` still wired as before.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "AppState dataclass keeps all existing fields (config, supervisor, store, session_manager, capability_registry) at their original positions and types; only adds the new llamaswap_adapter field as the last entry with a None default for backward compatibility. The full FEAT-J002 lifecycle test suite (test_supervisor_lifecycle_wiring.py: 17 tests, test_supervisor_with_tools.py: 7 tests) all pass. Verified by TestAC008Phase1AndFeatJ002BehaviourPreserved (1 test pass).",
+      "notes": "AppState dataclass keeps all existing fields (config, supervisor, store, session_manager, capability_registry) at their original positions and types; only adds the new llamaswap_adapter field as the last entry with a None default for backward compatibility. The full FEAT-J002 lifecycle test suite (test_supervisor_lifecycle_wiring.py: 17 tests, test_supervisor_with_tools.py: 7 tests) all pass. Verified by TestAC008Phase1AndFeatJ002BehaviourPreserved (1 test pass)."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `python -m ruff check` against src/jarvis/infrastructure/lifecycle.py, tests/test_lifecycle_startup_phase3.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_import_graph.py \u2014 all checks passed. Ran `python -m ruff format` to apply formatting; final files are format-clean.",
+      "notes": "Ran `python -m ruff check` against src/jarvis/infrastructure/lifecycle.py, tests/test_lifecycle_startup_phase3.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_import_graph.py \u2014 all checks passed. Ran `python -m ruff format` to apply formatting; final files are format-clean."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/infrastructure/lifecycle.py` \u2014 `startup(config)` constructs `llamaswap_adapter = LlamaSwapAdapter(base_url=config.llama_swap_base_url)`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs LlamaSwapAdapter(base_url=config.llama_swap_base_url) at step 5 (line ~331) and stores it on the returned AppState. Verified by TestAC001LlamaSwapAdapterConstruction (2 tests pass).",
+        "notes": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs LlamaSwapAdapter(base_url=config.llama_swap_base_url) at step 5 (line ~331) and stores it on the returned AppState. Verified by TestAC001LlamaSwapAdapterConstruction (2 tests pass)."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "`startup` calls `async_subagents = build_async_subagents(config)` and threads it into `build_supervisor(..., async_subagents=async_subagents, ...)`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_app_state imports build_async_subagents from jarvis.agents.subagent_registry, calls it at step 7 (line ~358), and passes the result via async_subagents= kwarg into build_supervisor. Verified by TestAC002AsyncSubagentsThreadedThroughBuildSupervisor (2 tests pass).",
+        "notes": "build_app_state imports build_async_subagents from jarvis.agents.subagent_registry, calls it at step 7 (line ~358), and passes the result via async_subagents= kwarg into build_supervisor. Verified by TestAC002AsyncSubagentsThreadedThroughBuildSupervisor (2 tests pass)."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`startup` assembles attended AND ambient tool lists via `assemble_tool_list(...)` with `include_frontier=True` / `False` respectively, and passes `ambient_tool_factory=lambda: tool_list_ambient` into `build_supervisor`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Steps 8 + 9 of build_app_state call assemble_tool_list(config, capability_registry, include_frontier=True) for the attended 10-tool surface and again with include_frontier=False for the ambient 9-tool surface. Step 10 passes ambient_tool_factory=lambda: tool_list_ambient into build_supervisor. Verified by TestAC003AttendedAndAmbientToolListsAssembled (3 tests pass) and the updated TestAC005LifecycleWiring::test_assemble_tool_list_called_with_config_and_registry in test_supervisor_lifecycle_wiring.py.",
+        "notes": "Steps 8 + 9 of build_app_state call assemble_tool_list(config, capability_registry, include_frontier=True) for the attended 10-tool surface and again with include_frontier=False for the ambient 9-tool surface. Step 10 passes ambient_tool_factory=lambda: tool_list_ambient into build_supervisor. Verified by TestAC003AttendedAndAmbientToolListsAssembled (3 tests pass) and the updated TestAC005LifecycleWiring::test_assemble_tool_list_called_with_config_and_registry in test_supervisor_lifecycle_wiring.py."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`OPENAI_BASE_URL` environment variable is set to `<config.llama_swap_base_url>/v1` before `build_async_subagents` runs (graph compilation reads this).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Step 6 of build_app_state writes os.environ['OPENAI_BASE_URL'] = f'{config.llama_swap_base_url}/v1' BEFORE step 7 calls build_async_subagents. Verified by TestAC004OpenAIBaseUrlEnvVarSetBeforeAsyncSubagents (2 tests pass): one reads the env var post-startup, the other captures the env value inside a side_effect on build_async_subagents to prove ordering.",
+        "notes": "Step 6 of build_app_state writes os.environ['OPENAI_BASE_URL'] = f'{config.llama_swap_base_url}/v1' BEFORE step 7 calls build_async_subagents. Verified by TestAC004OpenAIBaseUrlEnvVarSetBeforeAsyncSubagents (2 tests pass): one reads the env var post-startup, the other captures the env value inside a side_effect on build_async_subagents to prove ordering."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`AppState` is extended to carry `llamaswap_adapter: LlamaSwapAdapter` for later use by the supervisor's swap-aware policy.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "AppState dataclass in src/jarvis/infrastructure/lifecycle.py adds 'llamaswap_adapter: LlamaSwapAdapter | None = None' as a declared field. The default is None so existing direct AppState() constructions in tests are unaffected; build_app_state always populates it. Verified by TestAC005AppStateCarriesLlamaSwapAdapter (2 tests pass).",
+        "notes": "AppState dataclass in src/jarvis/infrastructure/lifecycle.py adds 'llamaswap_adapter: LlamaSwapAdapter | None = None' as a declared field. The default is None so existing direct AppState() constructions in tests are unaffected; build_app_state always populates it. Verified by TestAC005AppStateCarriesLlamaSwapAdapter (2 tests pass)."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Swap-aware voice-ack policy: helper function `should_emit_voice_ack(adapter_id: str, swap_status: SwapStatus) -> bool` returns `True` iff `adapter_id in {\"reachy\"}` (or voice-reactive set from config) AND `swap_status.eta_seconds > 30`. Boundary behaviour: `eta_seconds` of 0 \u2192 `False`; 30 \u2192 `False`; 31 \u2192 `True`; 240 \u2192 `True` (scenario: *Swap status above the voice-ack threshold triggers the supervisor TTS acknowledgement*).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "should_emit_voice_ack in src/jarvis/infrastructure/lifecycle.py uses VOICE_ACK_ETA_THRESHOLD_SECONDS=30 and DEFAULT_VOICE_REACTIVE_ADAPTER_IDS=frozenset({'reachy'}); accepts an optional voice_reactive_adapters override. Verified by TestAC006ShouldEmitVoiceAckBoundaryTable parametrized tests covering ETA 0/30/31/240 boundary plus non-voice-reactive adapter and override cases (6 tests pass).",
+        "notes": "should_emit_voice_ack in src/jarvis/infrastructure/lifecycle.py uses VOICE_ACK_ETA_THRESHOLD_SECONDS=30 and DEFAULT_VOICE_REACTIVE_ADAPTER_IDS=frozenset({'reachy'}); accepts an optional voice_reactive_adapters override. Verified by TestAC006ShouldEmitVoiceAckBoundaryTable parametrized tests covering ETA 0/30/31/240 boundary plus non-voice-reactive adapter and override cases (6 tests pass)."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "When `should_emit_voice_ack` returns `True`, the supervisor emits the TTS ack stub and queues the request for dispatch once the swap completes (scenario: *A voice-reactive session above the swap-ETA threshold receives a TTS acknowledgement and the request is queued*).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "emit_voice_ack_and_queue helper returns a frozen VoiceAckOutcome dataclass with emitted=True/queued=True/ack_text=VOICE_ACK_TTS_TEXT when the policy fires; emitted=False/queued=False/ack_text=None otherwise. Logs voice_ack_emitted via structlog when firing. Verified by TestAC007EmitVoiceAckAndQueue (3 tests pass) covering the firing path, the below-threshold path, and the non-voice-reactive path.",
+        "notes": "emit_voice_ack_and_queue helper returns a frozen VoiceAckOutcome dataclass with emitted=True/queued=True/ack_text=VOICE_ACK_TTS_TEXT when the policy fires; emitted=False/queued=False/ack_text=None otherwise. Logs voice_ack_emitted via structlog when firing. Verified by TestAC007EmitVoiceAckAndQueue (3 tests pass) covering the firing path, the below-threshold path, and the non-voice-reactive path."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "Phase 1 + FEAT-J002 startup behaviour preserved: existing AppState fields unchanged; `session_manager`, `store`, `capability_registry` still wired as before.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "AppState dataclass keeps all existing fields (config, supervisor, store, session_manager, capability_registry) at their original positions and types; only adds the new llamaswap_adapter field as the last entry with a None default for backward compatibility. The full FEAT-J002 lifecycle test suite (test_supervisor_lifecycle_wiring.py: 17 tests, test_supervisor_with_tools.py: 7 tests) all pass. Verified by TestAC008Phase1AndFeatJ002BehaviourPreserved (1 test pass).",
+        "notes": "AppState dataclass keeps all existing fields (config, supervisor, store, session_manager, capability_registry) at their original positions and types; only adds the new llamaswap_adapter field as the last entry with a None default for backward compatibility. The full FEAT-J002 lifecycle test suite (test_supervisor_lifecycle_wiring.py: 17 tests, test_supervisor_with_tools.py: 7 tests) all pass. Verified by TestAC008Phase1AndFeatJ002BehaviourPreserved (1 test pass)."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `python -m ruff check` against src/jarvis/infrastructure/lifecycle.py, tests/test_lifecycle_startup_phase3.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_import_graph.py \u2014 all checks passed. Ran `python -m ruff format` to apply formatting; final files are format-clean.",
+        "notes": "Ran `python -m ruff check` against src/jarvis/infrastructure/lifecycle.py, tests/test_lifecycle_startup_phase3.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_import_graph.py \u2014 all checks passed. Ran `python -m ruff format` to apply formatting; final files are format-clean."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 1 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 1,
+      "feature_files": [
+        "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+      ],
+      "pending_examples": [
+        "test_not_configuring_an_ambient_tool_factory_falls_back_to_the_attended_tools_without_frontier \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 337 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1196/5200 tokens\n\n### \u2705 Similar Outcomes\n- REFERENCED_IN\n- CONTAINS_CODE\n\n### \ud83c\udfa8 Relevant Patterns\n- APPLIES_TO\n- IMPLEMENTED_BY_CODE_PATTERN\n\n### \u26a0\ufe0f Warnings\n- BELONGS_TO_ENTITY\n- USES_ENDPOINT\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE\n- PROJECT_INVOLVES\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- IS_INVOCATION_METHOD_FOR\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}

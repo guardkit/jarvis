@@ -1,0 +1,7 @@
+{
+  "tests_run": 1491,
+  "tests_failed": 0,
+  "coverage_pct": 92.59,
+  "output_summary": "1489 passed, 2 skipped, 0 failed; lifecycle.py line coverage 92.59% across full pytest suite (8.11s).",
+  "quality_gates_passed": true
+}

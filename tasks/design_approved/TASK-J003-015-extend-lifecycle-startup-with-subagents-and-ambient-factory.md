@@ -1,44 +1,44 @@
 ---
-id: TASK-J003-015
-title: "Extend lifecycle.startup \u2014 async subagents + ambient tool factory + LlamaSwapAdapter"
-task_type: feature
-status: in_review
-created: 2026-04-24 00:00:00+00:00
-updated: 2026-04-24 00:00:00+00:00
-priority: high
+autobuild_state:
+  base_branch: main
+  current_turn: 1
+  last_updated: '2026-04-25T19:27:48.199552'
+  max_turns: 30
+  started_at: '2026-04-25T19:10:07.831500'
+  turns:
+  - coach_success: true
+    decision: approve
+    feedback: null
+    player_success: true
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    timestamp: '2026-04-25T19:10:07.831500'
+    turn: 1
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
 complexity: 5
-wave: 3
-implementation_mode: task-work
-estimated_minutes: 75
+created: 2026-04-24 00:00:00+00:00
 dependencies:
 - TASK-J003-007
 - TASK-J003-009
 - TASK-J003-012
 - TASK-J003-013
-parent_review: TASK-REV-J003
+estimated_minutes: 75
 feature_id: FEAT-J003
+id: TASK-J003-015
+implementation_mode: task-work
+parent_review: TASK-REV-J003
+priority: high
+status: design_approved
 tags:
 - phase-2
 - jarvis
 - feat-jarvis-003
 - wiring
 - lifecycle
-autobuild_state:
-  current_turn: 1
-  max_turns: 30
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
-  base_branch: main
-  started_at: '2026-04-25T19:10:07.831500'
-  last_updated: '2026-04-25T19:27:48.199552'
-  turns:
-  - turn: 1
-    decision: approve
-    feedback: null
-    timestamp: '2026-04-25T19:10:07.831500'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+task_type: feature
+title: Extend lifecycle.startup — async subagents + ambient tool factory + LlamaSwapAdapter
+updated: 2026-04-24 00:00:00+00:00
+wave: 3
 ---
 
 # Extend lifecycle.startup — async subagents + ambient tool factory + LlamaSwapAdapter

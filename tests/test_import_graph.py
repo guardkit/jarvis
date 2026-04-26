@@ -148,10 +148,18 @@ class TestStaticImportGraph:
         # ``jarvis.tools.general``/``capabilities``/``dispatch`` imports
         # outside the package) is enforced by
         # :class:`tests.test_assemble_tool_list.TestAC005NoSubmoduleImports`.
-        ["jarvis.adapters"],
+        #
+        # ``jarvis.adapters`` left the reserved-empty set in FEAT-JARVIS-003
+        # (TASK-J003-003 introduced ``SwapStatus``; TASK-J003-007 wired the
+        # Phase-2 ``LlamaSwapAdapter``; TASK-J003-015 — this task — has
+        # ``lifecycle.startup`` instantiate the adapter and store it on
+        # ``AppState``).  The package therefore no longer appears in the
+        # parametrized list — the still-reserved packages are tested
+        # instead so the contract continues to catch drift.
+        list(RESERVED_PACKAGES),
     )
     def test_specific_reserved_not_imported_by_any_domain_module(self, reserved_name: str) -> None:
-        """Explicitly test that jarvis.adapters is never imported by domain modules."""
+        """Explicitly test that reserved-empty packages are never imported by domain modules."""
         violations: list[str] = []
         for domain_package in DOMAIN_PACKAGES:
             for filepath in _python_files_in_package(domain_package):

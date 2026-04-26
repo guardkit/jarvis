@@ -332,7 +332,16 @@ class TestAC005LifecycleWiring:
     async def test_assemble_tool_list_called_with_config_and_registry(
         self, stub_registry_config: JarvisConfig
     ) -> None:
-        """``assemble_tool_list(config, registry)`` is the second seam."""
+        """``assemble_tool_list(config, registry, include_frontier=...)`` is the second seam.
+
+        TASK-J003-015 (FEAT-JARVIS-003 design §8) extended this seam: the
+        lifecycle now calls ``assemble_tool_list`` twice — once with
+        ``include_frontier=True`` for the attended 10-tool surface and
+        once with ``include_frontier=False`` for the ambient 9-tool
+        surface (DDR-014 registration-layer gate).  Both calls receive
+        ``(config, registry)`` positionally; only the ``include_frontier``
+        kwarg differs.
+        """
         from jarvis.infrastructure.lifecycle import build_app_state
 
         sentinel_registry = [MagicMock(spec=CapabilityDescriptor)]
@@ -353,7 +362,12 @@ class TestAC005LifecycleWiring:
             mock_assemble.return_value = []
             await build_app_state(stub_registry_config)
 
-        mock_assemble.assert_called_once_with(stub_registry_config, sentinel_registry)
+        # Two calls — attended (include_frontier=True) and ambient (=False).
+        assert mock_assemble.call_count == 2
+        for call in mock_assemble.call_args_list:
+            assert call.args == (stub_registry_config, sentinel_registry)
+        flags = {call.kwargs.get("include_frontier") for call in mock_assemble.call_args_list}
+        assert flags == {True, False}
 
     @pytest.mark.asyncio
     async def test_build_supervisor_called_with_tools_and_capabilities(
