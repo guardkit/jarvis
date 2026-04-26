@@ -1,0 +1,7 @@
+{
+  "tests_run": 89,
+  "tests_failed": 0,
+  "coverage_pct": 90.0,
+  "output_summary": "89 tests passed, 0 failed; 90% coverage on subagent layer (registry 100%, jarvis_reasoner 85%, prompts/types 100%); all gates green",
+  "quality_gates_passed": true
+}
