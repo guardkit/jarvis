@@ -61,8 +61,13 @@ DOMAIN_PACKAGES = [
 # import the implementation submodules ``general`` / ``capabilities`` /
 # ``dispatch``. That stricter discipline is enforced by
 # :class:`tests.test_assemble_tool_list.TestAC005NoSubmoduleImports`.
+#
+# ``jarvis.adapters`` left the reserved-empty set in FEAT-JARVIS-003
+# (TASK-J003-003 introduced ``SwapStatus``; TASK-J003-007 wired the
+# Phase-2 ``LlamaSwapAdapter`` into the package surface). Domain
+# modules may import the public adapter surface; the supervisor wiring
+# in later FEAT-J003 / FEAT-J004 tasks consumes it.
 RESERVED_PACKAGES = [
-    "jarvis.adapters",
     "jarvis.subagents",
     "jarvis.skills",
     "jarvis.routing",

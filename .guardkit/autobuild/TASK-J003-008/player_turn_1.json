@@ -1,0 +1,129 @@
+{
+  "task_id": "TASK-J003-008",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    "src/jarvis/agents/subagents/jarvis_reasoner.py",
+    "tests/test_subagents_jarvis_reasoner.py"
+  ],
+  "tests_written": [
+    "tests/test_subagents_jarvis_reasoner.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "31 tests passed, 0 failed in tests/test_subagents_jarvis_reasoner.py. Full suite: 1236 passed, 2 skipped, 0 failures. Ruff lint clean on both new files.",
+  "implementation_notes": "Implemented the leaf jarvis_reasoner subagent graph as a wrapper StateGraph around three pre-compiled create_deep_agent inner graphs (one per RoleName: critic, researcher, planner). Module-level `graph: CompiledStateGraph` compiles at import (DDR-012). The first node `_resolve_role` validates input shape, catches RoleName(value) ValueError to map empty/unknown roles onto a structured `ERROR: unknown_role` branch (ASSUM-004), and emits structured errors via the `async_tasks` channel for missing role / missing-or-empty prompt / adapter-level dispatch failures. correlation_id propagates through every error branch and the success branch. tools=[] and subagents=[] are passed to every create_deep_agent call (DDR-010 leaf invariant). OPENAI_BASE_URL is not set inside this module — the supervisor lifecycle owns that side effect — so no llama-swap URL is hard-coded. Tests cover all 11 acceptance criteria in 8 TestAC* classes; build-time wiring tests patch langchain.chat_models.init_chat_model and deepagents.create_deep_agent at the source so the from-imports in the reloaded module pick them up; runtime error-path tests invoke graph.invoke directly without LLM mocks because the resolver short-circuits to END before any dispatcher runs.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001 module-level graph CompiledStateGraph at import",
+    "AC-002 first node resolves input role against ROLE_PROMPTS",
+    "AC-003 OPENAI_BASE_URL not hard-coded",
+    "AC-004 unknown role structured error never raises",
+    "AC-005 empty role maps to unknown_role branch",
+    "AC-006 missing role field structured error",
+    "AC-007 empty prompt structured error",
+    "AC-008 adapter-level failure mentions /running",
+    "AC-009 leaf graph tools=[] subagents=[]",
+    "AC-010 no LLM call at import",
+    "AC-011 correlation_id propagates"
+  ],
+  "requirements_remaining": [],
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "src/jarvis/agents/subagents/jarvis_reasoner.py exposes a module-level graph: CompiledStateGraph via create_deep_agent(model=\"openai:jarvis-reasoner\", system_prompt=<resolved>, tools=[]). Compilation happens at import time per DDR-012 — from jarvis.agents.subagents.jarvis_reasoner import graph returns a compiled object without further initialisation.",
+      "status": "complete",
+      "evidence": "Module exposes `graph: CompiledStateGraph[Any, Any, Any, Any]` as a module-level binding initialised by `_build_graph()` at import. _build_graph() calls `create_deep_agent(model=model, tools=[], system_prompt=ROLE_PROMPTS[role], subagents=[])` once per RoleName and wraps them in an outer StateGraph. Verified by TestAC001GraphCompiledAtImport (4 tests including isinstance(graph, CompiledStateGraph)) and confirmed by direct import smoke `from jarvis.agents.subagents.jarvis_reasoner import graph` returning a CompiledStateGraph object.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "The first node of the graph reads input[\"role\"] (or equivalent initial-state channel), looks up ROLE_PROMPTS[RoleName(role)], and injects it as the system prompt.",
+      "status": "complete",
+      "evidence": "_resolve_role is set as entry point via builder.set_entry_point('resolve_role') and reads state.get('role'). Three role-specific dispatcher nodes are wired with system prompts pre-resolved from ROLE_PROMPTS[role] (one create_deep_agent per RoleName). Conditional edges route by resolved_role value to the matching dispatcher whose pre-resolved system_prompt is ROLE_PROMPTS[role]. Verified by TestAC002FirstNodeResolvesRole (parametrized over critic/researcher/planner) and TestAC009LeafGraphInvariants.test_create_deep_agent_called_with_each_role_prompt which asserts the set of system_prompts matches ROLE_PROMPTS values exactly.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "OPENAI_BASE_URL environment variable is set to <config.llama_swap_base_url>/v1 at graph construction; the supervisor process sets this via lifecycle (no hard-coded URL in this module).",
+      "status": "complete",
+      "evidence": "The jarvis_reasoner module never assigns to os.environ and contains no http URL literal in executable code (docstring mentions only). Verified by TestAC003NoHardCodedBaseUrl which strips the module docstring and asserts no `http://`, no `promaxgb10`, no `9000/v1`, no `os.environ[]`, no `os.environ.setdefault`, no `os.putenv` in the executable source.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Unknown role (e.g. \"bard\", \"CRITIC\", \"adversarial\") returns structured error via async_tasks state channel: \"ERROR: unknown_role — expected one of {critic, researcher, planner}, got=<value>\". Never raises.",
+      "status": "complete",
+      "evidence": "_resolve_role wraps `RoleName(role_value)` in try/except ValueError; on failure it returns _structured_error with the message `ERROR: unknown_role — expected one of {critic, researcher, planner}, got=<repr(value)>` populated on `async_tasks`, `messages`, and `error` state channels. The conditional-edge router short-circuits to END so no dispatcher runs. Verified by TestAC004UnknownRoleStructuredError parametrized over bard/CRITIC/Critic/adversarial/deep_reasoner plus an explicit test that invocation never raises.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Empty-string role (\"\") — RoleName(\"\") raises ValueError at enum lookup; the graph catches and maps to the unknown_role branch (ASSUM-004, confirmed).",
+      "status": "complete",
+      "evidence": "The role==None check uses `is None` (not falsiness) so an empty string falls through to RoleName(role_value) which raises ValueError per default Python enum semantics; the except clause maps it onto the unknown_role error string with `got=''`. Verified by TestAC005EmptyStringRoleMapsToUnknownRole asserting the output starts with `ERROR: unknown_role` and contains `got=''`, plus a test that the invocation never raises.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Missing role field entirely returns structured error: \"ERROR: missing_field — role is required\".",
+      "status": "complete",
+      "evidence": "_resolve_role checks `state.get('role') is None` first (covering both absent key and explicit None) and returns _structured_error('ERROR: missing_field — role is required', correlation_id). Verified by TestAC006MissingRoleField with two tests: one omitting the role key entirely, one passing role=None — both assert the output equals the literal error string.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Empty prompt returns structured error: \"ERROR: missing_field — prompt is required\".",
+      "status": "complete",
+      "evidence": "_resolve_role uses `if not prompt_value` which treats both empty string and missing key as missing_field, returning _structured_error('ERROR: missing_field — prompt is required', correlation_id). Verified by TestAC007EmptyPromptStructuredError covering empty-string prompt and missing-prompt-key scenarios.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Missing llama-swap alias (adapter-level failure) surfaces as structured error mentioning the /running endpoint.",
+      "status": "complete",
+      "evidence": "_make_role_runner wraps `await deep_agent.ainvoke(...)` in try/except Exception; on failure it emits an error string `ERROR: llama_swap_unavailable — model alias 'jarvis-reasoner' could not be resolved against the llama-swap /running endpoint (role=<role>, detail=<exc>)`. Verified by TestAC008LlamaSwapAliasMissing which builds a synthetic deep agent whose ainvoke raises, runs the dispatcher node, and asserts the output contains both `/running` and `llama_swap_unavailable` and that correlation_id propagates.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "Graph exposes no tools (tools=[]) and no further subagents — leaf per design §8 / DDR-010.",
+      "status": "complete",
+      "evidence": "Every create_deep_agent call in _build_graph passes tools=[] and subagents=[]. Verified by TestAC009LeafGraphInvariants.test_create_deep_agent_called_per_role_with_empty_tools which patches langchain.chat_models.init_chat_model + deepagents.create_deep_agent before reloading the module and asserts call_count == 3 with kwargs.tools == [] and kwargs.subagents == [] for every call.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "Module has no LLM network call at import (FakeListChatModel in tests; production model only hit on actual dispatch).",
+      "status": "complete",
+      "evidence": "Module imports successfully with no env vars set; init_chat_model only constructs the chat-model wrapper (per the supervisor pattern from TASK-J001-006) and create_deep_agent only assembles a graph — neither issues a network request at construction. Verified by TestAC010NoNetworkCallAtImport which patches the source modules and asserts neither invoke/ainvoke/stream/astream/predict was called on the model object during the forced reimport, plus assert_called_once_with('openai:jarvis-reasoner') on init_chat_model.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-011",
+      "criterion_text": "correlation_id from input propagates through to the async task's output channel (scenario: session correlation identifier propagates from input through to check-task results).",
+      "status": "complete",
+      "evidence": "_structured_error and _make_role_runner both copy state.get('correlation_id') into the async_tasks output payload. Verified by TestAC011CorrelationIdPropagates with four tests covering unknown_role, missing_role, empty_prompt branches plus the None-correlation-id default case.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    },
+    {
+      "criterion_id": "AC-012",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Both new files pass `python -m ruff check` with `All checks passed!` after auto-fixing one import-order issue and removing one unused noqa directive. Full pre-existing test suite remains green: 1236 passed, 2 skipped, 0 failures.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": ["src/jarvis/agents/subagents/jarvis_reasoner.py"]
+    }
+  ]
+}

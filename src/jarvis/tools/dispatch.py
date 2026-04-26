@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -62,6 +63,11 @@ from pydantic import ValidationError
 
 from jarvis.tools._correlation import new_correlation_id
 from jarvis.tools.capabilities import CapabilityDescriptor
+from jarvis.tools.dispatch_types import (
+    FrontierEscalationContext,
+    FrontierTarget,
+    log_frontier_escalation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -482,6 +488,276 @@ def queue_build(
     return json.dumps(ack)
 
 
+# ---------------------------------------------------------------------------
+# escalate_to_frontier — DDR-014 Layer 1 (TASK-J003-010)
+#
+# Layer 1 carries the tool body, docstring contract, and config / provider
+# branches. Layer 2 (executor attended-only assertion) lands in
+# TASK-J003-011 and Layer 3 (tool-registry absence) in TASK-J003-012 — this
+# tool intentionally has no runtime context awareness; the surrounding
+# layers enforce the constitutional gates.
+#
+# Per ADR-ARCH-029 (redaction posture) and the AC of TASK-J003-010, the
+# instruction body MUST never appear in any log record or returned error
+# string. The structured INFO record carries ``instruction_length`` only.
+# ---------------------------------------------------------------------------
+
+# Frontier-call session placeholder. Layer 2 (TASK-J003-011) will plug a
+# real session-id resolver into the executor wrapper; Layer 1 records a
+# stable placeholder so the FrontierEscalationContext field constraint
+# (`session_id: str`) is satisfied without leaking caller state.
+_FRONTIER_SESSION_PLACEHOLDER: str = "frontier-call"
+
+# Provider model aliases — closed map keyed by FrontierTarget.
+_GEMINI_MODEL: str = "gemini-3.1-pro"
+_OPUS_MODEL: str = "claude-opus-4-7"
+
+# Adapter labels surfaced into FrontierEscalationContext.adapter for
+# budget-trace bucketing per ADR-ARCH-030.
+_GEMINI_ADAPTER: str = "google-genai"
+_OPUS_ADAPTER: str = "anthropic"
+
+
+def _emit_frontier_log(
+    target: FrontierTarget,
+    correlation_id: str,
+    adapter: str,
+    instruction_length: int,
+    outcome: Literal[
+        "success",
+        "config_missing",
+        "provider_unavailable",
+        "degraded_empty",
+    ],
+) -> None:
+    """Emit one structured INFO record via :func:`log_frontier_escalation`.
+
+    Centralised so every successful and degraded branch of
+    ``escalate_to_frontier`` routes through a single call site — the
+    one-log-per-call invariant (AC-008) is therefore enforced by
+    construction.
+    """
+    ctx = FrontierEscalationContext(
+        target=target,
+        session_id=_FRONTIER_SESSION_PLACEHOLDER,
+        correlation_id=correlation_id,
+        adapter=adapter,
+        instruction_length=instruction_length,
+        outcome=outcome,
+    )
+    log_frontier_escalation(ctx, logger)
+
+
+def _escalate_gemini(
+    instruction: str,
+    instruction_length: int,
+    correlation_id: str,
+) -> str:
+    """Gemini branch of ``escalate_to_frontier``.
+
+    Reads ``GOOGLE_API_KEY`` directly (the SDK reads the same env var
+    natively, so this aligns with operator expectations) and invokes the
+    ``gemini-3.1-pro`` model via :class:`google.genai.Client`. All error
+    paths produce a structured string per ADR-ARCH-021.
+    """
+    target = FrontierTarget.GEMINI_3_1_PRO
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _GEMINI_ADAPTER,
+            instruction_length,
+            "config_missing",
+        )
+        return "ERROR: config_missing — GOOGLE_API_KEY not set"
+
+    try:
+        # Lazy import: the SDK is in `[providers]` extras only, and tests
+        # patch ``google.genai.Client`` directly. Importing at module
+        # scope would couple a Phase-1 import-graph test to the optional
+        # extras and surface SDK warnings during unrelated test runs.
+        from google import genai
+
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=_GEMINI_MODEL,
+            contents=instruction,
+        )
+        text = getattr(response, "text", None) or ""
+    except Exception as exc:
+        # Boundary guard per AC-010: escalate_to_frontier never raises.
+        # The ``<short reason>`` is the exception class name — chosen so
+        # AC-009 (instruction body never echoed) holds even when the SDK
+        # embeds caller input in its error messages.
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _GEMINI_ADAPTER,
+            instruction_length,
+            "provider_unavailable",
+        )
+        return f"DEGRADED: provider_unavailable — {type(exc).__name__}"
+
+    if not text:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _GEMINI_ADAPTER,
+            instruction_length,
+            "degraded_empty",
+        )
+        return "DEGRADED: provider_unavailable — empty response"
+
+    _emit_frontier_log(
+        target,
+        correlation_id,
+        _GEMINI_ADAPTER,
+        instruction_length,
+        "success",
+    )
+    return text
+
+
+def _escalate_opus(
+    instruction: str,
+    instruction_length: int,
+    correlation_id: str,
+) -> str:
+    """Opus branch of ``escalate_to_frontier``.
+
+    Reads ``ANTHROPIC_API_KEY`` directly and invokes
+    ``claude-opus-4-7`` via :class:`anthropic.Anthropic`. The Anthropic
+    SDK returns ``response.content`` as a list of content blocks; the
+    text we surface is the first block's ``.text``. Empty content list
+    or empty text both map to the ``degraded_empty`` outcome.
+    """
+    target = FrontierTarget.OPUS_4_7
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _OPUS_ADAPTER,
+            instruction_length,
+            "config_missing",
+        )
+        return "ERROR: config_missing — ANTHROPIC_API_KEY not set"
+
+    try:
+        # Lazy import: keeps the dispatch module's import graph stable
+        # for the existing import-graph test, and lets unit tests patch
+        # ``anthropic.Anthropic`` without first paying the SDK's import
+        # cost.
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=_OPUS_MODEL,
+            max_tokens=4096,
+            messages=[{"role": "user", "content": instruction}],
+        )
+        content = getattr(response, "content", None) or []
+        text = ""
+        if content:
+            first = content[0]
+            text = getattr(first, "text", None) or ""
+    except Exception as exc:
+        # Boundary guard per AC-010 — see _escalate_gemini for the
+        # rationale on why we use ``type(exc).__name__`` rather than
+        # ``str(exc)`` in the DEGRADED string.
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _OPUS_ADAPTER,
+            instruction_length,
+            "provider_unavailable",
+        )
+        return f"DEGRADED: provider_unavailable — {type(exc).__name__}"
+
+    if not text:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _OPUS_ADAPTER,
+            instruction_length,
+            "degraded_empty",
+        )
+        return "DEGRADED: provider_unavailable — empty response"
+
+    _emit_frontier_log(
+        target,
+        correlation_id,
+        _OPUS_ADAPTER,
+        instruction_length,
+        "success",
+    )
+    return text
+
+
+@tool(parse_docstring=True)
+def escalate_to_frontier(
+    instruction: str,
+    target: FrontierTarget = FrontierTarget.GEMINI_3_1_PRO,
+) -> str:
+    """ATTENDED-ONLY — cloud escape hatch. \
+Never invoke from ambient, learning, or async-subagent contexts.
+
+    Sends ``instruction`` to a cloud frontier model (Gemini 3.1 Pro by
+    default; Opus 4.7 as the alternate target) and returns the model's
+    response text as a string. Reserved for the rare case where a user
+    has explicitly asked for a frontier-quality answer in an attended
+    adapter session. Layers 2 + 3 (TASK-J003-011 / -012) enforce the
+    attended-only gate at the executor and tool-registry levels — this
+    tool body intentionally trusts that envelope.
+
+    Out-of-enum ``target`` values are rejected at argument coercion by
+    ``@tool(parse_docstring=True)`` before this function runs, so no
+    provider is contacted on bad input. Per ADR-ARCH-021 the function
+    never raises: every error path produces a structured string. Per
+    ADR-ARCH-029 the instruction body is never logged or echoed in any
+    error / degraded return string — only ``len(instruction)`` is
+    recorded as ``instruction_length`` on the structured INFO trace
+    emitted via :func:`log_frontier_escalation` with the budget-trace
+    tag ``model_alias="cloud-frontier"`` (ADR-ARCH-030).
+
+    Cost is high (cloud frontier models are an order of magnitude more
+    expensive than the local fleet); latency is provider-bound.
+
+    Args:
+        instruction: The free-form prompt to forward to the cloud
+                    frontier provider. Required. Treated as opaque text
+                    — no template substitution, no validation, no
+                    redaction is performed inside this tool.
+        target: Closed enum selecting the cloud frontier provider.
+               ``GEMINI_3_1_PRO`` routes through ``google_genai`` to the
+               ``gemini-3.1-pro`` model; ``OPUS_4_7`` routes through
+               ``anthropic`` to ``claude-opus-4-7``. Default
+               ``GEMINI_3_1_PRO``.
+
+    Returns:
+        The provider's response text on success, OR a structured error /
+        degraded string:
+
+          - ``ERROR: config_missing — GOOGLE_API_KEY not set``
+          - ``ERROR: config_missing — ANTHROPIC_API_KEY not set``
+          - ``DEGRADED: provider_unavailable — <short reason>``
+          - ``DEGRADED: provider_unavailable — empty response``
+    """
+    correlation_id = new_correlation_id()
+    instruction_length = len(instruction) if isinstance(instruction, str) else 0
+
+    if target is FrontierTarget.GEMINI_3_1_PRO:
+        return _escalate_gemini(instruction, instruction_length, correlation_id)
+    if target is FrontierTarget.OPUS_4_7:
+        return _escalate_opus(instruction, instruction_length, correlation_id)
+
+    # Defensive fallthrough: pydantic coercion already rejects out-of-enum
+    # values before the body runs, but ADR-ARCH-021 forbids raising even
+    # in unreachable branches.
+    return "ERROR: config_missing — unknown frontier target"
+
+
 __all__ = [
     "LOG_PREFIX_DISPATCH",
     "LOG_PREFIX_QUEUE_BUILD",
@@ -489,5 +765,6 @@ __all__ = [
     "_capability_registry",
     "_stub_response_hook",
     "dispatch_by_capability",
+    "escalate_to_frontier",
     "queue_build",
 ]
