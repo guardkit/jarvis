@@ -1,0 +1,93 @@
+{
+  "task_id": "TASK-J003-004",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    "src/jarvis/tools/dispatch_types.py",
+    "tests/test_dispatch_types_frontier_escalation.py"
+  ],
+  "tests_written": [
+    "tests/test_dispatch_types_frontier_escalation.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "33/33 tests pass in tests/test_dispatch_types_frontier_escalation.py covering AC-001 (six required fields + closed outcome Literal + instruction_length>=0), AC-002 (frozen model rejects mutation), AC-003 (model_fields exactly match the six declared fields and contain none of {instruction, instruction_body, body, prompt, text}), AC-004 (log_frontier_escalation emits one INFO record with model_alias='cloud-frontier' and all six fields, and never instruction-body keys), AC-005 (reload triggers no open()/socket() calls and __all__ is exactly the documented public surface). ruff check + ruff format --check both pass on the two new files; mypy strict reports zero errors against the new module (the only mypy errors are pre-existing in tools/capabilities.py and tools/general.py). 3 unrelated repository-wide test failures (jarvis subprocess import resolution and an unrelated calendar docstring byte-equality) pre-date this task.",
+  "implementation_notes": "Created src/jarvis/tools/dispatch_types.py with three public symbols: (1) FrontierTarget(str, Enum) with members GEMINI_3_1_PRO and OPUS_4_7 \u2014 needed as the 'target' field type and aligned with TASK-J003-002's location requirement so a future run of that task does not collide. (2) FrontierEscalationContext(BaseModel) \u2014 frozen via model_config = ConfigDict(frozen=True), with the six required fields target/session_id/correlation_id/adapter/instruction_length(ge=0)/outcome (Literal of the five canonical outcomes). The model intentionally has NO instruction-body field \u2014 only instruction_length is captured, per ADR-ARCH-029 redaction posture. (3) log_frontier_escalation(ctx, logger) \u2014 a module-level helper that calls logger.log(logging.INFO, 'frontier_escalation', extra={...}) with model_alias='cloud-frontier' (ADR-ARCH-030 budget tracing tag) plus all six ctx fields, and nothing else. The Logger argument is the stdlib logging.Logger so callers (and tests) can inject any logger without patching module state. The module performs no I/O at import (verified by patching builtins.open and socket.socket during reload) and makes no LLM calls.",
+  "concerns": [
+    "TASK-J003-002 (which formally owns FrontierTarget) had not been completed when this task ran, so I added FrontierTarget to dispatch_types.py here. The members and string values match the spec in TASK-J003-002's AC, so no rework should be needed when that task runs \u2014 but the player for TASK-J003-002 should treat the existing definition as canonical rather than overwriting it."
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/tools/dispatch_types.py` (same module as FrontierTarget) exposes `class FrontierEscalationContext(BaseModel)` with fields: `target: FrontierTarget`; `session_id: str`; `correlation_id: str`; `adapter: str`; `instruction_length: int = Field(ge=0)`; `outcome: Literal[\"success\", \"config_missing\", \"attended_only\", \"provider_unavailable\", \"degraded_empty\"]`.",
+      "status": "complete",
+      "evidence": "src/jarvis/tools/dispatch_types.py defines FrontierEscalationContext(BaseModel) with exactly the six specified fields. The 'target' field type is FrontierTarget (defined in the same module). instruction_length uses Field(ge=0). 'outcome' is a Literal of the five canonical members. Tests TestFrontierEscalationContextSchema (test_construct_with_required_fields_returns_context, test_canonical_outcomes_accepted parametrised over all five members, test_unknown_outcome_raises_validation_error, test_non_negative_instruction_length_accepted, test_negative_instruction_length_raises_validation_error, test_target_must_be_frontier_target_member, test_target_accepts_string_value_form) verify the schema.",
+      "test_file": "tests/test_dispatch_types_frontier_escalation.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Model is frozen (`model_config = ConfigDict(frozen=True)`).",
+      "status": "complete",
+      "evidence": "FrontierEscalationContext sets model_config = ConfigDict(frozen=True). TestFrontierEscalationContextFrozen tests verify (a) model_config.get('frozen') is True, (b) assigning to a string field raises ValidationError, (c) assigning to the outcome field raises ValidationError.",
+      "test_file": "tests/test_dispatch_types_frontier_escalation.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] No field for the instruction body \u2014 its presence would defeat the redaction posture; tests will assert absence.",
+      "status": "complete",
+      "evidence": "The model declares exactly six fields and has no instruction/body/prompt field. TestNoInstructionBodyField asserts (a) model_fields == {target, session_id, correlation_id, adapter, instruction_length, outcome}, (b) model_fields is disjoint from {instruction, instruction_body, body, prompt, text}, (c) the outcome Literal contains exactly the five canonical members.",
+      "test_file": "tests/test_dispatch_types_frontier_escalation.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Module-level helper `log_frontier_escalation(ctx: FrontierEscalationContext, logger: Logger) -> None` emits one structured INFO record with `model_alias=\"cloud-frontier\"` tag (ADR-ARCH-030 budget tracing) and all six fields \u2014 and never the body.",
+      "status": "complete",
+      "evidence": "log_frontier_escalation(ctx, logger) calls logger.log(logging.INFO, 'frontier_escalation', extra={...}) once per invocation with model_alias='cloud-frontier' and all six ctx fields. TestLogFrontierEscalation verifies (a) exactly one logger.log call at INFO level, (b) extra carries model_alias='cloud-frontier', (c) extra carries every one of target/session_id/correlation_id/adapter/instruction_length/outcome with the expected values, (d) extra carries NONE of {instruction, instruction_body, body, prompt, text} (parametrised), (e) the structured event name is 'frontier_escalation'.",
+      "test_file": "tests/test_dispatch_types_frontier_escalation.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] No I/O at import beyond the logger reference; no LLM calls.",
+      "status": "complete",
+      "evidence": "The module imports only stdlib (enum, logging, typing) and pydantic \u2014 no network or filesystem access at import. There is no module-level logger creation; logger is supplied by the caller. TestImportPurity reloads the module under patched builtins.open and socket.socket and verifies neither is invoked, plus asserts __all__ is exactly the three documented symbols.",
+      "test_file": "tests/test_dispatch_types_frontier_escalation.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch_types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Both new files pass `ruff check` (the project-configured linter from pyproject.toml [tool.ruff.lint] with select=['E','F','I','W','UP','B','SIM','RUF']) and `ruff format --check` with zero errors. mypy strict on the new dispatch_types.py also reports zero errors (the two pre-existing mypy errors in tools/capabilities.py and tools/general.py are unrelated and predate this task).",
+      "test_file": "tests/test_dispatch_types_frontier_escalation.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch_types.py",
+        "tests/test_dispatch_types_frontier_escalation.py"
+      ]
+    }
+  ],
+  "success": true
+}

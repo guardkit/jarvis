@@ -1,21 +1,17 @@
 ---
-id: TASK-J003-008
-title: Implement jarvis_reasoner subagent graph
-task_type: feature
-status: in_progress
-created: 2026-04-24 00:00:00+00:00
-updated: 2026-04-24 00:00:00+00:00
-priority: high
 complexity: 6
-wave: 2
-implementation_mode: task-work
-estimated_minutes: 113
+created: 2026-04-24 00:00:00+00:00
 dependencies:
 - TASK-J003-001
 - TASK-J003-002
 - TASK-J003-005
-parent_review: TASK-REV-J003
+estimated_minutes: 113
 feature_id: FEAT-J003
+id: TASK-J003-008
+implementation_mode: task-work
+parent_review: TASK-REV-J003
+priority: high
+status: design_approved
 tags:
 - phase-2
 - jarvis
@@ -23,14 +19,10 @@ tags:
 - subagent
 - ddr-010
 - ddr-012
-autobuild_state:
-  current_turn: 0
-  max_turns: 30
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003
-  base_branch: main
-  started_at: '2026-04-26T08:32:58.285296'
-  last_updated: '2026-04-26T08:32:58.285300'
-  turns: []
+task_type: feature
+title: Implement jarvis_reasoner subagent graph
+updated: 2026-04-24 00:00:00+00:00
+wave: 2
 ---
 
 # Implement jarvis_reasoner subagent graph

@@ -1,0 +1,256 @@
+{
+  "task_id": "TASK-J003-010",
+  "turn": 1,
+  "decision": "feedback",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_import_graph.py tests/test_llamaswap_adapter.py tests/test_reserved_packages.py tests/test_subagents_jarvis_reasoner.py tests/test_tools_escalate_to_frontier.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_reserved_packages.py ........................................ [ 57%]\ntests/test_subagents_jarvis_reasoner.py ...............................  [ 80%]\ntests/test_tools_escalate_to_frontier.py ...........................     [100%]\ntests/test_tools_escalate_to_frontier.py::TestTargetCoercion::test_invalid_target_does_not_contact_any_provider\n======================= 141 passed, 2 warnings in 2.68s ========================",
+      "duration_seconds": 5.02349066734314
+    },
+    "requirements": {
+      "criteria_total": 12,
+      "criteria_met": 12,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/tools/dispatch.py` \u2014 the FEAT-JARVIS-002 DDR-005/C2 reserved slot \u2014 gains `escalate_to_frontier(instruction: str, target: FrontierTarget = FrontierTarget.GEMINI_3_1_PRO) -> str` decorated with `@tool(parse_docstring=True)`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added @tool(parse_docstring=True) escalate_to_frontier(instruction, target=FrontierTarget.GEMINI_3_1_PRO) -> str at the bottom of src/jarvis/tools/dispatch.py and exported via __all__. Verified by TestToolDecoration (3 tests: BaseTool instance, name, args schema includes instruction + target).",
+      "notes": "Added @tool(parse_docstring=True) escalate_to_frontier(instruction, target=FrontierTarget.GEMINI_3_1_PRO) -> str at the bottom of src/jarvis/tools/dispatch.py and exported via __all__. Verified by TestToolDecoration (3 tests: BaseTool instance, name, args schema includes instruction + target)."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Docstring (the contract per DDR-005 precedent) states verbatim: \"ATTENDED-ONLY \u2014 cloud escape hatch. Never invoke from ambient, learning, or async-subagent contexts.\"",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "First line of escalate_to_frontier.__doc__ is the verbatim string (backslash-newline continuation in the source preserves the single-line content). Verified by TestDocstringContract.test_docstring_contains_required_attended_only_text and test_description_carries_required_attended_only_text.",
+      "notes": "First line of escalate_to_frontier.__doc__ is the verbatim string (backslash-newline continuation in the source preserves the single-line content). Verified by TestDocstringContract.test_docstring_contains_required_attended_only_text and test_description_carries_required_attended_only_text."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`target=GEMINI_3_1_PRO` invokes `google_genai:gemini-3.1-pro` via the `google-genai` SDK; `target=OPUS_4_7` invokes `anthropic:claude-opus-4-7` via the `anthropic` SDK.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_escalate_gemini calls google.genai.Client(api_key=...).models.generate_content(model='gemini-3.1-pro', contents=instruction); _escalate_opus calls anthropic.Anthropic(api_key=...).messages.create(model='claude-opus-4-7', ...). Verified by TestHappyPath.test_gemini_happy_path_calls_correct_model and test_opus_happy_path_calls_correct_model (assert kwargs['model'] equals the documented alias).",
+      "notes": "_escalate_gemini calls google.genai.Client(api_key=...).models.generate_content(model='gemini-3.1-pro', contents=instruction); _escalate_opus calls anthropic.Anthropic(api_key=...).messages.create(model='claude-opus-4-7', ...). Verified by TestHappyPath.test_gemini_happy_path_calls_correct_model and test_opus_happy_path_calls_correct_model (assert kwargs['model'] equals the documented alias)."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Out-of-enum `target` is rejected at `@tool(parse_docstring=True)` argument coercion before the function body runs (ASSUM-005, confirmed) \u2014 no provider contacted.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Pydantic schema synthesised from FrontierTarget type hint by langchain's @tool wrapper raises pydantic.ValidationError on a literal 'NOT_A_VALID_TARGET'. Verified by TestTargetCoercion.test_invalid_target_does_not_contact_any_provider \u2014 patches both google.genai.Client and anthropic.Anthropic and asserts neither was called.",
+      "notes": "Pydantic schema synthesised from FrontierTarget type hint by langchain's @tool wrapper raises pydantic.ValidationError on a literal 'NOT_A_VALID_TARGET'. Verified by TestTargetCoercion.test_invalid_target_does_not_contact_any_provider \u2014 patches both google.genai.Client and anthropic.Anthropic and asserts neither was called."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Missing `GOOGLE_API_KEY` when called with Gemini target returns `\"ERROR: config_missing \u2014 GOOGLE_API_KEY not set\"`; missing `ANTHROPIC_API_KEY` when called with Opus target returns `\"ERROR: config_missing \u2014 ANTHROPIC_API_KEY not set\"`. No outbound request made in either case.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Both branches read os.environ at entry, return the exact documented ERROR strings on missing keys, and short-circuit before importing the SDK module. Verified by TestConfigMissingGemini (3 tests) and TestConfigMissingAnthropic (3 tests) \u2014 including assertions that the patched provider Client was never called.",
+      "notes": "Both branches read os.environ at entry, return the exact documented ERROR strings on missing keys, and short-circuit before importing the SDK module. Verified by TestConfigMissingGemini (3 tests) and TestConfigMissingAnthropic (3 tests) \u2014 including assertions that the patched provider Client was never called."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Unreachable provider returns `\"DEGRADED: provider_unavailable \u2014 <short reason>\"`; no exception propagates.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Both branches wrap the SDK call in try/except Exception (boundary guard per ADR-ARCH-021) and return f'DEGRADED: provider_unavailable \u2014 {type(exc).__name__}'. The exception class name is the <short reason> \u2014 chosen because it can never contain caller input. Verified by TestProviderUnavailable (3 tests covering Gemini ConnectionError, Opus ConnectionError, and a single-INFO-log assertion).",
+      "notes": "Both branches wrap the SDK call in try/except Exception (boundary guard per ADR-ARCH-021) and return f'DEGRADED: provider_unavailable \u2014 {type(exc).__name__}'. The exception class name is the <short reason> \u2014 chosen because it can never contain caller input. Verified by TestProviderUnavailable (3 tests covering Gemini ConnectionError, Opus ConnectionError, and a single-INFO-log assertion)."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Empty body from provider maps to `\"DEGRADED: provider_unavailable \u2014 empty response\"` (ASSUM-001, confirmed).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "After successful SDK call, both branches normalise text via getattr(response, 'text', None) or '' (Gemini) and getattr(response.content[0], 'text', None) or '' guarded by len(content) (Opus). Empty/missing text routes to the documented DEGRADED string. Verified by TestDegradedEmpty (3 tests: Gemini empty text, Opus empty text, Opus empty content list).",
+      "notes": "After successful SDK call, both branches normalise text via getattr(response, 'text', None) or '' (Gemini) and getattr(response.content[0], 'text', None) or '' guarded by len(content) (Opus). Empty/missing text routes to the documented DEGRADED string. Verified by TestDegradedEmpty (3 tests: Gemini empty text, Opus empty text, Opus empty content list)."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Happy path returns the provider's response text as a `str` \u2014 not the raw SDK response object.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Both branches return the extracted .text attribute (a Python str) directly. Verified by TestHappyPath.test_gemini_happy_path_returns_response_text and test_opus_happy_path_returns_response_text (assert result == 'Hello from Gemini' / 'Hello from Opus' \u2014 string equality, not object equality).",
+      "notes": "Both branches return the extracted .text attribute (a Python str) directly. Verified by TestHappyPath.test_gemini_happy_path_returns_response_text and test_opus_happy_path_returns_response_text (assert result == 'Hello from Gemini' / 'Hello from Opus' \u2014 string equality, not object equality)."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "Every successful OR degraded call emits exactly one structured INFO log via `log_frontier_escalation(ctx, logger)` with `model_alias=\"cloud-frontier\"` (budget trace per ADR-ARCH-030). `outcome` field set to `\"success\"`, `\"config_missing\"`, `\"provider_unavailable\"`, or `\"degraded_empty\"`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Centralised _emit_frontier_log helper constructs FrontierEscalationContext and calls log_frontier_escalation(ctx, logger) at every terminal branch \u2014 by construction, each call to escalate_to_frontier emits exactly one INFO record. Verified by TestStructuredLog.test_success_emits_exactly_one_info_record (asserts len(records) == 1 with model_alias='cloud-frontier' and outcome='success'), plus the per-outcome assertions in TestConfigMissingGemini, TestConfigMissingAnthropic, TestProviderUnavailable, and TestDegradedEmpty.",
+      "notes": "Centralised _emit_frontier_log helper constructs FrontierEscalationContext and calls log_frontier_escalation(ctx, logger) at every terminal branch \u2014 by construction, each call to escalate_to_frontier emits exactly one INFO record. Verified by TestStructuredLog.test_success_emits_exactly_one_info_record (asserts len(records) == 1 with model_alias='cloud-frontier' and outcome='success'), plus the per-outcome assertions in TestConfigMissingGemini, TestConfigMissingAnthropic, TestProviderUnavailable, and TestDegradedEmpty."
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "Instruction body is never logged nor echoed in any error/degraded return string** (ASSUM-006, confirmed; concern #6 in the review report).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "FrontierEscalationContext records only instruction_length (per the existing TASK-J003-004 redaction posture); the DEGRADED reason uses type(exc).__name__ which cannot contain user input; and the config_missing / degraded_empty strings are constants. Verified by TestStructuredLog.test_log_does_not_carry_instruction_body (uses a unique secret token and asserts it never appears in any record's banned attributes or formatted message), plus the secret-string-not-in-result assertions in TestConfigMissingGemini, TestConfigMissingAnthropic, and TestProviderUnavailable.",
+      "notes": "FrontierEscalationContext records only instruction_length (per the existing TASK-J003-004 redaction posture); the DEGRADED reason uses type(exc).__name__ which cannot contain user input; and the config_missing / degraded_empty strings are constants. Verified by TestStructuredLog.test_log_does_not_carry_instruction_body (uses a unique secret token and asserts it never appears in any record's banned attributes or formatted message), plus the secret-string-not-in-result assertions in TestConfigMissingGemini, TestConfigMissingAnthropic, and TestProviderUnavailable."
+    },
+    {
+      "criterion_id": "AC-011",
+      "criterion_text": "Never raises \u2014 all error paths produce a structured string per ADR-ARCH-021.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Boundary-guard pattern: every SDK call sits inside try/except Exception with an early-return error string. The dispatch path itself has no other unguarded raise points. Verified by TestNeverRaises.test_runtime_error_inside_provider_call_is_caught and test_value_error_inside_opus_call_is_caught \u2014 both inject exceptions inside the SDK call and assert the function returns a DEGRADED string instead of propagating.",
+      "notes": "Boundary-guard pattern: every SDK call sits inside try/except Exception with an early-return error string. The dispatch path itself has no other unguarded raise points. Verified by TestNeverRaises.test_runtime_error_inside_provider_call_is_caught and test_value_error_inside_opus_call_is_caught \u2014 both inject exceptions inside the SDK call and assert the function returns a DEGRADED string instead of propagating."
+    },
+    {
+      "criterion_id": "AC-012",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "ruff check src/jarvis/tools/dispatch.py tests/test_tools_escalate_to_frontier.py reports 'All checks passed!'; ruff format --check on the same files reports both already formatted. Full pytest suite still green (1236 passed, 2 skipped, 0 failed in 4.5s).",
+      "notes": "ruff check src/jarvis/tools/dispatch.py tests/test_tools_escalate_to_frontier.py reports 'All checks passed!'; ruff format --check on the same files reports both already formatted. Full pytest suite still green (1236 passed, 2 skipped, 0 failed in 4.5s)."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/tools/dispatch.py` \u2014 the FEAT-JARVIS-002 DDR-005/C2 reserved slot \u2014 gains `escalate_to_frontier(instruction: str, target: FrontierTarget = FrontierTarget.GEMINI_3_1_PRO) -> str` decorated with `@tool(parse_docstring=True)`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added @tool(parse_docstring=True) escalate_to_frontier(instruction, target=FrontierTarget.GEMINI_3_1_PRO) -> str at the bottom of src/jarvis/tools/dispatch.py and exported via __all__. Verified by TestToolDecoration (3 tests: BaseTool instance, name, args schema includes instruction + target).",
+        "notes": "Added @tool(parse_docstring=True) escalate_to_frontier(instruction, target=FrontierTarget.GEMINI_3_1_PRO) -> str at the bottom of src/jarvis/tools/dispatch.py and exported via __all__. Verified by TestToolDecoration (3 tests: BaseTool instance, name, args schema includes instruction + target)."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Docstring (the contract per DDR-005 precedent) states verbatim: \"ATTENDED-ONLY \u2014 cloud escape hatch. Never invoke from ambient, learning, or async-subagent contexts.\"",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "First line of escalate_to_frontier.__doc__ is the verbatim string (backslash-newline continuation in the source preserves the single-line content). Verified by TestDocstringContract.test_docstring_contains_required_attended_only_text and test_description_carries_required_attended_only_text.",
+        "notes": "First line of escalate_to_frontier.__doc__ is the verbatim string (backslash-newline continuation in the source preserves the single-line content). Verified by TestDocstringContract.test_docstring_contains_required_attended_only_text and test_description_carries_required_attended_only_text."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`target=GEMINI_3_1_PRO` invokes `google_genai:gemini-3.1-pro` via the `google-genai` SDK; `target=OPUS_4_7` invokes `anthropic:claude-opus-4-7` via the `anthropic` SDK.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_escalate_gemini calls google.genai.Client(api_key=...).models.generate_content(model='gemini-3.1-pro', contents=instruction); _escalate_opus calls anthropic.Anthropic(api_key=...).messages.create(model='claude-opus-4-7', ...). Verified by TestHappyPath.test_gemini_happy_path_calls_correct_model and test_opus_happy_path_calls_correct_model (assert kwargs['model'] equals the documented alias).",
+        "notes": "_escalate_gemini calls google.genai.Client(api_key=...).models.generate_content(model='gemini-3.1-pro', contents=instruction); _escalate_opus calls anthropic.Anthropic(api_key=...).messages.create(model='claude-opus-4-7', ...). Verified by TestHappyPath.test_gemini_happy_path_calls_correct_model and test_opus_happy_path_calls_correct_model (assert kwargs['model'] equals the documented alias)."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Out-of-enum `target` is rejected at `@tool(parse_docstring=True)` argument coercion before the function body runs (ASSUM-005, confirmed) \u2014 no provider contacted.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Pydantic schema synthesised from FrontierTarget type hint by langchain's @tool wrapper raises pydantic.ValidationError on a literal 'NOT_A_VALID_TARGET'. Verified by TestTargetCoercion.test_invalid_target_does_not_contact_any_provider \u2014 patches both google.genai.Client and anthropic.Anthropic and asserts neither was called.",
+        "notes": "Pydantic schema synthesised from FrontierTarget type hint by langchain's @tool wrapper raises pydantic.ValidationError on a literal 'NOT_A_VALID_TARGET'. Verified by TestTargetCoercion.test_invalid_target_does_not_contact_any_provider \u2014 patches both google.genai.Client and anthropic.Anthropic and asserts neither was called."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Missing `GOOGLE_API_KEY` when called with Gemini target returns `\"ERROR: config_missing \u2014 GOOGLE_API_KEY not set\"`; missing `ANTHROPIC_API_KEY` when called with Opus target returns `\"ERROR: config_missing \u2014 ANTHROPIC_API_KEY not set\"`. No outbound request made in either case.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Both branches read os.environ at entry, return the exact documented ERROR strings on missing keys, and short-circuit before importing the SDK module. Verified by TestConfigMissingGemini (3 tests) and TestConfigMissingAnthropic (3 tests) \u2014 including assertions that the patched provider Client was never called.",
+        "notes": "Both branches read os.environ at entry, return the exact documented ERROR strings on missing keys, and short-circuit before importing the SDK module. Verified by TestConfigMissingGemini (3 tests) and TestConfigMissingAnthropic (3 tests) \u2014 including assertions that the patched provider Client was never called."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Unreachable provider returns `\"DEGRADED: provider_unavailable \u2014 <short reason>\"`; no exception propagates.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Both branches wrap the SDK call in try/except Exception (boundary guard per ADR-ARCH-021) and return f'DEGRADED: provider_unavailable \u2014 {type(exc).__name__}'. The exception class name is the <short reason> \u2014 chosen because it can never contain caller input. Verified by TestProviderUnavailable (3 tests covering Gemini ConnectionError, Opus ConnectionError, and a single-INFO-log assertion).",
+        "notes": "Both branches wrap the SDK call in try/except Exception (boundary guard per ADR-ARCH-021) and return f'DEGRADED: provider_unavailable \u2014 {type(exc).__name__}'. The exception class name is the <short reason> \u2014 chosen because it can never contain caller input. Verified by TestProviderUnavailable (3 tests covering Gemini ConnectionError, Opus ConnectionError, and a single-INFO-log assertion)."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Empty body from provider maps to `\"DEGRADED: provider_unavailable \u2014 empty response\"` (ASSUM-001, confirmed).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "After successful SDK call, both branches normalise text via getattr(response, 'text', None) or '' (Gemini) and getattr(response.content[0], 'text', None) or '' guarded by len(content) (Opus). Empty/missing text routes to the documented DEGRADED string. Verified by TestDegradedEmpty (3 tests: Gemini empty text, Opus empty text, Opus empty content list).",
+        "notes": "After successful SDK call, both branches normalise text via getattr(response, 'text', None) or '' (Gemini) and getattr(response.content[0], 'text', None) or '' guarded by len(content) (Opus). Empty/missing text routes to the documented DEGRADED string. Verified by TestDegradedEmpty (3 tests: Gemini empty text, Opus empty text, Opus empty content list)."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "Happy path returns the provider's response text as a `str` \u2014 not the raw SDK response object.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Both branches return the extracted .text attribute (a Python str) directly. Verified by TestHappyPath.test_gemini_happy_path_returns_response_text and test_opus_happy_path_returns_response_text (assert result == 'Hello from Gemini' / 'Hello from Opus' \u2014 string equality, not object equality).",
+        "notes": "Both branches return the extracted .text attribute (a Python str) directly. Verified by TestHappyPath.test_gemini_happy_path_returns_response_text and test_opus_happy_path_returns_response_text (assert result == 'Hello from Gemini' / 'Hello from Opus' \u2014 string equality, not object equality)."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "Every successful OR degraded call emits exactly one structured INFO log via `log_frontier_escalation(ctx, logger)` with `model_alias=\"cloud-frontier\"` (budget trace per ADR-ARCH-030). `outcome` field set to `\"success\"`, `\"config_missing\"`, `\"provider_unavailable\"`, or `\"degraded_empty\"`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Centralised _emit_frontier_log helper constructs FrontierEscalationContext and calls log_frontier_escalation(ctx, logger) at every terminal branch \u2014 by construction, each call to escalate_to_frontier emits exactly one INFO record. Verified by TestStructuredLog.test_success_emits_exactly_one_info_record (asserts len(records) == 1 with model_alias='cloud-frontier' and outcome='success'), plus the per-outcome assertions in TestConfigMissingGemini, TestConfigMissingAnthropic, TestProviderUnavailable, and TestDegradedEmpty.",
+        "notes": "Centralised _emit_frontier_log helper constructs FrontierEscalationContext and calls log_frontier_escalation(ctx, logger) at every terminal branch \u2014 by construction, each call to escalate_to_frontier emits exactly one INFO record. Verified by TestStructuredLog.test_success_emits_exactly_one_info_record (asserts len(records) == 1 with model_alias='cloud-frontier' and outcome='success'), plus the per-outcome assertions in TestConfigMissingGemini, TestConfigMissingAnthropic, TestProviderUnavailable, and TestDegradedEmpty."
+      },
+      {
+        "criterion_id": "AC-010",
+        "criterion_text": "Instruction body is never logged nor echoed in any error/degraded return string** (ASSUM-006, confirmed; concern #6 in the review report).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "FrontierEscalationContext records only instruction_length (per the existing TASK-J003-004 redaction posture); the DEGRADED reason uses type(exc).__name__ which cannot contain user input; and the config_missing / degraded_empty strings are constants. Verified by TestStructuredLog.test_log_does_not_carry_instruction_body (uses a unique secret token and asserts it never appears in any record's banned attributes or formatted message), plus the secret-string-not-in-result assertions in TestConfigMissingGemini, TestConfigMissingAnthropic, and TestProviderUnavailable.",
+        "notes": "FrontierEscalationContext records only instruction_length (per the existing TASK-J003-004 redaction posture); the DEGRADED reason uses type(exc).__name__ which cannot contain user input; and the config_missing / degraded_empty strings are constants. Verified by TestStructuredLog.test_log_does_not_carry_instruction_body (uses a unique secret token and asserts it never appears in any record's banned attributes or formatted message), plus the secret-string-not-in-result assertions in TestConfigMissingGemini, TestConfigMissingAnthropic, and TestProviderUnavailable."
+      },
+      {
+        "criterion_id": "AC-011",
+        "criterion_text": "Never raises \u2014 all error paths produce a structured string per ADR-ARCH-021.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Boundary-guard pattern: every SDK call sits inside try/except Exception with an early-return error string. The dispatch path itself has no other unguarded raise points. Verified by TestNeverRaises.test_runtime_error_inside_provider_call_is_caught and test_value_error_inside_opus_call_is_caught \u2014 both inject exceptions inside the SDK call and assert the function returns a DEGRADED string instead of propagating.",
+        "notes": "Boundary-guard pattern: every SDK call sits inside try/except Exception with an early-return error string. The dispatch path itself has no other unguarded raise points. Verified by TestNeverRaises.test_runtime_error_inside_provider_call_is_caught and test_value_error_inside_opus_call_is_caught \u2014 both inject exceptions inside the SDK call and assert the function returns a DEGRADED string instead of propagating."
+      },
+      {
+        "criterion_id": "AC-012",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "ruff check src/jarvis/tools/dispatch.py tests/test_tools_escalate_to_frontier.py reports 'All checks passed!'; ruff format --check on the same files reports both already formatted. Full pytest suite still green (1236 passed, 2 skipped, 0 failed in 4.5s).",
+        "notes": "ruff check src/jarvis/tools/dispatch.py tests/test_tools_escalate_to_frontier.py reports 'All checks passed!'; ruff format --check on the same files reports both already formatted. Full pytest suite still green (1236 passed, 2 skipped, 0 failed in 4.5s)."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "must_fix",
+      "category": "bdd_failure",
+      "description": "BDD oracle: 1 scenario(s) failed during pytest-bdd execution. Implementation does not satisfy the Gherkin specification.",
+      "scenarios_failed": 1,
+      "scenarios_passed": 0,
+      "scenarios_pending": 0,
+      "feature_files": [
+        "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+      ],
+      "failure_examples": [
+        "pytest_runner_error \u2014 pytest_runner_error: exit=4; ERROR: not found: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/features/feat-jarvis-003-as"
+      ]
+    }
+  ],
+  "rationale": "BDD scenarios failed: 1 scenario(s) reported assertion failure during pytest-bdd execution.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1189/5200 tokens\n\n### \u2705 Similar Outcomes\n- CONTAINS_CODE\n- INVOKES_FUNCTION\n\n### \ud83c\udfa8 Relevant Patterns\n- USES_TYPE_HINT\n- HAS_FILED_TYPE\n\n### \u26a0\ufe0f Warnings\n- CALLS\n- USES_ENDPOINT\n\n### \ud83c\udfad Role Constraints\n- DELEGATES_TO\n- DELEGATES_TO\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- APPLICABLE_TO_TASK\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}

@@ -1,0 +1,165 @@
+{
+  "task_id": "TASK-J003-022",
+  "turn": 1,
+  "files_modified": [
+    ".claude/task-plans/TASK-J003-012-implementation-plan.md",
+    ".claude/task-plans/TASK-J003-017-implementation-plan.md",
+    ".claude/task-plans/TASK-J003-022-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J003-011/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-012/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-012/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J003-012/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-012/specialist_results.json",
+    ".guardkit/autobuild/TASK-J003-012/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-012/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-012/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-014/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-014/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-014/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-014/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-014/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-014/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-017/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-017/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-017/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J003-017/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-017/specialist_results.json",
+    ".guardkit/autobuild/TASK-J003-017/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-017/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-017/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-022/turn_context.json",
+    ".guardkit/bdd/TASK-J003-012_junit.xml",
+    ".guardkit/bdd/TASK-J003-017_junit.xml",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_function_calls/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_role_propagation_e2e.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_role_propagation_e2e.py",
+    "coverage_phase4_TASK-J003-012.json",
+    "coverage_phase4_TASK-J003-017.json",
+    "src/jarvis/prompts/supervisor_prompt.py",
+    "src/jarvis/tools/__init__.py",
+    "tasks/design_approved/TASK-J003-012-assemble-tool-list-session-aware-layer-3.md",
+    "tasks/design_approved/TASK-J003-017-unit-tests-subagent-layer.md",
+    "tasks/design_approved/TASK-J003-022-integration-test-role-propagation.md",
+    "tests/test_assemble_tool_list.py",
+    "tests/test_assemble_tool_list_layer3.py",
+    "tests/test_prompts.py",
+    "tests/test_role_propagation_e2e.py",
+    "tests/test_subagent_prompts.py",
+    "tests/test_subagents_jarvis_reasoner.py",
+    "tests/test_supervisor_with_tools.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J003-012/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-022/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-022/task_work_results.json",
+    ".guardkit/bdd/TASK-J003-022_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/.guardkit/autobuild/TASK-J003-022/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_role_propagation_e2e.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_function_calls/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_role_propagation_e2e.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_role_propagation_e2e.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001 \u2014 middleware-tool exercise of all three roles",
+    "AC-002 \u2014 role + ROLE_PROMPTS injection per role",
+    "AC-003 \u2014 correlation_id round-trip via check_async_task",
+    "AC-004 \u2014 parallel critic+planner safety",
+    "AC-005 \u2014 FakeListChatModel; zero real LLM calls",
+    "AC-006 \u2014 loud failure on ASSUM-ASYNC-ROLE-PROPAGATION breach",
+    "AC-007 \u2014 uv run pytest passes",
+    "AC-008 \u2014 ruff check + format pass"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 70,
+  "sdk_max_turns": 100,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 12,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "tests/test_role_propagation_e2e.py exercises all three roles via the middleware-provided start_async_task tool (not direct graph invocation).",
+      "status": "complete",
+      "evidence": "TestAC001RolePropagatesThroughMiddlewareTool is parametrised over ['critic','researcher','planner'] and invokes the actual middleware-provided start_async_task coroutine returned by deepagents.middleware.async_subagents._build_async_subagent_tools. The fake LangGraph SDK client substituted via patch.object(_ClientCache, 'get_async') routes the SDK roundtrip into the real compiled jarvis_reasoner.graph \u2014 no test directly calls graph.invoke. All 6 parametrised assertions pass.",
+      "test_file": "tests/test_role_propagation_e2e.py",
+      "implementation_files": [
+        "tests/test_role_propagation_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Three parametrised cases: role=\"critic\", role=\"researcher\", role=\"planner\". For each: the test asserts the jarvis_reasoner graph's initial-state node received role=<value> AND that ROLE_PROMPTS[RoleName(<value>)] was resolved and injected as the system prompt.",
+      "status": "complete",
+      "evidence": "test_role_arrives_at_graph_initial_state asserts fake_client.captured_inputs[task_id]['role'] == role_value and ['prompt'] matches per role. test_role_prompts_resolves_and_injects_system_prompt asserts the wrapper graph's async_tasks[0]['role'] equals the input role AND that role_mocks[role_value].system_prompt == ROLE_PROMPTS[RoleName(role_value)] \u2014 proving compile-time injection of the right prompt \u2014 plus that the other roles' inner mocks were NOT awaited (no fan-out leakage).",
+      "test_file": "tests/test_role_propagation_e2e.py",
+      "implementation_files": [
+        "tests/test_role_propagation_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Correlation-id propagation: input={\"prompt\": ..., \"role\": ..., \"correlation_id\": \"abc123\"} \u2014 the test asserts check_async_task(task_id) returns a result carrying correlation_id=\"abc123\".",
+      "status": "complete",
+      "evidence": "TestAC003CorrelationIdRoundTrip exercises both contracts: test_correlation_id_lands_on_async_tasks_channel asserts the wrapper graph's async_tasks payload carries correlation_id='abc123' verbatim; test_check_async_task_surfaces_correlation_id launches with correlation_id='abc123', invokes the real check_async_task coroutine through the SDK seam, parses the returned ToolMessage JSON to confirm thread_id + status, and re-asserts captured_results[task_id]['async_tasks'][0]['correlation_id'] == 'abc123'.",
+      "test_file": "tests/test_role_propagation_e2e.py",
+      "implementation_files": [
+        "tests/test_role_propagation_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Parallel safety: start two concurrent tasks with different roles (critic + planner); assert distinct task identifiers; assert each task resolved its own role prompt; assert neither overwrote the other's state.",
+      "status": "complete",
+      "evidence": "TestAC004ParallelSafety::test_two_concurrent_tasks_resolve_independently uses asyncio.gather to launch a critic and a planner task simultaneously, then asserts critic_task_id != planner_task_id, each captured_results[*]['async_tasks'][0]['role'] matches its launch role, each correlation_id is preserved, and the unrelated 'researcher' inner mock was never awaited. test_concurrent_inputs_isolated_in_captured_state additionally checks captured_inputs preserves both prompts/cids/roles as distinct sets.",
+      "test_file": "tests/test_role_propagation_e2e.py",
+      "implementation_files": [
+        "tests/test_role_propagation_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Uses FakeListChatModel with canned responses; zero real LLM calls.",
+      "status": "complete",
+      "evidence": "The role_aware_reasoner fixture instantiates FakeListChatModel(responses=...) and patches langchain.chat_models.init_chat_model to return it during the reasoner module's compile-at-import. TestAC005ZeroRealLLMCalls::test_fake_llm_cursor_unchanged_after_full_roundtrip asserts fake_llm.i == 0 after running both start_async_task and check_async_task end-to-end \u2014 the FakeListChatModel cursor advances on every invocation, so a 0 reading is proof of zero LLM calls. No provider client is instantiated either (init_chat_model is patched).",
+      "test_file": "tests/test_role_propagation_e2e.py",
+      "implementation_files": [
+        "tests/test_role_propagation_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "If DeepAgents 0.5.3 preview API breaks role-key propagation at any point, this test fails loudly \u2014 it is the ASSUM-ASYNC-ROLE-PROPAGATION regression surface.",
+      "status": "complete",
+      "evidence": "test_role_arrives_at_graph_initial_state contains a loud assertion message naming the assumption: 'role propagation broken: graph received {actual!r}, expected {expected!r}. ASSUM-ASYNC-ROLE-PROPAGATION breach \u2014 if this fires under deepagents>=0.6, fall back to inlining [role=...] inside prompt per design.md \u00a712.' This message is the regression surface the 0.6 upgrade gate will read. The fake SDK client's runs.create routes input through the canonical extra-key shape the assumption requires the SDK to honour, so any future breakage of that contract surfaces here.",
+      "test_file": "tests/test_role_propagation_e2e.py",
+      "implementation_files": [
+        "tests/test_role_propagation_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "uv run pytest tests/test_role_propagation_e2e.py -v passes.",
+      "status": "complete",
+      "evidence": "Final run: `uv run pytest tests/test_role_propagation_e2e.py -v` \u2192 12 passed in 0.90s. Full suite (`uv run pytest tests/`) reports 1387 passed, 2 skipped \u2014 zero regressions.",
+      "test_file": "tests/test_role_propagation_e2e.py",
+      "implementation_files": [
+        "tests/test_role_propagation_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`uv run ruff check tests/test_role_propagation_e2e.py` \u2192 All checks passed! `uv run ruff format --check tests/test_role_propagation_e2e.py` \u2192 1 file already formatted. Both commands exit zero.",
+      "test_file": "tests/test_role_propagation_e2e.py",
+      "implementation_files": [
+        "tests/test_role_propagation_e2e.py"
+      ]
+    }
+  ]
+}

@@ -48,12 +48,20 @@ from jarvis.config.settings import JarvisConfig
 
 # ---------------------------------------------------------------------------
 # Constants — the canonical alphabetical order required by AC-003.
+#
+# TASK-J003-012 (Layer 3 of DDR-014) added the ``include_frontier`` kwarg to
+# ``assemble_tool_list``; the **default-True** attended surface splices
+# ``escalate_to_frontier`` between ``dispatch_by_capability`` and
+# ``get_calendar_events``. The 9-tool ambient surface is kept available
+# behind ``include_frontier=False`` so that the FEAT-J002 contract stays
+# accessible for ambient / learning / async-subagent contexts.
 # ---------------------------------------------------------------------------
 EXPECTED_TOOL_ORDER = [
     "calculate",
     "capabilities_refresh",
     "capabilities_subscribe_updates",
     "dispatch_by_capability",
+    "escalate_to_frontier",
     "get_calendar_events",
     "list_available_capabilities",
     "queue_build",
@@ -61,7 +69,8 @@ EXPECTED_TOOL_ORDER = [
     "search_web",
 ]
 
-# Public surface per API-internal.md §1.1.
+# Public surface per API-internal.md §1.1 (FEAT-J003 adds
+# ``escalate_to_frontier`` to the dispatch group).
 EXPECTED_PUBLIC_SURFACE = {
     # Pydantic types
     "CalendarEvent",
@@ -77,8 +86,9 @@ EXPECTED_PUBLIC_SURFACE = {
     "capabilities_refresh",
     "capabilities_subscribe_updates",
     "list_available_capabilities",
-    # Dispatch tools
+    # Dispatch tools (includes the FEAT-J003 attended-only escalation)
     "dispatch_by_capability",
+    "escalate_to_frontier",
     "queue_build",
     # Assembly + loader
     "assemble_tool_list",
@@ -170,10 +180,13 @@ class TestAC002Signature:
         descriptor_alpha: CapabilityDescriptor,
         reset_tool_state: None,
     ) -> None:
-        """The return value is ``list[BaseTool]`` of length 9."""
+        """The return value is ``list[BaseTool]`` of length 10 (attended)."""
         result = assemble_tool_list(test_config, [descriptor_alpha])
         assert isinstance(result, list)
-        assert len(result) == 9
+        # TASK-J003-012: default ``include_frontier=True`` splices in the
+        # ``escalate_to_frontier`` cloud escape hatch alongside the FEAT-J002
+        # 9 tools.
+        assert len(result) == 10
         for tool in result:
             assert isinstance(tool, BaseTool)
 
@@ -184,7 +197,7 @@ class TestAC002Signature:
     ) -> None:
         """An empty capability registry is permitted."""
         result = assemble_tool_list(test_config, [])
-        assert len(result) == 9
+        assert len(result) == 10
 
 
 # ---------------------------------------------------------------------------

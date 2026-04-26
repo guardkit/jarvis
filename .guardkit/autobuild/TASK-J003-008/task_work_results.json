@@ -1,0 +1,310 @@
+{
+  "task_id": "TASK-J003-008",
+  "timestamp": "2026-04-26T08:56:08.792345",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1236,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".claude/task-plans/TASK-J003-007-implementation-plan.md",
+    ".claude/task-plans/TASK-J003-008-implementation-plan.md",
+    ".claude/task-plans/TASK-J003-010-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J003-002/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-007/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-007/coach_feedback_for_turn_2.json",
+    ".guardkit/autobuild/TASK-J003-007/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-007/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J003-007/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-007/specialist_results.json",
+    ".guardkit/autobuild/TASK-J003-007/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-007/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-007/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-008/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-008/coverage.json",
+    ".guardkit/autobuild/TASK-J003-008/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J003-008/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-008/specialist_results.json",
+    ".guardkit/autobuild/TASK-J003-008/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-008/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-008/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-010/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-010/coach_feedback_for_turn_2.json",
+    ".guardkit/autobuild/TASK-J003-010/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-010/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J003-010/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-010/specialist_results.json",
+    ".guardkit/autobuild/TASK-J003-010/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-010/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-010/turn_state_turn_1.json",
+    ".guardkit/bdd/TASK-J003-007_junit.xml",
+    ".guardkit/bdd/TASK-J003-008_junit.xml",
+    ".guardkit/bdd/TASK-J003-010_junit.xml",
+    ".guardkit/bootstrap_state.json",
+    "coverage_TASK-J003-007.json",
+    "coverage_TASK-J003-007_full.json",
+    "src/jarvis/adapters/__init__.py",
+    "src/jarvis/adapters/llamaswap.py",
+    "src/jarvis/agents/subagents/jarvis_reasoner.py",
+    "src/jarvis/tools/dispatch.py",
+    "tasks/backlog/TASK-J003-007-implement-llamaswap-adapter-with-stubbed-health.md",
+    "tasks/backlog/TASK-J003-008-implement-jarvis-reasoner-subagent-graph.md",
+    "tasks/backlog/TASK-J003-010-implement-escalate-to-frontier-layer-1-body.md",
+    "tasks/design_approved/TASK-J003-007-implement-llamaswap-adapter-with-stubbed-health.md",
+    "tasks/design_approved/TASK-J003-008-implement-jarvis-reasoner-subagent-graph.md",
+    "tasks/design_approved/TASK-J003-010-implement-escalate-to-frontier-layer-1-body.md",
+    "tests/test_import_graph.py",
+    "tests/test_llamaswap_adapter.py",
+    "tests/test_reserved_packages.py",
+    "tests/test_subagents_jarvis_reasoner.py",
+    "tests/test_tools_escalate_to_frontier.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J003-008/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-008/coach_feedback_for_turn_2.json",
+    ".guardkit/autobuild/TASK-J003-008/player_turn_2.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/.guardkit/autobuild/TASK-J003-008/player_turn_2.json",
+    "features/feat-jarvis-003-async-subagent-and-frontier-escape/test_feat_jarvis_003_async_subagent_and_frontier_escape.py"
+  ],
+  "tests_written": [],
+  "summary": "1236 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 21,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 9,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_dispatching_to_the_critic_role_launches_an_async_task_and_returns_a_task_identifier",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_dispatching_to_the_researcher_role_uses_the_openended_research_posture",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_dispatching_to_the_planner_role_uses_the_multistep_planning_posture",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_unknown_role_values_are_rejected_with_a_structured_error[bard]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_unknown_role_values_are_rejected_with_a_structured_error[adversarial]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_unknown_role_values_are_rejected_with_a_structured_error[CRITIC]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_unknown_role_values_are_rejected_with_a_structured_error[\"\"]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_importing_the_jarvisreasoner_subagent_module_compiles_its_graph",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_jarvisreasoner_subagent_graph_carries_no_tools_of_its_own",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+    ],
+    "tag": "@task:TASK-J003-008"
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "src/jarvis/agents/subagents/jarvis_reasoner.py exposes a module-level graph: CompiledStateGraph via create_deep_agent(model=\"openai:jarvis-reasoner\", system_prompt=<resolved>, tools=[]). Compilation happens at import time per DDR-012 \u2014 from jarvis.agents.subagents.jarvis_reasoner import graph returns a compiled object without further initialisation.",
+      "status": "complete",
+      "evidence": "Module-level binding `graph: CompiledStateGraph[Any, Any, Any, Any] = _build_graph()` runs at import. _build_graph() instantiates a shared chat-model wrapper via init_chat_model('openai:jarvis-reasoner') (no network call) and then compiles one create_deep_agent inner graph per RoleName with kwargs `model=model, tools=[], system_prompt=ROLE_PROMPTS[role], subagents=[]`. The outer StateGraph wraps the three role dispatchers and is returned compiled. Verified by tests/test_subagents_jarvis_reasoner.py::TestAC001GraphCompiledAtImport (4 tests, including isinstance(graph, CompiledStateGraph), module attribute check, __all__ export check, and the REASONER_MODEL constant assertion) and re-confirmed in turn 2 by re-running pytest (31 tests pass). Coach independently verified this AC on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "The first node of the graph reads input[\"role\"] (or equivalent initial-state channel), looks up ROLE_PROMPTS[RoleName(role)], and injects it as the system prompt.",
+      "status": "complete",
+      "evidence": "_resolve_role is registered as the entry point via builder.set_entry_point('resolve_role'). It reads state.get('role'), wraps the value in RoleName(role_value) for membership validation, and on success sets state['resolved_role']. The conditional-edge router then dispatches to a role-specific node whose pre-compiled inner deep-agent has system_prompt=ROLE_PROMPTS[role] resolved at build time. Verified by TestAC002FirstNodeResolvesRole (parametrized over critic / researcher / planner) and TestAC009LeafGraphInvariants.test_create_deep_agent_called_with_each_role_prompt which asserts the set of system_prompts passed to create_deep_agent equals ROLE_PROMPTS values exactly. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "OPENAI_BASE_URL environment variable is set to <config.llama_swap_base_url>/v1 at graph construction; the supervisor process sets this via lifecycle (no hard-coded URL in this module).",
+      "status": "complete",
+      "evidence": "The jarvis_reasoner.py module never assigns to os.environ and contains no http URL literal in executable code. Verified by TestAC003NoHardCodedBaseUrl which strips the module docstring with a regex, then asserts the executable source contains no `http://` literal, no `promaxgb10`, no `9000/v1`, no `os.environ[`, no `os.environ.setdefault`, and no `os.putenv`. The supervisor lifecycle owns the OPENAI_BASE_URL export side-effect. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Unknown role (e.g. \"bard\", \"CRITIC\", \"adversarial\") returns structured error via async_tasks state channel: \"ERROR: unknown_role \u2014 expected one of {critic, researcher, planner}, got=<value>\". Never raises.",
+      "status": "complete",
+      "evidence": "_resolve_role wraps RoleName(role_value) in try/except ValueError; the except branch returns _structured_error with message `ERROR: unknown_role \u2014 expected one of {critic, researcher, planner}, got=<repr(value)>` populated on the async_tasks, messages, and error state channels. The conditional-edge router short-circuits to END so no dispatcher runs and no LLM is contacted. Verified by TestAC004UnknownRoleStructuredError parametrized over bard / CRITIC / Critic / adversarial / deep_reasoner plus an explicit test that graph.invoke does not raise. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Empty-string role (\"\") \u2014 RoleName(\"\") raises ValueError at enum lookup; the graph catches and maps to the unknown_role branch (ASSUM-004, confirmed).",
+      "status": "complete",
+      "evidence": "_resolve_role uses `if role_value is None` (identity check, not falsiness), so empty string '' falls through to the RoleName(role_value) call which raises ValueError per default Python enum semantics. The except clause maps onto the unknown_role error string with `got=''`. Verified by TestAC005EmptyStringRoleMapsToUnknownRole asserting `output.startswith('ERROR: unknown_role')` and `\"got=''\" in output`, plus a non-raising guarantee. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Missing role field entirely returns structured error: \"ERROR: missing_field \u2014 role is required\".",
+      "status": "complete",
+      "evidence": "_resolve_role checks `state.get('role') is None` first, which covers both an absent 'role' key and an explicit None value, and returns _structured_error('ERROR: missing_field \u2014 role is required', correlation_id). Verified by TestAC006MissingRoleField with two tests: one omitting the role key, one passing role=None \u2014 both assert the output equals the literal error string verbatim. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Empty prompt returns structured error: \"ERROR: missing_field \u2014 prompt is required\".",
+      "status": "complete",
+      "evidence": "_resolve_role uses `if not prompt_value` which treats empty string and missing key the same way, returning _structured_error('ERROR: missing_field \u2014 prompt is required', correlation_id). Verified by TestAC007EmptyPromptStructuredError covering both empty-string and missing-key scenarios. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Missing llama-swap alias (adapter-level failure) surfaces as structured error mentioning the /running endpoint.",
+      "status": "complete",
+      "evidence": "_make_role_runner wraps `await deep_agent.ainvoke(...)` in try/except Exception; on failure it emits `ERROR: llama_swap_unavailable \u2014 model alias 'jarvis-reasoner' could not be resolved against the llama-swap /running endpoint (role=<role>, detail=<exc>)`. Verified by TestAC008LlamaSwapAliasMissing which builds a synthetic deep agent whose ainvoke raises RuntimeError, runs the dispatcher node, and asserts the output contains both `/running` and `llama_swap_unavailable` and that correlation_id propagates. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "Graph exposes no tools (tools=[]) and no further subagents \u2014 leaf per design \u00a78 / DDR-010.",
+      "status": "complete",
+      "evidence": "Every create_deep_agent call inside _build_graph passes tools=[] and subagents=[] explicitly. Verified by TestAC009LeafGraphInvariants.test_create_deep_agent_called_per_role_with_empty_tools which patches langchain.chat_models.init_chat_model and deepagents.create_deep_agent at the source modules, forces a fresh re-import, and asserts call_count == 3 with kwargs.tools == [] and kwargs.subagents == [] for every call. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "Module has no LLM network call at import (FakeListChatModel in tests; production model only hit on actual dispatch).",
+      "status": "complete",
+      "evidence": "init_chat_model only constructs the chat-model wrapper (per the supervisor pattern verified in TASK-J001-006) and create_deep_agent only assembles a graph \u2014 neither issues a network request. Verified by TestAC010NoNetworkCallAtImport which patches the source modules and asserts neither invoke / ainvoke / stream / astream / predict was called on the model object during the forced re-import; plus assert_called_once_with('openai:jarvis-reasoner') on init_chat_model. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-011",
+      "criterion_text": "correlation_id from input propagates through to the async task's output channel (scenario: session correlation identifier propagates from input through to check-task results).",
+      "status": "complete",
+      "evidence": "_structured_error and _make_role_runner both copy state.get('correlation_id') into every async_tasks output payload. Verified by TestAC011CorrelationIdPropagates with four tests covering the unknown_role, missing_role, empty_prompt branches plus the None-correlation-id default case. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-012",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Both files pass `python -m ruff check` with `All checks passed!` Re-confirmed on turn 2: 31/31 unit tests still pass and the full project suite remains 1236 passed, 2 skipped, 0 failures. Coach verified on turn 1.",
+      "test_file": "tests/test_subagents_jarvis_reasoner.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 98.96179233300018
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 328.85717158299985
+    }
+  ]
+}

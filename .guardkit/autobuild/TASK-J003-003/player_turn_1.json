@@ -1,0 +1,94 @@
+{
+  "task_id": "TASK-J003-003",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    "src/jarvis/agents/subagents/__init__.py",
+    "src/jarvis/agents/subagents/types.py",
+    "src/jarvis/adapters/types.py",
+    "tests/test_async_task_input.py",
+    "tests/test_swap_status.py"
+  ],
+  "tests_written": [
+    "tests/test_async_task_input.py",
+    "tests/test_swap_status.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "20/20 new tests pass (10 for AsyncTaskInput, 10 for SwapStatus). Full tests/ suite: 1137 passed, 5 pre-existing failures unrelated to this task (build_system entry-point, get_calendar_events docstring, phase2 deps untouched, package import without editable install, phase3 jarvis version). Ruff lint + format clean on all five files.",
+  "implementation_notes": "Created the Phase 2 subagent input and adapter status models per TASK-J003-003 acceptance criteria.\n\n1. `src/jarvis/agents/subagents/types.py` exposes `AsyncTaskInput(BaseModel)` with `prompt: str = Field(min_length=1)`, `role: str` (deliberately a plain str \u2014 not RoleName \u2014 so unknown role values reach the subagent graph's `unknown_role` error branch per AC-001 + ASSUM-004 rather than raising at construction), and `correlation_id: str | None = None`. The module's __all__ + docstring also accommodate the RoleName enum (TASK-J003-002's deliverable, co-located here per AC-001's 'same module as RoleName' phrasing).\n2. `src/jarvis/adapters/types.py` exposes `SwapStatus(BaseModel)` with `loaded_model: str`, `eta_seconds: int = Field(ge=0)` (Pydantic raises ValidationError on -1), and `source: Literal[\"stub\", \"live\"] = \"stub\"`.\n3. Both models set `model_config = ConfigDict(frozen=True)` so post-construction assignment raises ValidationError (AC-003).\n4. Both modules import only from stdlib + pydantic \u2014 no I/O, no LLM clients, no filesystem reads at import time (AC-004).\n5. Ruff (E, F, I, W, UP, B, SIM, RUF rule sets per pyproject.toml) reports clean on all five files; formatter reports clean on all five files (AC-005).\n\nDesign deviation note: DM-subagent-types \u00a72 originally typed `role: RoleName` and \u00a74 typed `loaded_model: str | None`. The TASK-J003-003 acceptance criteria override both of those (role: str at this boundary; loaded_model: str). Implemented per task spec.",
+  "concerns": [
+    "TASK-J003-002 (RoleName + FrontierTarget enums) is a sibling task whose deliverable AC-001 references with the phrase 'same module as RoleName'. The auto-formatter / linter integrated RoleName into the same `types.py` after the initial write, which matches the spec's locality intent and DM-subagent-types \u00a71. If TASK-J003-002 is run separately it should treat this RoleName as the source of truth rather than redefining it.",
+    "Pre-existing test suite has 5 failing tests unrelated to TASK-J003-003 (build entry point, calendar event docstring snapshot, phase2/phase3 dep gates, package import without editable install). Not introduced by this change."
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `src/jarvis/agents/subagents/types.py` (same module as RoleName) exposes `class AsyncTaskInput(BaseModel)` with fields: `prompt: str` (non-empty per Pydantic `min_length=1`); `role: str` (validated against `RoleName` at the subagent graph's first node, NOT at model construction \u2014 so unknown roles reach the `unknown_role` error branch rather than raising at input); `correlation_id: str | None = None`.",
+      "status": "complete",
+      "evidence": "AsyncTaskInput defined in src/jarvis/agents/subagents/types.py with prompt: str = Field(min_length=1), role: str (plain string, not RoleName, so unknown values do NOT raise at construction), correlation_id: str | None = None. Co-located with RoleName in the same module per the 'same module as RoleName' phrasing. Tests verify: empty prompt raises ValidationError; unknown role string (e.g. 'not-a-real-role') is accepted at construction (AC-001 graph-side validation contract); missing prompt or role raises; correlation_id defaults to None.",
+      "test_file": "tests/test_async_task_input.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/agents/subagents/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] `src/jarvis/adapters/types.py` exposes `class SwapStatus(BaseModel)` with fields: `loaded_model: str`; `eta_seconds: int = Field(ge=0)` (Pydantic enforces non-negativity \u2014 construction with `-1` raises `ValidationError`); `source: Literal[\"stub\", \"live\"] = \"stub\"` (Phase 2 default; FEAT-JARVIS-004 will use `\"live\"`).",
+      "status": "complete",
+      "evidence": "SwapStatus defined in src/jarvis/adapters/types.py with loaded_model: str, eta_seconds: int = Field(ge=0), source: Literal['stub', 'live'] = 'stub'. Tests verify: default source is 'stub'; explicit source='live' is accepted; eta_seconds=-1 raises ValidationError; source='bogus' raises ValidationError; missing loaded_model or eta_seconds raises.",
+      "test_file": "tests/test_swap_status.py",
+      "implementation_files": [
+        "src/jarvis/adapters/types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Both models are frozen (`model_config = ConfigDict(frozen=True)`) \u2014 immutable once constructed.",
+      "status": "complete",
+      "evidence": "Both AsyncTaskInput and SwapStatus declare `model_config = ConfigDict(frozen=True)`. Tests verify post-construction assignment to every field on both models raises ValidationError (TestAsyncTaskInputFrozen, TestSwapStatusFrozen \u2014 three cases each, one per field).",
+      "test_file": "tests/test_async_task_input.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/adapters/types.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] No I/O at import; no LLM calls.",
+      "status": "complete",
+      "evidence": "Both modules import only from stdlib (typing, enum) and pydantic. No filesystem reads, no network calls, no chat-model construction, no environment lookups at module top-level. The TestAsyncTaskInputImportPurity / TestSwapStatusImportPurity classes assert the modules load cleanly (presence in sys.modules) \u2014 any side-effecting import would surface here as an exception or test failure.",
+      "test_file": "tests/test_async_task_input.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/adapters/types.py",
+        "src/jarvis/agents/subagents/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`ruff check` (pyproject.toml selects E, F, I, W, UP, B, SIM, RUF) reports 'All checks passed!' on all five files. `ruff format --check` reports '5 files already formatted'. After the auto-formatter integrated RoleName into types.py, a single RUF002 (en-dash) was fixed; the final state is clean on lint and format.",
+      "test_file": "tests/test_async_task_input.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/__init__.py",
+        "src/jarvis/agents/subagents/types.py",
+        "src/jarvis/adapters/types.py",
+        "tests/test_async_task_input.py",
+        "tests/test_swap_status.py"
+      ]
+    }
+  ],
+  "success": true
+}

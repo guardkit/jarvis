@@ -1,0 +1,209 @@
+{
+  "task_id": "TASK-J003-015",
+  "timestamp": "2026-04-26T10:05:44.441474",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1485,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_import_graph.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_supervisor_lifecycle_wiring.py",
+    "src/jarvis/infrastructure/lifecycle.py",
+    "tasks/backlog/TASK-J003-015-extend-lifecycle-startup-with-subagents-and-ambient-factory.md",
+    "tests/test_import_graph.py",
+    "tests/test_supervisor_lifecycle_wiring.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J003-015-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J003-013/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-015/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-015/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-015/turn_context.json",
+    ".guardkit/bdd/TASK-J003-015_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/.guardkit/autobuild/TASK-J003-015/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/src/jarvis/infrastructure/lifecycle.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_lifecycle_startup_phase3.py",
+    "tasks/design_approved/TASK-J003-015-extend-lifecycle-startup-with-subagents-and-ambient-factory.md",
+    "tests/test_lifecycle_startup_phase3.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_import_graph.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_lifecycle_startup_phase3.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_supervisor_lifecycle_wiring.py"
+  ],
+  "summary": "1485 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 59,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 1,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_not_configuring_an_ambient_tool_factory_falls_back_to_the_attended_tools_without_frontier",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+    ],
+    "tag": "@task:TASK-J003-015"
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "src/jarvis/infrastructure/lifecycle.py \u2014 startup(config) constructs llamaswap_adapter = LlamaSwapAdapter(base_url=config.llama_swap_base_url).",
+      "status": "complete",
+      "evidence": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs LlamaSwapAdapter(base_url=config.llama_swap_base_url) at step 5 (line ~331) and stores it on the returned AppState. Verified by TestAC001LlamaSwapAdapterConstruction (2 tests pass).",
+      "test_file": "tests/test_lifecycle_startup_phase3.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "startup calls async_subagents = build_async_subagents(config) and threads it into build_supervisor(..., async_subagents=async_subagents, ...).",
+      "status": "complete",
+      "evidence": "build_app_state imports build_async_subagents from jarvis.agents.subagent_registry, calls it at step 7 (line ~358), and passes the result via async_subagents= kwarg into build_supervisor. Verified by TestAC002AsyncSubagentsThreadedThroughBuildSupervisor (2 tests pass).",
+      "test_file": "tests/test_lifecycle_startup_phase3.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "startup assembles attended AND ambient tool lists via assemble_tool_list(...) with include_frontier=True / False respectively, and passes ambient_tool_factory=lambda: tool_list_ambient into build_supervisor.",
+      "status": "complete",
+      "evidence": "Steps 8 + 9 of build_app_state call assemble_tool_list(config, capability_registry, include_frontier=True) for the attended 10-tool surface and again with include_frontier=False for the ambient 9-tool surface. Step 10 passes ambient_tool_factory=lambda: tool_list_ambient into build_supervisor. Verified by TestAC003AttendedAndAmbientToolListsAssembled (3 tests pass) and the updated TestAC005LifecycleWiring::test_assemble_tool_list_called_with_config_and_registry in test_supervisor_lifecycle_wiring.py.",
+      "test_file": "tests/test_lifecycle_startup_phase3.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "OPENAI_BASE_URL environment variable is set to <config.llama_swap_base_url>/v1 before build_async_subagents runs (graph compilation reads this).",
+      "status": "complete",
+      "evidence": "Step 6 of build_app_state writes os.environ['OPENAI_BASE_URL'] = f'{config.llama_swap_base_url}/v1' BEFORE step 7 calls build_async_subagents. Verified by TestAC004OpenAIBaseUrlEnvVarSetBeforeAsyncSubagents (2 tests pass): one reads the env var post-startup, the other captures the env value inside a side_effect on build_async_subagents to prove ordering.",
+      "test_file": "tests/test_lifecycle_startup_phase3.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "AppState is extended to carry llamaswap_adapter: LlamaSwapAdapter for later use by the supervisor's swap-aware policy.",
+      "status": "complete",
+      "evidence": "AppState dataclass in src/jarvis/infrastructure/lifecycle.py adds 'llamaswap_adapter: LlamaSwapAdapter | None = None' as a declared field. The default is None so existing direct AppState() constructions in tests are unaffected; build_app_state always populates it. Verified by TestAC005AppStateCarriesLlamaSwapAdapter (2 tests pass).",
+      "test_file": "tests/test_lifecycle_startup_phase3.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Swap-aware voice-ack policy: helper function should_emit_voice_ack(adapter_id: str, swap_status: SwapStatus) -> bool returns True iff adapter_id in {'reachy'} (or voice-reactive set from config) AND swap_status.eta_seconds > 30. Boundary behaviour: eta 0 \u2192 False; 30 \u2192 False; 31 \u2192 True; 240 \u2192 True.",
+      "status": "complete",
+      "evidence": "should_emit_voice_ack in src/jarvis/infrastructure/lifecycle.py uses VOICE_ACK_ETA_THRESHOLD_SECONDS=30 and DEFAULT_VOICE_REACTIVE_ADAPTER_IDS=frozenset({'reachy'}); accepts an optional voice_reactive_adapters override. Verified by TestAC006ShouldEmitVoiceAckBoundaryTable parametrized tests covering ETA 0/30/31/240 boundary plus non-voice-reactive adapter and override cases (6 tests pass).",
+      "test_file": "tests/test_lifecycle_startup_phase3.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "When should_emit_voice_ack returns True, the supervisor emits the TTS ack stub and queues the request for dispatch once the swap completes.",
+      "status": "complete",
+      "evidence": "emit_voice_ack_and_queue helper returns a frozen VoiceAckOutcome dataclass with emitted=True/queued=True/ack_text=VOICE_ACK_TTS_TEXT when the policy fires; emitted=False/queued=False/ack_text=None otherwise. Logs voice_ack_emitted via structlog when firing. Verified by TestAC007EmitVoiceAckAndQueue (3 tests pass) covering the firing path, the below-threshold path, and the non-voice-reactive path.",
+      "test_file": "tests/test_lifecycle_startup_phase3.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Phase 1 + FEAT-J002 startup behaviour preserved: existing AppState fields unchanged; session_manager, store, capability_registry still wired as before.",
+      "status": "complete",
+      "evidence": "AppState dataclass keeps all existing fields (config, supervisor, store, session_manager, capability_registry) at their original positions and types; only adds the new llamaswap_adapter field as the last entry with a None default for backward compatibility. The full FEAT-J002 lifecycle test suite (test_supervisor_lifecycle_wiring.py: 17 tests, test_supervisor_with_tools.py: 7 tests) all pass. Verified by TestAC008Phase1AndFeatJ002BehaviourPreserved (1 test pass).",
+      "test_file": "tests/test_lifecycle_startup_phase3.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran `python -m ruff check` against src/jarvis/infrastructure/lifecycle.py, tests/test_lifecycle_startup_phase3.py, tests/test_supervisor_lifecycle_wiring.py, tests/test_import_graph.py \u2014 all checks passed. Ran `python -m ruff format` to apply formatting; final files are format-clean.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py",
+        "tests/test_lifecycle_startup_phase3.py",
+        "tests/test_supervisor_lifecycle_wiring.py",
+        "tests/test_import_graph.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 77.57395350000024
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 307.16847479199896
+    }
+  ]
+}

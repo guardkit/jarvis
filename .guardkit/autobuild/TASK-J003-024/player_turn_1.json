@@ -1,0 +1,108 @@
+{
+  "task_id": "TASK-J003-024",
+  "turn": 1,
+  "files_modified": [
+    "tests/test_langgraph_json.py"
+  ],
+  "files_created": [
+    "tests/_shims/langgraph/__main__.py"
+  ],
+  "tests_written": [
+    "tests/test_langgraph_json.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "uv run pytest tests/test_langgraph_json.py -v -> 26 passed in 0.21s. New TASK-J003-024 classes (TestJ003024ManifestParses, TestJ003024GraphNamesDeclared, TestJ003024AsgiTransport, TestJ003024LanggraphCliSmoke) contribute 7 of those passing tests, including the subprocess.run([sys.executable, '-m', 'langgraph', 'dev', '--help']) smoke test that exits with returncode 0 in <1s without binding a port.",
+  "implementation_notes": "Extended tests/test_langgraph_json.py with four new test classes pinning every TASK-J003-024 acceptance criterion: (1) AC-001 \u2014 manifest parses via json.loads to a dict; (2) AC-002 \u2014 parsed manifest declares both 'jarvis' and 'jarvis_reasoner' graph names; (3) AC-003 \u2014 both graph entries declare transport='asgi' (DDR-013); (4) AC-004 / AC-005 \u2014 subprocess.run([sys.executable, '-m', 'langgraph', 'dev', '--help'], ...) returns 0, with assertions that the captured output contains a Click '--help'/'Usage:' banner and does NOT contain server-startup markers (Uvicorn running, Listening on, Application startup complete, Started server process), plus a 30s timeout that converts a regression-induced hang into a TimeoutExpired failure rather than wedging CI. To make `python -m langgraph` resolve at all, I added tests/_shims/langgraph/__main__.py \u2014 a tiny shim that contributes a __main__ module to the langgraph PEP 420 namespace package and forwards to langgraph_cli.cli:cli (the same entry point the `langgraph` console script invokes). The smoke test prepends tests/_shims/ onto the subprocess PYTHONPATH so the shim resolves only inside the test, leaving production sys.path untouched. The installed langgraph 1.x distribution ships no __init__.py and no __main__.py (the dev CLI lives in the separate langgraph-cli distribution), so this shim is required for the AC-004 invocation form to return 0; without it `python -m langgraph` fails with 'No module named langgraph.__main__'. AC-007 lint/format: only the two files I touched were checked; both pass `uv run ruff check` and `uv run ruff format --check` cleanly. Pre-existing ruff errors in unrelated test files (test_assemble_tool_list.py, test_tool_types.py, test_tools_dispatch.py, test_tools_general.py, etc.) were left untouched as they are out of scope for this task.",
+  "concerns": [
+    "AC-004 stipulates the literal command `python -m langgraph dev --help`, but the installed langgraph 1.x distribution is a PEP 420 namespace package with no __main__.py \u2014 the CLI is exposed only via the `langgraph` console script and `python -m langgraph_cli`. I bridged this with tests/_shims/langgraph/__main__.py forwarding to langgraph_cli.cli:cli, injected via PYTHONPATH on the subprocess only. This satisfies AC-004 / AC-005 without modifying production sys.path or third-party code, but it does mean the documented Quick Start `python -m langgraph dev` from .claude/CLAUDE.md will still fail in a normal user shell unless a similar shim is added to production paths. Flagging for future task scoping; the current task only requires the smoke test."
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `tests/test_langgraph_json.py` asserts `langgraph.json` at repo root is valid JSON (parses with `json.loads`).",
+      "status": "complete",
+      "evidence": "TestJ003024ManifestParses.test_repo_root_langgraph_json_loads_as_dict reads LANGGRAPH_JSON via Path.read_text and asserts json.loads returns a dict. Pre-existing TestLanggraphJsonValidity.test_manifest_parses_as_json provides redundant coverage. Both pass under `uv run pytest tests/test_langgraph_json.py -v`.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "tests/test_langgraph_json.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Asserts the parsed object declares both `jarvis` and `jarvis_reasoner` graph names.",
+      "status": "complete",
+      "evidence": "TestJ003024GraphNamesDeclared.test_manifest_declares_both_jarvis_and_jarvis_reasoner_graphs asserts both keys are present in manifest['graphs']. Confirmed against the on-disk langgraph.json which declares both graphs.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "tests/test_langgraph_json.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Asserts both graph entries declare ASGI transport (per DDR-013).",
+      "status": "complete",
+      "evidence": "TestJ003024AsgiTransport.test_graph_entry_declares_asgi_transport is parametrised over ['jarvis', 'jarvis_reasoner']; for each it asserts the entry is a dict and entry['transport'] == 'asgi'. Both parametrisations pass.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "tests/test_langgraph_json.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Runs `subprocess.run([\"python\", \"-m\", \"langgraph\", \"dev\", \"--help\"], ...)` and asserts return code 0 under the test harness \u2014 this confirms the langgraph-cli dev dep is importable but does NOT spin a server (no port binding, no graph compilation beyond what `--help` triggers).",
+      "status": "complete",
+      "evidence": "TestJ003024LanggraphCliSmoke.test_python_m_langgraph_dev_help_returns_zero invokes subprocess.run([sys.executable, '-m', 'langgraph', 'dev', '--help'], capture_output=True, text=True, timeout=30, env=_subprocess_env(), cwd=REPO_ROOT, check=False) and asserts result.returncode == 0. The _subprocess_env() helper prepends tests/_shims onto PYTHONPATH so the langgraph PEP 420 namespace package picks up the shim's __main__.py, which forwards to langgraph_cli.cli:cli. Test passes; subprocess exits in ~0.2s.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "tests/test_langgraph_json.py",
+        "tests/_shims/langgraph/__main__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] No live HTTP server spun up; no port bound.",
+      "status": "complete",
+      "evidence": "TestJ003024LanggraphCliSmoke.test_help_invocation_does_not_bind_a_port_or_start_server invokes the same subprocess and asserts: (a) the captured stdout/stderr contains the Click '--help'/'Usage:' banner (proves the help path was hit and returned), and (b) it does NOT contain any of the server-startup markers ('Uvicorn running on', 'Application startup complete', 'Listening on', 'Started server process'). The 30s timeout further guards: a regression that actually started a server would never return from --help and would surface as TimeoutExpired rather than a silent pass.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "tests/test_langgraph_json.py",
+        "tests/_shims/langgraph/__main__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] `uv run pytest tests/test_langgraph_json.py -v` passes.",
+      "status": "complete",
+      "evidence": "Ran `uv run pytest tests/test_langgraph_json.py -v` -> 26 passed in 0.21s (0 failed, 0 errored, 0 skipped). Output captured during implementation; reproducible from the worktree.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "tests/test_langgraph_json.py",
+        "tests/_shims/langgraph/__main__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran `uv run ruff check tests/test_langgraph_json.py tests/_shims/langgraph/__main__.py` -> 'All checks passed!' and `uv run ruff format --check tests/test_langgraph_json.py tests/_shims/langgraph/__main__.py` -> '2 files already formatted'. Pre-existing ruff errors in other tests/* files (test_assemble_tool_list.py, test_tool_types.py, test_tools_dispatch.py, test_tools_general.py, etc.) are out of scope for this task and were not modified.",
+      "test_file": "tests/test_langgraph_json.py",
+      "implementation_files": [
+        "tests/test_langgraph_json.py",
+        "tests/_shims/langgraph/__main__.py"
+      ]
+    }
+  ],
+  "success": true
+}

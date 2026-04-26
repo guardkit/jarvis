@@ -301,16 +301,34 @@ class TestAC004Phase1DependenciesUntouched:
         )
 
     def test_phase1_providers_untouched(self) -> None:
+        """Phase 1 provider entries are still present with their original pins.
+
+        Phase 3 (TASK-J003-006) appends `google-genai>=0.3.0` to this group,
+        so the assertion is a *superset* check rather than an exact-list match
+        — Phase 1 pins must not be relaxed, tightened, or removed, but Phase 3
+        is allowed to extend the group additively.
+        """
         opt = _load_pyproject()["project"]["optional-dependencies"]
-        assert opt["providers"] == self.PHASE_1_OPTIONAL_PROVIDERS, (
-            f"[project.optional-dependencies].providers changed: {opt['providers']!r}"
-        )
+        for pin in self.PHASE_1_OPTIONAL_PROVIDERS:
+            assert pin in opt["providers"], (
+                f"Phase 1 provider pin {pin!r} was relaxed/tightened/removed "
+                f"from [project.optional-dependencies].providers: {opt['providers']!r}"
+            )
 
     def test_phase1_dev_group_untouched(self) -> None:
+        """Phase 1 dev pins are still present with their original values.
+
+        Phase 3 (TASK-J003-006) appends `langgraph-cli>=0.1` to the dev
+        group, so the assertion is a *superset* check rather than an
+        exact-list match — Phase 1 pins must not be relaxed, tightened,
+        or removed, but Phase 3 is allowed to extend the group additively.
+        """
         dev = _load_pyproject()["dependency-groups"]["dev"]
-        assert dev == self.PHASE_1_DEV_PINS, (
-            f"[dependency-groups].dev changed: {dev!r}"
-        )
+        for pin in self.PHASE_1_DEV_PINS:
+            assert pin in dev, (
+                f"Phase 1 dev pin {pin!r} was relaxed/tightened/removed "
+                f"from [dependency-groups].dev: {dev!r}"
+            )
 
     def test_project_metadata_untouched(self) -> None:
         """Name, version, build backend, hatch wheel layout are untouched."""

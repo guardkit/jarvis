@@ -1,0 +1,229 @@
+{
+  "task_id": "TASK-J003-009",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_subagent_registry.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_subagent_registry.py ......................                   [100%]\n======================== 22 passed, 1 warning in 1.99s =========================",
+      "duration_seconds": 3.6605780124664307
+    },
+    "requirements": {
+      "criteria_total": 10,
+      "criteria_met": 10,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`src/jarvis/agents/subagent_registry.py` exposes `build_async_subagents(config: JarvisConfig) -> list[AsyncSubAgent]`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Created src/jarvis/agents/subagent_registry.py with the public function build_async_subagents(config: JarvisConfig) -> list[AsyncSubAgent]; module __all__ exports it. Tests TestAC001PublicFactory.test_module_exports_build_async_subagents and test_returns_list pass.",
+      "notes": "Created src/jarvis/agents/subagent_registry.py with the public function build_async_subagents(config: JarvisConfig) -> list[AsyncSubAgent]; module __all__ exports it. Tests TestAC001PublicFactory.test_module_exports_build_async_subagents and test_returns_list pass."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Returns a list of **exactly one** element.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_async_subagents returns [spec] where spec is a single AsyncSubAgent dict. TestAC002SingleElement.test_returns_single_entry asserts len(result) == 1.",
+      "notes": "build_async_subagents returns [spec] where spec is a single AsyncSubAgent dict. TestAC002SingleElement.test_returns_single_entry asserts len(result) == 1."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "The element satisfies: `name == \"jarvis-reasoner\"`; `graph_id == \"jarvis_reasoner\"`; `description` is non-empty.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_REASONER_NAME='jarvis-reasoner' and _REASONER_GRAPH_ID='jarvis_reasoner' module constants populate the spec; _REASONER_DESCRIPTION is a multi-line non-empty string. TestAC003CoreFields verifies all three fields.",
+      "notes": "_REASONER_NAME='jarvis-reasoner' and _REASONER_GRAPH_ID='jarvis_reasoner' module constants populate the spec; _REASONER_DESCRIPTION is a multi-line non-empty string. TestAC003CoreFields verifies all three fields."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Description must contain ALL of the following substrings (routing signals): `gpt-oss-120b`, `on the premises`, `sub-second`, `two to four minutes`, `critic`, `researcher`, `planner`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_REASONER_DESCRIPTION embeds every required substring verbatim. TestAC004RequiredRoutingSignals.test_description_contains_required_substrings asserts each is present and reports any missing ones.",
+      "notes": "_REASONER_DESCRIPTION embeds every required substring verbatim. TestAC004RequiredRoutingSignals.test_description_contains_required_substrings asserts each is present and reports any missing ones."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Description must NOT contain any of: `deep_reasoner`, `adversarial_critic`, `long_research`, `quick_local`, cloud-tier promises \u2014 asserted by TASK-J003-020 regression test (Context A concern #3).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Description copy was authored fresh and contains none of the four-roster legacy names or the substring 'cloud'. TestAC005ForbiddenTokensAbsent.test_description_excludes_forbidden_substrings checks each forbidden token (case-insensitive).",
+      "notes": "Description copy was authored fresh and contains none of the four-roster legacy names or the substring 'cloud'. TestAC005ForbiddenTokensAbsent.test_description_excludes_forbidden_substrings checks each forbidden token (case-insensitive)."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`AsyncSubAgent` is imported from `deepagents` (0.5.3 TypedDict); no redefinition.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "subagent_registry.py performs `from deepagents import AsyncSubAgent` and re-exports the same symbol. TestAC006UsesDeepAgentsAsyncSubAgent asserts identity with deepagents.AsyncSubAgent both on first import and after importlib.reload.",
+      "notes": "subagent_registry.py performs `from deepagents import AsyncSubAgent` and re-exports the same symbol. TestAC006UsesDeepAgentsAsyncSubAgent asserts identity with deepagents.AsyncSubAgent both on first import and after importlib.reload."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Function is pure \u2014 given the same config, returns the same description text (deterministic for Graphiti trace-richness).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Description is a module-level constant string; build_async_subagents only constructs and returns the spec dict. TestAC007Deterministic asserts repeated calls with the same JarvisConfig produce equal results, and that two distinct fresh configs produce equal results too.",
+      "notes": "Description is a module-level constant string; build_async_subagents only constructs and returns the spec dict. TestAC007Deterministic asserts repeated calls with the same JarvisConfig produce equal results, and that two distinct fresh configs produce equal results too."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "`src/jarvis/agents/subagents/__init__.py` re-exports the `jarvis_reasoner.graph` symbol so `langgraph.json` can bind `jarvis_reasoner` by module path.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Updated src/jarvis/agents/subagents/__init__.py to `from jarvis.agents.subagents.jarvis_reasoner import graph` and added 'graph' to __all__. TestAC008GraphReExport asserts subagents_pkg.graph is the same object as jarvis_reasoner.graph and that 'graph' is in __all__.",
+      "notes": "Updated src/jarvis/agents/subagents/__init__.py to `from jarvis.agents.subagents.jarvis_reasoner import graph` and added 'graph' to __all__. TestAC008GraphReExport asserts subagents_pkg.graph is the same object as jarvis_reasoner.graph and that 'graph' is in __all__."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "No LLM calls; no I/O beyond reading config.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_async_subagents only reads config.supervisor_model for a debug log line and constructs a TypedDict; it never invokes init_chat_model or create_deep_agent. TestAC009NoNetworkAtBuildTime patches both and asserts neither is called from build_async_subagents itself.",
+      "notes": "build_async_subagents only reads config.supervisor_model for a debug log line and constructs a TypedDict; it never invokes init_chat_model or create_deep_agent. TestAC009NoNetworkAtBuildTime patches both and asserts neither is called from build_async_subagents itself."
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "`ruff check` returns 'All checks passed!' for the new and modified files; `ruff format` reports zero changes after the test file was reformatted. Full pytest run (1296+ tests) passes with exit 0.",
+      "notes": "`ruff check` returns 'All checks passed!' for the new and modified files; `ruff format` reports zero changes after the test file was reformatted. Full pytest run (1296+ tests) passes with exit 0."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`src/jarvis/agents/subagent_registry.py` exposes `build_async_subagents(config: JarvisConfig) -> list[AsyncSubAgent]`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Created src/jarvis/agents/subagent_registry.py with the public function build_async_subagents(config: JarvisConfig) -> list[AsyncSubAgent]; module __all__ exports it. Tests TestAC001PublicFactory.test_module_exports_build_async_subagents and test_returns_list pass.",
+        "notes": "Created src/jarvis/agents/subagent_registry.py with the public function build_async_subagents(config: JarvisConfig) -> list[AsyncSubAgent]; module __all__ exports it. Tests TestAC001PublicFactory.test_module_exports_build_async_subagents and test_returns_list pass."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Returns a list of **exactly one** element.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_async_subagents returns [spec] where spec is a single AsyncSubAgent dict. TestAC002SingleElement.test_returns_single_entry asserts len(result) == 1.",
+        "notes": "build_async_subagents returns [spec] where spec is a single AsyncSubAgent dict. TestAC002SingleElement.test_returns_single_entry asserts len(result) == 1."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "The element satisfies: `name == \"jarvis-reasoner\"`; `graph_id == \"jarvis_reasoner\"`; `description` is non-empty.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_REASONER_NAME='jarvis-reasoner' and _REASONER_GRAPH_ID='jarvis_reasoner' module constants populate the spec; _REASONER_DESCRIPTION is a multi-line non-empty string. TestAC003CoreFields verifies all three fields.",
+        "notes": "_REASONER_NAME='jarvis-reasoner' and _REASONER_GRAPH_ID='jarvis_reasoner' module constants populate the spec; _REASONER_DESCRIPTION is a multi-line non-empty string. TestAC003CoreFields verifies all three fields."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Description must contain ALL of the following substrings (routing signals): `gpt-oss-120b`, `on the premises`, `sub-second`, `two to four minutes`, `critic`, `researcher`, `planner`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_REASONER_DESCRIPTION embeds every required substring verbatim. TestAC004RequiredRoutingSignals.test_description_contains_required_substrings asserts each is present and reports any missing ones.",
+        "notes": "_REASONER_DESCRIPTION embeds every required substring verbatim. TestAC004RequiredRoutingSignals.test_description_contains_required_substrings asserts each is present and reports any missing ones."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Description must NOT contain any of: `deep_reasoner`, `adversarial_critic`, `long_research`, `quick_local`, cloud-tier promises \u2014 asserted by TASK-J003-020 regression test (Context A concern #3).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Description copy was authored fresh and contains none of the four-roster legacy names or the substring 'cloud'. TestAC005ForbiddenTokensAbsent.test_description_excludes_forbidden_substrings checks each forbidden token (case-insensitive).",
+        "notes": "Description copy was authored fresh and contains none of the four-roster legacy names or the substring 'cloud'. TestAC005ForbiddenTokensAbsent.test_description_excludes_forbidden_substrings checks each forbidden token (case-insensitive)."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`AsyncSubAgent` is imported from `deepagents` (0.5.3 TypedDict); no redefinition.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "subagent_registry.py performs `from deepagents import AsyncSubAgent` and re-exports the same symbol. TestAC006UsesDeepAgentsAsyncSubAgent asserts identity with deepagents.AsyncSubAgent both on first import and after importlib.reload.",
+        "notes": "subagent_registry.py performs `from deepagents import AsyncSubAgent` and re-exports the same symbol. TestAC006UsesDeepAgentsAsyncSubAgent asserts identity with deepagents.AsyncSubAgent both on first import and after importlib.reload."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Function is pure \u2014 given the same config, returns the same description text (deterministic for Graphiti trace-richness).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Description is a module-level constant string; build_async_subagents only constructs and returns the spec dict. TestAC007Deterministic asserts repeated calls with the same JarvisConfig produce equal results, and that two distinct fresh configs produce equal results too.",
+        "notes": "Description is a module-level constant string; build_async_subagents only constructs and returns the spec dict. TestAC007Deterministic asserts repeated calls with the same JarvisConfig produce equal results, and that two distinct fresh configs produce equal results too."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "`src/jarvis/agents/subagents/__init__.py` re-exports the `jarvis_reasoner.graph` symbol so `langgraph.json` can bind `jarvis_reasoner` by module path.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Updated src/jarvis/agents/subagents/__init__.py to `from jarvis.agents.subagents.jarvis_reasoner import graph` and added 'graph' to __all__. TestAC008GraphReExport asserts subagents_pkg.graph is the same object as jarvis_reasoner.graph and that 'graph' is in __all__.",
+        "notes": "Updated src/jarvis/agents/subagents/__init__.py to `from jarvis.agents.subagents.jarvis_reasoner import graph` and added 'graph' to __all__. TestAC008GraphReExport asserts subagents_pkg.graph is the same object as jarvis_reasoner.graph and that 'graph' is in __all__."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "No LLM calls; no I/O beyond reading config.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_async_subagents only reads config.supervisor_model for a debug log line and constructs a TypedDict; it never invokes init_chat_model or create_deep_agent. TestAC009NoNetworkAtBuildTime patches both and asserts neither is called from build_async_subagents itself.",
+        "notes": "build_async_subagents only reads config.supervisor_model for a debug log line and constructs a TypedDict; it never invokes init_chat_model or create_deep_agent. TestAC009NoNetworkAtBuildTime patches both and asserts neither is called from build_async_subagents itself."
+      },
+      {
+        "criterion_id": "AC-010",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "`ruff check` returns 'All checks passed!' for the new and modified files; `ruff format` reports zero changes after the test file was reformatted. Full pytest run (1296+ tests) passes with exit 0.",
+        "notes": "`ruff check` returns 'All checks passed!' for the new and modified files; `ruff format` reports zero changes after the test file was reformatted. Full pytest run (1296+ tests) passes with exit 0."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 3 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 3,
+      "feature_files": [
+        "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+      ],
+      "pending_examples": [
+        "test_a_single_jarvisreasoner_async_subagent_is_registered_at_startup \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_the_jarvisreasoner_description_carries_cost_and_latency_signals_the_reasoning_model_can_read \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_adding_an_unsanctioned_subagent_does_not_silently_appear_in_the_registry \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 320 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1178/5200 tokens\n\n### \u2705 Similar Outcomes\n- CONTAINS_CODE\n- REFERENCED_IN\n\n### \ud83c\udfa8 Relevant Patterns\n- CALLED_BY\n- SETS_UP_FEATURE_STRUCTURE_AT\n\n### \u26a0\ufe0f Warnings\n- USES\n- ALTERNATIVE_TO\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE\n- HAS_CONTEXT\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- IS_INVOCATION_METHOD_FOR\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}

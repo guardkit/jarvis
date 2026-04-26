@@ -16,7 +16,7 @@ import warnings
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from jarvis.shared.exceptions import ConfigurationError
@@ -61,12 +61,40 @@ class JarvisConfig(BaseSettings):
     stub_capabilities_path: Path = Path("src/jarvis/config/stub_capabilities.yaml")
     workspace_root: Path = Path(".").resolve()
 
+    # -- FEAT-JARVIS-003: routing + frontier-escape settings -----------------
+    # llama-swap base URL on the local GB10 (ADR-ARCH-012). Picked up from
+    # JARVIS_LLAMA_SWAP_BASE_URL via the env_prefix below.
+    llama_swap_base_url: str = "http://promaxgb10-41b1:9000"
+
+    # Default target model for `escalate_to_frontier` (ADR-ARCH-027).
+    # Closed enum — adding a new target requires a DDR.
+    frontier_default_target: Literal["GEMINI_3_1_PRO", "OPUS_4_7"] = "GEMINI_3_1_PRO"
+
+    # Frontier provider key for the Gemini path of `escalate_to_frontier`.
+    # The Google GenAI SDK natively reads `GOOGLE_API_KEY`, so we honour the
+    # un-prefixed variable as well as the `JARVIS_GEMINI_API_KEY` form.
+    gemini_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("GOOGLE_API_KEY", "JARVIS_GEMINI_API_KEY"),
+    )
+
+    # Adapter IDs that count as "attended" consumer surfaces — the
+    # constitutional gate on `escalate_to_frontier` checks membership here
+    # (ADR-ARCH-016 consumer-surface list).
+    attended_adapter_ids: frozenset[str] = frozenset({"telegram", "cli", "dashboard", "reachy"})
+
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        # populate_by_name=True is required so fields that declare
+        # `validation_alias` (e.g. `gemini_api_key` → `GOOGLE_API_KEY`)
+        # remain assignable by their Python field name in tests and
+        # programmatic construction. Without this, the alias replaces the
+        # field name as the only accepted input key.
+        populate_by_name=True,
     )
 
     # -- Validators ----------------------------------------------------------
@@ -121,9 +149,7 @@ class JarvisConfig(BaseSettings):
         if self.web_search_provider == "tavily":
             tavily_key = self.tavily_api_key
             tavily_value = (
-                tavily_key.get_secret_value()
-                if isinstance(tavily_key, SecretStr)
-                else tavily_key
+                tavily_key.get_secret_value() if isinstance(tavily_key, SecretStr) else tavily_key
             )
             if not tavily_value:
                 message = (

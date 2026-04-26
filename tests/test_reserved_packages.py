@@ -22,6 +22,11 @@ import pytest
 # namespace contract no longer applies to it. The boundary discipline —
 # domain modules consume the package surface, never the submodules —
 # is enforced by :mod:`tests.test_import_graph` instead.
+#
+# ``jarvis.adapters`` followed the same trajectory in FEAT-JARVIS-003:
+# TASK-J003-003 introduced ``jarvis.adapters.types.SwapStatus`` and
+# TASK-J003-007 added ``LlamaSwapAdapter`` plus the public re-exports
+# in ``__init__.py``. The empty-namespace contract no longer applies.
 RESERVED_PACKAGES = [
     "jarvis.subagents",
     "jarvis.skills",
@@ -29,7 +34,6 @@ RESERVED_PACKAGES = [
     "jarvis.watchers",
     "jarvis.discovery",
     "jarvis.learning",
-    "jarvis.adapters",
 ]
 
 # Locate the src directory so we can inspect __init__.py files

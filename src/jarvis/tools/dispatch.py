@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -60,8 +61,19 @@ from nats_core import EventType, MessageEnvelope, Topics
 from nats_core.events import BuildQueuedPayload, CommandPayload, ResultPayload
 from pydantic import ValidationError
 
+# ``Session`` is imported at runtime (not under TYPE_CHECKING) so the Layer 2
+# resolver-hook annotations resolve cleanly under ``typing.get_type_hints``,
+# which is exercised by ``test_tools_dispatch_contract`` for the swap-point
+# seam. ``jarvis.sessions.session`` only depends on ``jarvis.shared.constants``
+# so this introduces no import cycle with ``jarvis.tools``.
+from jarvis.sessions.session import Session
 from jarvis.tools._correlation import new_correlation_id
 from jarvis.tools.capabilities import CapabilityDescriptor
+from jarvis.tools.dispatch_types import (
+    FrontierEscalationContext,
+    FrontierTarget,
+    log_frontier_escalation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -482,12 +494,466 @@ def queue_build(
     return json.dumps(ack)
 
 
+# ---------------------------------------------------------------------------
+# escalate_to_frontier — DDR-014 Layer 1 (TASK-J003-010)
+#
+# Layer 1 carries the tool body, docstring contract, and config / provider
+# branches. Layer 2 (executor attended-only assertion) lands in
+# TASK-J003-011 and Layer 3 (tool-registry absence) in TASK-J003-012 — this
+# tool intentionally has no runtime context awareness; the surrounding
+# layers enforce the constitutional gates.
+#
+# Per ADR-ARCH-029 (redaction posture) and the AC of TASK-J003-010, the
+# instruction body MUST never appear in any log record or returned error
+# string. The structured INFO record carries ``instruction_length`` only.
+# ---------------------------------------------------------------------------
+
+# Frontier-call session placeholder. Layer 2 (TASK-J003-011) plugs a
+# real session resolver via ``_current_session_hook`` below; the placeholder
+# remains the value used in the structured log records so the
+# ``FrontierEscalationContext.session_id`` constraint stays satisfied without
+# leaking caller state into telemetry (ADR-ARCH-029).
+_FRONTIER_SESSION_PLACEHOLDER: str = "frontier-call"
+
+# Provider model aliases — closed map keyed by FrontierTarget.
+_GEMINI_MODEL: str = "gemini-3.1-pro"
+_OPUS_MODEL: str = "claude-opus-4-7"
+
+# Adapter labels surfaced into FrontierEscalationContext.adapter for
+# budget-trace bucketing per ADR-ARCH-030.
+_GEMINI_ADAPTER: str = "google-genai"
+_OPUS_ADAPTER: str = "anthropic"
+
+
+# ---------------------------------------------------------------------------
+# DDR-014 Layer 2 — executor assertion (TASK-J003-011).
+#
+# Two detection paths run BEFORE any provider SDK call so a rejection never
+# triggers outbound HTTP traffic:
+#
+#   1. Adapter check via ``_current_session_hook`` →
+#      ``Session.adapter`` ∈ ``ATTENDED_ADAPTER_IDS``.
+#   2. Caller-frame check via ``_async_subagent_frame_hook`` (preferred,
+#      ``AsyncSubAgentMiddleware`` metadata) with the session-state
+#      ``metadata['currently_in_subagent']`` flag as the F6/Finding-F6
+#      fallback per ASSUM-FRONTIER-CALLER-FRAME.
+#
+# Production wiring lands in ``jarvis.infrastructure.lifecycle.startup`` —
+# the lifecycle module assigns these hooks to a ``SessionManager``-backed
+# resolver and (when DeepAgents 0.5.3 exposes the metadata) the middleware
+# probe. Until either hook is wired, Layer 2 is a no-op so Layer 1 unit
+# tests for the tool body keep passing without setup.
+# ---------------------------------------------------------------------------
+
+# ADR-ARCH-016 consumer-surface list. Held as a frozenset of adapter-id
+# strings rather than ``Adapter`` enum members so duck-typed mocks (and the
+# session-state fallback path) compare cleanly against the value reported on
+# ``Session.adapter`` (a ``StrEnum`` whose ``str(...)`` is the lower-case
+# alias).
+ATTENDED_ADAPTER_IDS: frozenset[str] = frozenset({"telegram", "cli", "dashboard", "reachy"})
+
+
+# Module-level resolver hooks. Defaulting to ``None`` keeps Layer 2 inert
+# until ``jarvis.infrastructure.lifecycle.startup`` wires the production
+# resolvers; Layer-2 unit tests assign these directly via monkeypatch.
+_current_session_hook: Callable[[], Session | None] | None = None
+_async_subagent_frame_hook: Callable[[], bool | None] | None = None
+
+
+def _resolve_current_session() -> Session | None:
+    """Resolve the currently-active :class:`Session` via the registered hook.
+
+    Returns ``None`` when no hook is wired or the hook raised — the
+    surrounding Layer-2 logic treats both as "no attended session" (which
+    causes a rejection) rather than allowing a hook misconfiguration to
+    silently bypass the gate.
+    """
+    hook = _current_session_hook
+    if hook is None:
+        return None
+    try:
+        return hook()
+    except Exception:
+        # Boundary guard — Layer 2 must never raise out of the tool body.
+        return None
+
+
+def _is_async_subagent_frame() -> bool:
+    """Return ``True`` if the call is in an :class:`AsyncSubAgent` frame.
+
+    Two-path detection per DDR-014 + Finding F6:
+
+    1. **Middleware metadata** via ``_async_subagent_frame_hook``. The hook
+       is expected to return ``True``/``False`` when
+       ``AsyncSubAgentMiddleware`` exposes the answer, or ``None`` when the
+       metadata is unavailable in the running DeepAgents version
+       (ASSUM-FRONTIER-CALLER-FRAME). A raised exception is treated as
+       "unable to answer" and the session-state fallback runs.
+    2. **Session-state fallback** via the active session's
+       ``metadata['currently_in_subagent']`` flag. Used when the middleware
+       layer cannot answer — this is the resilience path Finding F6 calls
+       out: if one detection path fails the other must still hold.
+
+    Either path returning ``True`` triggers a Layer-2 rejection in
+    :func:`_check_attended_only`.
+    """
+    middleware_hook = _async_subagent_frame_hook
+    if middleware_hook is not None:
+        try:
+            result = middleware_hook()
+        except Exception:
+            result = None
+        # An explicit boolean from the middleware is authoritative — it
+        # has direct visibility into the call frame and supersedes the
+        # session-state fallback. Only when the metadata is genuinely
+        # unavailable (``None`` or raised) does the fallback path run.
+        if result is True:
+            return True
+        if result is False:
+            return False
+
+    # Session-state fallback (Finding F6).
+    session = _resolve_current_session()
+    if session is not None:
+        metadata = getattr(session, "metadata", None) or {}
+        if metadata.get("currently_in_subagent") is True:
+            return True
+
+    return False
+
+
+def _check_attended_only(
+    target: FrontierTarget,
+    correlation_id: str,
+    instruction_length: int,
+    adapter_label: str,
+) -> str | None:
+    """Layer 2 executor assertion — attended-only / non-subagent gate.
+
+    Returns a structured ``ERROR: attended_only — …`` string when the call
+    must be rejected, else ``None``. Both detection paths fire before any
+    provider SDK call (AC-004), and every rejection emits exactly one
+    structured INFO record with ``outcome="attended_only"`` (AC-007).
+
+    The function is a no-op when neither resolver hook is wired, so Layer 1
+    tests that exercise the tool body without a session manager continue to
+    reach the provider/config branches.
+    """
+    if _current_session_hook is None and _async_subagent_frame_hook is None:
+        # Layer 2 is dormant — production startup wires the hooks; tests
+        # for Layer 1 exercise the body directly.
+        return None
+
+    # ---- Path A — adapter check ------------------------------------------
+    session = _resolve_current_session()
+    if session is None:
+        adapter_id = "unknown"
+    else:
+        adapter_value = getattr(session, "adapter", None)
+        adapter_id = str(adapter_value) if adapter_value is not None else "unknown"
+
+    if adapter_id not in ATTENDED_ADAPTER_IDS:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            adapter_label,
+            instruction_length,
+            "attended_only",
+        )
+        return (
+            "ERROR: attended_only — escalate_to_frontier cannot be invoked "
+            f"from {adapter_id} adapter"
+        )
+
+    # ---- Path B — caller-frame check -------------------------------------
+    # Attended adapter passed; the spoofed-ambient case (attended session
+    # with an in-progress async-subagent frame) is the security-critical
+    # branch — the frame check OVERRIDES the attended-adapter pass.
+    if _is_async_subagent_frame():
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            adapter_label,
+            instruction_length,
+            "attended_only",
+        )
+        return (
+            "ERROR: attended_only — escalate_to_frontier cannot be invoked "
+            "from async-subagent frame"
+        )
+
+    return None
+
+
+def _emit_frontier_log(
+    target: FrontierTarget,
+    correlation_id: str,
+    adapter: str,
+    instruction_length: int,
+    outcome: Literal[
+        "success",
+        "config_missing",
+        "provider_unavailable",
+        "degraded_empty",
+    ],
+) -> None:
+    """Emit one structured INFO record via :func:`log_frontier_escalation`.
+
+    Centralised so every successful and degraded branch of
+    ``escalate_to_frontier`` routes through a single call site — the
+    one-log-per-call invariant (AC-008) is therefore enforced by
+    construction.
+    """
+    ctx = FrontierEscalationContext(
+        target=target,
+        session_id=_FRONTIER_SESSION_PLACEHOLDER,
+        correlation_id=correlation_id,
+        adapter=adapter,
+        instruction_length=instruction_length,
+        outcome=outcome,
+    )
+    log_frontier_escalation(ctx, logger)
+
+
+def _escalate_gemini(
+    instruction: str,
+    instruction_length: int,
+    correlation_id: str,
+) -> str:
+    """Gemini branch of ``escalate_to_frontier``.
+
+    Reads ``GOOGLE_API_KEY`` directly (the SDK reads the same env var
+    natively, so this aligns with operator expectations) and invokes the
+    ``gemini-3.1-pro`` model via :class:`google.genai.Client`. All error
+    paths produce a structured string per ADR-ARCH-021.
+    """
+    target = FrontierTarget.GEMINI_3_1_PRO
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _GEMINI_ADAPTER,
+            instruction_length,
+            "config_missing",
+        )
+        return "ERROR: config_missing — GOOGLE_API_KEY not set"
+
+    try:
+        # Lazy import: the SDK is in `[providers]` extras only, and tests
+        # patch ``google.genai.Client`` directly. Importing at module
+        # scope would couple a Phase-1 import-graph test to the optional
+        # extras and surface SDK warnings during unrelated test runs.
+        from google import genai
+
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=_GEMINI_MODEL,
+            contents=instruction,
+        )
+        text = getattr(response, "text", None) or ""
+    except Exception as exc:
+        # Boundary guard per AC-010: escalate_to_frontier never raises.
+        # The ``<short reason>`` is the exception class name — chosen so
+        # AC-009 (instruction body never echoed) holds even when the SDK
+        # embeds caller input in its error messages.
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _GEMINI_ADAPTER,
+            instruction_length,
+            "provider_unavailable",
+        )
+        return f"DEGRADED: provider_unavailable — {type(exc).__name__}"
+
+    if not text:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _GEMINI_ADAPTER,
+            instruction_length,
+            "degraded_empty",
+        )
+        return "DEGRADED: provider_unavailable — empty response"
+
+    _emit_frontier_log(
+        target,
+        correlation_id,
+        _GEMINI_ADAPTER,
+        instruction_length,
+        "success",
+    )
+    return text
+
+
+def _escalate_opus(
+    instruction: str,
+    instruction_length: int,
+    correlation_id: str,
+) -> str:
+    """Opus branch of ``escalate_to_frontier``.
+
+    Reads ``ANTHROPIC_API_KEY`` directly and invokes
+    ``claude-opus-4-7`` via :class:`anthropic.Anthropic`. The Anthropic
+    SDK returns ``response.content`` as a list of content blocks; the
+    text we surface is the first block's ``.text``. Empty content list
+    or empty text both map to the ``degraded_empty`` outcome.
+    """
+    target = FrontierTarget.OPUS_4_7
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _OPUS_ADAPTER,
+            instruction_length,
+            "config_missing",
+        )
+        return "ERROR: config_missing — ANTHROPIC_API_KEY not set"
+
+    try:
+        # Lazy import: keeps the dispatch module's import graph stable
+        # for the existing import-graph test, and lets unit tests patch
+        # ``anthropic.Anthropic`` without first paying the SDK's import
+        # cost.
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=_OPUS_MODEL,
+            max_tokens=4096,
+            messages=[{"role": "user", "content": instruction}],
+        )
+        content = getattr(response, "content", None) or []
+        text = ""
+        if content:
+            first = content[0]
+            text = getattr(first, "text", None) or ""
+    except Exception as exc:
+        # Boundary guard per AC-010 — see _escalate_gemini for the
+        # rationale on why we use ``type(exc).__name__`` rather than
+        # ``str(exc)`` in the DEGRADED string.
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _OPUS_ADAPTER,
+            instruction_length,
+            "provider_unavailable",
+        )
+        return f"DEGRADED: provider_unavailable — {type(exc).__name__}"
+
+    if not text:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            _OPUS_ADAPTER,
+            instruction_length,
+            "degraded_empty",
+        )
+        return "DEGRADED: provider_unavailable — empty response"
+
+    _emit_frontier_log(
+        target,
+        correlation_id,
+        _OPUS_ADAPTER,
+        instruction_length,
+        "success",
+    )
+    return text
+
+
+@tool(parse_docstring=True)
+def escalate_to_frontier(
+    instruction: str,
+    target: FrontierTarget = FrontierTarget.GEMINI_3_1_PRO,
+) -> str:
+    """ATTENDED-ONLY — cloud escape hatch. \
+Never invoke from ambient, learning, or async-subagent contexts.
+
+    Sends ``instruction`` to a cloud frontier model (Gemini 3.1 Pro by
+    default; Opus 4.7 as the alternate target) and returns the model's
+    response text as a string. Reserved for the rare case where a user
+    has explicitly asked for a frontier-quality answer in an attended
+    adapter session. Layers 2 + 3 (TASK-J003-011 / -012) enforce the
+    attended-only gate at the executor and tool-registry levels — this
+    tool body intentionally trusts that envelope.
+
+    Out-of-enum ``target`` values are rejected at argument coercion by
+    ``@tool(parse_docstring=True)`` before this function runs, so no
+    provider is contacted on bad input. Per ADR-ARCH-021 the function
+    never raises: every error path produces a structured string. Per
+    ADR-ARCH-029 the instruction body is never logged or echoed in any
+    error / degraded return string — only ``len(instruction)`` is
+    recorded as ``instruction_length`` on the structured INFO trace
+    emitted via :func:`log_frontier_escalation` with the budget-trace
+    tag ``model_alias="cloud-frontier"`` (ADR-ARCH-030).
+
+    Cost is high (cloud frontier models are an order of magnitude more
+    expensive than the local fleet); latency is provider-bound.
+
+    Args:
+        instruction: The free-form prompt to forward to the cloud
+                    frontier provider. Required. Treated as opaque text
+                    — no template substitution, no validation, no
+                    redaction is performed inside this tool.
+        target: Closed enum selecting the cloud frontier provider.
+               ``GEMINI_3_1_PRO`` routes through ``google_genai`` to the
+               ``gemini-3.1-pro`` model; ``OPUS_4_7`` routes through
+               ``anthropic`` to ``claude-opus-4-7``. Default
+               ``GEMINI_3_1_PRO``.
+
+    Returns:
+        The provider's response text on success, OR a structured error /
+        degraded string:
+
+          - ``ERROR: config_missing — GOOGLE_API_KEY not set``
+          - ``ERROR: config_missing — ANTHROPIC_API_KEY not set``
+          - ``DEGRADED: provider_unavailable — <short reason>``
+          - ``DEGRADED: provider_unavailable — empty response``
+    """
+    correlation_id = new_correlation_id()
+    instruction_length = len(instruction) if isinstance(instruction, str) else 0
+
+    # Pick the provider-side adapter tag used in the structured log records.
+    # On out-of-enum ``target`` values pydantic coercion already raised, but
+    # the gemini label is the safe default for the defensive fallthrough at
+    # the end of this function.
+    adapter_label = _OPUS_ADAPTER if target is FrontierTarget.OPUS_4_7 else _GEMINI_ADAPTER
+
+    # Layer 2 — executor assertion. Runs before any provider call so that
+    # a rejection produces no outbound HTTP attempt (DDR-014, AC-004). The
+    # assertion is dormant when no resolver hooks are wired (e.g. Layer 1
+    # unit tests of the tool body itself).
+    rejection = _check_attended_only(
+        target,
+        correlation_id,
+        instruction_length,
+        adapter_label,
+    )
+    if rejection is not None:
+        return rejection
+
+    if target is FrontierTarget.GEMINI_3_1_PRO:
+        return _escalate_gemini(instruction, instruction_length, correlation_id)
+    if target is FrontierTarget.OPUS_4_7:
+        return _escalate_opus(instruction, instruction_length, correlation_id)
+
+    # Defensive fallthrough: pydantic coercion already rejects out-of-enum
+    # values before the body runs, but ADR-ARCH-021 forbids raising even
+    # in unreachable branches.
+    return "ERROR: config_missing — unknown frontier target"
+
+
 __all__ = [
+    "ATTENDED_ADAPTER_IDS",
     "LOG_PREFIX_DISPATCH",
     "LOG_PREFIX_QUEUE_BUILD",
     "StubResponse",
+    "_async_subagent_frame_hook",
     "_capability_registry",
+    "_current_session_hook",
     "_stub_response_hook",
     "dispatch_by_capability",
+    "escalate_to_frontier",
     "queue_build",
 ]

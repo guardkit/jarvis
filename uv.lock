@@ -444,6 +444,7 @@ name = "jarvis"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anthropic" },
     { name = "asteval" },
     { name = "click" },
     { name = "deepagents" },
@@ -460,13 +461,26 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+dev = [
+    { name = "langgraph-cli" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-bdd" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "types-click" },
+    { name = "types-pyyaml" },
+]
 providers = [
+    { name = "google-genai" },
     { name = "langchain-anthropic" },
     { name = "langchain-google-genai" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "langgraph-cli" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -479,26 +493,38 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", specifier = ">=0.40" },
     { name = "asteval", specifier = ">=0.9.33" },
     { name = "click", specifier = ">=8.1" },
     { name = "deepagents", specifier = ">=0.5.3,<0.6" },
+    { name = "google-genai", marker = "extra == 'providers'", specifier = ">=0.3.0" },
     { name = "langchain-anthropic", marker = "extra == 'providers'", specifier = ">=0.2" },
     { name = "langchain-core", specifier = ">=0.3" },
     { name = "langchain-google-genai", marker = "extra == 'providers'", specifier = ">=2.0" },
     { name = "langchain-openai", specifier = ">=0.2" },
     { name = "langchain-tavily", specifier = ">=0.2" },
     { name = "langgraph", specifier = ">=0.3" },
+    { name = "langgraph-cli", marker = "extra == 'dev'", specifier = ">=0.1" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "nats-core", editable = "../nats-core" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "pytest-bdd", marker = "extra == 'dev'", specifier = ">=8.1,<9" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "structlog", specifier = ">=24.1" },
+    { name = "types-click", marker = "extra == 'dev'", specifier = ">=7.1" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6" },
 ]
-provides-extras = ["providers"]
+provides-extras = ["providers", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "langgraph-cli", specifier = ">=0.1" },
     { name = "mypy", specifier = ">=1.10" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
@@ -675,6 +701,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2e/f2/cf8086e1f1a3358d9228805614e72602c281b18307f3fae64a5b854aad2d/langgraph_checkpoint-4.0.2.tar.gz", hash = "sha256:4f6f99cba8e272deabf81b2d8cdc96582af07a57a6ad591cdf216bb310497039", size = 160810, upload-time = "2026-04-15T21:03:00.062Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b9/5a/6dba29dd89b0a46ae21c707da0f9d17e94f27d3e481ed15bc99d6bd20aa6/langgraph_checkpoint-4.0.2-py3-none-any.whl", hash = "sha256:59b0f29216128a629c58dd07c98aa004f82f51805d5573126ffb419b753ff253", size = 51000, upload-time = "2026-04-15T21:02:59.096Z" },
+]
+
+[[package]]
+name = "langgraph-cli"
+version = "0.4.24"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "httpx" },
+    { name = "langgraph-sdk" },
+    { name = "pathspec" },
+    { name = "python-dotenv" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1c/77/34ebed84736dacbf164617794c15cd9271c18773cf32eeb7086c8b7b6dfd/langgraph_cli-0.4.24.tar.gz", hash = "sha256:8f05f0aec38a5da3cb0e7250123530e83c0179d74be0021050bc5cd36ac0dafb", size = 1027613, upload-time = "2026-04-22T18:49:30.921Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/89/c5b09ad2dffb411987529f32e81fe318ccef3c2fdff2442e7c25b05b108c/langgraph_cli-0.4.24-py3-none-any.whl", hash = "sha256:aaf4dbecd752391c1489864da3a8e0af08e6bb0684d6516007617ce0abe9404d", size = 75486, upload-time = "2026-04-22T18:49:29.888Z" },
 ]
 
 [[package]]

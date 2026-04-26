@@ -1,0 +1,230 @@
+{
+  "task_id": "TASK-J003-009",
+  "timestamp": "2026-04-26T09:09:10.283672",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 22,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".guardkit/autobuild/TASK-J003-008/checkpoints.json",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/src/jarvis/agents/subagent_registry.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/src/jarvis/agents/subagents/__init__.py",
+    "src/jarvis/agents/subagents/__init__.py",
+    "src/jarvis/tools/dispatch.py",
+    "tasks/backlog/TASK-J003-009-implement-subagent-registry-build-async-subagents.md",
+    "tasks/backlog/TASK-J003-011-implement-escalate-to-frontier-layer-2-executor-assertion.md"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J003-009-implementation-plan.md",
+    ".claude/task-plans/TASK-J003-011-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J003-009/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-009/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-009/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-011/turn_context.json",
+    ".guardkit/bdd/TASK-J003-009_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/.guardkit/autobuild/TASK-J003-009/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/src/jarvis/agents/subagent_registry.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_subagent_registry.py",
+    "src/jarvis/agents/subagent_registry.py",
+    "tasks/design_approved/TASK-J003-009-implement-subagent-registry-build-async-subagents.md",
+    "tasks/design_approved/TASK-J003-011-implement-escalate-to-frontier-layer-2-executor-assertion.md",
+    "tests/test_subagent_registry.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_subagent_registry.py"
+  ],
+  "summary": "22 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 44,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 3,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_a_single_jarvisreasoner_async_subagent_is_registered_at_startup",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_jarvisreasoner_description_carries_cost_and_latency_signals_the_reasoning_model_can_read",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_adding_an_unsanctioned_subagent_does_not_silently_appear_in_the_registry",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+    ],
+    "tag": "@task:TASK-J003-009"
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "src/jarvis/agents/subagent_registry.py exposes build_async_subagents(config: JarvisConfig) -> list[AsyncSubAgent].",
+      "status": "complete",
+      "evidence": "Created src/jarvis/agents/subagent_registry.py with the public function build_async_subagents(config: JarvisConfig) -> list[AsyncSubAgent]; module __all__ exports it. Tests TestAC001PublicFactory.test_module_exports_build_async_subagents and test_returns_list pass.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Returns a list of exactly one element.",
+      "status": "complete",
+      "evidence": "build_async_subagents returns [spec] where spec is a single AsyncSubAgent dict. TestAC002SingleElement.test_returns_single_entry asserts len(result) == 1.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "The element satisfies: name == 'jarvis-reasoner'; graph_id == 'jarvis_reasoner'; description is non-empty.",
+      "status": "complete",
+      "evidence": "_REASONER_NAME='jarvis-reasoner' and _REASONER_GRAPH_ID='jarvis_reasoner' module constants populate the spec; _REASONER_DESCRIPTION is a multi-line non-empty string. TestAC003CoreFields verifies all three fields.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Description must contain ALL of the following substrings (routing signals): gpt-oss-120b, on the premises, sub-second, two to four minutes, critic, researcher, planner.",
+      "status": "complete",
+      "evidence": "_REASONER_DESCRIPTION embeds every required substring verbatim. TestAC004RequiredRoutingSignals.test_description_contains_required_substrings asserts each is present and reports any missing ones.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Description must NOT contain any of: deep_reasoner, adversarial_critic, long_research, quick_local, cloud-tier promises \u2014 asserted by TASK-J003-020 regression test (Context A concern #3).",
+      "status": "complete",
+      "evidence": "Description copy was authored fresh and contains none of the four-roster legacy names or the substring 'cloud'. TestAC005ForbiddenTokensAbsent.test_description_excludes_forbidden_substrings checks each forbidden token (case-insensitive).",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "AsyncSubAgent is imported from deepagents (0.5.3 TypedDict); no redefinition.",
+      "status": "complete",
+      "evidence": "subagent_registry.py performs `from deepagents import AsyncSubAgent` and re-exports the same symbol. TestAC006UsesDeepAgentsAsyncSubAgent asserts identity with deepagents.AsyncSubAgent both on first import and after importlib.reload.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Function is pure \u2014 given the same config, returns the same description text (deterministic for Graphiti trace-richness).",
+      "status": "complete",
+      "evidence": "Description is a module-level constant string; build_async_subagents only constructs and returns the spec dict. TestAC007Deterministic asserts repeated calls with the same JarvisConfig produce equal results, and that two distinct fresh configs produce equal results too.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "src/jarvis/agents/subagents/__init__.py re-exports the jarvis_reasoner.graph symbol so langgraph.json can bind jarvis_reasoner by module path.",
+      "status": "complete",
+      "evidence": "Updated src/jarvis/agents/subagents/__init__.py to `from jarvis.agents.subagents.jarvis_reasoner import graph` and added 'graph' to __all__. TestAC008GraphReExport asserts subagents_pkg.graph is the same object as jarvis_reasoner.graph and that 'graph' is in __all__.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagents/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "No LLM calls; no I/O beyond reading config.",
+      "status": "complete",
+      "evidence": "build_async_subagents only reads config.supervisor_model for a debug log line and constructs a TypedDict; it never invokes init_chat_model or create_deep_agent. TestAC009NoNetworkAtBuildTime patches both and asserts neither is called from build_async_subagents itself.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`ruff check` returns 'All checks passed!' for the new and modified files; `ruff format` reports zero changes after the test file was reformatted. Full pytest run (1296+ tests) passes with exit 0.",
+      "test_file": "tests/test_subagent_registry.py",
+      "implementation_files": [
+        "src/jarvis/agents/subagent_registry.py",
+        "src/jarvis/agents/subagents/__init__.py",
+        "tests/test_subagent_registry.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 42.6976857919999
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 209.43878933399992
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "tests_run": 22,
+  "tests_failed": 0,
+  "coverage_pct": 100.0,
+  "output_summary": "22/22 tests in tests/test_subagent_registry.py passed; subagent_registry.py and subagents/__init__.py at 100% line coverage.",
+  "quality_gates_passed": true
+}
