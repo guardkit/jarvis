@@ -1,19 +1,27 @@
 ---
-id: TASK-J003-023
-title: Acceptance test — test_routing_e2e (7 canned prompts)
-task_type: testing
-status: pending
-created: 2026-04-24T00:00:00Z
-updated: 2026-04-24T00:00:00Z
-priority: high
 complexity: 6
-wave: 5
-implementation_mode: task-work
+created: 2026-04-24 00:00:00+00:00
+dependencies:
+- TASK-J003-021
+- TASK-J003-022
 estimated_minutes: 113
-dependencies: [TASK-J003-021, TASK-J003-022]
-parent_review: TASK-REV-J003
 feature_id: FEAT-J003
-tags: [phase-2, jarvis, feat-jarvis-003, tests, acceptance, e2e]
+id: TASK-J003-023
+implementation_mode: task-work
+parent_review: TASK-REV-J003
+priority: high
+status: design_approved
+tags:
+- phase-2
+- jarvis
+- feat-jarvis-003
+- tests
+- acceptance
+- e2e
+task_type: testing
+title: Acceptance test — test_routing_e2e (7 canned prompts)
+updated: 2026-04-24 00:00:00+00:00
+wave: 5
 ---
 
 # Acceptance test — test_routing_e2e (7 canned prompts)
