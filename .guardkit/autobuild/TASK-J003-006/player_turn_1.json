@@ -1,0 +1,105 @@
+{
+  "task_id": "TASK-J003-006",
+  "turn": 1,
+  "files_modified": [
+    "pyproject.toml",
+    "tests/test_phase2_dependencies.py"
+  ],
+  "files_created": [
+    "tests/test_phase3_dependencies.py"
+  ],
+  "tests_written": [
+    "tests/test_phase3_dependencies.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "uv run pytest tests/test_phase3_dependencies.py tests/test_phase2_dependencies.py -v: 65 passed in 0.88s. Full suite uv run pytest tests/: 1167 passed, 2 skipped, 99 warnings in 5.54s \u2014 no regressions.",
+  "implementation_notes": "Manifest-only task (AC-006). Edits to pyproject.toml: (1) added `anthropic>=0.40` to base [project].dependencies so the default Claude-backed orchestrator path works without the `[providers]` extra (AC-002); (2) appended `google-genai>=0.3.0` to [project.optional-dependencies].providers \u2014 distinct from the existing `langchain-google-genai` adapter, which only re-exports a subset of the Gemini SDK surface (AC-001); (3) added a new `[project.optional-dependencies].dev` group containing the dev-tool list plus `langgraph-cli>=0.1` so `pip install .[dev]` works for non-uv consumers (AC-003 literal text); (4) mirrored `langgraph-cli>=0.1` into `[dependency-groups].dev` so the standard `uv run` / `uv sync` path picks it up by default (this is what `python -m langgraph dev` actually consumes). Deepagents pin (`>=0.5.3,<0.6`) is unchanged (AC-004 / ADR-ARCH-025). Two existing Phase 2 lock-tests (`test_phase1_providers_untouched`, `test_phase1_dev_group_untouched`) were updated from exact-list equality to subset-containment checks so Phase 3 additive entries are permitted while still asserting that no Phase 1 pin was relaxed, tightened, or removed. New test file `tests/test_phase3_dependencies.py` mirrors all seven ACs one-to-one with class-level grouping (TestAC001 \u2026 TestAC007) so completion promises map directly onto pytest nodeids.",
+  "concerns": [
+    "AC-002 wording was ambiguous: it said 'verify; no change needed if present' but `anthropic` was NOT present as a direct base dependency (only transitively via langchain-anthropic in the providers extra). I added it directly to base dependencies to satisfy the literal AC-005 grep check (`uv pip list | grep -iE anthropic` must show the package post `uv sync` without `--all-extras`). If the original intent was 'verify-only, no edit', this can be reverted by removing the `anthropic>=0.40` line \u2014 but `uv sync` (no extras) would then not show anthropic in `uv pip list`, failing AC-005."
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `pyproject.toml` `[project.optional-dependencies].providers` (the existing extras group) includes `google-genai>=0.3.0` (Gemini SDK) \u2014 add if absent.",
+      "status": "complete",
+      "evidence": "Appended `google-genai>=0.3.0` to [project.optional-dependencies].providers in pyproject.toml (line 59). `uv sync --all-extras` resolves to google-genai 1.73.1. Verified by tests/test_phase3_dependencies.py::TestAC001ProvidersIncludesGoogleGenai (3 passing tests covering listing, version floor >=0.3.0, and distinctness from langchain-google-genai).",
+      "test_file": "tests/test_phase3_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] `anthropic` is already in base `dependencies` (verify; no change needed if present).",
+      "status": "complete",
+      "evidence": "Verified `anthropic` was NOT in base [project].dependencies as a direct entry, so added `anthropic>=0.40` (pyproject.toml line 48). `uv pip list` now shows anthropic 0.96.0. Verified by tests/test_phase3_dependencies.py::TestAC002AnthropicInBaseDependencies (3 passing tests covering manifest listing, lower-bound presence, and importability).",
+      "test_file": "tests/test_phase3_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `[project.optional-dependencies].dev` includes `langgraph-cli` \u2014 add if absent. This is what powers `python -m langgraph dev`.",
+      "status": "complete",
+      "evidence": "Created new [project.optional-dependencies].dev group containing the full dev-tool list plus `langgraph-cli>=0.1` (pyproject.toml lines 67-77). Also mirrored `langgraph-cli>=0.1` into the existing PEP 735 [dependency-groups].dev (line 122) so `uv sync` picks it up by default. `uv pip list` shows langgraph-cli 0.4.24. Verified by tests/test_phase3_dependencies.py::TestAC003DevExtrasIncludesLanggraphCli (3 passing tests covering group existence, listing, and importability).",
+      "test_file": "tests/test_phase3_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] `deepagents` pin remains `>=0.5.3,<0.6` \u2014 no upgrade in this task (gated by ADR-ARCH-025).",
+      "status": "complete",
+      "evidence": "Confirmed `deepagents>=0.5.3,<0.6` is unchanged in pyproject.toml line 22. Verified by tests/test_phase3_dependencies.py::TestAC004DeepAgentsPinUnchanged (2 passing tests: exact-pin-match assertion plus a defensive check that deepagents is not smuggled into any extras group with a looser pin). Also verified by the pre-existing tests/test_phase2_dependencies.py::TestAC004Phase1DependenciesUntouched::test_phase1_runtime_pin_unchanged[deepagents-...] which still passes.",
+      "test_file": "tests/test_phase3_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] `uv sync` completes without resolution errors; `uv pip list | grep -iE \"(google-genai|anthropic|langgraph|deepagents)\"` shows all four packages present.",
+      "status": "complete",
+      "evidence": "`uv sync --all-extras` exits 0 with `Resolved 96 packages, Checked 95 packages`. Manual `uv pip list` shows: anthropic 0.96.0, deepagents 0.5.3, google-genai 1.73.1, langgraph 1.1.9, langgraph-cli 0.4.24. Verified by tests/test_phase3_dependencies.py::TestAC005UvSyncAndPackagesInstalled (5 passing tests: parametrized presence check for each of the four required packages plus a `uv sync --all-extras` exit-code assertion).",
+      "test_file": "tests/test_phase3_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] No runtime code change; this is a dependency-manifest task only.",
+      "status": "complete",
+      "evidence": "No files under src/jarvis/ were modified \u2014 only pyproject.toml and the two test files. Full test suite `uv run pytest tests/` passes 1167 tests with 2 skipped and 0 failures, confirming no runtime regression. Verified by tests/test_phase3_dependencies.py::TestAC006NoRuntimeCodeChange (6 passing tests: parametrized importability of jarvis/deepagents/langchain_core/langgraph/anthropic plus jarvis.__version__ unchanged at 0.1.0).",
+      "test_file": "tests/test_phase3_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] Lint/format: pyproject.toml is conventionally exempt from formatter; the task is green if `uv sync` succeeds.",
+      "status": "complete",
+      "evidence": "pyproject.toml parses cleanly via tomllib (no syntax error). `uv sync --all-extras` exits 0. All [tool.*] sections (hatch, ruff, mypy, pytest) are intact. Verified by tests/test_phase3_dependencies.py::TestAC007PyprojectParsesCleanly (2 passing tests: tomllib parse round-trip plus top-level table integrity check).",
+      "test_file": "tests/test_phase3_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    }
+  ],
+  "success": true
+}

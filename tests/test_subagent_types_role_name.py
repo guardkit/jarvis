@@ -96,9 +96,7 @@ class TestStrCoercionRoundTrip:
             ("planner", RoleName.PLANNER),
         ],
     )
-    def test_role_name_value_lookup_returns_member(
-        self, value: str, expected: RoleName
-    ) -> None:
+    def test_role_name_value_lookup_returns_member(self, value: str, expected: RoleName) -> None:
         assert RoleName(value) is expected
 
     @pytest.mark.parametrize(
@@ -124,9 +122,7 @@ class TestStrCoercionRoundTrip:
         "member",
         list(FrontierTarget),
     )
-    def test_frontier_target_instance_equals_value_string(
-        self, member: FrontierTarget
-    ) -> None:
+    def test_frontier_target_instance_equals_value_string(self, member: FrontierTarget) -> None:
         assert member == member.value
 
 
@@ -159,9 +155,7 @@ class TestUnknownValueRaisesValueError:
         "value",
         ["", "GEMINI", "gemini_3_1_pro", "opus_4_7", "claude-opus-4-7"],
     )
-    def test_frontier_target_non_member_value_raises_value_error(
-        self, value: str
-    ) -> None:
+    def test_frontier_target_non_member_value_raises_value_error(self, value: str) -> None:
         with pytest.raises(ValueError):
             FrontierTarget(value)
 
@@ -183,9 +177,7 @@ class TestImportPurity:
             patch("builtins.open") as open_mock,
             patch("socket.socket") as socket_mock,
         ):
-            importlib.reload(
-                importlib.import_module("jarvis.agents.subagents.types")
-            )
+            importlib.reload(importlib.import_module("jarvis.agents.subagents.types"))
         open_mock.assert_not_called()
         socket_mock.assert_not_called()
 
