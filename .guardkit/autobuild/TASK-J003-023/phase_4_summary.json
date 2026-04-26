@@ -1,0 +1,7 @@
+{
+  "tests_run": 1587,
+  "tests_failed": 0,
+  "coverage_pct": 91.71,
+  "output_summary": "1585 passed, 2 skipped, 0 failed in 12.26s; tests/test_routing_e2e.py 25/25 pass; coverage 91.71% on src/jarvis.",
+  "quality_gates_passed": true
+}

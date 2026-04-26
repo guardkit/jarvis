@@ -1,0 +1,236 @@
+{
+  "task_id": "TASK-J003-023",
+  "timestamp": "2026-04-26T10:35:05.298100",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 7,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": null
+  },
+  "files_modified": [
+    ".claude/task-plans/TASK-J003-023-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J003-019/checkpoints.json",
+    ".guardkit/autobuild/TASK-J003-023/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-024/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-024/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-024/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-024/turn_context.json",
+    ".guardkit/autobuild/TASK-J003-024/turn_state_turn_1.json",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_routing_e2e.py",
+    "tasks/design_approved/TASK-J003-023-acceptance-test-routing-e2e.md",
+    "tests/_shims/langgraph/__main__.py",
+    "tests/test_langgraph_json.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J003-023/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J003-023/task_work_results.json",
+    ".guardkit/autobuild/TASK-J003-024/checkpoints.json",
+    ".guardkit/bdd/TASK-J003-023_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/.guardkit/autobuild/TASK-J003-023/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_routing_e2e.py",
+    "tests/test_routing_e2e.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J003/tests/test_routing_e2e.py"
+  ],
+  "summary": "7 tests passed",
+  "sdk_turns": {
+    "turns_used": 60,
+    "max_turns": 100,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 7,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_supervisor_routes_the_seven_canned_acceptance_prompts_to_the_expected_tools[\"What's 15% of 847?\"-calculate]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_supervisor_routes_the_seven_canned_acceptance_prompts_to_the_expected_tools[\"Summarise /tmp/test.md\"-read_file]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_supervisor_routes_the_seven_canned_acceptance_prompts_to_the_expected_tools[\"Critique this architecture doc for subtle flaws.\"-start_async_task targeting jarvis-reasoner with role critic]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_supervisor_routes_the_seven_canned_acceptance_prompts_to_the_expected_tools[\"Research Meta-Harness deeply.\"-start_async_task targeting jarvis-reasoner with role researcher]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_supervisor_routes_the_seven_canned_acceptance_prompts_to_the_expected_tools[\"Plan the migration to Python 3.13.\"-start_async_task targeting jarvis-reasoner with role planner]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_supervisor_routes_the_seven_canned_acceptance_prompts_to_the_expected_tools[\"Ask Gemini 3.1 Pro for a frontier opinion on this ADR.\"-escalate_to_frontier with the default target]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-003-async-subagent-and-frontier-escape.test_feat_jarvis_003_async_subagent_and_frontier_escape",
+        "scenario_name": "test_the_supervisor_routes_the_seven_canned_acceptance_prompts_to_the_expected_tools[\"Build FEAT-JARVIS-EXAMPLE-001 on the jarvis repo.\"-queue_build]",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+    ],
+    "tag": "@task:TASK-J003-023"
+  },
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "tests/test_routing_e2e.py builds the full supervisor via build_supervisor(test_config, tools=<FEAT-J002 set>, async_subagents=build_async_subagents(test_config), ambient_tool_factory=...).",
+      "status": "complete",
+      "evidence": "TestAC001SupervisorBuiltViaBuildSupervisor.test_full_supervisor_built_via_build_supervisor exercises the exact build_supervisor(...) call shape demanded by the AC and asserts the return type is CompiledStateGraph. The same wiring is reused for every parametrised routing scenario via the _build_routing_supervisor helper, which calls build_async_subagents(stub_registry_config) and wires the FEAT-J002 attended 10-tool surface plus an ambient_tool_factory closure that yields assemble_tool_list(..., include_frontier=False).",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Attended adapter (adapter_id=\"cli\") is set in the session context.",
+      "status": "complete",
+      "evidence": "The cli_session fixture builds a Session with adapter=Adapter.CLI and the cli_session_context fixture wires jarvis.tools.dispatch._current_session_hook to return that session for the duration of each scenario. TestAC002AttendedCliAdapterInSessionContext.test_attended_cli_adapter_visible_via_resolver_hook independently asserts that _resolve_current_session() returns a session whose adapter equals Adapter.CLI (str value \"cli\"). The hook is restored to its original value on teardown so the suite stays test-isolated.",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Seven parametrised prompts and their expected tool-call first step (per scenario): 'What's 15% of 847?' -> calculate, 'Summarise /tmp/test.md' -> read_file, 'Critique...' -> start_async_task with role=critic, 'Research...' -> start_async_task with role=researcher, 'Plan...' -> start_async_task with role=planner, 'Ask Gemini 3.1 Pro...' -> escalate_to_frontier(target=GEMINI_3_1_PRO), 'Build FEAT-JARVIS-EXAMPLE-001...' -> queue_build.",
+      "status": "complete",
+      "evidence": "The _SCENARIOS module-level list enumerates exactly seven entries (asserted by TestStructuralAssertionsOnly.test_seven_scenarios_present and the scenario_id range check). Each entry is exercised by TestRoutingScenarios.test_supervisor_routes_canned_prompt \u2014 the FakeMessagesListChatModel is canned with the expected tool_call as its first AIMessage. After supervisor.ainvoke the test reads result['messages'], picks out the first AIMessage with tool_calls, and asserts (a) tool_call['name'] equals the expected tool, and (b) the contractual first-call args match expected_arg_subset. For prompts 3-5 the description payload's 'role' key is additionally JSON-decoded and compared to expected_role to lock down the AsyncSubAgent dispatch shape.",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Assertions are structural (tool name + first-call arguments), not behavioural (final NL output).",
+      "status": "complete",
+      "evidence": "TestRoutingScenarios.test_supervisor_routes_canned_prompt asserts only on tool_call['name'] and tool_call['args'] from the first AIMessage; nothing in the test reads the final message content. TestStructuralAssertionsOnly.test_scenarios_table_carries_no_nl_assertion_keys is a regression guard: it iterates _SCENARIOS and fails if any scenario row defines a forbidden NL key (expected_nl, expected_text, expected_response, expected_content, expected_output, expected_message). This mechanically prevents future contributors from sneaking in NL-output assertions.",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "LLM is mocked with FakeListChatModel or equivalent returning deterministic tool-call sequences; zero real LLM calls.",
+      "status": "complete",
+      "evidence": "_BindableFakeChatModel subclasses langchain_core.language_models.fake_chat_models.FakeMessagesListChatModel and returns self from bind_tools (the upstream class raises NotImplementedError, which DeepAgents would otherwise hit during graph compile). Each scenario's _make_fake_model returns a 2-response cycling instance whose first response is the expected tool-call AIMessage and whose second response is the AIMessage with no tool_calls that terminates the agent loop. TestZeroRealLLMCalls.test_fake_model_cursor_advances_exactly_twice patches jarvis.agents.supervisor.init_chat_model via mock and asserts the patched seam was called exactly once with config.supervisor_model \u2014 i.e. no real provider client was ever constructed. TestDefensiveFixtureInvariants.test_asyncmock_is_not_used_in_place_of_chat_model guards against a future fixture refactor that would silently swap the fake for an AsyncMock.",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Provider SDKs (google-genai, anthropic) are mocked for prompt 6.",
+      "status": "complete",
+      "evidence": "The frontier_provider_mocks fixture patches both google.genai.Client and anthropic.Anthropic, sets GOOGLE_API_KEY and ANTHROPIC_API_KEY to fake placeholder values via patch.dict(os.environ, ...), and pre-canned generate_content / messages.create return values. TestProviderSDKsMockedForFrontierEscalation.test_gemini_client_invoked_via_patched_sdk drives prompt 6 end-to-end and asserts the patched google.genai.Client class was constructed exactly once and gemini_client.models.generate_content was awaited via the patched object \u2014 proving the mock is actually exercised. The anthropic.Anthropic patch is asserted present (anthropic_cls is not None) so a future flip of target=OPUS_4_7 cannot leak to the real SDK.",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "uv run pytest tests/test_routing_e2e.py -v passes.",
+      "status": "complete",
+      "evidence": "Local run: 25 passed in 1.92s on uv run pytest tests/test_routing_e2e.py -v (Python 3.12.4). The 25 collected tests cover AC-001 through AC-006 plus structural-only / helper / defensive guards. The wider suite (tests/ excluding the new module) also passes \u2014 1560 passed, 2 skipped \u2014 so no regression was introduced.",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Test runtime < 5 seconds on M2 Max (no network I/O; all mocks).",
+      "status": "complete",
+      "evidence": "Measured runtime: 1.92 seconds for the 25-test module locally. All external seams are patched: init_chat_model (no provider client construction), deepagents.middleware.async_subagents._ClientCache.get_async (in-process _SDKClientSimulator with no HTTP), google.genai.Client, anthropic.Anthropic, plus environment-variable injection of fake API keys. Zero network sockets are opened in any code path the test exercises.",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "uv run ruff check tests/test_routing_e2e.py reports 'All checks passed!'. uv run ruff format tests/test_routing_e2e.py applied formatting and ruff format --check now reports clean. mypy raises only the same 'Skipping analyzing jarvis.*' import-untyped notes and 'Returning Any from function declared to return list[Any]' notes that already affect the existing tests/test_supervisor_with_subagents.py module \u2014 i.e. consistent with the codebase's accepted mypy posture for fixtures that wrap untyped jarvis modules.",
+      "test_file": "tests/test_routing_e2e.py",
+      "implementation_files": [
+        "tests/test_routing_e2e.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 75.39352070799941
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 216.66266154200093
+    }
+  ]
+}
