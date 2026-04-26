@@ -61,6 +61,12 @@ from nats_core import EventType, MessageEnvelope, Topics
 from nats_core.events import BuildQueuedPayload, CommandPayload, ResultPayload
 from pydantic import ValidationError
 
+# ``Session`` is imported at runtime (not under TYPE_CHECKING) so the Layer 2
+# resolver-hook annotations resolve cleanly under ``typing.get_type_hints``,
+# which is exercised by ``test_tools_dispatch_contract`` for the swap-point
+# seam. ``jarvis.sessions.session`` only depends on ``jarvis.shared.constants``
+# so this introduces no import cycle with ``jarvis.tools``.
+from jarvis.sessions.session import Session
 from jarvis.tools._correlation import new_correlation_id
 from jarvis.tools.capabilities import CapabilityDescriptor
 from jarvis.tools.dispatch_types import (
@@ -502,10 +508,11 @@ def queue_build(
 # string. The structured INFO record carries ``instruction_length`` only.
 # ---------------------------------------------------------------------------
 
-# Frontier-call session placeholder. Layer 2 (TASK-J003-011) will plug a
-# real session-id resolver into the executor wrapper; Layer 1 records a
-# stable placeholder so the FrontierEscalationContext field constraint
-# (`session_id: str`) is satisfied without leaking caller state.
+# Frontier-call session placeholder. Layer 2 (TASK-J003-011) plugs a
+# real session resolver via ``_current_session_hook`` below; the placeholder
+# remains the value used in the structured log records so the
+# ``FrontierEscalationContext.session_id`` constraint stays satisfied without
+# leaking caller state into telemetry (ADR-ARCH-029).
 _FRONTIER_SESSION_PLACEHOLDER: str = "frontier-call"
 
 # Provider model aliases — closed map keyed by FrontierTarget.
@@ -516,6 +523,166 @@ _OPUS_MODEL: str = "claude-opus-4-7"
 # budget-trace bucketing per ADR-ARCH-030.
 _GEMINI_ADAPTER: str = "google-genai"
 _OPUS_ADAPTER: str = "anthropic"
+
+
+# ---------------------------------------------------------------------------
+# DDR-014 Layer 2 — executor assertion (TASK-J003-011).
+#
+# Two detection paths run BEFORE any provider SDK call so a rejection never
+# triggers outbound HTTP traffic:
+#
+#   1. Adapter check via ``_current_session_hook`` →
+#      ``Session.adapter`` ∈ ``ATTENDED_ADAPTER_IDS``.
+#   2. Caller-frame check via ``_async_subagent_frame_hook`` (preferred,
+#      ``AsyncSubAgentMiddleware`` metadata) with the session-state
+#      ``metadata['currently_in_subagent']`` flag as the F6/Finding-F6
+#      fallback per ASSUM-FRONTIER-CALLER-FRAME.
+#
+# Production wiring lands in ``jarvis.infrastructure.lifecycle.startup`` —
+# the lifecycle module assigns these hooks to a ``SessionManager``-backed
+# resolver and (when DeepAgents 0.5.3 exposes the metadata) the middleware
+# probe. Until either hook is wired, Layer 2 is a no-op so Layer 1 unit
+# tests for the tool body keep passing without setup.
+# ---------------------------------------------------------------------------
+
+# ADR-ARCH-016 consumer-surface list. Held as a frozenset of adapter-id
+# strings rather than ``Adapter`` enum members so duck-typed mocks (and the
+# session-state fallback path) compare cleanly against the value reported on
+# ``Session.adapter`` (a ``StrEnum`` whose ``str(...)`` is the lower-case
+# alias).
+ATTENDED_ADAPTER_IDS: frozenset[str] = frozenset({"telegram", "cli", "dashboard", "reachy"})
+
+
+# Module-level resolver hooks. Defaulting to ``None`` keeps Layer 2 inert
+# until ``jarvis.infrastructure.lifecycle.startup`` wires the production
+# resolvers; Layer-2 unit tests assign these directly via monkeypatch.
+_current_session_hook: Callable[[], Session | None] | None = None
+_async_subagent_frame_hook: Callable[[], bool | None] | None = None
+
+
+def _resolve_current_session() -> Session | None:
+    """Resolve the currently-active :class:`Session` via the registered hook.
+
+    Returns ``None`` when no hook is wired or the hook raised — the
+    surrounding Layer-2 logic treats both as "no attended session" (which
+    causes a rejection) rather than allowing a hook misconfiguration to
+    silently bypass the gate.
+    """
+    hook = _current_session_hook
+    if hook is None:
+        return None
+    try:
+        return hook()
+    except Exception:
+        # Boundary guard — Layer 2 must never raise out of the tool body.
+        return None
+
+
+def _is_async_subagent_frame() -> bool:
+    """Return ``True`` if the call is in an :class:`AsyncSubAgent` frame.
+
+    Two-path detection per DDR-014 + Finding F6:
+
+    1. **Middleware metadata** via ``_async_subagent_frame_hook``. The hook
+       is expected to return ``True``/``False`` when
+       ``AsyncSubAgentMiddleware`` exposes the answer, or ``None`` when the
+       metadata is unavailable in the running DeepAgents version
+       (ASSUM-FRONTIER-CALLER-FRAME). A raised exception is treated as
+       "unable to answer" and the session-state fallback runs.
+    2. **Session-state fallback** via the active session's
+       ``metadata['currently_in_subagent']`` flag. Used when the middleware
+       layer cannot answer — this is the resilience path Finding F6 calls
+       out: if one detection path fails the other must still hold.
+
+    Either path returning ``True`` triggers a Layer-2 rejection in
+    :func:`_check_attended_only`.
+    """
+    middleware_hook = _async_subagent_frame_hook
+    if middleware_hook is not None:
+        try:
+            result = middleware_hook()
+        except Exception:
+            result = None
+        # An explicit boolean from the middleware is authoritative — it
+        # has direct visibility into the call frame and supersedes the
+        # session-state fallback. Only when the metadata is genuinely
+        # unavailable (``None`` or raised) does the fallback path run.
+        if result is True:
+            return True
+        if result is False:
+            return False
+
+    # Session-state fallback (Finding F6).
+    session = _resolve_current_session()
+    if session is not None:
+        metadata = getattr(session, "metadata", None) or {}
+        if metadata.get("currently_in_subagent") is True:
+            return True
+
+    return False
+
+
+def _check_attended_only(
+    target: FrontierTarget,
+    correlation_id: str,
+    instruction_length: int,
+    adapter_label: str,
+) -> str | None:
+    """Layer 2 executor assertion — attended-only / non-subagent gate.
+
+    Returns a structured ``ERROR: attended_only — …`` string when the call
+    must be rejected, else ``None``. Both detection paths fire before any
+    provider SDK call (AC-004), and every rejection emits exactly one
+    structured INFO record with ``outcome="attended_only"`` (AC-007).
+
+    The function is a no-op when neither resolver hook is wired, so Layer 1
+    tests that exercise the tool body without a session manager continue to
+    reach the provider/config branches.
+    """
+    if _current_session_hook is None and _async_subagent_frame_hook is None:
+        # Layer 2 is dormant — production startup wires the hooks; tests
+        # for Layer 1 exercise the body directly.
+        return None
+
+    # ---- Path A — adapter check ------------------------------------------
+    session = _resolve_current_session()
+    if session is None:
+        adapter_id = "unknown"
+    else:
+        adapter_value = getattr(session, "adapter", None)
+        adapter_id = str(adapter_value) if adapter_value is not None else "unknown"
+
+    if adapter_id not in ATTENDED_ADAPTER_IDS:
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            adapter_label,
+            instruction_length,
+            "attended_only",
+        )
+        return (
+            "ERROR: attended_only — escalate_to_frontier cannot be invoked "
+            f"from {adapter_id} adapter"
+        )
+
+    # ---- Path B — caller-frame check -------------------------------------
+    # Attended adapter passed; the spoofed-ambient case (attended session
+    # with an in-progress async-subagent frame) is the security-critical
+    # branch — the frame check OVERRIDES the attended-adapter pass.
+    if _is_async_subagent_frame():
+        _emit_frontier_log(
+            target,
+            correlation_id,
+            adapter_label,
+            instruction_length,
+            "attended_only",
+        )
+        return (
+            "ERROR: attended_only — escalate_to_frontier cannot be invoked "
+            "from async-subagent frame"
+        )
+
+    return None
 
 
 def _emit_frontier_log(
@@ -747,6 +914,25 @@ Never invoke from ambient, learning, or async-subagent contexts.
     correlation_id = new_correlation_id()
     instruction_length = len(instruction) if isinstance(instruction, str) else 0
 
+    # Pick the provider-side adapter tag used in the structured log records.
+    # On out-of-enum ``target`` values pydantic coercion already raised, but
+    # the gemini label is the safe default for the defensive fallthrough at
+    # the end of this function.
+    adapter_label = _OPUS_ADAPTER if target is FrontierTarget.OPUS_4_7 else _GEMINI_ADAPTER
+
+    # Layer 2 — executor assertion. Runs before any provider call so that
+    # a rejection produces no outbound HTTP attempt (DDR-014, AC-004). The
+    # assertion is dormant when no resolver hooks are wired (e.g. Layer 1
+    # unit tests of the tool body itself).
+    rejection = _check_attended_only(
+        target,
+        correlation_id,
+        instruction_length,
+        adapter_label,
+    )
+    if rejection is not None:
+        return rejection
+
     if target is FrontierTarget.GEMINI_3_1_PRO:
         return _escalate_gemini(instruction, instruction_length, correlation_id)
     if target is FrontierTarget.OPUS_4_7:
@@ -759,10 +945,13 @@ Never invoke from ambient, learning, or async-subagent contexts.
 
 
 __all__ = [
+    "ATTENDED_ADAPTER_IDS",
     "LOG_PREFIX_DISPATCH",
     "LOG_PREFIX_QUEUE_BUILD",
     "StubResponse",
+    "_async_subagent_frame_hook",
     "_capability_registry",
+    "_current_session_hook",
     "_stub_response_hook",
     "dispatch_by_capability",
     "escalate_to_frontier",
