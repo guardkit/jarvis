@@ -1,0 +1,7 @@
+{
+  "tests_run": 12,
+  "tests_failed": 0,
+  "coverage_pct": 84.0,
+  "output_summary": "12 tests passed, 0 failed; 84% line coverage on jarvis.agents.subagents (jarvis_reasoner 80%, prompts/types/__init__ 100%); all gates green",
+  "quality_gates_passed": true
+}

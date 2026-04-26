@@ -1,0 +1,191 @@
+{
+  "task_id": "TASK-J003-022",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "skipped",
+      "test_output_summary": "Independent test verification skipped (tests not required for testing tasks)",
+      "duration_seconds": 0.0
+    },
+    "requirements": {
+      "criteria_total": 8,
+      "criteria_met": 8,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`tests/test_role_propagation_e2e.py` exercises all three roles via the middleware-provided `start_async_task` tool (not direct graph invocation).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestAC001RolePropagatesThroughMiddlewareTool is parametrised over ['critic','researcher','planner'] and invokes the actual middleware-provided start_async_task coroutine returned by deepagents.middleware.async_subagents._build_async_subagent_tools. The fake LangGraph SDK client substituted via patch.object(_ClientCache, 'get_async') routes the SDK roundtrip into the real compiled jarvis_reasoner.graph \u2014 no test directly calls graph.invoke. All 6 parametrised assertions pass.",
+      "notes": "TestAC001RolePropagatesThroughMiddlewareTool is parametrised over ['critic','researcher','planner'] and invokes the actual middleware-provided start_async_task coroutine returned by deepagents.middleware.async_subagents._build_async_subagent_tools. The fake LangGraph SDK client substituted via patch.object(_ClientCache, 'get_async') routes the SDK roundtrip into the real compiled jarvis_reasoner.graph \u2014 no test directly calls graph.invoke. All 6 parametrised assertions pass."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Three parametrised cases: `role=\"critic\"`, `role=\"researcher\"`, `role=\"planner\"`. For each: the test asserts the jarvis_reasoner graph's initial-state node received `role=<value>` AND that `ROLE_PROMPTS[RoleName(<value>)]` was resolved and injected as the system prompt.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "test_role_arrives_at_graph_initial_state asserts fake_client.captured_inputs[task_id]['role'] == role_value and ['prompt'] matches per role. test_role_prompts_resolves_and_injects_system_prompt asserts the wrapper graph's async_tasks[0]['role'] equals the input role AND that role_mocks[role_value].system_prompt == ROLE_PROMPTS[RoleName(role_value)] \u2014 proving compile-time injection of the right prompt \u2014 plus that the other roles' inner mocks were NOT awaited (no fan-out leakage).",
+      "notes": "test_role_arrives_at_graph_initial_state asserts fake_client.captured_inputs[task_id]['role'] == role_value and ['prompt'] matches per role. test_role_prompts_resolves_and_injects_system_prompt asserts the wrapper graph's async_tasks[0]['role'] equals the input role AND that role_mocks[role_value].system_prompt == ROLE_PROMPTS[RoleName(role_value)] \u2014 proving compile-time injection of the right prompt \u2014 plus that the other roles' inner mocks were NOT awaited (no fan-out leakage)."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Correlation-id propagation: `input={\"prompt\": ..., \"role\": ..., \"correlation_id\": \"abc123\"}` \u2014 the test asserts `check_async_task(task_id)` returns a result carrying `correlation_id=\"abc123\"` (scenario: *The session correlation identifier propagates from input through to check-task results*).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestAC003CorrelationIdRoundTrip exercises both contracts: test_correlation_id_lands_on_async_tasks_channel asserts the wrapper graph's async_tasks payload carries correlation_id='abc123' verbatim; test_check_async_task_surfaces_correlation_id launches with correlation_id='abc123', invokes the real check_async_task coroutine through the SDK seam, parses the returned ToolMessage JSON to confirm thread_id + status, and re-asserts captured_results[task_id]['async_tasks'][0]['correlation_id'] == 'abc123'.",
+      "notes": "TestAC003CorrelationIdRoundTrip exercises both contracts: test_correlation_id_lands_on_async_tasks_channel asserts the wrapper graph's async_tasks payload carries correlation_id='abc123' verbatim; test_check_async_task_surfaces_correlation_id launches with correlation_id='abc123', invokes the real check_async_task coroutine through the SDK seam, parses the returned ToolMessage JSON to confirm thread_id + status, and re-asserts captured_results[task_id]['async_tasks'][0]['correlation_id'] == 'abc123'."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Parallel safety: start two concurrent tasks with different roles (`critic` + `planner`); assert distinct task identifiers; assert each task resolved its own role prompt; assert neither overwrote the other's state (scenario: *Two different role-mode tasks can run in parallel without collision*).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestAC004ParallelSafety::test_two_concurrent_tasks_resolve_independently uses asyncio.gather to launch a critic and a planner task simultaneously, then asserts critic_task_id != planner_task_id, each captured_results[*]['async_tasks'][0]['role'] matches its launch role, each correlation_id is preserved, and the unrelated 'researcher' inner mock was never awaited. test_concurrent_inputs_isolated_in_captured_state additionally checks captured_inputs preserves both prompts/cids/roles as distinct sets.",
+      "notes": "TestAC004ParallelSafety::test_two_concurrent_tasks_resolve_independently uses asyncio.gather to launch a critic and a planner task simultaneously, then asserts critic_task_id != planner_task_id, each captured_results[*]['async_tasks'][0]['role'] matches its launch role, each correlation_id is preserved, and the unrelated 'researcher' inner mock was never awaited. test_concurrent_inputs_isolated_in_captured_state additionally checks captured_inputs preserves both prompts/cids/roles as distinct sets."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Uses `FakeListChatModel` with canned responses; zero real LLM calls.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "The role_aware_reasoner fixture instantiates FakeListChatModel(responses=...) and patches langchain.chat_models.init_chat_model to return it during the reasoner module's compile-at-import. TestAC005ZeroRealLLMCalls::test_fake_llm_cursor_unchanged_after_full_roundtrip asserts fake_llm.i == 0 after running both start_async_task and check_async_task end-to-end \u2014 the FakeListChatModel cursor advances on every invocation, so a 0 reading is proof of zero LLM calls. No provider client is instantiated either (init_chat_model is patched).",
+      "notes": "The role_aware_reasoner fixture instantiates FakeListChatModel(responses=...) and patches langchain.chat_models.init_chat_model to return it during the reasoner module's compile-at-import. TestAC005ZeroRealLLMCalls::test_fake_llm_cursor_unchanged_after_full_roundtrip asserts fake_llm.i == 0 after running both start_async_task and check_async_task end-to-end \u2014 the FakeListChatModel cursor advances on every invocation, so a 0 reading is proof of zero LLM calls. No provider client is instantiated either (init_chat_model is patched)."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "If DeepAgents 0.5.3 preview API breaks role-key propagation at any point, this test fails loudly \u2014 it is the ASSUM-ASYNC-ROLE-PROPAGATION regression surface (if a 0.6 breakage occurs, the fallback is inlining `role` as a leading `[role=...]` token in the prompt per design \u00a712; this test drives that decision).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "test_role_arrives_at_graph_initial_state contains a loud assertion message naming the assumption: 'role propagation broken: graph received {actual!r}, expected {expected!r}. ASSUM-ASYNC-ROLE-PROPAGATION breach \u2014 if this fires under deepagents>=0.6, fall back to inlining [role=...] inside prompt per design.md \u00a712.' This message is the regression surface the 0.6 upgrade gate will read. The fake SDK client's runs.create routes input through the canonical extra-key shape the assumption requires the SDK to honour, so any future breakage of that contract surfaces here.",
+      "notes": "test_role_arrives_at_graph_initial_state contains a loud assertion message naming the assumption: 'role propagation broken: graph received {actual!r}, expected {expected!r}. ASSUM-ASYNC-ROLE-PROPAGATION breach \u2014 if this fires under deepagents>=0.6, fall back to inlining [role=...] inside prompt per design.md \u00a712.' This message is the regression surface the 0.6 upgrade gate will read. The fake SDK client's runs.create routes input through the canonical extra-key shape the assumption requires the SDK to honour, so any future breakage of that contract surfaces here."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "`uv run pytest tests/test_role_propagation_e2e.py -v` passes.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Final run: `uv run pytest tests/test_role_propagation_e2e.py -v` \u2192 12 passed in 0.90s. Full suite (`uv run pytest tests/`) reports 1387 passed, 2 skipped \u2014 zero regressions.",
+      "notes": "Final run: `uv run pytest tests/test_role_propagation_e2e.py -v` \u2192 12 passed in 0.90s. Full suite (`uv run pytest tests/`) reports 1387 passed, 2 skipped \u2014 zero regressions."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "`uv run ruff check tests/test_role_propagation_e2e.py` \u2192 All checks passed! `uv run ruff format --check tests/test_role_propagation_e2e.py` \u2192 1 file already formatted. Both commands exit zero.",
+      "notes": "`uv run ruff check tests/test_role_propagation_e2e.py` \u2192 All checks passed! `uv run ruff format --check tests/test_role_propagation_e2e.py` \u2192 1 file already formatted. Both commands exit zero."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`tests/test_role_propagation_e2e.py` exercises all three roles via the middleware-provided `start_async_task` tool (not direct graph invocation).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestAC001RolePropagatesThroughMiddlewareTool is parametrised over ['critic','researcher','planner'] and invokes the actual middleware-provided start_async_task coroutine returned by deepagents.middleware.async_subagents._build_async_subagent_tools. The fake LangGraph SDK client substituted via patch.object(_ClientCache, 'get_async') routes the SDK roundtrip into the real compiled jarvis_reasoner.graph \u2014 no test directly calls graph.invoke. All 6 parametrised assertions pass.",
+        "notes": "TestAC001RolePropagatesThroughMiddlewareTool is parametrised over ['critic','researcher','planner'] and invokes the actual middleware-provided start_async_task coroutine returned by deepagents.middleware.async_subagents._build_async_subagent_tools. The fake LangGraph SDK client substituted via patch.object(_ClientCache, 'get_async') routes the SDK roundtrip into the real compiled jarvis_reasoner.graph \u2014 no test directly calls graph.invoke. All 6 parametrised assertions pass."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Three parametrised cases: `role=\"critic\"`, `role=\"researcher\"`, `role=\"planner\"`. For each: the test asserts the jarvis_reasoner graph's initial-state node received `role=<value>` AND that `ROLE_PROMPTS[RoleName(<value>)]` was resolved and injected as the system prompt.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "test_role_arrives_at_graph_initial_state asserts fake_client.captured_inputs[task_id]['role'] == role_value and ['prompt'] matches per role. test_role_prompts_resolves_and_injects_system_prompt asserts the wrapper graph's async_tasks[0]['role'] equals the input role AND that role_mocks[role_value].system_prompt == ROLE_PROMPTS[RoleName(role_value)] \u2014 proving compile-time injection of the right prompt \u2014 plus that the other roles' inner mocks were NOT awaited (no fan-out leakage).",
+        "notes": "test_role_arrives_at_graph_initial_state asserts fake_client.captured_inputs[task_id]['role'] == role_value and ['prompt'] matches per role. test_role_prompts_resolves_and_injects_system_prompt asserts the wrapper graph's async_tasks[0]['role'] equals the input role AND that role_mocks[role_value].system_prompt == ROLE_PROMPTS[RoleName(role_value)] \u2014 proving compile-time injection of the right prompt \u2014 plus that the other roles' inner mocks were NOT awaited (no fan-out leakage)."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Correlation-id propagation: `input={\"prompt\": ..., \"role\": ..., \"correlation_id\": \"abc123\"}` \u2014 the test asserts `check_async_task(task_id)` returns a result carrying `correlation_id=\"abc123\"` (scenario: *The session correlation identifier propagates from input through to check-task results*).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestAC003CorrelationIdRoundTrip exercises both contracts: test_correlation_id_lands_on_async_tasks_channel asserts the wrapper graph's async_tasks payload carries correlation_id='abc123' verbatim; test_check_async_task_surfaces_correlation_id launches with correlation_id='abc123', invokes the real check_async_task coroutine through the SDK seam, parses the returned ToolMessage JSON to confirm thread_id + status, and re-asserts captured_results[task_id]['async_tasks'][0]['correlation_id'] == 'abc123'.",
+        "notes": "TestAC003CorrelationIdRoundTrip exercises both contracts: test_correlation_id_lands_on_async_tasks_channel asserts the wrapper graph's async_tasks payload carries correlation_id='abc123' verbatim; test_check_async_task_surfaces_correlation_id launches with correlation_id='abc123', invokes the real check_async_task coroutine through the SDK seam, parses the returned ToolMessage JSON to confirm thread_id + status, and re-asserts captured_results[task_id]['async_tasks'][0]['correlation_id'] == 'abc123'."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Parallel safety: start two concurrent tasks with different roles (`critic` + `planner`); assert distinct task identifiers; assert each task resolved its own role prompt; assert neither overwrote the other's state (scenario: *Two different role-mode tasks can run in parallel without collision*).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestAC004ParallelSafety::test_two_concurrent_tasks_resolve_independently uses asyncio.gather to launch a critic and a planner task simultaneously, then asserts critic_task_id != planner_task_id, each captured_results[*]['async_tasks'][0]['role'] matches its launch role, each correlation_id is preserved, and the unrelated 'researcher' inner mock was never awaited. test_concurrent_inputs_isolated_in_captured_state additionally checks captured_inputs preserves both prompts/cids/roles as distinct sets.",
+        "notes": "TestAC004ParallelSafety::test_two_concurrent_tasks_resolve_independently uses asyncio.gather to launch a critic and a planner task simultaneously, then asserts critic_task_id != planner_task_id, each captured_results[*]['async_tasks'][0]['role'] matches its launch role, each correlation_id is preserved, and the unrelated 'researcher' inner mock was never awaited. test_concurrent_inputs_isolated_in_captured_state additionally checks captured_inputs preserves both prompts/cids/roles as distinct sets."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Uses `FakeListChatModel` with canned responses; zero real LLM calls.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "The role_aware_reasoner fixture instantiates FakeListChatModel(responses=...) and patches langchain.chat_models.init_chat_model to return it during the reasoner module's compile-at-import. TestAC005ZeroRealLLMCalls::test_fake_llm_cursor_unchanged_after_full_roundtrip asserts fake_llm.i == 0 after running both start_async_task and check_async_task end-to-end \u2014 the FakeListChatModel cursor advances on every invocation, so a 0 reading is proof of zero LLM calls. No provider client is instantiated either (init_chat_model is patched).",
+        "notes": "The role_aware_reasoner fixture instantiates FakeListChatModel(responses=...) and patches langchain.chat_models.init_chat_model to return it during the reasoner module's compile-at-import. TestAC005ZeroRealLLMCalls::test_fake_llm_cursor_unchanged_after_full_roundtrip asserts fake_llm.i == 0 after running both start_async_task and check_async_task end-to-end \u2014 the FakeListChatModel cursor advances on every invocation, so a 0 reading is proof of zero LLM calls. No provider client is instantiated either (init_chat_model is patched)."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "If DeepAgents 0.5.3 preview API breaks role-key propagation at any point, this test fails loudly \u2014 it is the ASSUM-ASYNC-ROLE-PROPAGATION regression surface (if a 0.6 breakage occurs, the fallback is inlining `role` as a leading `[role=...]` token in the prompt per design \u00a712; this test drives that decision).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "test_role_arrives_at_graph_initial_state contains a loud assertion message naming the assumption: 'role propagation broken: graph received {actual!r}, expected {expected!r}. ASSUM-ASYNC-ROLE-PROPAGATION breach \u2014 if this fires under deepagents>=0.6, fall back to inlining [role=...] inside prompt per design.md \u00a712.' This message is the regression surface the 0.6 upgrade gate will read. The fake SDK client's runs.create routes input through the canonical extra-key shape the assumption requires the SDK to honour, so any future breakage of that contract surfaces here.",
+        "notes": "test_role_arrives_at_graph_initial_state contains a loud assertion message naming the assumption: 'role propagation broken: graph received {actual!r}, expected {expected!r}. ASSUM-ASYNC-ROLE-PROPAGATION breach \u2014 if this fires under deepagents>=0.6, fall back to inlining [role=...] inside prompt per design.md \u00a712.' This message is the regression surface the 0.6 upgrade gate will read. The fake SDK client's runs.create routes input through the canonical extra-key shape the assumption requires the SDK to honour, so any future breakage of that contract surfaces here."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "`uv run pytest tests/test_role_propagation_e2e.py -v` passes.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Final run: `uv run pytest tests/test_role_propagation_e2e.py -v` \u2192 12 passed in 0.90s. Full suite (`uv run pytest tests/`) reports 1387 passed, 2 skipped \u2014 zero regressions.",
+        "notes": "Final run: `uv run pytest tests/test_role_propagation_e2e.py -v` \u2192 12 passed in 0.90s. Full suite (`uv run pytest tests/`) reports 1387 passed, 2 skipped \u2014 zero regressions."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "`uv run ruff check tests/test_role_propagation_e2e.py` \u2192 All checks passed! `uv run ruff format --check tests/test_role_propagation_e2e.py` \u2192 1 file already formatted. Both commands exit zero.",
+        "notes": "`uv run ruff check tests/test_role_propagation_e2e.py` \u2192 All checks passed! `uv run ruff format --check tests/test_role_propagation_e2e.py` \u2192 1 file already formatted. Both commands exit zero."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 2 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 2,
+      "feature_files": [
+        "features/feat-jarvis-003-async-subagent-and-frontier-escape/feat-jarvis-003-async-subagent-and-frontier-escape.feature"
+      ],
+      "pending_examples": [
+        "test_two_different_rolemode_tasks_can_run_in_parallel_without_collision \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_the_session_correlation_identifier_propagates_from_input_through_to_checktask_results \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Tests not required for this task type. All acceptance criteria met. Architecture context: 353 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1241/5200 tokens\n\n### \u2705 Similar Outcomes\n- USES_LIBRARY\n- INVOKES_FUNCTION\n\n### \ud83c\udfa8 Relevant Patterns\n- ASSIGNS_TASK_TO\n- SOURCE_PATTERN\n\n### \u26a0\ufe0f Warnings\n- IS_IMPLEMENTED_AS\n- HAS_IMPLEMENTATION_TARGET\n\n### \ud83c\udfad Role Constraints\n- PROJECT_INVOLVES\n- RUNS_TESTS_BEFORE_REPORTING\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- AVOIDED_OUTCOME\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false
+}
