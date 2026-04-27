@@ -36,12 +36,17 @@ a CLI-importability smoke test:
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
+import io
 import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -140,6 +145,254 @@ class TestJarvisGraphDeclaration:
         # The referenced file must exist on disk so langgraph CLI can resolve it.
         resolved = (REPO_ROOT / module_str).resolve()
         assert resolved.exists(), f"Supervisor module path must exist on disk: {resolved}"
+
+
+class TestJarvisGraphSymbolResolves:
+    """TASK-J003-FIX-004 (F8) — the ``module:variable`` path the langgraph
+    CLI consumes must actually resolve.
+
+    The pre-FIX-004 ``test_jarvis_graph_path_resolves_to_supervisor_module``
+    asserted only that the *file* on the path side existed; it never imported
+    the module nor looked up the variable. As a result, ``langgraph.json``
+    could declare ``./src/jarvis/agents/supervisor.py:graph`` while
+    ``supervisor.py`` exposed only ``build_supervisor(config)`` and the smoke
+    suite still passed. ``langgraph dev`` would then crash at startup with
+    ``ImportError: cannot import name 'graph'``.
+
+    These tests close that gap by performing the resolution the langgraph CLI
+    performs at server load — and (for the in-process path) actually invoking
+    the symbol so the FIX-001 Layer-2 wiring contract is exercised end-to-end.
+
+    All three tests fail on ``main`` pre-fix and pass post-fix; the
+    failing-then-passing commit history is itself the regression artefact
+    (DDR-013 / Phase-2 close criterion #6).
+    """
+
+    @staticmethod
+    def _module_attr_for_jarvis_graph(manifest: dict) -> tuple[Path, str]:
+        """Parse the ``jarvis`` graph entry into ``(module_file, attr_name)``.
+
+        Mirrors the langgraph CLI's parsing of the ``module:variable`` path
+        format declared in ``langgraph.json``. Returns the absolute filesystem
+        path to the module and the attribute name to look up on it.
+        """
+        entry = manifest["graphs"]["jarvis"]
+        path_str = entry["path"] if isinstance(entry, dict) else entry
+        module_str, _, attr_str = path_str.partition(":")
+        assert attr_str, f"Jarvis graph spec must use 'module:variable' format; got {path_str!r}"
+        module_file = (REPO_ROOT / module_str).resolve()
+        return module_file, attr_str
+
+    @staticmethod
+    def _load_module_from_path(module_file: Path) -> Any:
+        """Import the module living at ``module_file`` (mirroring langgraph CLI).
+
+        We deliberately use ``importlib.util.spec_from_file_location`` so the
+        resolution path matches what the langgraph CLI does at server load:
+        the path on disk → import. Falling back to ``importlib.import_module``
+        on a derived dotted name would let an installed-but-stale package
+        succeed when the on-disk module had drifted.
+        """
+        spec = importlib.util.spec_from_file_location(
+            f"_langgraph_smoke_{module_file.stem}", module_file
+        )
+        assert spec is not None and spec.loader is not None, (
+            f"importlib could not build a spec for {module_file}"
+        )
+        # Re-use the already-imported package version when available so we
+        # don't end up with two copies of the supervisor module living
+        # side-by-side in ``sys.modules`` (one fully wired, the other not).
+        if "jarvis.agents.supervisor" in sys.modules and module_file.name == "supervisor.py":
+            return sys.modules["jarvis.agents.supervisor"]
+        if (
+            "jarvis.agents.subagents.jarvis_reasoner" in sys.modules
+            and module_file.name == "jarvis_reasoner.py"
+        ):
+            return sys.modules["jarvis.agents.subagents.jarvis_reasoner"]
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_importlib_resolves_jarvis_graph_attr_from_manifest_path(
+        self, manifest: dict
+    ) -> None:
+        """The ``module:variable`` path resolves to a real attribute.
+
+        Pre-FIX-004 this fails with ``AttributeError`` because
+        ``supervisor.py`` exposes only ``build_supervisor`` (the factory) and
+        ``langgraph.json`` declares ``:graph`` — there is no module-level
+        ``graph`` symbol. Post-FIX-004 the manifest declares ``:make_graph``
+        and the lookup succeeds.
+        """
+        # Arrange
+        module_file, attr_str = self._module_attr_for_jarvis_graph(manifest)
+
+        # Act
+        module = self._load_module_from_path(module_file)
+
+        # Assert — the symbol resolves
+        assert hasattr(module, attr_str), (
+            f"Module {module_file.name} must expose attribute {attr_str!r} declared by "
+            f"langgraph.json's 'jarvis' graph path; the langgraph CLI imports this "
+            f"symbol at server load and a missing attribute crashes startup with "
+            f"ImportError (TASK-J003-FIX-004 / F8)."
+        )
+        resolved = getattr(module, attr_str)
+        assert resolved is not None, (
+            f"{module_file.name}:{attr_str} resolved to None — langgraph CLI cannot "
+            f"serve a None graph"
+        )
+
+    def test_jarvis_graph_symbol_invocation_returns_compiled_state_graph(
+        self, manifest: dict, fake_llm: Any
+    ) -> None:
+        """The symbol declared in ``langgraph.json`` must produce a
+        ``CompiledStateGraph`` when langgraph CLI loads it.
+
+        The CLI accepts either a bare ``CompiledStateGraph`` (the
+        ``jarvis_reasoner`` module-level eager-compile shape, DDR-012) OR a
+        zero-argument callable returning one (the ``jarvis`` factory shape,
+        TASK-J003-FIX-004 / Contract 5). Both must yield a
+        ``CompiledStateGraph`` instance — anything else is a runtime crash on
+        the langgraph CLI's first compile.
+        """
+        # Arrange
+        from langgraph.graph.state import CompiledStateGraph
+
+        module_file, attr_str = self._module_attr_for_jarvis_graph(manifest)
+        module = self._load_module_from_path(module_file)
+        resolved = getattr(module, attr_str, None)
+        assert resolved is not None, (
+            f"Cannot invoke {module_file.name}:{attr_str} — symbol does not resolve "
+            f"(see test_importlib_resolves_jarvis_graph_attr_from_manifest_path)"
+        )
+
+        # Compose a JarvisConfig that survives ``validate_provider_keys`` in
+        # the test sandbox (real openai_base_url is not available; an absolute
+        # ``stub_capabilities_path`` is required because conftest chdirs to
+        # tmp_path per test).
+        from jarvis.config.settings import JarvisConfig
+
+        stub_path = REPO_ROOT / "src" / "jarvis" / "config" / "stub_capabilities.yaml"
+        assert stub_path.exists(), f"Stub capabilities fixture missing at {stub_path}"
+
+        with patch.dict("os.environ", {}, clear=True):
+            stub_config = JarvisConfig(
+                openai_base_url="http://fake-endpoint/v1",
+                stub_capabilities_path=stub_path,
+                llama_swap_base_url="http://fake-llama-swap:9000",
+            )
+        stub_config.validate_provider_keys()
+
+        # Act — invoke the symbol via the langgraph CLI's contract. The
+        # supervisor factory builds a real graph via ``build_app_state``, so
+        # we patch ``init_chat_model`` (no network) and substitute the stub
+        # config for the default-constructed one ``make_graph()`` builds.
+        if callable(resolved) and not isinstance(resolved, CompiledStateGraph):
+            with (
+                patch("sys.stderr", new=io.StringIO()),
+                patch(
+                    "jarvis.agents.supervisor.init_chat_model",
+                    return_value=fake_llm,
+                ),
+                patch(
+                    "jarvis.config.settings.JarvisConfig",
+                    return_value=stub_config,
+                ),
+            ):
+                graph_obj = resolved()
+        else:
+            graph_obj = resolved
+
+        # Assert
+        assert isinstance(graph_obj, CompiledStateGraph), (
+            f"langgraph.json's 'jarvis' entry ({module_file.name}:{attr_str}) must "
+            f"resolve (or return) a CompiledStateGraph; got {type(graph_obj).__name__}"
+        )
+
+    def test_jarvis_graph_factory_invocation_wires_layer2_hooks(
+        self, manifest: dict, fake_llm: Any
+    ) -> None:
+        """Calling the ``jarvis`` factory must wire the FIX-001 Layer-2 hooks.
+
+        The supervisor factory delegates to ``lifecycle.build_app_state`` so
+        every constitutional invariant established by FIX-001 (Layer-2 hook
+        wiring per DDR-014, ambient tool factory per ADR-ARCH-027, capability
+        snapshot per ASSUM-006) holds when the langgraph CLI loads the graph
+        — not just when ``jarvis chat`` builds it. A future refactor that
+        eager-compiled the supervisor at module scope (mirroring
+        ``jarvis_reasoner.py``'s shape) would silently bypass this wiring and
+        regress F1 — so we assert the post-conditions here as a regression
+        guard (TASK-J003-FIX-004 acceptance criterion).
+        """
+        # Arrange
+        from jarvis.tools import dispatch
+
+        module_file, attr_str = self._module_attr_for_jarvis_graph(manifest)
+        module = self._load_module_from_path(module_file)
+        resolved = getattr(module, attr_str, None)
+        assert resolved is not None, (
+            f"Cannot invoke {module_file.name}:{attr_str} — symbol does not resolve "
+            f"(see test_importlib_resolves_jarvis_graph_attr_from_manifest_path)"
+        )
+        # If the manifest ever migrated to a bare-graph form for ``jarvis``
+        # (matching the ``jarvis_reasoner`` shape) this test would no longer
+        # apply — flag the migration explicitly rather than passing vacuously.
+        from langgraph.graph.state import CompiledStateGraph
+
+        assert callable(resolved) and not isinstance(resolved, CompiledStateGraph), (
+            f"TASK-J003-FIX-004 requires {module_file.name}:{attr_str} to be a "
+            f"factory callable (not an eager-compiled CompiledStateGraph) so "
+            f"FIX-001 Layer-2 hooks are wired at langgraph-CLI server load. "
+            f"If this test fails, the supervisor module has reverted to an "
+            f"eager-compile shape and Finding F1 has silently regressed."
+        )
+
+        from jarvis.config.settings import JarvisConfig
+
+        stub_path = REPO_ROOT / "src" / "jarvis" / "config" / "stub_capabilities.yaml"
+        with patch.dict("os.environ", {}, clear=True):
+            stub_config = JarvisConfig(
+                openai_base_url="http://fake-endpoint/v1",
+                stub_capabilities_path=stub_path,
+                llama_swap_base_url="http://fake-llama-swap:9000",
+            )
+        stub_config.validate_provider_keys()
+
+        # Pre-condition: hooks dormant before invocation. The autouse
+        # ``_restore_dispatch_layer2_hooks`` fixture in conftest restores
+        # whatever value held at test entry, so we explicitly null them here
+        # so the assertion below proves the factory armed them — not some
+        # earlier test that left them populated.
+        dispatch._current_session_hook = None
+        dispatch._async_subagent_frame_hook = None
+
+        # Act
+        with (
+            patch("sys.stderr", new=io.StringIO()),
+            patch(
+                "jarvis.agents.supervisor.init_chat_model",
+                return_value=fake_llm,
+            ),
+            patch(
+                "jarvis.config.settings.JarvisConfig",
+                return_value=stub_config,
+            ),
+        ):
+            resolved()
+
+        # Assert — Layer-2 hooks armed (FIX-001 invariant)
+        assert dispatch._current_session_hook is not None, (
+            "make_graph() must wire dispatch._current_session_hook via "
+            "lifecycle.build_app_state — otherwise the langgraph-CLI-served "
+            "supervisor has Layer 2 dormant and Finding F1 regresses "
+            "(TASK-J003-FIX-004 acceptance criterion)."
+        )
+        assert dispatch._async_subagent_frame_hook is not None, (
+            "make_graph() must wire dispatch._async_subagent_frame_hook via "
+            "lifecycle.build_app_state — otherwise Layer 2 falls back to the "
+            "session-state path with no middleware probe (FIX-001 invariant)."
+        )
 
 
 class TestJarvisReasonerGraphDeclaration:
