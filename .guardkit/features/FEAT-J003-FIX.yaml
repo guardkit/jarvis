@@ -1,18 +1,22 @@
 id: FEAT-J003-FIX
 name: Layer 2 Wiring + Quality-Gate Closeout
-description: 'Follow-up to FEAT-JARVIS-003 architectural review. Closes three findings:
+description: 'Follow-up to FEAT-JARVIS-003 architectural review. Closes four findings:
   F1 (Layer 2 hooks dormant in production — wire dispatch._current_session_hook +
   dispatch._async_subagent_frame_hook in lifecycle.build_app_state per DDR-014),
   F2 (DDR-012 module-import compilation requires OPENAI_API_KEY; pre-seed stub in
-  tests/conftest.py), and F3 (Phase-2 close criterion #9 — clear all 9 mypy + 8 ruff
+  tests/conftest.py), F3 (Phase-2 close criterion #9 — clear all 9 mypy + 8 ruff
   errors in src/jarvis/, including the _emit_frontier_log Literal mismatch that
-  flags F1 structurally). Two-wave AutoBuild: Wave 1 = build hygiene (parallel direct);
-  Wave 2 = TDD constitutional-gate restoration. Restores three-layer belt+braces
-  guarantee per ADR-ARCH-022/027.'
+  flags F1 structurally), and F8 (langgraph.json declares supervisor.py:graph but
+  no module-level graph symbol exists; langgraph dev fails at startup — added 27
+  Apr during manual close-out). Three-wave AutoBuild: Wave 1 = build hygiene (parallel
+  direct); Wave 2 = TDD constitutional-gate restoration; Wave 3 = supervisor make_graph
+  factory for langgraph CLI. Restores three-layer belt+braces guarantee per ADR-ARCH-022/027
+  and recovers Phase-2 close criterion #6 (langgraph dev spin).'
 created: '2026-04-26T00:00:00.000000'
-status: backlog
+updated: '2026-04-27T00:00:00.000000'
+status: in_progress
 complexity: 3
-estimated_tasks: 3
+estimated_tasks: 4
 parent_review: FEAT-JARVIS-003
 tasks:
 - id: TASK-J003-FIX-002
@@ -47,20 +51,35 @@ tasks:
   wave: 1
 - id: TASK-J003-FIX-001
   name: Wire escalate_to_frontier Layer 2 hooks in lifecycle.build_app_state
-  file_path: tasks/backlog/feat-jarvis-003-fix/TASK-J003-FIX-001-wire-layer2-hooks-in-lifecycle-startup.md
+  file_path: tasks/in_review/feat-jarvis-003-fix/TASK-J003-FIX-001-wire-layer2-hooks-in-lifecycle-startup.md
   complexity: 4
   dependencies:
   - TASK-J003-FIX-002
-  status: backlog
+  status: in_review
   implementation_mode: task-work
   estimated_minutes: 60
   requires_infrastructure: []
-  result: null
-  turns_completed: 0
-  current_turn: 1
-  started_at: null
+  result: 'Implemented across commits 431024f (red-phase failing test) + 26fb128 (green-phase wiring); 5/5 tests in test_lifecycle_layer2_wiring.py pass; awaiting Coach acceptance to move file to completed/.'
+  turns_completed: 2
+  current_turn: 2
+  started_at: '2026-04-27T00:00:00.000000'
   completed_at: null
   wave: 2
+- id: TASK-J003-FIX-004
+  name: Wire supervisor module-level graph symbol for langgraph CLI
+  file_path: tasks/completed/feat-jarvis-003-fix/TASK-J003-FIX-004-wire-supervisor-module-level-graph-for-langgraph-cli.md
+  complexity: 3
+  dependencies: []
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result: 'F8 closed. Implemented across commits 4536bb8 (red-phase: 3 sibling tests in TestJarvisGraphSymbolResolves; failing on pre-fix tree) + 9f49ae3 (green-phase: make_graph factory in supervisor.py + langgraph.json :graph→:make_graph for jarvis only). Quality gates: 1596 passed (1593 baseline + 3 new), 2 skipped; mypy clean (39 files); ruff clean. Module import remains side-effect free (lazy imports inside factory body). Operator-side `langgraph dev` real-server smoke remains pending (one AC item ⏸️) — closes Phase-2 close criterion #6 once executed.'
+  turns_completed: 2
+  current_turn: 2
+  started_at: '2026-04-27T00:00:00.000000'
+  completed_at: '2026-04-27T00:00:00.000000'
+  wave: 3
 acceptance_gates:
 - name: mypy_clean_on_src
   command: mypy src/jarvis/
@@ -78,4 +97,12 @@ acceptance_gates:
 - name: layer2_integration_test
   command: pytest tests/test_lifecycle_layer2_wiring.py
   expected_exit_code: 0
-  notes: NEW test file added by FIX-001. Must FAIL on main pre-merge (TDD red commit), pass post-merge.
+  notes: NEW test file added by FIX-001. Must FAIL on main pre-merge (TDD red commit), pass post-merge. ✅ 5/5 green 27 Apr.
+- name: langgraph_supervisor_symbol_resolution
+  command: python -c "from jarvis.agents.supervisor import make_graph; g = make_graph(); from langgraph.graph.state import CompiledStateGraph; assert isinstance(g, CompiledStateGraph)"
+  expected_exit_code: 0
+  notes: NEW symbol-resolution check added by FIX-004. Must FAIL on main pre-merge (proves F8), pass post-merge. Independent of llama-swap availability.
+- name: langgraph_dev_smoke
+  command: python -m langgraph dev --help
+  expected_exit_code: 0
+  notes: CLI surface check from FIX-004 (does NOT spin a real server in CI). Operator-side full smoke (server startup + assistants/search) documented in TASK-J003-FIX-004 closeout note.

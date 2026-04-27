@@ -109,3 +109,56 @@ Manual checks (#5 `jarvis chat` and #6 `langgraph dev` spin) remain unchanged �
 | Lifecycle hook wiring stomps per-test hook injection in test_escalate_to_frontier.py | FIX-001 AC: tests use save/restore pattern around module attributes; verify pytest's autouse fixture ordering does not interfere. Add a sanity teardown assertion. |
 | `SessionManager.current_session()` doesn't exist yet | FIX-001 AC explicitly allows adding it. Trivial — read the manager state and return the most recent session or `None`. |
 | `AsyncSubAgentMiddleware` metadata probe is unavailable in DeepAgents 0.5.3 | FIX-001 AC documents the fallback (session-state-only); ASSUM-FRONTIER-CALLER-FRAME explicitly covers this case. |
+
+---
+
+## Wave 3 addendum — TASK-J003-FIX-004 (added 2026-04-27)
+
+Surfaced during Phase-2 manual close-out: `langgraph.json` declares `./src/jarvis/agents/supervisor.py:graph`, but `supervisor.py` exposes only the `build_supervisor(config)` factory function — there is no module-level `graph` symbol, and `langgraph dev` will fail at startup. Independent of Waves 1–2 and of the GB10/llama-swap infra workstream.
+
+### Why a dedicated wave (not folded into Wave 2)
+
+Waves 1+2 had merged before F8 was discovered. Adding a third wave preserves the audit trail (Wave 1 = F2/F3 closure; Wave 2 = F1 closure with TDD red→green; Wave 3 = F8 closure). It also keeps the FIX-004 commit-history clean — separate red/green commits for the strengthened symbol-resolution smoke test.
+
+### Decision: factory function, not eager module-level compile
+
+FIX-004 chooses the factory-function form (`make_graph()`) over `graph = build_supervisor(JarvisConfig())` at module scope. The factory delegates to `lifecycle.build_app_state` so all FIX-001 invariants (Layer 2 hook wiring, ambient tool factory, capability snapshot) hold when the langgraph CLI loads the graph — not just when `jarvis chat` builds it. See the task file for the full rationale.
+
+### Integration contract — Wave 3
+
+#### Contract 5 — supervisor module exposes a graph factory
+
+- **Producer:** TASK-J003-FIX-004 (adds `make_graph()` to `supervisor.py`)
+- **Consumer:** `langgraph.json` (path field `:make_graph`); `langgraph dev` CLI at server load
+- **Format constraint:** Zero-argument callable returning a `CompiledStateGraph[Any, Any, Any, Any]` with all FIX-001 hooks wired. Must NOT have import-time side effects — implementation lazy-imports `JarvisConfig` and `build_app_state` inside the factory body.
+- **Validation:** Strengthened `tests/test_langgraph_json.py::test_jarvis_graph_path_resolves_to_supervisor_module` performs an `importlib`-based resolution + invocation + Layer-2-hook-wired assertion; FAILS today (proving F8) and PASSES post-fix.
+
+### Wave 3 dependency graph
+
+```mermaid
+graph TD
+    F004[TASK-J003-FIX-004 — wire supervisor.make_graph factory]
+
+    style F004 fill:#fce,stroke:#c09
+```
+
+_Single-task wave; no internal dependencies. Independent of all Wave 1+2 work. Can run before or after llama-swap provisioning — graph compilation does not hit the network._
+
+### Suggested commit boundaries — Wave 3
+
+- **Wave 3 commit 1**: `test(langgraph): strengthen supervisor:graph symbol resolution check (TASK-J003-FIX-004 red, F8)` — adds the importlib-based smoke test; fails on `main` today.
+- **Wave 3 commit 2**: `fix(langgraph): wire supervisor.make_graph factory for langgraph CLI (TASK-J003-FIX-004 green, F8 / DDR-013)` — adds `make_graph()` to `supervisor.py`; updates `langgraph.json` path; smoke test now passes.
+
+### Wave 3 close criterion
+
+After FIX-004 lands, Phase-2 close criterion #6 (`langgraph dev` real-server spin) becomes satisfiable **without** llama-swap on the GB10 — operator can run the manual smoke on the M2 Max:
+
+```bash
+OPENAI_API_KEY=stub uv run python -m langgraph dev
+# Expect: server starts, both graphs registered at http://127.0.0.1:2024
+curl -X POST http://127.0.0.1:2024/assistants/search \
+     -H 'Content-Type: application/json' -d '{}' | grep graph_id
+# Expect: both "jarvis" and "jarvis_reasoner"
+```
+
+Actual graph *invocation* still needs llama-swap up — but graph *registration* (which is what criterion #6 measures) is then verifiable independently.

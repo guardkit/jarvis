@@ -1402,6 +1402,67 @@ Task Complete — TASK-J003-FIX-003
   review of the in_review task file. (disable recaps in /config)
 
 
+/task-work TASK-J003-FIX-004
+
+
+TDD red→green pair landed on main. Summary report:
+
+  ✅ Task Work Complete — TASK-J003-FIX-004
+
+  Stack: Python (LangChain/LangGraph/DeepAgents) | Mode: TDD | Complexity: 3/10
+
+  Commits
+
+  - 4536bb8 — RED: 3 sibling tests in TestJarvisGraphSymbolResolves (importlib resolution / CompiledStateGraph
+  invocation / Layer-2 hook wiring) — fail on pre-fix tree as expected
+  - 9f49ae3 — GREEN: supervisor.make_graph() factory + langgraph.json :graph → :make_graph for jarvis only
+
+  Files changed
+
+  - src/jarvis/agents/supervisor.py — added make_graph() zero-arg factory (lazy-imports
+  JarvisConfig/build_app_state, runs asyncio.run(build_app_state(JarvisConfig())).supervisor)
+  - langgraph.json — :graph → :make_graph for jarvis (jarvis_reasoner stays at :graph per DDR-012)
+  - tests/test_langgraph_json.py — new TestJarvisGraphSymbolResolves class (3 tests); relaxed scenario-anchor
+  endswith(":graph") to assert module:variable form generically
+
+  Quality Gates
+
+  ┌────────────────────────────────────────────────────────────────┬───────────────────────────────────────────┐
+  │                              Gate                              │                  Result                   │
+  ├────────────────────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ pytest tests/                                                  │ ✅ 1596 passed, 2 skipped (≥1593          │
+  │                                                                │ baseline; +3 new)                         │
+  ├────────────────────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ mypy src/jarvis/                                               │ ✅ Success: no issues found in 39 source  │
+  │                                                                │ files                                     │
+  ├────────────────────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ ruff check src/jarvis/                                         │ ✅ All checks passed                      │
+  ├────────────────────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ from jarvis.agents.supervisor import make_graph import-time    │ ✅ Hooks remain None (no eager lifecycle) │
+  │ side effects                                                   │                                           │
+  ├────────────────────────────────────────────────────────────────┼───────────────────────────────────────────┤
+  │ from jarvis.agents.supervisor import graph (the original red   │ ✅ Now a non-issue — manifest declares    │
+  │ repro)                                                         │ :make_graph                               │
+  └────────────────────────────────────────────────────────────────┴───────────────────────────────────────────┘
+
+  Out of scope (per task)
+
+  - Manual langgraph dev server smoke — operator-side; graph compilation in tests is a sufficient unit-level proxy
+  - Changing jarvis_reasoner.py's eager-compile pattern (DDR-012)
+  - llama-swap provisioning
+
+  Open scaffolding (not committed by this task)
+
+  tasks/backlog/feat-jarvis-003-fix/{IMPLEMENTATION-GUIDE.md, README.md, TASK-J003-FIX-004-*.md},
+  .guardkit/features/FEAT-J003-FIX.yaml, docs/research/ideas/phase2-build-plan.md — all pre-existing modifications
+  introducing TASK-J003-FIX-004 itself; left unstaged for the feature-level closeout commit.
+
+✻ Sautéed for 8m 37s
+
+※ recap: Closed F8 for FEAT-J003-FIX with a TDD red→green pair: strengthened supervisor symbol-resolution test,
+  then wired `supervisor.make_graph()` and flipped `langgraph.json` to `:make_graph`. Next: commit the leftover
+  task-scaffolding files (IMPLEMENTATION-GUIDE, README, task md, FEAT yaml) as the feature closeout. (disable
+  recaps in /config)
 
 
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003-FIX --verbose --max-turns 30
