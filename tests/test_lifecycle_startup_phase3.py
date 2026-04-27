@@ -538,3 +538,79 @@ class TestAC008Phase1AndFeatJ002BehaviourPreserved:
         # The 4-entry stub registry shipped at
         # src/jarvis/config/stub_capabilities.yaml.
         assert len(state.capability_registry) == 4
+
+
+# ---------------------------------------------------------------------------
+# AC (TASK-J003-FIX-001) — DDR-014 Layer 2 hooks are wired by build_app_state.
+# ---------------------------------------------------------------------------
+class TestLayer2HooksWiredByBuildAppState:
+    """``build_app_state`` populates the dispatch module's Layer-2 hooks.
+
+    FEAT-JARVIS-003 review Finding F1: ``_current_session_hook`` and
+    ``_async_subagent_frame_hook`` were dormant in production. The fix
+    (TASK-J003-FIX-001) wires both during startup so the constitutional
+    ``escalate_to_frontier`` gate runs all three layers (prompt +
+    executor assertion + registration absence) instead of two.
+    """
+
+    @pytest.mark.asyncio
+    async def test_current_session_hook_is_assigned(
+        self, stub_registry_config: JarvisConfig, fake_llm: Any
+    ) -> None:
+        from jarvis.infrastructure.lifecycle import build_app_state, shutdown
+        from jarvis.tools import dispatch
+
+        original_session_hook = dispatch._current_session_hook
+        original_frame_hook = dispatch._async_subagent_frame_hook
+        try:
+            with (
+                patch("sys.stderr", new=io.StringIO()),
+                patch(
+                    "jarvis.agents.supervisor.init_chat_model",
+                    return_value=fake_llm,
+                ),
+            ):
+                state = await build_app_state(stub_registry_config)
+                assert dispatch._current_session_hook is not None, (
+                    "build_app_state must wire dispatch._current_session_hook "
+                    "(TASK-J003-FIX-001 / Finding F1)."
+                )
+                # Idle state: no session driving a turn → resolver returns None.
+                assert dispatch._current_session_hook() is None
+                await shutdown(state)
+        finally:
+            dispatch._current_session_hook = original_session_hook
+            dispatch._async_subagent_frame_hook = original_frame_hook
+
+    @pytest.mark.asyncio
+    async def test_async_subagent_frame_hook_is_assigned_per_assum_frontier_caller_frame(
+        self, stub_registry_config: JarvisConfig, fake_llm: Any
+    ) -> None:
+        from jarvis.infrastructure.lifecycle import build_app_state, shutdown
+        from jarvis.tools import dispatch
+
+        original_session_hook = dispatch._current_session_hook
+        original_frame_hook = dispatch._async_subagent_frame_hook
+        try:
+            with (
+                patch("sys.stderr", new=io.StringIO()),
+                patch(
+                    "jarvis.agents.supervisor.init_chat_model",
+                    return_value=fake_llm,
+                ),
+            ):
+                state = await build_app_state(stub_registry_config)
+                hook = dispatch._async_subagent_frame_hook
+                assert hook is not None, (
+                    "build_app_state must wire dispatch._async_subagent_frame_hook "
+                    "even when middleware metadata is unavailable — the hook "
+                    "must exist so Layer 2 emerges from its dormant state."
+                )
+                # ASSUM-FRONTIER-CALLER-FRAME — DeepAgents 0.5.3 does not
+                # expose the metadata, so the wired hook returns None and
+                # Layer 2 falls through to the session-state fallback.
+                assert hook() is None
+                await shutdown(state)
+        finally:
+            dispatch._current_session_hook = original_session_hook
+            dispatch._async_subagent_frame_hook = original_frame_hook

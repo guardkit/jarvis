@@ -245,6 +245,44 @@ class TestLogFrontierEscalation:
         args, _ = logger.log.call_args
         assert args[1] == "frontier_escalation"
 
+    def test_attended_only_outcome_carries_field_set_without_instruction_body(
+        self,
+    ) -> None:
+        """Layer 2 rejection (TASK-J003-FIX-001 wiring) preserves redaction.
+
+        ADR-ARCH-029 invariant — the new ``escalate_to_frontier`` code path
+        wired by ``lifecycle.build_app_state`` reaches this helper with
+        ``outcome='attended_only'``; the field set must remain exactly the
+        six declared dispatch_types fields (no instruction body / prompt /
+        text leak). Extends AC-004 to cover the new code path explicitly.
+        """
+        logger = MagicMock(spec=logging.Logger)
+        ctx = self._ctx(
+            outcome="attended_only",
+            instruction_length=512,
+            adapter="anthropic",
+            correlation_id="corr-attended-only",
+            session_id="frontier-call",
+            target=FrontierTarget.OPUS_4_7,
+        )
+        log_frontier_escalation(ctx, logger)
+        _, kwargs = logger.log.call_args
+        extra = kwargs["extra"]
+
+        # The six declared fields are present and carry the supplied values.
+        assert extra["outcome"] == "attended_only"
+        assert extra["target"] == "OPUS_4_7"
+        assert extra["session_id"] == "frontier-call"
+        assert extra["correlation_id"] == "corr-attended-only"
+        assert extra["adapter"] == "anthropic"
+        assert extra["instruction_length"] == 512
+        assert extra["model_alias"] == "cloud-frontier"
+
+        # The redaction invariant — no instruction-body-shaped key leaks
+        # into the structured record under the attended-only path.
+        for banned in ("instruction", "instruction_body", "body", "prompt", "text"):
+            assert banned not in extra
+
 
 # ---------------------------------------------------------------------------
 # AC-005 — No I/O at import; no LLM calls

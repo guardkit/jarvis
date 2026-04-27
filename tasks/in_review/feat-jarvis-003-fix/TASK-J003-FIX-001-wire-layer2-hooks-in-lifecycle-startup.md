@@ -9,7 +9,7 @@ id: TASK-J003-FIX-001
 implementation_mode: task-work
 parent_review: FEAT-JARVIS-003
 priority: high
-status: backlog
+status: in_review
 tags:
 - phase-2
 - jarvis
@@ -20,7 +20,7 @@ tags:
 - tdd
 task_type: bugfix
 title: Wire escalate_to_frontier Layer 2 hooks in lifecycle.build_app_state
-updated: 2026-04-26 00:00:00+00:00
+updated: 2026-04-27 00:00:00+00:00
 wave: 2
 ---
 

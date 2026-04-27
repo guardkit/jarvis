@@ -10,6 +10,7 @@ This module belongs to the sessions package (Group D) per ADR-ARCH-006.
 
 from __future__ import annotations
 
+import contextvars
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -50,6 +51,22 @@ class SessionManager:
         self._sessions: dict[str, Session] = {}
         self._ended: set[str] = set()
         self._in_flight: dict[str, bool] = {}
+        # ContextVar (per-instance) backing :meth:`current_session`. A
+        # ContextVar is required rather than a plain attribute because the
+        # supervisor invocation is awaited and multiple sessions can be
+        # in flight across asyncio tasks at the same time — each task's
+        # context copy holds its own session reference, so the dispatch
+        # module's ``_current_session_hook`` resolves to the session whose
+        # supervisor turn is actually running. The unique name embeds
+        # ``id(self)`` so multiple SessionManagers (e.g. across
+        # ``build_app_state`` calls in a single test process) do not
+        # alias one another's storage.
+        self._current_session_var: contextvars.ContextVar[Session | None] = (
+            contextvars.ContextVar(
+                f"jarvis_session_manager_{id(self)}_current_session",
+                default=None,
+            )
+        )
 
     def start_session(self, adapter: Adapter, user_id: str) -> Session:
         """Create a new session for the given adapter and user.
@@ -114,6 +131,30 @@ class SessionManager:
 
         return self._sessions[session_id]
 
+    def current_session(self) -> Session | None:
+        """Return the session whose supervisor turn is currently running.
+
+        Backs the ``jarvis.tools.dispatch._current_session_hook`` resolver
+        wired by :func:`jarvis.infrastructure.lifecycle.build_app_state`.
+        Layer 2 of the constitutional ``escalate_to_frontier`` gate
+        (DDR-014) reads ``Session.adapter`` and
+        ``Session.metadata['currently_in_subagent']`` from the returned
+        value to decide whether to reject the call before any provider
+        SDK invocation.
+
+        The result is sourced from a per-instance :class:`contextvars.ContextVar`
+        that :meth:`invoke` sets for the duration of each supervisor turn —
+        ``None`` is the dormant default observed when no session is
+        currently driving a supervisor call (which the dispatch module
+        treats as ``adapter_id == "unknown"``, an attended-only
+        rejection).
+
+        Returns:
+            The :class:`Session` currently driving a supervisor turn, or
+            ``None`` when the manager is idle on the active asyncio task.
+        """
+        return self._current_session_var.get()
+
     def end_session(self, session_id: str) -> None:
         """End a session. Idempotent — calling twice does not raise.
 
@@ -167,6 +208,11 @@ class SessionManager:
             raise JarvisError(msg)
 
         self._in_flight[sid] = True
+        # Publish the active session to the per-instance ContextVar so the
+        # dispatch module's ``_current_session_hook`` (wired in
+        # ``lifecycle.build_app_state``) can resolve the active adapter
+        # for DDR-014 Layer 2.
+        token = self._current_session_var.set(session)
         try:
             result: dict[str, Any] = await self._supervisor.ainvoke(
                 {"messages": [HumanMessage(content=user_input)]},
@@ -176,4 +222,5 @@ class SessionManager:
 
             return str(result["messages"][-1].content)
         finally:
+            self._current_session_var.reset(token)
             self._in_flight[sid] = False

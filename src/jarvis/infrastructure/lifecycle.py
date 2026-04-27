@@ -77,6 +77,7 @@ from jarvis.tools import (
     assemble_tool_list,
     load_stub_registry,
 )
+from jarvis.tools import dispatch as _dispatch
 
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
@@ -437,6 +438,35 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # 11. Wire the session manager so AppState is fully populated on return.
     session_manager = SessionManager(supervisor=supervisor, store=store)
 
+    # 11b. Arm DDR-014 Layer 2 — the executor assertion of the
+    # constitutional ``escalate_to_frontier`` gate. Until these hooks are
+    # assigned, ``_check_attended_only`` short-circuits to ``None`` and the
+    # gate operates with two layers (prompt + registration absence) instead
+    # of three (FEAT-JARVIS-003 review Finding F1, TASK-J003-FIX-001).
+    #
+    # ``_current_session_hook`` is bound to ``session_manager.current_session``
+    # — a method backed by a per-instance ``contextvars.ContextVar`` set by
+    # :meth:`SessionManager.invoke` for the duration of each supervisor
+    # turn. The dispatch module reads ``Session.adapter`` and
+    # ``Session.metadata['currently_in_subagent']`` from the returned
+    # value.
+    #
+    # ``_async_subagent_frame_hook`` is wired to a callable returning
+    # ``None`` per ASSUM-FRONTIER-CALLER-FRAME — DeepAgents 0.5.3 does
+    # not expose ``AsyncSubAgentMiddleware`` caller-frame metadata, so
+    # the hook deliberately falls through to the session-state fallback
+    # (Finding F6's resilience path). When a future DeepAgents release
+    # surfaces the metadata, swap this for a probe over the middleware
+    # state and the gate gains its second detection path automatically.
+    #
+    # Plain assignment makes this naturally idempotent: a second
+    # ``build_app_state`` call simply replaces the closures with fresh
+    # ones bound to the new ``SessionManager``. No stacking, no guards
+    # required.
+    _dispatch._current_session_hook = session_manager.current_session
+    _dispatch._async_subagent_frame_hook = lambda: None
+    log.info("jarvis_layer2_hooks_wired")
+
     state = AppState(
         config=config,
         supervisor=supervisor,
@@ -460,6 +490,12 @@ async def shutdown(state: AppState) -> None:
     Idempotent — calling this multiple times on the same state does
     not raise.  Logs a structured shutdown event on completion.
 
+    Returns the dispatch module's DDR-014 Layer-2 hooks
+    (``_current_session_hook``, ``_async_subagent_frame_hook``) to their
+    dormant ``None`` default so a subsequent ``build_app_state`` in the
+    same process (e.g. tests, ``jarvis chat`` restart) starts from a
+    clean module state.
+
     Args:
         state: The :class:`AppState` to tear down.
     """
@@ -471,6 +507,12 @@ async def shutdown(state: AppState) -> None:
                 state.store.close()
             except Exception:
                 log.warning("jarvis_store_close_warning", exc_info=True)
+
+        # Disarm Layer 2 — the dispatch module's hooks must not survive
+        # ``shutdown`` so a fresh ``build_app_state`` can rewire them
+        # without aliasing this lifecycle's SessionManager.
+        _dispatch._current_session_hook = None
+        _dispatch._async_subagent_frame_hook = None
 
         log.info("jarvis_shutdown_complete")
     except Exception:
