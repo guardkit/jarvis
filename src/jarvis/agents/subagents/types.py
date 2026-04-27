@@ -24,14 +24,14 @@ This module performs no I/O at import and makes no LLM calls.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = ["AsyncTaskInput", "RoleName"]
 
 
-class RoleName(str, Enum):
+class RoleName(StrEnum):
     """Closed enumeration of role modes for the ``jarvis-reasoner`` subagent.
 
     Per DDR-011 and design.md §4: membership is closed for v1. Additions

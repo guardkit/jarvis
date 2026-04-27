@@ -58,6 +58,7 @@ The leaf-subagent invariant (DDR-010) is enforced by the ``tools=[]`` and
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Hashable
 from typing import Any, TypedDict
 
 from deepagents import create_deep_agent
@@ -254,7 +255,7 @@ def _route_after_resolution(state: _ReasonerState) -> str:
 def _make_role_runner(
     role: RoleName,
     deep_agent: CompiledStateGraph[Any, Any, Any, Any],
-):
+) -> Callable[[_ReasonerState], Any]:
     """Factory: build the dispatcher node for one role.
 
     Each role gets a closure that delegates to its pre-compiled inner
@@ -361,12 +362,20 @@ def _build_graph() -> CompiledStateGraph[Any, Any, Any, Any]:
     builder = StateGraph(_ReasonerState)
     builder.add_node("resolve_role", _resolve_role)
     for role, deep_agent in role_deep_agents.items():
-        builder.add_node(role.value, _make_role_runner(role, deep_agent))
+        # langgraph's ``add_node`` infers its node-input TypeVar as
+        # ``Never`` (it doesn't propagate StateGraph's ``StateT`` into
+        # the ``_Node[NodeInputT_contra]`` protocol), so a typed
+        # ``Callable[[_ReasonerState], Any]`` looks incompatible even
+        # though it is contravariantly valid at runtime. Suppression is
+        # safe — _ReasonerState is the StateGraph schema (line 361
+        # above).
+        runner = _make_role_runner(role, deep_agent)
+        builder.add_node(role.value, runner)  # type: ignore[arg-type]
 
     builder.set_entry_point("resolve_role")
 
     # Conditional edges: resolver emits a role value or END.
-    role_edge_map: dict[str, str] = {role.value: role.value for role in RoleName}
+    role_edge_map: dict[Hashable, str] = {role.value: role.value for role in RoleName}
     role_edge_map[END] = END
     builder.add_conditional_edges(
         "resolve_role",

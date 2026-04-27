@@ -8,7 +8,8 @@ id: TASK-J003-FIX-002
 implementation_mode: direct
 parent_review: FEAT-JARVIS-003
 priority: high
-status: backlog
+status: completed
+completed: '2026-04-27T00:00:00+00:00'
 tags:
 - phase-2
 - jarvis
@@ -19,8 +20,14 @@ tags:
 - ddr-014
 task_type: bugfix
 title: Clear all mypy + ruff drift in src/jarvis/ to satisfy Phase 2 close criterion #9
-updated: 2026-04-26 00:00:00+00:00
+updated: '2026-04-27T00:00:00+00:00'
 wave: 1
+test_results:
+  status: pass
+  last_run: 2026-04-27
+  ruff: "All checks passed!"
+  mypy: "Success: no issues found in 39 source files"
+  pytest: "1585 passed, 2 skipped"
 ---
 
 # Clear all mypy + ruff drift in src/jarvis/ to satisfy Phase 2 close criterion #9
@@ -62,3 +69,22 @@ This task widens the Literal, autofixes the safe ruff drift, and migrates `RoleN
 ## Notes
 
 This task **unblocks FIX-001's** TDD acceptance gate — once the Literal is widened, mypy is satisfied with the existing Layer-2 code path and FIX-001's new integration test runs against a clean baseline. Land FIX-002 first (Wave 1); FIX-001 follows in Wave 2.
+
+## Implementation Summary
+
+**Outcome:** Phase 2 close criterion #9 satisfied — `ruff check src/jarvis/` and `mypy src/jarvis/` both report zero errors; full test suite remains at 1585 passed, 2 skipped.
+
+**Baseline correction.** Task description was based on a stale baseline (9 mypy + 8 ruff errors). At the time of execution the surface had already been narrowed to **2 mypy + 1 ruff** by adjacent work — `FrontierTarget` had already been migrated to `StrEnum`, the `_emit_frontier_log` `outcome` Literal already included `"attended_only"`, and the dispatch.py / general.py / tools/__init__.py drift the description listed had already been cleared by TASK-J002F-001. Only `RoleName`, `_make_role_runner`, and the `add_conditional_edges` mapping type remained.
+
+**Approach.**
+- `src/jarvis/agents/subagents/types.py`: switched `class RoleName(str, Enum)` → `class RoleName(StrEnum)`. Test invariants verified: `RoleName("")` raises `ValueError`, `RoleName("CRITIC")` raises (lowercase-only), `RoleName.CRITIC.value == "critic"`, `issubclass(RoleName, str)` and `issubclass(RoleName, Enum)` both still hold (StrEnum extends both). `test_subagent_types_role_name.py` (33 cases) passed unchanged.
+- `src/jarvis/agents/subagents/jarvis_reasoner.py`: added `Callable[[_ReasonerState], Any]` return annotation to `_make_role_runner`; narrowed `role_edge_map` to `dict[Hashable, str]` so `add_conditional_edges` accepts it; added `from collections.abc import Callable, Hashable`.
+
+**Lessons.**
+- langgraph's `StateGraph.add_node` does not propagate the StateGraph's `StateT` into the `_Node[NodeInputT_contra]` Protocol — mypy infers `NodeInputT_contra=Never`, so a typed `Callable[[_ReasonerState], Any]` looks incompatible with `_Node[Never]` even though it is contravariantly valid at runtime. The typed `_make_role_runner` therefore required a single justified `# type: ignore[arg-type]` at the `builder.add_node(role.value, runner)` call site, with an inline comment naming the rule and the cause. Returning `Any` from `_make_role_runner` (instead of typing it) would have hidden the same incompatibility but lost the contract — the explicit annotation + scoped suppression is the better trade.
+- Always re-baseline mypy + ruff before starting a "clean drift" task. The drift surface compresses fast as adjacent tasks land, and the fix list in the description can rot in days.
+
+**Related ADRs / contracts.**
+- DDR-014 (Phase-2 close criterion #9 — ruff + mypy clean on `src/jarvis/`)
+- DDR-011 (RoleName closed enum invariants — preserved by StrEnum migration)
+- FEAT-J003 IMPLEMENTATION-GUIDE.md §4 Contract 4 (already satisfied by prior `outcome` Literal widening)
