@@ -4,7 +4,7 @@
   ],
   "graphs": {
     "jarvis": {
-      "path": "./src/jarvis/agents/supervisor.py:graph",
+      "path": "./src/jarvis/agents/supervisor.py:make_graph",
       "transport": "asgi"
     },
     "jarvis_reasoner": {

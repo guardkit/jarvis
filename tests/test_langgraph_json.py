@@ -506,6 +506,13 @@ class TestScenarioAnchor:
           - declares the ``jarvis`` graph,
           - declares the ``jarvis_reasoner`` graph,
           - and pins ASGI transport on both.
+
+        The path attribute name is intentionally NOT pinned to ``:graph``
+        here: TASK-J003-FIX-004 (F8) flipped ``jarvis`` to ``:make_graph``
+        (factory shape, delegating to ``lifecycle.build_app_state``) while
+        ``jarvis_reasoner`` keeps the eager ``:graph`` shape per DDR-012.
+        Both forms are valid langgraph CLI inputs; the symbol-resolution
+        contract is enforced by ``TestJarvisGraphSymbolResolves`` above.
         """
         assert LANGGRAPH_JSON.parent == REPO_ROOT
         graphs = manifest["graphs"]
@@ -514,7 +521,11 @@ class TestScenarioAnchor:
             entry = graphs[graph_id]
             assert isinstance(entry, dict)
             assert entry.get("transport") == "asgi"
-            assert "path" in entry and entry["path"].endswith(":graph")
+            assert "path" in entry, f"{graph_id} entry must declare a path"
+            module_str, _, attr_str = entry["path"].partition(":")
+            assert module_str and attr_str, (
+                f"{graph_id} path must use 'module:variable' form; got {entry['path']!r}"
+            )
 
 
 # ---------------------------------------------------------------------------

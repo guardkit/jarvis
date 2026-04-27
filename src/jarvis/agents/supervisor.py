@@ -332,3 +332,66 @@ def build_supervisor(
 
     logger.info("Supervisor graph compiled successfully")
     return graph
+
+
+def make_graph() -> CompiledStateGraph[Any, Any, Any, Any]:
+    """Zero-argument factory consumed by ``langgraph.json`` (DDR-013 / F8).
+
+    The langgraph CLI loads each entry in ``langgraph.json`` by importing
+    the declared ``module:variable`` path and calling the resolved object
+    when it is callable (or serving it directly when it is already a
+    :class:`CompiledStateGraph`).  ``jarvis_reasoner.py`` exposes a bare
+    ``graph`` symbol per DDR-012's eager-compile rule because that leaf
+    graph has no lifecycle dependencies; the supervisor cannot follow the
+    same pattern because eager compilation at import would:
+
+    1. Trigger ``JarvisConfig()`` instantiation, ``init_chat_model``,
+       ``assemble_tool_list``, and the capability-registry load before any
+       caller had a chance to configure logging, providing keys, or pin a
+       stub registry path — re-introducing the F2-class fragility the
+       FEAT-JARVIS-003 fix wave just closed.
+    2. Bypass :func:`jarvis.infrastructure.lifecycle.build_app_state`, so
+       the FIX-001 invariants (DDR-014 Layer-2 hook wiring,
+       ADR-ARCH-027 ambient tool factory, ASSUM-006 capability snapshot)
+       would silently NOT hold for the langgraph-CLI-served supervisor —
+       a Finding F1 regression with no test coverage.
+
+    The factory shape sidesteps both: ``JarvisConfig`` and
+    ``build_app_state`` are imported inside the function body so importing
+    this module remains side-effect free, and the lifecycle wiring runs
+    once when the langgraph CLI invokes the factory at server load.
+
+    Args:
+        (none) — the langgraph CLI invokes the factory with no
+        arguments. Configuration is read from the operator's ``.env``
+        (referenced by ``langgraph.json``'s ``env`` key) and from
+        ``JARVIS_*``-prefixed environment variables.
+
+    Returns:
+        A fully wired :class:`CompiledStateGraph` ready for invocation.
+        Layer 2 of the constitutional ``escalate_to_frontier`` gate is
+        armed (``dispatch._current_session_hook`` and
+        ``dispatch._async_subagent_frame_hook`` are non-``None``); the
+        ambient-tool factory is attached to the graph as
+        ``graph._jarvis_ambient_tool_factory``; the capability registry
+        is snapshot into the dispatch + capability tool modules.
+
+    Raises:
+        ConfigurationError: If the active ``JarvisConfig`` fails provider
+            key validation (e.g. ``OPENAI_BASE_URL`` is unset for the
+            default ``openai:jarvis-reasoner`` supervisor model).
+        FileNotFoundError: If the configured ``stub_capabilities_path``
+            does not exist (startup-fatal per FEAT-JARVIS-002 §7).
+
+    See also:
+        TASK-J003-FIX-004 — closes Finding F8 (langgraph CLI cannot
+        resolve ``supervisor.py:graph`` because no such symbol exists).
+        DDR-013 — repo-root ``langgraph.json`` declares both Jarvis graphs.
+    """
+    import asyncio
+
+    from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.lifecycle import build_app_state
+
+    state = asyncio.run(build_app_state(JarvisConfig()))
+    return state.supervisor
