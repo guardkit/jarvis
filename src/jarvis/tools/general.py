@@ -1,9 +1,9 @@
-# ruff: noqa: RUF002
-# ^ Tool docstrings are reproduced *byte-for-byte* from
-#   docs/design/FEAT-JARVIS-002/contracts/API-tools.md. The contract uses
-#   Unicode en-dashes; the reasoning model reads docstrings verbatim, so
-#   we deliberately preserve those characters rather than substitute
-#   ASCII hyphens.
+# Tool docstrings are reproduced *byte-for-byte* from
+# docs/design/FEAT-JARVIS-002/contracts/API-tools.md. The contract uses
+# Unicode en-dashes; the reasoning model reads docstrings verbatim, so we
+# deliberately preserve those characters rather than substitute ASCII
+# hyphens. The project-wide RUF002 silence is pinned in pyproject.toml's
+# `[tool.ruff.lint.per-file-ignores]` for `src/jarvis/**` (FEAT-J002F-001).
 """General-purpose tools for the Jarvis supervisor.
 
 Hosts the four ``general`` tools consumed by the reasoning model via the
@@ -60,7 +60,6 @@ from typing import Any, Final, Literal
 
 from asteval import Interpreter  # type: ignore[import-untyped]
 from langchain_core.tools import tool
-from pydantic import SecretStr
 
 from jarvis.config.settings import JarvisConfig
 from jarvis.tools.types import WebResult
@@ -175,17 +174,21 @@ _provider_factory: Any = TavilyProvider
 
 
 def _resolve_api_key(config: JarvisConfig | None) -> str | None:
-    """Return the configured Tavily API key, or ``None`` if absent."""
+    """Return the configured Tavily API key, or ``None`` if absent.
+
+    ``JarvisConfig.tavily_api_key`` is typed as ``SecretStr | None`` so
+    after the early ``None`` return the only remaining branch is the
+    SecretStr unwrap. (Earlier revisions kept a ``str`` fallback arm,
+    but the config schema has narrowed since — strict mypy flagged it
+    as unreachable. Removed in FEAT-J002F-001.)
+    """
     if config is None:
         return None
     raw = config.tavily_api_key
     if raw is None:
         return None
-    if isinstance(raw, SecretStr):
-        secret = raw.get_secret_value()
-        return secret or None
-    secret_str = str(raw)
-    return secret_str or None
+    secret = raw.get_secret_value()
+    return secret or None
 
 
 def _coerce_results(

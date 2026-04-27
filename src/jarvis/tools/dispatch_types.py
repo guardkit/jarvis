@@ -23,7 +23,7 @@ calls — it is a pure types + helper module.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from logging import INFO, Logger
 from typing import Literal
 
@@ -36,11 +36,13 @@ __all__ = [
 ]
 
 
-class FrontierTarget(str, Enum):
+class FrontierTarget(StrEnum):
     """Closed enumeration of supported cloud frontier providers.
 
     Per DDR-011 and design.md §4: adding a member is a conscious schema
-    change that requires a DDR. The enum is ``str``-valued so
+    change that requires a DDR. The enum is ``str``-valued (via
+    :class:`enum.StrEnum`, the canonical 3.11+ form for the legacy
+    ``(str, Enum)`` mix-in) so
     :func:`@tool(parse_docstring=True) <langchain_core.tools.tool>`
     argument coercion works with literal strings supplied by the
     reasoning model.

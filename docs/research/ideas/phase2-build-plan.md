@@ -10,7 +10,7 @@
 
 ## For: Giving Jarvis's supervisor its dispatch vocabulary — the tools it reaches for and the subagents it delegates to. First phase where "one reasoning model that knows which reasoning model to use" works in practice.
 ## Date: 20 April 2026
-## Status (2026-04-24): Phase 1 closed (22 Apr). Both `/system-design` runs complete (23 Apr). `/feature-spec` complete for both features (24 Apr). `/feature-plan` complete for both features (24 Apr) → AutoBuild features [`FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) (23 subtasks, complexity 6) and [`FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) (24 subtasks, complexity 7). **Next: `/feature-build FEAT-J002` + `/feature-build FEAT-J003`.**
+## Status (2026-04-26): Phase 1 closed (22 Apr). Both `/system-design` runs complete (23 Apr). `/feature-spec` complete for both features (24 Apr). `/feature-plan` complete for both features (24 Apr) → AutoBuild features [`FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) (23 subtasks, complexity 6) and [`FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) (24 subtasks, complexity 7). **AutoBuild complete for both features** — FEAT-J002 landed 25 Apr (23/23 tasks, 100% pass, 91% first-attempt approval, commit `1da94ca`); FEAT-J003 merged 26 Apr (24/24 tasks across 8 waves, merge commit `49dcbd0`). **Next: `/task-review` + regression check + Step 11 end-to-end routing validation.**
 ## Repo: `guardkit/jarvis`
 ## Machine: MacBook Pro M2 Max (planning + build via Claude Code)
 
@@ -23,8 +23,8 @@ The `/feature-plan` command produces structured YAML feature files under
 | Feature | AutoBuild YAML | Task directory | Status |
 |---|---|---|---|
 | FEAT-JARVIS-001 | [`FEAT-JARVIS-001.yaml`](../../../.guardkit/features/FEAT-JARVIS-001.yaml) | `tasks/backlog/project-scaffolding-supervisor-sessions/` | ✅ Phase 1 — AutoBuild complete, closed 22 Apr |
-| FEAT-JARVIS-002 | [`FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) | [`tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/`](../../../tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/) | 🟡 Plan landed 24 Apr — 23 subtasks ready for `/feature-build FEAT-J002` |
-| FEAT-JARVIS-003 | [`FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) | [`tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/`](../../../tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/) | 🟡 Plan landed 24 Apr — 24 subtasks ready for `/feature-build FEAT-J003` |
+| FEAT-JARVIS-002 | [`FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) | [`tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/`](../../../tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/) | ✅ AutoBuild complete 25 Apr — 23/23 tasks, 100% pass rate (commit `1da94ca`) |
+| FEAT-JARVIS-003 | [`FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) | [`tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/`](../../../tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/) | ✅ AutoBuild complete 26 Apr — 24/24 tasks across 8 waves (merge commit `49dcbd0`) |
 
 `/feature-build FEAT-<id>` executes the AutoBuild cycle — player-coach loop
 per subtask, BDD oracle (R2) for tagged scenarios, and between-wave
@@ -45,8 +45,8 @@ smoke gates (R3) if declared in the YAML.
 | 2026-04-24 | `/feature-spec FEAT-JARVIS-003` | Gherkin scenarios landed at [`features/feat-jarvis-003-async-subagent-and-frontier-escape/`](../../../features/feat-jarvis-003-async-subagent-and-frontier-escape/). 44 scenarios (11 @smoke, 1 @regression). 6 assumptions (0 high / 5 medium / 1 low) — review required. Spec consumes the reframed design per DDR-010..015: single `jarvis-reasoner` subagent with closed-enum `role`, module-import compilation, `langgraph.json` at repo root, `escalate_to_frontier` with three-layer belt+braces gating, `LlamaSwapAdapter` with stubbed health. |
 | 2026-04-24 | `/feature-plan FEAT-JARVIS-002` | AutoBuild feature landed: [`.guardkit/features/FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml). 23 subtasks generated under [`tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/`](../../../tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/), aggregate complexity 6. Envelope-first concurrent fan-out (Option B, review score 12/12). DDR-009 swap-point discipline preserved — two primary grep anchors guard the FEAT-JARVIS-004/005 transport swap. Commit `76ca5ff`. Ready for `/feature-build FEAT-J002`. |
 | 2026-04-24 | `/feature-plan FEAT-JARVIS-003` | AutoBuild feature landed: [`.guardkit/features/FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml). 24 subtasks generated under [`tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/`](../../../tasks/backlog/feat-jarvis-003-async-subagent-and-frontier-escape/), aggregate complexity 7. Envelope-first concurrent fan-out (Option B, review score 12/12). Three-layer belt+braces gate split into L1 (010) / L2 (011) / L3 standalone (012) per Context A concern #1. All 44 Gherkin scenarios tagged `@task:TASK-J003-xxx` (avg confidence 0.88, 0 below threshold) — R2 BDD oracle active. ASSUM-004 (low confidence) resolved at `/feature-spec` time (`human_response: confirmed`). |
-| *pending* | `/feature-build FEAT-J002` | AutoBuild cycle over the 23 subtasks in `FEAT-J002.yaml`. Player-coach loop per subtask; R2 BDD oracle runs `@task:TASK-J002-xxx`-tagged scenarios during `/task-work` Phase 4. |
-| *pending* | `/feature-build FEAT-J003` | AutoBuild cycle over the 24 subtasks in `FEAT-J003.yaml`. Preview-feature risk sits here (DeepAgents 0.5.3 `AsyncSubAgentMiddleware` + ASGI multi-graph); the role-propagation integration test (TASK-J003-022) is the regression surface if the 0.5.3 preview API breaks role-key propagation. |
+| 2026-04-25 | `/feature-build FEAT-J002` | AutoBuild cycle complete: **23/23 tasks PASSED**, 6 waves executed, 25 total turns (avg 1.09 turns/task), first-attempt pass rate 91% (21/23 single-turn), 0 SDK ceiling hits, 0 task failures. Run summary: [`.guardkit/autobuild/FEAT-J002/review-summary.md`](../../../.guardkit/autobuild/FEAT-J002/review-summary.md). Per-task progress logs under [`.guardkit/autobuild/TASK-J002-xxx/`](../../../.guardkit/autobuild/). Orchestration completion + status updates committed in `1da94ca`. R2 BDD oracle ran `@task:TASK-J002-xxx`-tagged scenarios; pytest-bdd collection wired in `f60c6be` (TASK-OPS-J002-BDD). |
+| 2026-04-26 | `/feature-build FEAT-J003` | AutoBuild cycle complete: **24/24 tasks PASSED across 8 waves** (events log: [`.guardkit/autobuild/FEAT-J003/events.jsonl`](../../../.guardkit/autobuild/FEAT-J003/events.jsonl)). All wave routers reported `task_failures: 0`. Final wave (wave-8) closed 10:39 UTC with TASK-J003-023 + TASK-J003-024. Missing checkpoint added in `5c77f6a`; merge to `main` in `49dcbd0`. Preview-feature risk (DeepAgents 0.5.3 `AsyncSubAgentMiddleware` + ASGI multi-graph) cleared — role-propagation integration test (TASK-J003-022) approved on first turn. |
 
 ---
 
@@ -549,7 +549,7 @@ token in the prompt) kicks in.
 AutoBuild cycles; FEAT-J002 completes first (tools-before-subagents matches
 the "dispatch is tool selection" framing), then FEAT-J003.
 
-### Step 7: AutoBuild FEAT-JARVIS-002
+### Step 7: AutoBuild FEAT-JARVIS-002 ✅ Complete (2026-04-25)
 
 AutoBuild feature YAML: [`.guardkit/features/FEAT-J002.yaml`](../../../.guardkit/features/FEAT-J002.yaml) — 23 subtasks, complexity 6, produced 2026-04-24.
 
@@ -558,9 +558,9 @@ cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
 /feature-build FEAT-J002
 ```
 
-The `/feature-plan` run has already enumerated the wave structure and commit order inside the YAML + `tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/IMPLEMENTATION-GUIDE.md`. Envelope-first concurrent fan-out (Option B, review score 12/12); DDR-009 swap-point discipline preserved — two primary grep anchors guard the FEAT-JARVIS-004/005 transport swap. Per-feature AutoBuild, not per-task. `/task-review` at feature gate.
+**Outcome:** 23/23 tasks PASSED across 6 waves, 100% task success rate, first-attempt approval rate 91% (21/23 single-turn; 2 multi-turn at TASK-J002-013 and TASK-J002-014). 0 SDK ceiling hits, 0 task failures. Avg SDK turns/invocation 54.2. Run summary at [`.guardkit/autobuild/FEAT-J002/review-summary.md`](../../../.guardkit/autobuild/FEAT-J002/review-summary.md); per-task progress logs under [`.guardkit/autobuild/TASK-J002-xxx/progress.log`](../../../.guardkit/autobuild/). Orchestration completion + status updates committed in `1da94ca`. The `/feature-plan` run had already enumerated the wave structure and commit order inside the YAML + `tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/IMPLEMENTATION-GUIDE.md`. Envelope-first concurrent fan-out (Option B, review score 12/12); DDR-009 swap-point discipline preserved — two primary grep anchors (`JARVIS_DISPATCH_STUB`, `JARVIS_QUEUE_BUILD_STUB`) guard the FEAT-JARVIS-004/005 transport swap. Follow-up: pytest-bdd collection wired in `f60c6be` (TASK-OPS-J002-BDD) so `@task:TASK-J002-xxx`-tagged Gherkin scenarios run during `/task-work` Phase 4.
 
-### Step 8: AutoBuild FEAT-JARVIS-003
+### Step 8: AutoBuild FEAT-JARVIS-003 ✅ Complete (2026-04-26)
 
 AutoBuild feature YAML: [`.guardkit/features/FEAT-J003.yaml`](../../../.guardkit/features/FEAT-J003.yaml) — 24 subtasks, complexity 7, produced 2026-04-24.
 
@@ -568,16 +568,16 @@ AutoBuild feature YAML: [`.guardkit/features/FEAT-J003.yaml`](../../../.guardkit
 /feature-build FEAT-J003
 ```
 
-Suggested commit order (the `/feature-plan` run should refine, and the YAML's wave structure governs once written):
+**Outcome:** 24/24 tasks PASSED across 8 waves; all wave routers reported `task_failures: 0`. Wave timeline (per [`.guardkit/autobuild/FEAT-J003/events.jsonl`](../../../.guardkit/autobuild/FEAT-J003/events.jsonl)):
 
-1. `subagents/prompts.py` (role prompts — critic / researcher / planner per DDR-011 closed-enum).
-2. `subagents/jarvis_reasoner.py` — single `AsyncSubAgent` with module-import compilation per DDR-012.
-3. `subagent_registry.py` + `test_subagent_registry.py`.
-4. `LlamaSwapAdapter` with stubbed health per DDR-015.
-5. `escalate_to_frontier` in `jarvis.tools.dispatch` per DDR-014 — three-layer belt+braces gating.
-6. Supervisor factory + prompt updates.
-7. ASGI transport (`langgraph.json` at repo root per DDR-013 + `infrastructure/asgi.py` if needed).
-8. `test_routing_e2e.py` — the acceptance test.
+- Wave 1 (primitives): config fields, RoleName + FrontierTarget enums, AsyncTaskInput + SwapStatus + FrontierEscalationContext models, ROLE_PROMPTS registry, pyproject deps.
+- Wave 2 (components): LlamaSwapAdapter with stubbed health (DDR-015), `jarvis_reasoner` graph with module-import compile (DDR-012), `subagent_registry` (DDR-010), `escalate_to_frontier` L1 body + L2 executor assertion (DDR-014).
+- Wave 3 (wiring): `assemble_tool_list` Layer 3 absence (standalone task per Context A concern #1), `build_supervisor` extension, supervisor prompt update, `lifecycle.startup` completion.
+- Wave 4 (transport + tests): `langgraph.json` at repo root (DDR-013), three unit-test suites.
+- Wave 5: retired-roster regression test, supervisor-with-subagents integration test, role-propagation integration test (standalone per Context A concern #4).
+- Waves 6–8: seven-prompt acceptance test (design §9), `langgraph dev --help` smoke, final acceptance + close (TASK-J003-023 + TASK-J003-024 closed wave-8 at 10:39 UTC).
+
+Missing checkpoint added in `5c77f6a`; merge to `main` in `49dcbd0`. Preview-feature risk (DeepAgents 0.5.3 `AsyncSubAgentMiddleware` + ASGI multi-graph) cleared — TASK-J003-022 (role-propagation integration test, the regression surface for any 0.5.3 → 0.6 API break) approved on first turn.
 
 ### Step 9: /task-review FEAT-JARVIS-002 + /task-review FEAT-JARVIS-003
 
@@ -705,11 +705,11 @@ Building on Phase 1's timeline (Phase 1: 21–24 April 2026):
 | 2 (24 Apr) | Step 3 + Step 4 — `/feature-spec` for both features | Gherkin scenarios (42 + 44), assumptions, summaries | ✅ |
 | 2 (24 Apr) | Step 5 — `/feature-plan FEAT-JARVIS-002` | AutoBuild YAML `FEAT-J002.yaml` + 23 subtasks | ✅ |
 | 2 (24 Apr) | Step 6 — `/feature-plan FEAT-JARVIS-003` | AutoBuild YAML `FEAT-J003.yaml` + 24 subtasks | ✅ |
-| 3 (25 Apr) | Step 7 — `/feature-build FEAT-J002` (tools first — low-risk) | Tools + capability reader + dispatch stubs shipping; FEAT-JARVIS-002 tests green | 🔲 |
-| 4 (26 Apr) | Step 8 — `/feature-build FEAT-J003` (single subagent + escalate_to_frontier — preview feature) | `jarvis-reasoner` subagent + ASGI + routing e2e test shipping | 🔲 |
+| 3 (25 Apr) | Step 7 — `/feature-build FEAT-J002` (tools first — low-risk) | Tools + capability reader + dispatch stubs shipping; FEAT-JARVIS-002 tests green | ✅ 23/23 tasks PASSED, 6 waves, 91% first-attempt approval (commit `1da94ca`) |
+| 4 (26 Apr) | Step 8 — `/feature-build FEAT-J003` (single subagent + escalate_to_frontier — preview feature) | `jarvis-reasoner` subagent + ASGI + routing e2e test shipping | ✅ 24/24 tasks PASSED, 8 waves (merge commit `49dcbd0`) |
 | 5 (27 Apr) | Step 9 — `/task-review` for both; fix any gaps. Step 10 — regression check. Step 11 — end-to-end routing validation with real models. | Phase 2 closed; evidence recorded | 🔲 |
 
-**Target: Phase 2 complete within the 23–27 Apr window.** Design + spec + plans for **both** features landed on Day 2 (24 Apr) — one full day ahead of the original 25–29 Apr plan. FEAT-JARVIS-003 remains the hardest feature in v1 (preview-feature risk on `AsyncSubAgentMiddleware`, first ASGI multi-graph, three-layer `escalate_to_frontier` gating); budget still accommodates a 1-day overrun if needed.
+**Phase 2 build phase delivered on schedule.** Design + spec + plans for **both** features landed on Day 2 (24 Apr) — one full day ahead of the original 25–29 Apr plan. AutoBuild for both features completed on the originally-budgeted days (FEAT-J002 on Day 3, 25 Apr; FEAT-J003 on Day 4, 26 Apr) with zero task failures across 47 subtasks (23 + 24). FEAT-JARVIS-003's preview-feature risks (`AsyncSubAgentMiddleware`, first ASGI multi-graph, three-layer `escalate_to_frontier` gating) cleared without overrun. Day 5 (27 Apr) close-out work (`/task-review`, regression check, end-to-end routing validation with real models) remains.
 
 ---
 

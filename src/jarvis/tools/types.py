@@ -25,11 +25,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 __all__ = [
-    "WebResult",
     "CalendarEvent",
     "DispatchError",
+    "WebResult",
 ]
 
 
@@ -77,7 +76,7 @@ class CalendarEvent(BaseModel):
     description: str | None = None
 
     @model_validator(mode="after")
-    def _end_must_not_precede_start(self) -> "CalendarEvent":
+    def _end_must_not_precede_start(self) -> CalendarEvent:
         if self.end < self.start:
             raise ValueError("end must be >= start")
         return self

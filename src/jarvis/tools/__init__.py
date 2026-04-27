@@ -61,7 +61,11 @@ if TYPE_CHECKING:
     from jarvis.config.settings import JarvisConfig
 
 
-__all__ = [
+# Category grouping (pydantic types → general → catalogue → dispatch →
+# assembly+loader) is the documentation order callers read this module in;
+# the isort-style alphabetical sort RUF022 wants would scatter related
+# symbols and obscure the surface contract.
+__all__ = [  # noqa: RUF022 — deliberate category grouping (see comment above)
     # Pydantic types (3 + 1 internal sentinel = 4)
     "CalendarEvent",
     "CapabilityDescriptor",
@@ -87,7 +91,7 @@ __all__ = [
 
 
 def assemble_tool_list(
-    config: "JarvisConfig",
+    config: JarvisConfig,
     capability_registry: list[CapabilityDescriptor],
     *,
     include_frontier: bool = True,

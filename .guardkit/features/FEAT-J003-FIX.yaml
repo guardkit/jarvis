@@ -1,0 +1,81 @@
+id: FEAT-J003-FIX
+name: Layer 2 Wiring + Quality-Gate Closeout
+description: 'Follow-up to FEAT-JARVIS-003 architectural review. Closes three findings:
+  F1 (Layer 2 hooks dormant in production — wire dispatch._current_session_hook +
+  dispatch._async_subagent_frame_hook in lifecycle.build_app_state per DDR-014),
+  F2 (DDR-012 module-import compilation requires OPENAI_API_KEY; pre-seed stub in
+  tests/conftest.py), and F3 (Phase-2 close criterion #9 — clear all 9 mypy + 8 ruff
+  errors in src/jarvis/, including the _emit_frontier_log Literal mismatch that
+  flags F1 structurally). Two-wave AutoBuild: Wave 1 = build hygiene (parallel direct);
+  Wave 2 = TDD constitutional-gate restoration. Restores three-layer belt+braces
+  guarantee per ADR-ARCH-022/027.'
+created: '2026-04-26T00:00:00.000000'
+status: backlog
+complexity: 3
+estimated_tasks: 3
+parent_review: FEAT-JARVIS-003
+tasks:
+- id: TASK-J003-FIX-002
+  name: Clear all mypy + ruff drift in src/jarvis/
+  file_path: tasks/backlog/feat-jarvis-003-fix/TASK-J003-FIX-002-clear-mypy-and-ruff-drift-in-src.md
+  complexity: 3
+  dependencies: []
+  status: backlog
+  implementation_mode: direct
+  estimated_minutes: 35
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: null
+  completed_at: null
+  wave: 1
+- id: TASK-J003-FIX-003
+  name: Pre-seed OPENAI_API_KEY stub in tests/conftest.py
+  file_path: tasks/backlog/feat-jarvis-003-fix/TASK-J003-FIX-003-pre-seed-openai-api-key-in-conftest.md
+  complexity: 1
+  dependencies: []
+  status: backlog
+  implementation_mode: direct
+  estimated_minutes: 15
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: null
+  completed_at: null
+  wave: 1
+- id: TASK-J003-FIX-001
+  name: Wire escalate_to_frontier Layer 2 hooks in lifecycle.build_app_state
+  file_path: tasks/backlog/feat-jarvis-003-fix/TASK-J003-FIX-001-wire-layer2-hooks-in-lifecycle-startup.md
+  complexity: 4
+  dependencies:
+  - TASK-J003-FIX-002
+  status: backlog
+  implementation_mode: task-work
+  estimated_minutes: 60
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 1
+  started_at: null
+  completed_at: null
+  wave: 2
+acceptance_gates:
+- name: mypy_clean_on_src
+  command: mypy src/jarvis/
+  expected_exit_code: 0
+- name: ruff_clean_on_src
+  command: ruff check src/jarvis/
+  expected_exit_code: 0
+- name: pytest_full_suite_no_env
+  command: pytest tests/
+  expected_exit_code: 0
+  notes: Must work without OPENAI_API_KEY pre-set in shell — FIX-003's stub fixture is the only requirement.
+- name: routing_e2e_regression
+  command: pytest tests/test_routing_e2e.py tests/test_role_propagation_e2e.py tests/test_no_retired_roster_strings.py tests/test_langgraph_json.py
+  expected_exit_code: 0
+- name: layer2_integration_test
+  command: pytest tests/test_lifecycle_layer2_wiring.py
+  expected_exit_code: 0
+  notes: NEW test file added by FIX-001. Must FAIL on main pre-merge (TDD red commit), pass post-merge.

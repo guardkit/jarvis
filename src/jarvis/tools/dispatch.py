@@ -345,21 +345,26 @@ def dispatch_by_capability(
         # Boundary-guard per AC-013: dispatch_by_capability never raises.
         return f"ERROR: specialist_error — agent_id={agent_id} detail={exc}"
 
-    match response:
-        case ("success", ResultPayload() as result):
-            return result.model_dump_json()
-        case ("timeout",):
-            return (
-                f"TIMEOUT: agent_id={agent_id} tool_name={tool_name} "
-                f"timeout_seconds={timeout_seconds}"
-            )
-        case ("specialist_error", str() as reason):
-            return f"ERROR: specialist_error — agent_id={agent_id} detail={reason}"
-        case _:
-            return (
-                f"ERROR: specialist_error — agent_id={agent_id} "
-                f"detail=invalid stub response: {response!r}"
-            )
+    # Tagged-union dispatch on `StubResponse`. Strict mypy doesn't narrow
+    # the discriminator through class patterns in match-case (it reports
+    # the second/third arms as `[unreachable]` and the literal-string
+    # success arm as `Subclass of "str" and "ResultPayload" cannot exist`),
+    # so we narrow with an explicit `isinstance` guard chain instead. The
+    # runtime semantics — and the existing test suite — are unchanged.
+    tag = response[0]
+    if tag == "success" and len(response) == 2 and isinstance(response[1], ResultPayload):
+        return response[1].model_dump_json()
+    if tag == "timeout":
+        return (
+            f"TIMEOUT: agent_id={agent_id} tool_name={tool_name} "
+            f"timeout_seconds={timeout_seconds}"
+        )
+    if tag == "specialist_error" and len(response) == 2 and isinstance(response[1], str):
+        return f"ERROR: specialist_error — agent_id={agent_id} detail={response[1]}"
+    return (
+        f"ERROR: specialist_error — agent_id={agent_id} "
+        f"detail=invalid stub response: {response!r}"
+    )
 
 
 @tool(parse_docstring=True)
@@ -693,6 +698,7 @@ def _emit_frontier_log(
     outcome: Literal[
         "success",
         "config_missing",
+        "attended_only",
         "provider_unavailable",
         "degraded_empty",
     ],
@@ -940,8 +946,11 @@ Never invoke from ambient, learning, or async-subagent contexts.
 
     # Defensive fallthrough: pydantic coercion already rejects out-of-enum
     # values before the body runs, but ADR-ARCH-021 forbids raising even
-    # in unreachable branches.
-    return "ERROR: config_missing — unknown frontier target"
+    # in unreachable branches. mypy correctly identifies this as
+    # statically unreachable given the closed two-member ``FrontierTarget``
+    # — the ignore is intentional and load-bearing if a future DDR adds a
+    # third member that isn't yet routed.
+    return "ERROR: config_missing — unknown frontier target"  # type: ignore[unreachable]
 
 
 __all__ = [

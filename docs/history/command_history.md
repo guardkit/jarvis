@@ -1171,6 +1171,105 @@ Ready for Step 8. /feature-build FEAT-J003 — AutoBuild cycle over the 24 subta
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003 --verbose --max-turns 30
 
 
+/task-work TASK-J002F-001
+
+Summary
+
+  TASK-J002F-001 — Quality gates ruff/mypy clean on FEAT-JARVIS-002 tools surface
+
+  Minimal-intensity workflow (auto-detected from parent_review + complexity 2). Direct fixes applied across 6
+  files; zero behavioural change.
+
+  Acceptance gates
+
+  ┌────────────────────────────────────────────────────────────────────────────┬──────────────────────────┐
+  │                                    Gate                                    │          Result          │
+  ├────────────────────────────────────────────────────────────────────────────┼──────────────────────────┤
+  │ ruff check src/jarvis/tools src/jarvis/config                              │ ✅ All checks passed!    │
+  │ src/jarvis/agents/supervisor.py src/jarvis/prompts/supervisor_prompt.py    │                          │
+  ├────────────────────────────────────────────────────────────────────────────┼──────────────────────────┤
+  │ mypy src/jarvis/tools                                                      │ ✅ Success: no issues    │
+  │                                                                            │ found in 7 source files  │
+  ├────────────────────────────────────────────────────────────────────────────┼──────────────────────────┤
+  │ pytest                                                                     │ ✅ 1585 passed, 2        │
+  │                                                                            │ skipped                  │
+  └────────────────────────────────────────────────────────────────────────────┴──────────────────────────┘
+
+  Files touched
+
+  File: pyproject.toml
+  Change: Added [tool.ruff.lint.per-file-ignores] pinning RUF002 for src/jarvis/** (em-dash policy)
+  ────────────────────────────────────────
+  File: src/jarvis/tools/__init__.py
+  Change: # noqa: RUF022 on deliberately category-grouped __all__; unquoted JarvisConfig annotation (UP037)
+  ────────────────────────────────────────
+  File: src/jarvis/tools/types.py
+  Change: Sorted __all__ alphabetically (RUF022); tightened import-block whitespace (I001); unquoted
+    CalendarEvent annotation (UP037)
+  ────────────────────────────────────────
+  File: src/jarvis/tools/dispatch_types.py
+  Change: class FrontierTarget(str, Enum) → class FrontierTarget(StrEnum) (UP042)
+  ────────────────────────────────────────
+  File: src/jarvis/tools/general.py
+  Change: Removed dead-arm if isinstance(raw, SecretStr): ... after tavily_api_key: SecretStr | None narrows
+    (mypy unreachable); removed now-redundant file-level # ruff: noqa: RUF002 and unused SecretStr import
+  ────────────────────────────────────────
+  File: src/jarvis/tools/dispatch.py
+  Change: Converted match/case on StubResponse tagged-union to explicit isinstance-guarded if/elif chain
+  (fixes
+    3 mypy unreachables); widened _emit_frontier_log.outcome Literal to include "attended_only" (fixes 2
+    arg-type errors at 661/678); # type: ignore[unreachable] on the closed-enum defensive fallthrough at line
+    944 with rationale comment
+
+  State transition
+
+  backlog → in_review (tasks/in_review/feat-jarvis-002-quality-cleanup/TASK-J002F-001-...)
+
+
+
+/task-work TASK-J002F-002
+
+
+ ✅ Task Work Complete — TASK-J002F-002
+
+  Mode: Auto-detected MINIMAL (parent_review provenance, complexity 1/10)
+  Type: Chore — kanban hygiene, no code change
+
+  Acceptance Criteria — all 3 pass
+
+  ┌────────────────────────────────────────────┬────────────┐
+  │                     AC                     │   Result   │
+  ├────────────────────────────────────────────┼────────────┤
+  │ tasks/backlog clean of TASK-J002-[0-9]*    │ ✓ 0 files  │
+  ├────────────────────────────────────────────┼────────────┤
+  │ tasks/design_approved clean of TASK-J002-* │ ✓ 0 files  │
+  ├────────────────────────────────────────────┼────────────┤
+  │ tasks/completed has 23 J002 files          │ ✓ 23 files │
+  └────────────────────────────────────────────┴────────────┘
+
+  What changed
+
+  - 23 canonical task files moved → tasks/completed/feat-jarvis-002-core-tools-and-dispatch/
+    - 21 from tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/ (subfolder canonical)
+    - 2 from tasks/design_approved/ (TASK-J002-013, TASK-J002-014 — only copy)
+  - 21 duplicates deleted with git rm (13 from loose backlog, 8 from design_approved)
+  - README.md + IMPLEMENTATION-GUIDE.md moved with the task subfolder
+  - Frontmatter touched only: status: completed + completed_at: <ts from FEAT-J002.yaml> + bumped updated. Body and
+   AutoBuild turn history preserved (96% rename similarity).
+  - Empty source subfolder tasks/backlog/feat-jarvis-002-core-tools-and-dispatch/ removed.
+  - Constraints honored: TASK-J002F-001 / TASK-J002F-002 untouched (J002F-002 only transitioned to in_review at
+  end); no edits to .guardkit/features/FEAT-J002.yaml; no source-code changes.
+
+  State transition
+
+  backlog/feat-jarvis-002-quality-cleanup/ → in_review/feat-jarvis-002-quality-cleanup/ (mirrors J002F-001).
+
+  Next step
+
+  Changes are staged but not committed — review staged renames with git diff --cached -M and commit when ready.
+
+  
+
 
 
 
