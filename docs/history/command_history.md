@@ -1268,8 +1268,143 @@ Summary
 
   Changes are staged but not committed — review staged renames with git diff --cached -M and commit when ready.
 
-  
 
+
+/task-work TASK-J003-FIX-002
+
+
+✅ TASK-J003-FIX-002 complete — moved to IN_REVIEW
+
+  Summary
+
+  The task description was based on stale baseline (9 mypy + 8 ruff errors). Current baseline was actually 2 mypy +
+   1 ruff — most prior drift was already cleared by other work (e.g. FrontierTarget → StrEnum, the outcome Literal
+  already included "attended_only").
+
+  Changes made (only this task)
+
+  src/jarvis/agents/subagents/types.py
+  - class RoleName(str, Enum) → class RoleName(StrEnum) (clears UP042)
+  - Import switched from Enum to StrEnum
+
+  src/jarvis/agents/subagents/jarvis_reasoner.py
+  - Added Callable[[_ReasonerState], Any] return annotation to _make_role_runner (clears mypy no-untyped-def at
+  line 254)
+  - Narrowed role_edge_map to dict[Hashable, str] so add_conditional_edges accepts it (clears mypy arg-type at
+  line 374)
+  - Added from collections.abc import Callable, Hashable
+  - Added one justified # type: ignore[arg-type] on builder.add_node(role.value, runner) — langgraph's stubs don't
+  propagate StateGraph's StateT into the _Node[NodeInputT_contra] protocol, so a typed Callable[[_ReasonerState],
+  Any] looks incompatible with _Node[Never] even though it is contravariantly valid. Justification comment cites
+  the source.
+
+  Verification
+
+  ┌───────────────────────────────────────────┬────────────────────────────────────────────────────────────────┐
+  │                   Gate                    │                             Result                             │
+  ├───────────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ uv run ruff check src/jarvis/             │ ✅ All checks passed                                           │
+  ├───────────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ uv run mypy src/jarvis/ (strict)          │ ✅ Success: no issues found in 39 source files                 │
+  ├───────────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ OPENAI_API_KEY=stub uv run pytest tests/  │ ✅ 1585 passed, 2 skipped (no regressions)                     │
+  ├───────────────────────────────────────────┼────────────────────────────────────────────────────────────────┤
+  │ test_subagent_types_role_name.py (StrEnum │ ✅ 33/33 pass — RoleName("") raises, RoleName("CRITIC")        │
+  │  invariants)                              │ raises, RoleName.CRITIC.value == "critic", all preserved       │
+  └───────────────────────────────────────────┴────────────────────────────────────────────────────────────────┘
+
+  Note on git state
+
+  Other working-tree changes (.env.example, tests/conftest.py, .claude/CLAUDE.md, docs/history/command_history.md,
+  and the FIX-003 task move) are from TASK-J003-FIX-003, which is being worked on in parallel — those are not part
+  of this task's diff.
+
+
+
+/task-work TASK-J003-FIX-003
+
+
+Task Complete — TASK-J003-FIX-003
+
+  Status: backlog → in_review
+
+  Acceptance criteria:
+  - ✅ tests/conftest.py pre-seeds a stub OPENAI_API_KEY at conftest module load (before pytest collection),
+  with a per-test re-assertion in _isolate_dotenv via monkeypatch.setenv
+  - ✅ Stub value stub-for-tests-no-real-calls-do-not-use-in-prod is obviously fake; rationale documented in
+  module-level docstring
+  - ✅ unset OPENAI_API_KEY && uv run pytest tests/ → 1585 passed, 2 skipped (matches the AC ratchet exactly)
+  - ✅ Per-test patch.dict("os.environ", {}, clear=True) overrides still work — verified the 29
+  Test{Missing,Layer2,...} cases in test_escalate_to_frontier.py and test_tools_escalate_to_frontier.py all
+  pass
+  - ✅ .env.example gains a comment noting tests need no env config; local dev needs real keys
+  - ✅ .claude/CLAUDE.md quickstart gains the one-liner
+
+  Files changed:
+  - tests/conftest.py:21,69-70,93-95 — module-level os.environ.setdefault("OPENAI_API_KEY", ...) + per-test
+  monkeypatch.setenv re-assertion
+  - .env.example:8-13 — documentation comment
+  - .claude/CLAUDE.md:16-18 — quickstart one-liner
+  - Task file moved to tasks/in_review/feat-jarvis-003-fix/
+
+  Key implementation note: The fix had to land at conftest module load (not in a fixture) because
+  jarvis_reasoner.graph is compiled at import time per DDR-012, and pytest imports test modules during the
+  collection phase before any fixture (autouse or otherwise) runs.
+
+
+/task-work TASK-J003-FIX-001
+
+✅ TASK-J003-FIX-001 — Work Complete
+
+  Result: IN_PROGRESS → IN_REVIEW
+
+  Commits (TDD red-then-green per task AC):
+  - 431024f — failing-test commit (proves Finding F1 was real)
+  - 26fb128 — implementation commit (turns the test green)
+
+  Quality gates
+
+  ┌────────────────────────┬───────────────────────────────────────────────────────────────────────────────┐
+  │          Gate          │                                    Result                                     │
+  ├────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ Compilation            │ ✅                                                                            │
+  ├────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ Tests pass             │ ✅ 1589 passed (4 pre-existing subprocess-venv failures unchanged, 2 skipped) │
+  ├────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ New regression test    │ ✅ Green-phase via tests/test_lifecycle_layer2_wiring.py                      │
+  ├────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ mypy src/jarvis/       │ ✅ No new errors (1 pre-existing yaml stub note unchanged)                    │
+  ├────────────────────────┼───────────────────────────────────────────────────────────────────────────────┤
+  │ ruff check src/jarvis/ │ ✅ Clean                                                                      │
+  └────────────────────────┴───────────────────────────────────────────────────────────────────────────────┘
+
+  Changes
+  - src/jarvis/sessions/manager.py:11 — current_session() method backed by contextvars.ContextVar set during
+  invoke()
+  - src/jarvis/infrastructure/lifecycle.py:441 — wires both Layer 2 hooks (_current_session_hook → session
+  resolver; _async_subagent_frame_hook → lambda: None per ASSUM-FRONTIER-CALLER-FRAME)
+  - src/jarvis/infrastructure/lifecycle.py:484 — shutdown clears both hooks back to None
+  - tests/test_lifecycle_layer2_wiring.py — new integration test (spoofed-ambient + idempotency + shutdown
+  reset + hook population)
+  - tests/test_lifecycle_startup_phase3.py — added TestLayer2HooksWiredByBuildAppState
+  - tests/test_dispatch_types_frontier_escalation.py — added attended_only field-set extension (ADR-ARCH-029
+  invariant)
+  - tests/conftest.py — autouse fixture restoring dispatch._current_session_hook / _async_subagent_frame_hook
+  per test (prevents build_app_state-using tests leaking hook state into Layer-1 tests)
+
+  Next step: human review of the IN_REVIEW task at
+  tasks/in_review/feat-jarvis-003-fix/TASK-J003-FIX-001-wire-layer2-hooks-in-lifecycle-startup.md.
+
+✻ Worked for 14m 34s
+
+※ recap: You ran /task-work TASK-J003-FIX-001 to wire the Layer 2 escalate_to_frontier hooks; the task is now
+  in_review with the red-then-green commits landed and tests, mypy, and ruff all clean. Next action: human
+  review of the in_review task file. (disable recaps in /config)
+
+
+
+
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003-FIX --verbose --max-turns 30
 
 
 

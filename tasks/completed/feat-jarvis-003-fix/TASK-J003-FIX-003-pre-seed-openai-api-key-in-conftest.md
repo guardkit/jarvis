@@ -7,8 +7,9 @@ feature_id: FEAT-J003-FIX
 id: TASK-J003-FIX-003
 implementation_mode: direct
 parent_review: FEAT-JARVIS-003
+completed: 2026-04-27 00:00:00+00:00
 priority: medium
-status: backlog
+status: completed
 tags:
 - phase-2
 - jarvis
@@ -18,7 +19,7 @@ tags:
 - ddr-012
 task_type: bugfix
 title: Pre-seed OPENAI_API_KEY stub in tests/conftest.py for fresh-env collection
-updated: 2026-04-26 00:00:00+00:00
+updated: 2026-04-27 00:00:00+00:00
 wave: 1
 ---
 

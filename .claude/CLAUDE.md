@@ -14,6 +14,9 @@ pip install .[providers]
 python -m langgraph dev
 ```
 
+Tests require no environment configuration; `langgraph dev` requires
+`OPENAI_API_KEY` (or equivalent for the configured provider).
+
 `.[providers]` installs every LangChain integration this template can be configured
 to use (openai, google-genai). The base `dependencies` include `langchain-anthropic`
 so a zero-extras install of the default provider still works. See `pyproject.toml`
