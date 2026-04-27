@@ -102,7 +102,7 @@ acceptance_gates:
   command: python -c "from jarvis.agents.supervisor import make_graph; g = make_graph(); from langgraph.graph.state import CompiledStateGraph; assert isinstance(g, CompiledStateGraph)"
   expected_exit_code: 0
   notes: NEW symbol-resolution check added by FIX-004. Must FAIL on main pre-merge (proves F8), pass post-merge. Independent of llama-swap availability.
-- name: langgraph_dev_smoke
-  command: python -m langgraph dev --help
+- name: langgraph_validate
+  command: langgraph validate
   expected_exit_code: 0
-  notes: CLI surface check from FIX-004 (does NOT spin a real server in CI). Operator-side full smoke (server startup + assistants/search) documented in TASK-J003-FIX-004 closeout note.
+  notes: Structural check — confirms langgraph.json parses and both graphs (`jarvis` via `make_graph`, `jarvis_reasoner` via `graph`) resolve their symbols. Faster than full server spin and runs in CI without a port. Requires `langgraph-cli[inmem]` extra (F9 closeout 27 Apr).

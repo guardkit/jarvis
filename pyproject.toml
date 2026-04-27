@@ -61,8 +61,12 @@ providers = [
 # `dev` mirrors the PEP 735 `[dependency-groups].dev` entries below for
 # consumers (and CI) that prefer the older PEP 631 extras syntax
 # (`pip install .[dev]`). Added in TASK-J003-006 specifically so
-# `langgraph-cli` — the package that powers `python -m langgraph dev` —
-# is installable without uv. Keep this list in sync with
+# `langgraph-cli` — the package that powers the `langgraph dev` console
+# script — is installable without uv. The `[inmem]` extra pulls in
+# `langgraph-api`, the in-memory dev-server runtime that `langgraph dev`
+# requires (added 2026-04-27 to close F9 surfaced during Phase-2 manual
+# close-out — without `[inmem]`, `langgraph dev` errors with "Required
+# package 'langgraph-api' is not installed"). Keep this list in sync with
 # `[dependency-groups].dev`.
 dev = [
     "pytest>=8",
@@ -73,7 +77,7 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML>=6",
     "types-click>=7.1",
-    "langgraph-cli>=0.1",
+    "langgraph-cli[inmem]>=0.1",
 ]
 
 # ---------------------------------------------------------------------------
@@ -115,11 +119,13 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML>=6",
     "types-click>=7.1",
-    # `langgraph-cli` powers `python -m langgraph dev` (the local dev
-    # server documented in `.claude/CLAUDE.md` Quick Start). Added in
-    # TASK-J003-006. Mirrored into `[project.optional-dependencies].dev`
+    # `langgraph-cli` powers the `langgraph dev` console script (the local
+    # dev server documented in `.claude/CLAUDE.md` Quick Start). Added in
+    # TASK-J003-006. The `[inmem]` extra pulls in `langgraph-api`, the
+    # in-memory dev-server runtime that `langgraph dev` requires (added
+    # 2026-04-27, F9 closeout). Mirrored into `[project.optional-dependencies].dev`
     # so non-uv consumers can `pip install .[dev]` and get the same set.
-    "langgraph-cli>=0.1",
+    "langgraph-cli[inmem]>=0.1",
 ]
 
 [project.scripts]

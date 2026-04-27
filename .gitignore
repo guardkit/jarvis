@@ -37,5 +37,9 @@ htmlcov/
 .guardkit/autobuild/**/progress.log
 .guardkit/autobuild/**/events.jsonl
 
+# LangGraph dev-server persistence (`langgraph dev` writes pickled
+# store/vectors here on each run; F9 closeout 2026-04-27)
+.langgraph_api/
+
 # Per-machine Claude Code overrides
 .claude/settings.local.json
