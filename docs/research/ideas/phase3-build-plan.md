@@ -1,8 +1,8 @@
 # Phase 3 Build Plan — Fleet Integration: NATS Specialist Dispatch & Build Queue Dispatch to Forge
 
 ## For: Swapping Phase 2's stubbed transports for real NATS — Jarvis registers on `fleet.register`, dispatches via `agents.command.*`, publishes to `pipeline.build-queued.*`, and writes its first ADR-FLEET-001 trace-rich records to `jarvis_routing_history`. After Phase 3, Jarvis v1 is functionally complete for dispatch.
-## Date: 20 April 2026
-## Status: Blocked on Phase 2 completion. Ready for `/system-design FEAT-JARVIS-004` once Phase 2 closes.
+## Date: 20 April 2026 (last updated 27 April 2026)
+## Status: **In progress.** Phase 2 closed. FEAT-JARVIS-004 design + Gherkin spec landed (2026-04-27). Next: `/feature-plan FEAT-JARVIS-004`.
 ## Repo: `guardkit/jarvis`
 ## Machine: MacBook Pro M2 Max (planning + build via Claude Code). Integration tests use in-process NATS/Graphiti; end-to-end test requires NATS on GB10 + Forge running + Graphiti on GB10.
 
@@ -14,15 +14,29 @@
 |------|------|---------|
 | 2026-04-20 | `phase3-fleet-integration-scope.md` written | Scope doc — input to `/system-design FEAT-JARVIS-004` and `/system-design FEAT-JARVIS-005`. |
 | 2026-04-20 | `phase3-build-plan.md` written | This document. |
-| *pending* | Phase 2 close | FEAT-JARVIS-002 + FEAT-JARVIS-003 merged, routing-e2e test green, `langgraph dev` spinning 5 graphs cleanly. |
+| 2026-04-25 | **Phase 2 close** | FEAT-JARVIS-003-FIX waves F1/F2/F3 (commit `feb482e`), F8 (commits `4536bb8` → `9f49ae3` → `a6cdf57` — supervisor `make_graph` factory wired for langgraph CLI per DDR-013), F9 + F10 (commit `0ff4f40` — `langgraph-cli[inmem]` + YAML gate fix). Routing-e2e test green; `langgraph dev` spinning 2 graphs cleanly. |
+| 2026-04-27 | **`/system-design FEAT-JARVIS-004`** | Design doc landed at [`docs/design/FEAT-JARVIS-004/design.md`](../../design/FEAT-JARVIS-004/design.md) with 7 DDRs (DDR-016..022), 3 contract docs (`API-tools.md`, `API-internal.md`, `API-events.md`), `DM-routing-history.md` (resolves JA1), and the C4 L3 diagram at `diagrams/fleet-dispatch-l3.md`. |
+| 2026-04-27 | **`/feature-spec FEAT-JARVIS-004`** | 36 Gherkin scenarios across 4 SBE groups + 7 expansion scenarios. 12 assumptions captured (10 high / 1 medium / 1 low). Output at [`features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/`](../../../features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/). One **REVIEW REQUIRED** flag on ASSUM-009 (existing-trace-file overwrite policy). |
+| 2026-04-27 | **`/feature-plan FEAT-JARVIS-004`** | Decision-mode review TASK-REV-22CF (score 88/100; 3 approaches considered, **Approach 2 — wave-based parallel fan-out — recommended and selected**). Produced [`FEAT-J004-702C.yaml`](../../../.guardkit/features/FEAT-J004-702C.yaml) with 20 tasks across 7 dependency-aware parallel waves; [`tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/`](../../../tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/) with [`IMPLEMENTATION-GUIDE.md`](../../../tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/IMPLEMENTATION-GUIDE.md) (data-flow + sequence + dependency Mermaid diagrams + 7 §4 Integration Contracts). **ASSUM-009 promoted to DDR-023** (trace-file collision = WARN-and-preserve) and **ASSUM-008 promoted to DDR-024** (degraded specialists eligible v1) — both as TASK-J004-001. Step 11 BDD-linker tagged **36/36 scenarios** with `@task:TASK-J004-NNN` (0 below 0.6 threshold; 5 multi-line step continuations in the .feature file fixed inline so the Cucumber parser accepts the file). Pre-flight YAML validation: ✓ all 20 file_paths resolved; ✓ no intra-wave deps; ✓ valid task_type on every task. |
+| 2026-04-27 | **AutoBuild kickoff — Wave 1** | `GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J004-702C --verbose --max-turns 30` invoked. Worktree created at `.guardkit/worktrees/FEAT-J004-702C` (base branch `main`). Wave 1 (4 tasks parallel): TASK-J004-001 (DDR-023 + DDR-024), TASK-J004-002 (pyproject extras), TASK-J004-003 (JarvisConfig fields), TASK-J004-004 (`JarvisRoutingHistoryEntry` schema) all in `in_progress` with `current_turn: 1`. Feature YAML status: `planned` → `in_progress`. |
+| *in flight* | AutoBuild Waves 1–7 | Wave 1 currently executing. On completion: Wave 2 (5 tasks: T005 schema test + T006 nats_client + T007 fleet_registration + T008 dispatch_semaphore + T010 routing-history writer) → Wave 3 (T009 capabilities_registry) → Wave 4 (T011 dispatch swap, T012 capabilities swap parallel) → Wave 5 (T013 lifecycle wiring) → Wave 6 (T014–T018 integration + soft-fail tests) → Wave 7 (T019 contract tests, T020 retire stubs). |
 | *pending* | Soft-prereq check — NATS on GB10 + Forge running | End-to-end test (Step 14 below) requires both. Integration tests up to Step 13 use in-process test servers and are unaffected. |
 | *pending* | Rich selects FEAT-JARVIS-INTERNAL-*** candidate | Per Q10.6 — choose from: (a) docstring/README polish, (b) trace-schema refinement, (c) skill scaffolding. Resolve before Step 14. |
-| *pending* | `/system-design FEAT-JARVIS-004` | Design doc. |
 | *pending* | `/system-design FEAT-JARVIS-005` | Design doc. |
-| *pending* | `/feature-spec FEAT-JARVIS-004` | Gherkin scenarios. |
 | *pending* | `/feature-spec FEAT-JARVIS-005` | Gherkin scenarios. |
-| *pending* | `/feature-plan FEAT-JARVIS-004` | Task breakdown. |
 | *pending* | `/feature-plan FEAT-JARVIS-005` | Task breakdown. |
+
+### FEAT-JARVIS-004 Wave Status
+
+| Wave | Tasks | Status |
+|------|-------|--------|
+| 1 | T001 (DDRs), T002 (pyproject), T003 (config), T004 (schema) | 🟡 **in_progress** (AutoBuild — kicked 2026-04-27 16:42 UTC) |
+| 2 | T005 (schema test), T006 (nats_client), T007 (fleet_registration), T008 (semaphore), T010 (routing-history writer) | ⬜ pending — gates on Wave 1 |
+| 3 | T009 (capabilities_registry) | ⬜ pending — gates on T006 |
+| 4 | T011 (dispatch swap), T012 (capabilities swap) | ⬜ pending — gates on Wave 2 + T009 |
+| 5 | T013 (lifecycle wiring) | ⬜ pending — gates on Wave 4 |
+| 6 | T014, T015, T016, T017, T018 (integration + soft-fail tests) | ⬜ pending — gates on T013 |
+| 7 | T019 (contract tests + grep invariant), T020 (retire stubs) | ⬜ pending — gates on T015 |
 
 ---
 
@@ -381,18 +395,44 @@ Expected output: `docs/design/FEAT-JARVIS-005/design.md` — `queue_build` real 
 
 ### Step 5: /feature-plan FEAT-JARVIS-004
 
+Slug pinned at `/feature-spec` time: `feat-jarvis-004-fleet-registration-and-specialist-dispatch`.
+
 ```bash
-/feature-plan "NATS Fleet Registration & Specialist Dispatch" \
-  --context features/feat-jarvis-004-*/feat-jarvis-004-*_summary.md \
-  --context features/feat-jarvis-004-*/feat-jarvis-004-*.feature \
-  --context features/feat-jarvis-004-*/feat-jarvis-004-*_assumptions.yaml \
+cd /Users/richardwoollcott/Projects/appmilla_github/jarvis
+
+/feature-plan "NATS Fleet Registration and Specialist Dispatch" \
+  --context features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_summary.md \
+  --context features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature \
+  --context features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_assumptions.yaml \
   --context docs/design/FEAT-JARVIS-004/design.md \
+  --context docs/design/FEAT-JARVIS-004/contracts/API-tools.md \
+  --context docs/design/FEAT-JARVIS-004/contracts/API-internal.md \
+  --context docs/design/FEAT-JARVIS-004/contracts/API-events.md \
+  --context docs/design/FEAT-JARVIS-004/models/DM-routing-history.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-016-dispatch-timeout-default-60s.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-017-retry-with-redirect-policy.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-018-routing-history-schema-authoritative.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-019-graphiti-fire-and-forget-writes.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-020-concurrent-dispatch-cap-8.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-022-defer-llamaswap-live-reads-to-v15.md \
   --context docs/research/ideas/phase3-fleet-integration-scope.md \
   --context docs/research/ideas/phase3-build-plan.md \
   --context .guardkit/context-manifest.yaml
 ```
 
-Resolve low-confidence assumptions before Step 7.
+**Pre-flight before running:**
+
+- Resolve **ASSUM-009** (existing-trace-file overwrite policy — *low confidence*) — either confirm "treat as write failure" or override to "overwrite-with-warning". The `.feature` currently pins write-failure semantics.
+- Confirm **ASSUM-008** (degraded specialist dispatch eligibility — *medium confidence*) is the intended v1 behaviour, or flag for an append-only DDR before tasking.
+
+`/feature-plan`'s **Step 11 (BDD linker)** will attach `@task:<TASK-ID>` tags
+to the 36 scenarios automatically. Expect clusters around (1) NATS client +
+fleet registration, (2) capabilities live registry, (3) dispatch transport +
+retry-with-redirect, (4) routing-history writer + filesystem offload,
+(5) lifecycle integration + soft-fail tests, (6) contract tests vs
+`nats-core`. The build-plan §Step 7 commit order should be the task
+ordering target.
 
 ### Step 6: /feature-plan FEAT-JARVIS-005
 

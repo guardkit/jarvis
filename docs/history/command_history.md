@@ -1171,6 +1171,70 @@ Ready for Step 8. /feature-build FEAT-J003 — AutoBuild cycle over the 24 subta
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003 --verbose --max-turns 30
 
 
+
+/task-review FEAT-JARVIS-002 \
+  --context tasks/FEAT-JARVIS-002-*.md \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md
+
+
+Accepted. Two small fixes, both orthogonal — I'll propose the implementation plan in one go rather than walking through each Context B question.
+
+Implementation Plan
+Subtask	Mode	Wave	Est	Approach
+TASK-J002F-001 — Quality gates: ruff + mypy clean on tools/	direct	1	30-45 min	Mix of fixes (RUF022 sort, UP037 strip quote, UP042 StrEnum, mypy literal widening) + targeted tool.ruff.lint.per-file-ignores for RUF002 prose dashes
+TASK-J002F-002 — Kanban hygiene: move 23 J002 task files to tasks/completed/	direct	1	10-15 min	Deduplicate three locations (subfolder + loose backlog + design_approved); single source of truth lands in tasks/completed/feat-jarvis-002-core-tools-and-dispatch/
+Execution: parallel-safe (no file conflicts — different scopes).
+Testing depth: minimal (FIX-001 must keep all 1585 tests green; FIX-002 has no test surface — pure bookkeeping).
+Subfolder: tasks/backlog/feat-jarvis-002-quality-cleanup/
+Provenance: parent_review: FEAT-JARVIS-002-review-2026-04-26, feature_id: FEAT-J002F
+
+Confirm and I'll generate the subtask files + IMPLEMENTATION-GUIDE.md + README.md, or push back if you'd like different choices (e.g. one bundled task instead of two, or different subfolder name).
+
+Done. Created tasks/backlog/feat-jarvis-002-quality-cleanup/ with:
+
+README.md — problem, solution, subtask summary
+IMPLEMENTATION-GUIDE.md — execution strategy, step-by-step approaches, validation commands
+TASK-J002F-001 — 7 ruff lints + 7 mypy errors itemised with fix hints (45 min, direct mode)
+TASK-J002F-002 — kanban reconciliation across three locations (15 min, direct mode)
+Both carry parent_review: FEAT-JARVIS-002-review-2026-04-26 and feature_id: FEAT-J002F in frontmatter for provenance.
+
+Next steps: pick either subtask and run /task-work TASK-J002F-001 or /task-work TASK-J002F-002 — they're parallel-safe (no file overlap), so Conductor can run both in Wave 1.
+
+
+
+/task-review FEAT-JARVIS-003 \
+  --context tasks/FEAT-JARVIS-003-*.md \
+  --context docs/research/ideas/phase2-dispatch-foundations-scope.md \
+  --context docs/research/ideas/phase2-build-plan.md
+
+Scaffold landed. Summary of what was created:
+
+Subfolder: tasks/backlog/feat-jarvis-003-fix/
+
+File	Purpose
+README.md	Wave summary + acceptance gate + Phase-2 close-criteria recovery table
+IMPLEMENTATION-GUIDE.md	Dependency graph, 4 integration contracts, suggested commit boundaries, risk table
+TASK-J003-FIX-001-wire-layer2-hooks-in-lifecycle-startup.md	Wave 2 / TDD / complexity 4 — closes F1 (Layer 2 dormant)
+TASK-J003-FIX-002-clear-mypy-and-ruff-drift-in-src.md	Wave 1 / direct / complexity 3 — closes F3 (Phase-2 #9)
+TASK-J003-FIX-003-pre-seed-openai-api-key-in-conftest.md	Wave 1 / direct / complexity 1 — closes F2 (DX)
+AutoBuild contract: .guardkit/features/FEAT-J003-FIX.yaml — 3 tasks, 2 waves, 5 acceptance gates (mypy clean, ruff clean, full pytest with no env vars, routing-e2e regression suite, new Layer-2 integration test).
+
+Execution plan:
+
+
+Wave 1 (parallel — 2 worktrees recommended)
+  ⚡ TASK-J003-FIX-002 — feat-jarvis-003-fix-wave1-1 — direct
+  ⚡ TASK-J003-FIX-003 — feat-jarvis-003-fix-wave1-2 — direct
+
+Wave 2 (TDD — gated on FIX-002)
+  ⚡ TASK-J003-FIX-001 — feat-jarvis-003-fix-wave2-1 — task-work TDD
+Next step: /feature-build FEAT-J003-FIX — runs the AutoBuild player–coach cycle over the 3 subtasks. Estimated wall-clock: ~half a day at FEAT-J002/J003 cadence.
+
+The review report itself remains at .claude/reviews/FEAT-JARVIS-003-review-report.md for the audit trail.
+
+
+
 /task-work TASK-J002F-001
 
 Summary
@@ -1463,6 +1527,180 @@ TDD red→green pair landed on main. Summary report:
   then wired `supervisor.make_graph()` and flipped `langgraph.json` to `:make_graph`. Next: commit the leftover
   task-scaffolding files (IMPLEMENTATION-GUIDE, README, task md, FEAT yaml) as the feature closeout. (disable
   recaps in /config)
+
+
+
+
+/system-design FEAT-JARVIS-004 \
+  --context docs/research/ideas/phase3-fleet-integration-scope.md \
+  --context docs/research/ideas/phase3-build-plan.md \
+  --context .claude/reviews/FEAT-JARVIS-003-review-report.md \
+  --context docs/design/FEAT-JARVIS-003/design.md
+
+ System Design Complete
+Created: docs/design/FEAT-JARVIS-004/
+
+design.md — main design (14 sections, all bounded contexts unchanged except Fleet Dispatch + Knowledge activation)
+contracts/ — API-internal.md, API-tools.md, API-events.md
+models/DM-routing-history.md — JA1 resolved (full ADR-FLEET-001 schema authoritative for v1+)
+diagrams/fleet-dispatch-l3.md — C4 L3 (mandatory review gate)
+decisions/DDR-016..022 — 7 DDRs
+Open questions resolved: Q1 (timeout=60s), Q2 (1 redirect, same-capability priority), Q3 (full ADR-FLEET-001 + Jarvis extensions, 16KB filesystem offload), Q4 (per-dispatch fire-and-forget), Q5 (cap=8), Q6 (LlamaSwap live reads → v1.5), Q7 (real session_id plumbed — F5), Q8 (frontier_default_target becomes load-bearing — F6), Q9 (NATS soft-fail with stub fallback), Q10 (dedicated forge_notifications.py module — flagged for FEAT-J005 design).
+
+Next steps after C4 approval + Graphiti seeding:
+
+/feature-spec FEAT-JARVIS-004 — Gherkin scenarios (8 primary scenarios listed in design §13).
+/feature-plan FEAT-JARVIS-004 — task breakdown per build-plan §Step 7 commit order.
+AutoBuild — config → NATS client → fleet registration → routing_history → capabilities live registry → dispatch swap → lifecycle integration → fallback tests → contract tests.
+
+
+/feature-spec "NATS Fleet Registration & Specialist Dispatch: Jarvis registers on fleet.register, discovers specialists via NATSKVManifestRegistry, dispatches via agents.command.{agent_id}/agents.result.{agent_id} with timeout + retry-with-redirect; first live jarvis_routing_history trace-rich writes per ADR-FLEET-001" \
+  --from docs/design/FEAT-JARVIS-004/ \
+  --context docs/research/ideas/phase3-fleet-integration-scope.md \
+  --context docs/research/ideas/phase3-build-plan.md \
+  --context docs/design/FEAT-JARVIS-003/design.md \
+  --context .claude/reviews/FEAT-JARVIS-003-review-report.md \
+  --context ../forge/docs/research/ideas/ADR-FLEET-001-trace-richness.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-015-capability-driven-dispatch.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-016-fleet-is-the-catalogue.md \
+  --context ../forge/docs/architecture/decisions/ADR-ARCH-017-live-fleet-watching.md \
+  --context ../nats-core/src/nats_core/manifest.py \
+  --context ../nats-core/src/nats_core/events/_agent.py \
+  --context ../nats-core/src/nats_core/topics.py \
+  --context src/jarvis/tools/dispatch.py \
+  --context src/jarvis/tools/capabilities.py \
+  --context src/jarvis/infrastructure/lifecycle.py \
+  --context src/jarvis/config/settings.py \
+  --context .guardkit/context-manifest.yaml
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE SPEC COMPLETE: NATS Fleet Registration and Specialist Dispatch
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Files written:
+  features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature
+  features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_assumptions.yaml
+  features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_summary.md
+
+Scenarios: 36 total
+  @key-example: 6      @boundary: 6
+  @negative: 7         @edge-case: 17
+  @smoke: 5            @regression: 3
+
+  Of those, 3 are Scenario Outlines covering 12 example rows total
+  (3 inside-range timeouts + 4 outside-range timeouts + 5 dispatch outcomes).
+
+Assumptions: 12 total
+  high: 10 (auto-proceed)
+  medium: 1 (Coach review recommended)
+  low: 1 (human review required)
+
+REVIEW REQUIRED: 1 low-confidence assumption needs verification
+  ASSUM-009 — existing-trace-file overwrite policy treated as a write failure.
+  See: features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_assumptions.yaml
+
+Deferred: 0 scenario groups (all four primary groups + edge-case expansion accepted in full)
+
+Next steps:
+  Review: features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature
+  Pass to feature-plan: /feature-plan "NATS Fleet Registration and Specialist Dispatch" \
+    --context features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_summary.md \
+    --context docs/design/FEAT-JARVIS-004/design.md
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+36 scenarios pinned across the four Specification by Example categories plus the 7-scenario expansion. One low-confidence policy decision (ASSUM-009 — existing trace-file overwrite semantics) is the only item that needs your attention before tasking; medium-confidence ASSUM-008 (degraded specialist dispatch eligibility) is worth a glance too. Ready for /feature-plan.
+
+
+
+
+/feature-plan "NATS Fleet Registration and Specialist Dispatch" \
+  --context features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_summary.md \
+  --context features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature \
+  --context features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_assumptions.yaml \
+  --context docs/design/FEAT-JARVIS-004/design.md \
+  --context docs/design/FEAT-JARVIS-004/contracts/API-tools.md \
+  --context docs/design/FEAT-JARVIS-004/contracts/API-internal.md \
+  --context docs/design/FEAT-JARVIS-004/contracts/API-events.md \
+  --context docs/design/FEAT-JARVIS-004/models/DM-routing-history.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-016-dispatch-timeout-default-60s.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-017-retry-with-redirect-policy.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-018-routing-history-schema-authoritative.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-019-graphiti-fire-and-forget-writes.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-020-concurrent-dispatch-cap-8.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-022-defer-llamaswap-live-reads-to-v15.md \
+  --context docs/research/ideas/phase3-fleet-integration-scope.md \
+  --context docs/research/ideas/phase3-build-plan.md \
+  --context .guardkit/context-manifest.yaml
+
+
+
+FEATURE PLANNING COMPLETE — FEAT-J004-702C
+What landed
+Artifact	Path
+Review report	.claude/reviews/TASK-REV-22CF-review-report.md
+Feature folder	tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/
+Implementation guide	tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/IMPLEMENTATION-GUIDE.md
+README	tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/README.md
+20 task files	TASK-J004-001 … TASK-J004-020
+Structured YAML	.guardkit/features/FEAT-J004-702C.yaml
+Tagged BDD spec	features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature — 36/36 scenarios tagged
+Review task	tasks/in_review/TASK-REV-22CF-plan-nats-fleet-registration-and-specialist-dispatch.md → review_complete
+Wave layout (7 parallel groups)
+
+Wave 1 (4): 001 002 003 004      ← foundations (DDRs, deps, config, schema)
+Wave 2 (5): 005 006 007 008 010  ← infra modules (schema test + 4 of 5 modules)
+Wave 3 (1): 009                  ← capabilities_registry (depends on nats_client)
+Wave 4 (2): 011 012              ← tool surface swaps (parallel)
+Wave 5 (1): 013                  ← lifecycle wiring
+Wave 6 (5): 014 015 016 017 018  ← integration + soft-fail tests
+Wave 7 (2): 019 020              ← contract tests + Phase 2 retirement
+§4 Integration Contracts pinned (7 total in IMPLEMENTATION-GUIDE.md)
+A. JARVIS_ROUTING_HISTORY_ENTRY_SCHEMA (T004 → T005, T010)
+B. NATS_CLIENT_API (T006 → T009, T011, T013)
+C. CAPABILITIES_REGISTRY_PROTOCOL (T009 → T011, T012, T013)
+D. DISPATCH_SEMAPHORE_API (T008 → T011, T013)
+E. ROUTING_HISTORY_WRITER_API (T010 → T011, T013)
+F. NATS_TOPIC_SINGULAR_CONVENTION (external → T007, T009, T011)
+G. SOURCE_ID_JARVIS_AUDIT (T011 → T019)
+
+Notable adaptations
+generate-feature-yaml and feature-plan-bdd-link CLIs were broken in this ~/.agentecflow install (installer.core.* import paths missing). Built a /tmp/agentecflow-shim PYTHONPATH bridge that symlinks the actual ~/.agentecflow/commands/lib/ modules into the expected installer.core.commands.lib namespace — got the BDD linker working. You may want to file this as a packaging bug.
+The .feature file had 5 multi-line And step continuations that the official Cucumber Gherkin parser rejected. Fixed by joining each split into one line — semantics preserved, parser passes. Edits at lines 33, 145, 195, 212, 306.
+guardkit feature validate subcommand not present in this install — I ran an equivalent inline Python validator that checked: file_path resolution (20/20), no intra-wave dependencies (✓), no unknown deps (✓), valid task_type on every file (✓).
+Saved a project memory for the DDD Southwest deadline — future planning will see this constraint without you having to re-state it.
+Resolutions for your flagged concerns
+Concern	Resolution
+ASSUM-009 (low)	Promoted to DDR-023 in TASK-J004-001 (WARN-and-preserve)
+ASSUM-008 (medium)	Promoted to DDR-024 in TASK-J004-001 (degraded eligible v1)
+Contract enforcement	TASK-J004-019 — 7 contract tests + Topics-formatter grep invariant + parametrised source_id="jarvis" audit
+Test strategy gaps	TASK-J004-017 (slot-release Outline), TASK-J004-018 (shutdown-order invariant), TASK-J004-010 (writer covers dir-creation + redaction-after-offload)
+Next steps
+
+# Recommended (matches your Q5 = AutoBuild answer):
+/feature-build FEAT-J004-702C
+
+# Or single-task:
+/task-work TASK-J004-001          # Wave 1 starts here
+
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J004-702C --verbose --max-turns 30
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003-FIX --verbose --max-turns 30

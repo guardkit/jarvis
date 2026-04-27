@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "jarvis"
 version = "0.1.0"
 description = "General purpose agent providing access to the Forge and other agents on the NATS Jetstream event bus"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [
     { name = "Appmilla" },
@@ -14,7 +14,10 @@ authors = [
 keywords = ["agent", "deepagents", "langchain", "langgraph", "nats"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [

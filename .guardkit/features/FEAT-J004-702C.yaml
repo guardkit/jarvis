@@ -1,0 +1,372 @@
+id: FEAT-J004-702C
+name: NATS Fleet Registration and Specialist Dispatch
+description: "Phase 3 feature replacing Phase 2 stubbed transports with real NATS\
+  \ round-trips:\nJarvis registers on fleet.register, dispatches via agents.command.{agent_id}\
+  \ /\nagents.result.{agent_id} with timeout + retry-with-redirect, lights up first\n\
+  ADR-FLEET-001 trace-rich writes to jarvis_routing_history.\n\nGenerated via /feature-plan\
+  \ from TASK-REV-22CF using Wave-based parallel\nfan-out (Approach 2). Constraint:\
+  \ DDD Southwest demo timeline \u2014 favour\nparallelism + demo robustness.\n\n\
+  Source-of-truth: docs/design/FEAT-JARVIS-004/design.md\nReview report:   .claude/reviews/TASK-REV-22CF-review-report.md\n\
+  Guide:           tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/IMPLEMENTATION-GUIDE.md\n"
+created: '2026-04-27T15:45:00Z'
+status: failed
+complexity: 88
+estimated_tasks: 20
+tasks:
+- id: TASK-J004-001
+  name: Promote ASSUM-008 + ASSUM-009 to DDR-024 + DDR-023
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-001-promote-assum-008-009-to-ddrs.md
+  complexity: 2
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 30
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-27T16:42:59.568182'
+  completed_at: '2026-04-27T17:15:48.687857'
+- id: TASK-J004-002
+  name: pyproject extras nats-py and graphiti-core
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-002-pyproject-extras-nats-py-and-graphiti-core.md
+  complexity: 2
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 20
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-27T16:42:59.576481'
+  completed_at: '2026-04-27T17:15:48.695723'
+- id: TASK-J004-003
+  name: Extend JarvisConfig with FEAT-J004 fields
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-003-extend-jarvisconfig-with-feat-j004-fields.md
+  complexity: 3
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 30
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-27T16:42:59.584022'
+  completed_at: '2026-04-27T17:15:48.702900'
+- id: TASK-J004-004
+  name: JarvisRoutingHistoryEntry Pydantic schema
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-004-routing-history-pydantic-schema.md
+  complexity: 4
+  dependencies: []
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-27T19:56:15.719714'
+  completed_at: '2026-04-27T20:01:48.201065'
+- id: TASK-J004-005
+  name: Routing-history schema-conformance test
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-005-routing-history-schema-conformance-test.md
+  complexity: 3
+  dependencies:
+  - TASK-J004-004
+  status: pending
+  implementation_mode: direct
+  estimated_minutes: 30
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-006
+  name: infrastructure/nats_client.py async wrapper
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-006-nats-client-async-wrapper.md
+  complexity: 5
+  dependencies:
+  - TASK-J004-002
+  - TASK-J004-003
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 60
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-007
+  name: 'Fleet registration: manifest, register, heartbeat, deregister'
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-007-fleet-registration-and-heartbeat.md
+  complexity: 4
+  dependencies:
+  - TASK-J004-003
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-008
+  name: DispatchSemaphore wrapper
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-008-dispatch-semaphore-wrapper.md
+  complexity: 3
+  dependencies:
+  - TASK-J004-003
+  status: pending
+  implementation_mode: direct
+  estimated_minutes: 30
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-009
+  name: 'CapabilitiesRegistry: Protocol + Live + Stub'
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-009-capabilities-registry-protocol-live-stub.md
+  complexity: 6
+  dependencies:
+  - TASK-J004-003
+  - TASK-J004-006
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-010
+  name: RoutingHistoryWriter with offload + redaction
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-010-routing-history-writer-with-offload-and-redaction.md
+  complexity: 7
+  dependencies:
+  - TASK-J004-003
+  - TASK-J004-004
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 90
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-011
+  name: tools/dispatch.py real transport swap
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-011-dispatch-tool-real-transport-swap.md
+  complexity: 7
+  dependencies:
+  - TASK-J004-006
+  - TASK-J004-008
+  - TASK-J004-009
+  - TASK-J004-010
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 90
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-012
+  name: tools/capabilities.py real KV bodies
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-012-capabilities-tools-real-kv-bodies.md
+  complexity: 4
+  dependencies:
+  - TASK-J004-009
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-013
+  name: Lifecycle startup + shutdown wiring
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-013-lifecycle-startup-and-shutdown-wiring.md
+  complexity: 6
+  dependencies:
+  - TASK-J004-006
+  - TASK-J004-007
+  - TASK-J004-008
+  - TASK-J004-009
+  - TASK-J004-010
+  - TASK-J004-011
+  - TASK-J004-012
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-014
+  name: Fleet + capabilities integration tests
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-014-fleet-and-capabilities-integration-tests.md
+  complexity: 5
+  dependencies:
+  - TASK-J004-013
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 60
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-015
+  name: 'Dispatch integration tests: round-trip + redirect matrix'
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md
+  complexity: 6
+  dependencies:
+  - TASK-J004-013
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 75
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-016
+  name: 'Soft-fail tests: NATS-down, Graphiti-down, partial failures'
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md
+  complexity: 5
+  dependencies:
+  - TASK-J004-013
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 60
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-017
+  name: Dispatch slot-release Scenario Outline regression
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-017-dispatch-slot-release-scenario-outline.md
+  complexity: 4
+  dependencies:
+  - TASK-J004-013
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-018
+  name: Lifecycle shutdown-order invariant test
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md
+  complexity: 4
+  dependencies:
+  - TASK-J004-013
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-019
+  name: Contract tests vs nats-core + Topics-formatter grep invariant
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-019-contract-tests-vs-nats-core.md
+  complexity: 4
+  dependencies:
+  - TASK-J004-015
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 45
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+- id: TASK-J004-020
+  name: Retire Phase 2 stubs + update routing-e2e
+  file_path: tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/TASK-J004-020-retire-phase-2-stubs-and-update-routing-e2e.md
+  complexity: 3
+  dependencies:
+  - TASK-J004-015
+  status: pending
+  implementation_mode: direct
+  estimated_minutes: 30
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
+orchestration:
+  parallel_groups:
+  - - TASK-J004-001
+    - TASK-J004-002
+    - TASK-J004-003
+    - TASK-J004-004
+  - - TASK-J004-005
+    - TASK-J004-006
+    - TASK-J004-007
+    - TASK-J004-008
+    - TASK-J004-010
+  - - TASK-J004-009
+  - - TASK-J004-011
+    - TASK-J004-012
+  - - TASK-J004-013
+  - - TASK-J004-014
+    - TASK-J004-015
+    - TASK-J004-016
+    - TASK-J004-017
+    - TASK-J004-018
+  - - TASK-J004-019
+    - TASK-J004-020
+  estimated_duration_minutes: 950
+  recommended_parallel: 5
+execution:
+  started_at: '2026-04-27T16:42:59.535365'
+  completed_at: '2026-04-27T17:15:48.719544'
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  total_turns: 6
+  tasks_completed: 4
+  tasks_failed: 0
+  current_wave: 1
+  completed_waves:
+  - 1
+  last_updated: '2026-04-27T20:01:48.208620'
+  archived_at: null
+  archived_to: null
