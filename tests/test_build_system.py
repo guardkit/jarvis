@@ -72,9 +72,17 @@ class TestAC001PyprojectParses:
         assert data["project"]["name"] == "jarvis"
 
     def test_requires_python_312(self) -> None:
+        # Method name preserved for git-blame continuity. Pin was rebaselined
+        # 2026-04-27 from `>=3.12,<3.13` to `>=3.11` per ADR-ARCH-010-rev2
+        # (TASK-REV-FA04 follow-up). 3.11 floor still satisfies the original
+        # "Python 3.12 features available" intent (Python 3.12 is permitted),
+        # while removing the closed upper bound that excluded the active
+        # interpreter on consumer machines using newer minors.
         data = _load_pyproject()
         rp = data["project"]["requires-python"]
-        assert ">=3.12" in rp
+        assert rp == ">=3.11", (
+            f"requires-python expected '>=3.11' (ADR-ARCH-010-rev2), got {rp!r}"
+        )
 
     def test_has_dependencies(self) -> None:
         data = _load_pyproject()

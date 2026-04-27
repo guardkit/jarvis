@@ -212,9 +212,18 @@ class TestAC005UvSyncAndPackagesInstalled:
     def test_required_package_in_uv_pip_list(self, pkg: str) -> None:
         """Mirrors the AC-005 grep:
         `uv pip list | grep -iE "(google-genai|anthropic|langgraph|deepagents)"`.
+
+        Pins the inspection target to ``sys.executable`` so the subprocess
+        looks at the same environment pytest itself is running in. Without
+        ``--python``, `uv pip list` autodetects an environment via cwd
+        heuristics (`.python-version`, `.venv/`, `UV_PYTHON`, etc.) which
+        can drift from the active interpreter — observed 2026-04-27 during
+        the langchain-1.x rebaseline (TASK-REV-FA04 follow-up), where the
+        autodetected env was empty even though the active venv had every
+        required package installed.
         """
         result = subprocess.run(
-            ["uv", "pip", "list", "--format=freeze"],
+            ["uv", "pip", "list", "--format=freeze", "--python", sys.executable],
             capture_output=True,
             text=True,
             cwd=ROOT,
@@ -229,7 +238,7 @@ class TestAC005UvSyncAndPackagesInstalled:
             if "==" in line
         }
         assert pkg.lower() in installed_names, (
-            f"required package {pkg!r} not found in `uv pip list`. "
+            f"required package {pkg!r} not found in `uv pip list --python {sys.executable}`. "
             f"Installed (sample): {sorted(installed_names)[:10]}"
         )
 

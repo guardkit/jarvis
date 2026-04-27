@@ -245,13 +245,25 @@ class TestAC004Phase1DependenciesUntouched:
     end of FEAT-JARVIS-001 (TASK-J001-001) and tightened by ADR-ARCH-010 for
     the deepagents pin. Each entry below must appear *verbatim* — no
     relaxation, no tightening, no removal.
+
+    Rev2 rebaseline (2026-04-27, ADR-ARCH-010-rev2 / TASK-REV-FA04 follow-up):
+    the langchain ecosystem (langchain-core / langchain / langgraph /
+    langchain-openai and the providers langchain-anthropic /
+    langchain-google-genai) jumped from coordinated 0.x to coordinated 1.x.
+    The 0.x langchain-core stopped publishing the `block_translators.langchain_v0`
+    compat helpers that 0.x langchain agents still imported, leaving the
+    open-floor `>=0.3` / `>=0.2` pins free to resolve mismatched 0.x/1.x
+    pairs. The pins below have been rebaselined to coherent 1.x with `<2`
+    caps. `langchain` itself is now an explicit runtime dep (was implicit
+    transitively). Non-langchain Phase 1 pins are unchanged.
     """
 
     PHASE_1_RUNTIME_PINS: ClassVar[dict[str, str]] = {
         "deepagents": "deepagents>=0.5.3,<0.6",
-        "langchain-core": "langchain-core>=0.3",
-        "langgraph": "langgraph>=0.3",
-        "langchain-openai": "langchain-openai>=0.2",
+        "langchain-core": "langchain-core>=1.3,<2",
+        "langchain": "langchain>=1.2,<2",
+        "langgraph": "langgraph>=1.1,<2",
+        "langchain-openai": "langchain-openai>=1.2,<2",
         "pydantic": "pydantic>=2",
         "pydantic-settings": "pydantic-settings>=2",
         "structlog": "structlog>=24.1",
@@ -261,8 +273,8 @@ class TestAC004Phase1DependenciesUntouched:
     }
 
     PHASE_1_OPTIONAL_PROVIDERS: ClassVar[list[str]] = [
-        "langchain-anthropic>=0.2",
-        "langchain-google-genai>=2.0",
+        "langchain-anthropic>=1.4,<2",
+        "langchain-google-genai>=4.2,<5",
     ]
 
     PHASE_1_DEV_PINS: ClassVar[list[str]] = [
@@ -294,10 +306,20 @@ class TestAC004Phase1DependenciesUntouched:
         )
 
     def test_python_pin_unchanged(self) -> None:
-        """ADR-ARCH-010: requires-python = '>=3.12,<3.13'."""
+        """ADR-ARCH-010-rev2: requires-python = '>=3.11'.
+
+        Rebaselined 2026-04-27 from `>=3.12,<3.13` (TASK-REV-FA04 follow-up).
+        The original tight upper bound was driven by the 2025-10 PyPI publication
+        of `nats-core` requiring `>=3.13`; that constraint resolved upstream
+        (verified 2026-04-27: `nats-core` PyPI now declares `>=3.10`). The
+        stale upper bound caused a 33-min GuardKit AutoBuild stall on consumer
+        machines whose default Python had advanced to 3.14, hence the
+        rebaseline. `>=3.11` aligns with the rest of the LangChain DeepAgents
+        portfolio (forge, study-tutor, agentic-dataset-factory, specialist-agent).
+        """
         rp = _load_pyproject()["project"]["requires-python"]
-        assert rp == ">=3.12,<3.13", (
-            f"requires-python changed from ADR-ARCH-010 pin: {rp!r}"
+        assert rp == ">=3.11", (
+            f"requires-python changed from ADR-ARCH-010-rev2 pin: {rp!r}"
         )
 
     def test_phase1_providers_untouched(self) -> None:
