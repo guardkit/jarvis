@@ -31,9 +31,12 @@ Thumbs.db
 .pytest_cache/
 htmlcov/
 .coverage
+# Stray pytest-cov JSON artefacts at repo root (autobuild Phase-4 runs)
+/coverage*.json
 
 # Runtime logs
 .guardkit/graphiti-query-log.jsonl
+.guardkit/graphiti-query-log.jsonl.*
 .guardkit/autobuild/**/progress.log
 .guardkit/autobuild/**/events.jsonl
 
