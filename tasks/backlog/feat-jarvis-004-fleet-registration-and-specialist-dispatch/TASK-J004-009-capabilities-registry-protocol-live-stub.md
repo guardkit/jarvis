@@ -1,27 +1,51 @@
 ---
 id: TASK-J004-009
-title: "infrastructure/capabilities_registry.py — Protocol + Live + Stub"
+title: "infrastructure/capabilities_registry.py \u2014 Protocol + Live + Stub"
 task_type: feature
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 2
 implementation_mode: task-work
 complexity: 6
-dependencies: [TASK-J004-003, TASK-J004-006]
+dependencies:
+- TASK-J004-003
+- TASK-J004-006
 priority: high
-tags: [infrastructure, capabilities, kv-watch, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- infrastructure
+- capabilities
+- kv-watch
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 consumer_context:
-  - task: TASK-J004-006
-    consumes: NATS_CLIENT_API
-    framework: "async nats-py wrapper exposed as NATSClient"
-    driver: "nats-py"
-    format_note: "LiveCapabilitiesRegistry consumes the wrapper's `client` property + `js` JetStream context for KV operations; never bypasses the wrapper to call nats.connect directly"
+- task: TASK-J004-006
+  consumes: NATS_CLIENT_API
+  framework: async nats-py wrapper exposed as NATSClient
+  driver: nats-py
+  format_note: LiveCapabilitiesRegistry consumes the wrapper's `client` property +
+    `js` JetStream context for KV operations; never bypasses the wrapper to call nats.connect
+    directly
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T11:35:37.004940'
+  last_updated: '2026-04-28T11:50:46.666910'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T11:35:37.004940'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-009 — CapabilitiesRegistry: Protocol + LiveCapabilitiesRegistry + StubCapabilitiesRegistry

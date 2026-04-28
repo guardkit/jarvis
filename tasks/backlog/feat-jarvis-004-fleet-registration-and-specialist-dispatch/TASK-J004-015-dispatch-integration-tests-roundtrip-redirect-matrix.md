@@ -1,21 +1,44 @@
 ---
 id: TASK-J004-015
-title: "Integration: dispatch_by_capability round-trip + redirect matrix"
+title: 'Integration: dispatch_by_capability round-trip + redirect matrix'
 task_type: testing
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 4
 implementation_mode: task-work
 complexity: 6
-dependencies: [TASK-J004-013]
+dependencies:
+- TASK-J004-013
 priority: high
-tags: [tests, integration, dispatch, retry, redirect, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- tests
+- integration
+- dispatch
+- retry
+- redirect
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T13:03:49.480403'
+  last_updated: '2026-04-28T13:30:18.585731'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T13:03:49.480403'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-015 — Integration: dispatch_by_capability round-trip + redirect matrix

@@ -24,20 +24,20 @@ autobuild_state:
   max_turns: 30
   worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
   base_branch: main
-  started_at: '2026-04-27T16:42:59.616031'
-  last_updated: '2026-04-27T16:50:03.111753'
+  started_at: '2026-04-28T10:48:46.214070'
+  last_updated: '2026-04-28T10:55:41.870615'
   turns:
   - turn: 1
     decision: approve
     feedback: null
-    timestamp: '2026-04-27T16:42:59.616031'
-    player_summary: "Added two focused optional-extras groups to pyproject.toml \u2014\
-      \ `[nats]` (nats-py>=2.0,<3) and `[graphiti]` (graphiti-core>=0.9,<1.0) \u2014\
-      \ and re-exported both into the `[providers]` umbrella so a single `pip install\
-      \ .[providers]` still installs everything (LCOI policy \u2014 TASK-REV-LES1\
-      \ / LES1 \xA73). Pin rationale: nats-py lower bound matches the sibling `nats-core/pyproject.toml`\
-      \ convention (`nats-py>=2.0`) and caps at the next major (`<3`); graphiti-core\
-      \ lower bound `>=0.9` is the first line that ships "
+    timestamp: '2026-04-28T10:48:46.214070'
+    player_summary: "Added `[nats]` (`nats-py>=2.0,<3`) and `[graphiti]` (`graphiti-core>=0.9,<1`)\
+      \ optional-extras groups to pyproject.toml's `[project.optional-dependencies]`\
+      \ block. Re-exported both into the `[providers]` umbrella via PEP 631 self-extras\
+      \ references (`jarvis[nats]`, `jarvis[graphiti]`) so a single `pip install .[providers]`\
+      \ / `uv sync --extra providers` still installs every provider/integration this\
+      \ project can be configured to use (LCOI policy \u2014 TASK-REV-LES1 / LES1\
+      \ \xA73, recorded in `.claude/CLAUDE."
     player_success: true
     coach_success: true
 ---

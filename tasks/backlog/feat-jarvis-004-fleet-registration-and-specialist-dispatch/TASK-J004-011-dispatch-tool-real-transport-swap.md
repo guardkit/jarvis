@@ -1,42 +1,73 @@
 ---
 id: TASK-J004-011
-title: "tools/dispatch.py — real dispatch_by_capability transport swap"
+title: "tools/dispatch.py \u2014 real dispatch_by_capability transport swap"
 task_type: feature
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 3
 implementation_mode: task-work
 complexity: 7
-dependencies: [TASK-J004-006, TASK-J004-008, TASK-J004-009, TASK-J004-010]
+dependencies:
+- TASK-J004-006
+- TASK-J004-008
+- TASK-J004-009
+- TASK-J004-010
 priority: high
-tags: [tools, dispatch, transport, retry, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- tools
+- dispatch
+- transport
+- retry
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 consumer_context:
-  - task: TASK-J004-006
-    consumes: NATS_CLIENT_API
-    framework: "async nats-py wrapper exposed as NATSClient"
-    driver: "nats-py"
-    format_note: "dispatch consumes NATSClient.request(subject, payload, *, timeout); subject is built via nats_core.Topics formatters; payload is bytes (envelope.model_dump_json().encode())"
-  - task: TASK-J004-008
-    consumes: DISPATCH_SEMAPHORE_API
-    framework: "asyncio.Semaphore wrapper"
-    driver: "asyncio"
-    format_note: "dispatch must use try_acquire() (synchronous, non-blocking); on False, return DEGRADED string immediately without awaiting; release() always called in finally block"
-  - task: TASK-J004-009
-    consumes: CAPABILITIES_REGISTRY_PROTOCOL
-    framework: "Protocol unifying Live + Stub registries"
-    driver: "in-process Python Protocol"
-    format_note: "dispatch reads via .snapshot() returning fresh list; never mutates the snapshot; resolution iterates lexicographically by agent_id (DDR-017 determinism invariant)"
-  - task: TASK-J004-010
-    consumes: ROUTING_HISTORY_WRITER_API
-    framework: "Fire-and-forget Graphiti writer (DDR-019)"
-    driver: "graphiti-core"
-    format_note: "dispatch calls asyncio.create_task(writer.write_specialist_dispatch(entry)) at every outcome; never awaits the write; never raises on writer failure"
+- task: TASK-J004-006
+  consumes: NATS_CLIENT_API
+  framework: async nats-py wrapper exposed as NATSClient
+  driver: nats-py
+  format_note: dispatch consumes NATSClient.request(subject, payload, *, timeout);
+    subject is built via nats_core.Topics formatters; payload is bytes (envelope.model_dump_json().encode())
+- task: TASK-J004-008
+  consumes: DISPATCH_SEMAPHORE_API
+  framework: asyncio.Semaphore wrapper
+  driver: asyncio
+  format_note: dispatch must use try_acquire() (synchronous, non-blocking); on False,
+    return DEGRADED string immediately without awaiting; release() always called in
+    finally block
+- task: TASK-J004-009
+  consumes: CAPABILITIES_REGISTRY_PROTOCOL
+  framework: Protocol unifying Live + Stub registries
+  driver: in-process Python Protocol
+  format_note: dispatch reads via .snapshot() returning fresh list; never mutates
+    the snapshot; resolution iterates lexicographically by agent_id (DDR-017 determinism
+    invariant)
+- task: TASK-J004-010
+  consumes: ROUTING_HISTORY_WRITER_API
+  framework: Fire-and-forget Graphiti writer (DDR-019)
+  driver: graphiti-core
+  format_note: dispatch calls asyncio.create_task(writer.write_specialist_dispatch(entry))
+    at every outcome; never awaits the write; never raises on writer failure
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T11:50:46.731582'
+  last_updated: '2026-04-28T12:21:24.636518'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T11:50:46.731582'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-011 — tools/dispatch.py: real dispatch_by_capability transport swap

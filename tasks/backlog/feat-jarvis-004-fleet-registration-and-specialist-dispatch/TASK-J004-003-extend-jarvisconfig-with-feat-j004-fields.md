@@ -24,20 +24,20 @@ autobuild_state:
   max_turns: 30
   worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
   base_branch: main
-  started_at: '2026-04-27T16:42:59.619623'
-  last_updated: '2026-04-27T16:47:11.102008'
+  started_at: '2026-04-28T10:48:46.214187'
+  last_updated: '2026-04-28T10:55:07.921800'
   turns:
   - turn: 1
     decision: approve
     feedback: null
-    timestamp: '2026-04-27T16:42:59.619623'
-    player_summary: 'Added the nine FEAT-JARVIS-004 fields to JarvisConfig under a
-      clearly delimited block, immediately after the FEAT-J003 attended_adapter_ids
-      field and before model_config: nats_url (str default ''nats://localhost:4222''),
-      nats_credentials_path (Path|None=None), heartbeat_interval_seconds (int Field
-      default=30 ge=5 le=300 per DDR-021/heartbeat), graphiti_endpoint (str|None=None
-      for DDR-019 soft-fail), graphiti_api_key (SecretStr|None=None), jarvis_traces_dir
-      (Path default ~/.jarvis/traces), speciali'
+    timestamp: '2026-04-28T10:48:46.214187'
+    player_summary: "Added the nine FEAT-JARVIS-004 fields to JarvisConfig in src/jarvis/config/settings.py\
+      \ under a clearly delimited block, immediately after attended_adapter_ids and\
+      \ before model_config. Field declarations match docs/design/FEAT-JARVIS-004/contracts/API-internal.md\
+      \ \xA78: nats_url (str default 'nats://localhost:4222'), nats_credentials_path\
+      \ (Path | None default None), heartbeat_interval_seconds (int Field default=30\
+      \ ge=5 le=300 per DDR-021/heartbeat), graphiti_endpoint (str | None default\
+      \ None \u2014 trigg"
     player_success: true
     coach_success: true
 ---

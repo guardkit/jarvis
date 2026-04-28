@@ -24,20 +24,20 @@ autobuild_state:
   max_turns: 30
   worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
   base_branch: main
-  started_at: '2026-04-27T16:42:59.611604'
-  last_updated: '2026-04-27T16:51:13.628814'
+  started_at: '2026-04-28T10:48:46.212754'
+  last_updated: '2026-04-28T10:53:43.374635'
   turns:
   - turn: 1
     decision: approve
     feedback: null
-    timestamp: '2026-04-27T16:42:59.611604'
-    player_summary: 'Pure documentation task. Worktree autobuild/FEAT-J004-702C did
-      not contain the FEAT-JARVIS-004 design directory because the main repo had it
-      untracked; copied design.md, decisions/DDR-016..022.md, contracts/, diagrams/,
-      models/, and the assumptions YAML into the worktree as a prerequisite. Then:
-      (1) Created DDR-023 (trace-file collision: O_CREAT|O_EXCL; on FileExistsError
-      log WARN routing_history_write_failed and preserve original), promoting ASSUM-009
-      from low confidence; rationale leans on DDR'
+    timestamp: '2026-04-28T10:48:46.212754'
+    player_summary: Promoted ASSUM-008 (degraded specialists eligible) and ASSUM-009
+      (trace-file collision) to formal DDR-024 + DDR-023 respectively. Both DDRs follow
+      the existing DDR-016..022 template (Status / Date / Context / Decision / Rationale
+      / Alternatives / Consequences / Status). DDR-023 pins O_EXCL atomic create-or-fail
+      on the filesystem-offload path with WARN routing_history_write_failed reason=trace_file_exists;
+      the original file is preserved and the Graphiti entity points at it. DDR-024
+      keeps degraded
     player_success: true
     coach_success: true
 ---

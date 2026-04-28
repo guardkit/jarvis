@@ -1,37 +1,68 @@
 ---
 id: TASK-J004-013
-title: "infrastructure/lifecycle.py — NATS + Graphiti + register + heartbeat + drain wiring"
+title: "infrastructure/lifecycle.py \u2014 NATS + Graphiti + register + heartbeat\
+  \ + drain wiring"
 task_type: feature
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 3
 implementation_mode: task-work
 complexity: 6
-dependencies: [TASK-J004-006, TASK-J004-007, TASK-J004-008, TASK-J004-009, TASK-J004-010, TASK-J004-011, TASK-J004-012]
+dependencies:
+- TASK-J004-006
+- TASK-J004-007
+- TASK-J004-008
+- TASK-J004-009
+- TASK-J004-010
+- TASK-J004-011
+- TASK-J004-012
 priority: high
-tags: [infrastructure, lifecycle, wiring, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- infrastructure
+- lifecycle
+- wiring
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 consumer_context:
-  - task: TASK-J004-006
-    consumes: NATS_CLIENT_API
-    framework: "async nats-py wrapper exposed as NATSClient"
-    driver: "nats-py"
-    format_note: "lifecycle calls NATSClient.connect (returning None on failure per DDR-021) and NATSClient.drain(timeout=5.0) on shutdown"
-  - task: TASK-J004-009
-    consumes: CAPABILITIES_REGISTRY_PROTOCOL
-    framework: "Protocol unifying Live + Stub registries"
-    driver: "in-process Python Protocol"
-    format_note: "lifecycle wires LiveCapabilitiesRegistry when nats_client is not None; falls back to StubCapabilitiesRegistry(fallback_path) when None per DDR-021"
-  - task: TASK-J004-010
-    consumes: ROUTING_HISTORY_WRITER_API
-    framework: "Fire-and-forget Graphiti writer (DDR-019)"
-    driver: "graphiti-core"
-    format_note: "lifecycle calls writer.flush(timeout=5.0) before NATS drain; bounded wait, abandons on timeout with WARN per DDR-019"
+- task: TASK-J004-006
+  consumes: NATS_CLIENT_API
+  framework: async nats-py wrapper exposed as NATSClient
+  driver: nats-py
+  format_note: lifecycle calls NATSClient.connect (returning None on failure per DDR-021)
+    and NATSClient.drain(timeout=5.0) on shutdown
+- task: TASK-J004-009
+  consumes: CAPABILITIES_REGISTRY_PROTOCOL
+  framework: Protocol unifying Live + Stub registries
+  driver: in-process Python Protocol
+  format_note: lifecycle wires LiveCapabilitiesRegistry when nats_client is not None;
+    falls back to StubCapabilitiesRegistry(fallback_path) when None per DDR-021
+- task: TASK-J004-010
+  consumes: ROUTING_HISTORY_WRITER_API
+  framework: Fire-and-forget Graphiti writer (DDR-019)
+  driver: graphiti-core
+  format_note: lifecycle calls writer.flush(timeout=5.0) before NATS drain; bounded
+    wait, abandons on timeout with WARN per DDR-019
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T12:21:24.694478'
+  last_updated: '2026-04-28T13:03:49.389537'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T12:21:24.694478'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-013 — Lifecycle: startup + shutdown wiring

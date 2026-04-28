@@ -1,21 +1,42 @@
 ---
 id: TASK-J004-006
-title: "infrastructure/nats_client.py — async NATS wrapper"
+title: "infrastructure/nats_client.py \u2014 async NATS wrapper"
 task_type: feature
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 2
 implementation_mode: task-work
 complexity: 5
-dependencies: [TASK-J004-002, TASK-J004-003]
+dependencies:
+- TASK-J004-002
+- TASK-J004-003
 priority: high
-tags: [infrastructure, nats, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- infrastructure
+- nats
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T11:00:01.338028'
+  last_updated: '2026-04-28T11:14:44.773042'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T11:00:01.338028'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-006 — infrastructure/nats_client.py async wrapper

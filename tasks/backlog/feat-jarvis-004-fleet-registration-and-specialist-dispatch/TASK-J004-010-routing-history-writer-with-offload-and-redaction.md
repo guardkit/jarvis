@@ -1,27 +1,68 @@
 ---
 id: TASK-J004-010
-title: "RoutingHistoryWriter — write_specialist_dispatch + 16KB offload + redaction + flush"
+title: "RoutingHistoryWriter \u2014 write_specialist_dispatch + 16KB offload + redaction\
+  \ + flush"
 task_type: feature
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 2
 implementation_mode: task-work
 complexity: 7
-dependencies: [TASK-J004-003, TASK-J004-004]
+dependencies:
+- TASK-J004-003
+- TASK-J004-004
 priority: high
-tags: [infrastructure, routing-history, graphiti, redaction, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- infrastructure
+- routing-history
+- graphiti
+- redaction
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 consumer_context:
-  - task: TASK-J004-004
-    consumes: JARVIS_ROUTING_HISTORY_ENTRY_SCHEMA
-    framework: "Pydantic v2 BaseModel with frozen=True, extra=ignore"
-    driver: "pydantic"
-    format_note: "Writer accepts JarvisRoutingHistoryEntry instances; never mutates fields (frozen=True invariant); applies redaction processor at write boundary, not at construction"
+- task: TASK-J004-004
+  consumes: JARVIS_ROUTING_HISTORY_ENTRY_SCHEMA
+  framework: Pydantic v2 BaseModel with frozen=True, extra=ignore
+  driver: pydantic
+  format_note: Writer accepts JarvisRoutingHistoryEntry instances; never mutates fields
+    (frozen=True invariant); applies redaction processor at write boundary, not at
+    construction
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 2
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T11:00:01.350765'
+  last_updated: '2026-04-28T11:30:02.505348'
+  turns:
+  - turn: 1
+    decision: feedback
+    feedback: '- Advisory (non-blocking): task-work produced a report with 2 of 3
+      expected agent invocations. Missing phases: 3 (Implementation). Consider invoking
+      these agents via the Task tool to strengthen stack-specific quality:
+
+      - Phase 3: `the stack-specific Phase-3 specialist` (Implementation)
+
+      - BDD oracle: 1 scenario(s) failed during pytest-bdd execution. Implementation
+      does not satisfy the Gherkin specification.'
+    timestamp: '2026-04-28T11:00:01.350765'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
+  - turn: 2
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T11:19:41.537051'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-010 — RoutingHistoryWriter: writer methods + filesystem offload + redaction

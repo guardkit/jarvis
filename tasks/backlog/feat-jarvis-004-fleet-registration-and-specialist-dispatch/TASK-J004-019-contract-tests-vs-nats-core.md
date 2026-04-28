@@ -1,27 +1,51 @@
 ---
 id: TASK-J004-019
-title: "tests/test_contract_nats_core.py — contract tests + Topics-formatter grep invariant"
+title: "tests/test_contract_nats_core.py \u2014 contract tests + Topics-formatter\
+  \ grep invariant"
 task_type: testing
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 5
 implementation_mode: task-work
 complexity: 4
-dependencies: [TASK-J004-015]
+dependencies:
+- TASK-J004-015
 priority: high
-tags: [tests, contract, nats-core, regression-gate, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- tests
+- contract
+- nats-core
+- regression-gate
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 consumer_context:
-  - task: TASK-J004-011
-    consumes: SOURCE_ID_JARVIS_AUDIT
-    framework: "nats_core.MessageEnvelope"
-    driver: "pydantic"
-    format_note: "Every emitted MessageEnvelope must carry source_id='jarvis' (audit invariant per API-events §5)"
+- task: TASK-J004-011
+  consumes: SOURCE_ID_JARVIS_AUDIT
+  framework: nats_core.MessageEnvelope
+  driver: pydantic
+  format_note: "Every emitted MessageEnvelope must carry source_id='jarvis' (audit\
+    \ invariant per API-events \xA75)"
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T13:34:25.402674'
+  last_updated: '2026-04-28T13:46:34.694905'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T13:34:25.402674'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-019 — Contract tests vs nats-core + Topics-formatter grep invariant

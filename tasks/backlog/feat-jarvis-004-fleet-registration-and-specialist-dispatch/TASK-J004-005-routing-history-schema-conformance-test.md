@@ -1,27 +1,54 @@
 ---
 id: TASK-J004-005
-title: "tests/test_routing_history_schema.py — schema-conformance gate"
+title: "tests/test_routing_history_schema.py \u2014 schema-conformance gate"
 task_type: testing
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 1
 implementation_mode: direct
 complexity: 3
-dependencies: [TASK-J004-004]
+dependencies:
+- TASK-J004-004
 priority: high
-tags: [tests, routing-history, schema, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- tests
+- routing-history
+- schema
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 consumer_context:
-  - task: TASK-J004-004
-    consumes: JARVIS_ROUTING_HISTORY_ENTRY_SCHEMA
-    framework: "Pydantic v2 BaseModel with frozen=True, extra=ignore"
-    driver: "pydantic"
-    format_note: "Schema is authoritative per DDR-018; tests must validate exact field set including all ADR-FLEET-001 §1–§7 base fields + Jarvis extensions"
+- task: TASK-J004-004
+  consumes: JARVIS_ROUTING_HISTORY_ENTRY_SCHEMA
+  framework: Pydantic v2 BaseModel with frozen=True, extra=ignore
+  driver: pydantic
+  format_note: "Schema is authoritative per DDR-018; tests must validate exact field\
+    \ set including all ADR-FLEET-001 \xA71\u2013\xA77 base fields + Jarvis extensions"
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T11:00:01.346894'
+  last_updated: '2026-04-28T11:04:01.817756'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T11:00:01.346894'
+    player_summary: "Authored tests/test_routing_history_schema.py as the DDR-018\
+      \ schema-authority gate against TASK-J004-004's JarvisRoutingHistoryEntry (src/jarvis/infrastructure/routing_history.py).\
+      \ The file contains 41 test functions across 11 test classes (61 collected items\
+      \ after parametrize expansion), mirroring DM-routing-history.md \xA77 'Validation\
+      \ tests anchor' coverage points 1-8: (1) TestHappyPathFullShape \u2014 full-shape\
+      \ construct with every \xA71-\xA77 base field + every Jarvis extension populated,\
+      \ plus Python (m"
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-005 — Routing-history schema-conformance gate

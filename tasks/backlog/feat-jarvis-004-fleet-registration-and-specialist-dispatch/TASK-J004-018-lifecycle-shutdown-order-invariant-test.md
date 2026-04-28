@@ -1,21 +1,43 @@
 ---
 id: TASK-J004-018
-title: "tests/test_lifecycle_shutdown_order.py — drain ordering invariant"
+title: "tests/test_lifecycle_shutdown_order.py \u2014 drain ordering invariant"
 task_type: testing
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 4
 implementation_mode: task-work
 complexity: 4
-dependencies: [TASK-J004-013]
+dependencies:
+- TASK-J004-013
 priority: high
-tags: [tests, lifecycle, shutdown, ordering, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- tests
+- lifecycle
+- shutdown
+- ordering
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T13:03:49.490080'
+  last_updated: '2026-04-28T13:27:21.523241'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T13:03:49.490080'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-018 — Lifecycle shutdown-order invariant test

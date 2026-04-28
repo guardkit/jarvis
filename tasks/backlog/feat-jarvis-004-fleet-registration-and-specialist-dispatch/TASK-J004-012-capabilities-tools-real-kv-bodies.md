@@ -1,27 +1,50 @@
 ---
 id: TASK-J004-012
-title: "tools/capabilities.py — real KV-backed bodies for list / refresh / subscribe_updates"
+title: "tools/capabilities.py \u2014 real KV-backed bodies for list / refresh / subscribe_updates"
 task_type: feature
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 3
 implementation_mode: task-work
 complexity: 4
-dependencies: [TASK-J004-009]
+dependencies:
+- TASK-J004-009
 priority: high
-tags: [tools, capabilities, kv-watch, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- tools
+- capabilities
+- kv-watch
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 consumer_context:
-  - task: TASK-J004-009
-    consumes: CAPABILITIES_REGISTRY_PROTOCOL
-    framework: "Protocol unifying Live + Stub registries"
-    driver: "in-process Python Protocol"
-    format_note: "tools/capabilities.py reads from a CapabilitiesRegistry instance via the Protocol surface only (.snapshot/.refresh/.subscribe_updates/.close); never branches on Live vs Stub"
+- task: TASK-J004-009
+  consumes: CAPABILITIES_REGISTRY_PROTOCOL
+  framework: Protocol unifying Live + Stub registries
+  driver: in-process Python Protocol
+  format_note: tools/capabilities.py reads from a CapabilitiesRegistry instance via
+    the Protocol surface only (.snapshot/.refresh/.subscribe_updates/.close); never
+    branches on Live vs Stub
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T11:50:46.731372'
+  last_updated: '2026-04-28T12:17:56.795704'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T11:50:46.731372'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-012 — tools/capabilities.py: real KV-backed bodies

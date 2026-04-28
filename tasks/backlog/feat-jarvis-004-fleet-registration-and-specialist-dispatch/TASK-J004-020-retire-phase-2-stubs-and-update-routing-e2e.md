@@ -1,21 +1,47 @@
 ---
 id: TASK-J004-020
-title: "Retire Phase 2 stubs + update FEAT-J003 routing-e2e for real-NATS path"
+title: Retire Phase 2 stubs + update FEAT-J003 routing-e2e for real-NATS path
 task_type: refactor
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 5
 implementation_mode: direct
 complexity: 3
-dependencies: [TASK-J004-015]
+dependencies:
+- TASK-J004-015
 priority: high
-tags: [refactor, retire-stubs, regression, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- refactor
+- retire-stubs
+- regression
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T13:34:25.402845'
+  last_updated: '2026-04-28T13:53:18.602779'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T13:34:25.402845'
+    player_summary: "TASK-J004-020 has two coupled cleanup actions; both landed as\
+      \ small, surgical edits.\n\nA. Phase 2 stub-anchor retirement gate.\n  1. Cleaned\
+      \ three retirement-explanation docstrings in src/jarvis/tools/dispatch.py that\
+      \ still literally named the retired symbols (LOG_PREFIX_DISPATCH, _stub_response_hook,\
+      \ JARVIS_DISPATCH_STUB) \u2014 replaced with neutral descriptive text so a strict\
+      \ substring search finds zero matches in src/jarvis/. Removed the stale `DEGRADED:\
+      \ transport_stub` line from queue_build's doc"
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-020 — Retire Phase 2 stubs + update routing-e2e for real-NATS path

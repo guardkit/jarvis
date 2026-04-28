@@ -1,21 +1,48 @@
 ---
 id: TASK-J004-008
-title: "infrastructure/dispatch_semaphore.py — DispatchSemaphore wrapper"
+title: "infrastructure/dispatch_semaphore.py \u2014 DispatchSemaphore wrapper"
 task_type: feature
 parent_review: TASK-REV-22CF
 feature_id: FEAT-JARVIS-004
 wave: 2
 implementation_mode: direct
 complexity: 3
-dependencies: [TASK-J004-003]
+dependencies:
+- TASK-J004-003
 priority: high
-tags: [infrastructure, dispatch, semaphore, concurrency, FEAT-JARVIS-004]
-status: backlog
-created: 2026-04-27T15:30:00Z
+tags:
+- infrastructure
+- dispatch
+- semaphore
+- concurrency
+- FEAT-JARVIS-004
+status: in_review
+created: 2026-04-27 15:30:00+00:00
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 30
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C
+  base_branch: main
+  started_at: '2026-04-28T11:00:01.356671'
+  last_updated: '2026-04-28T11:03:57.894626'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-28T11:00:01.356671'
+    player_summary: 'Implemented DispatchSemaphore as a pure-counter wrapper guarded
+      by threading.Lock rather than holding an inner asyncio.Semaphore. Rationale
+      (carried forward from the prior turn''s player_summary in the task front-matter):
+      the brief mentions ''thin wrapper around asyncio.Semaphore'' in prose, but the
+      embedded Implementation Notes explicitly recommend maintaining an explicit counter
+      rather than touching _value, because asyncio.Semaphore exposes no public non-blocking
+      acquire path (only async acquire '
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-J004-008 — DispatchSemaphore wrapper
