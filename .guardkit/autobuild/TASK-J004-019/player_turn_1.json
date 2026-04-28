@@ -1,0 +1,105 @@
+{
+  "task_id": "TASK-J004-019",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/tools/dispatch.py",
+    "tasks/backlog/TASK-J004-019-contract-tests-vs-nats-core.md",
+    "tests/test_no_retired_roster_strings.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J004-019-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-014/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-019/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-019/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-019/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-020/turn_context.json",
+    ".guardkit/bdd/TASK-J004-019_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-019/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_contract_nats_core.py",
+    "tasks/design_approved/TASK-J004-019-contract-tests-vs-nats-core.md",
+    "tests/test_contract_nats_core.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_contract_nats_core.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: 6 contract tests + FEAT-J005 carry-forward stub exist",
+    "AC-002: grep invariant uses pathlib.Path.rglob + str.contains, allow-list documented",
+    "AC-003: grep failure message names offending file + line",
+    "AC-004: source_id audit parametrised across all emit sites + count-matches-grep companion",
+    "AC-005: no real NATS / Graphiti \u2014 pure schema + grep contract tests",
+    "AC-006: uv run pytest tests/test_contract_nats_core.py -v green (14 passed)"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 52,
+  "sdk_max_turns": 150,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 14,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "All 6 contract tests + the FEAT-J005 carry-forward stub exist.",
+      "status": "complete",
+      "evidence": "tests/test_contract_nats_core.py contains seven test classes mapped to the seven sub-tests in the task description: TestJarvisManifestRoundTrips (#1), TestCommandPayloadEmittedMatchesNatsCore (#2), TestResultPayloadConsumedMatchesNatsCore (#3), TestEnvelopeSourceIdIsJarvis (#4 \u2014 parametrised across both MessageEnvelope emit sites in src/jarvis/), TestTopicSubjectsMatchTopicsClass (#5 \u2014 three Topics.* assertions covering Agents.COMMAND, Pipeline.BUILD_QUEUED, Fleet.REGISTER), TestNoHardcodedSubjectLiteralsInSrc (#6 \u2014 grep invariant), and TestBuildQueuedPayloadEmittedMatchesNatsCore (#7 \u2014 FEAT-J005 carry-forward stub). 14 tests collected, 14 passed.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Grep invariant test (#6) uses pathlib.Path.rglob + str.contains to scan src/jarvis/ for hard-coded subject literals; allow-list documented in the test docstring.",
+      "status": "complete",
+      "evidence": "TestNoHardcodedSubjectLiteralsInSrc uses _iter_source_files() which calls _SRC_JARVIS.rglob('*.py') (pathlib.Path.rglob) and `forbidden in content` / `forbidden in line` (str.__contains__) to scan src/jarvis/ for the three forbidden literals 'agents.command.', 'agents.result.', 'fleet.register'. The class docstring documents the four-rule allow-list: (1) module/function docstrings, (2) comment lines, (3) nats_core.Topics import lines, (4) lines that reference Topics.* templates rather than emitting literals.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Tests fail loudly if any subject string is hard-coded (failure message names the offending file + line).",
+      "status": "complete",
+      "evidence": "test_no_hardcoded_subject_literals_in_src walks each line, records offenders as f'{rel}:{lineno}: {line.strip()}' (relative path + line number + line content), and asserts `not offenders` with a multi-line message naming each offender. The assert message is 'Hard-coded subject literal {forbidden!r} found in src/jarvis/ outside the allow-list (...): \\n' followed by the joined offender list \u2014 every offending file:line shows up in the failure output.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Source_id audit (#4) parametrises across every MessageEnvelope(source_id=...) construction site found via grep.",
+      "status": "complete",
+      "evidence": "TestEnvelopeSourceIdIsJarvis is parametrised over _EMIT_SITES which lists both MessageEnvelope construction sites in src/jarvis/ (dispatch.py:_build_command_envelope at line 242 and dispatch.py:queue_build at line 811 \u2014 verified via Grep for 'MessageEnvelope\\('). The companion test_emit_site_count_matches_grep test re-runs the grep itself (re.compile(r'\\bMessageEnvelope\\s*\\(') over Path.rglob) and asserts len(emit_lines) == len(_EMIT_SITES) so that adding a new emit site without registering it triggers a hard fail rather than a silent miss.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "No real NATS / Graphiti \u2014 these are pure schema + grep contract tests.",
+      "status": "complete",
+      "evidence": "All NATS/Graphiti dependencies are stubbed: the dispatch consumer test uses mock_dispatch_deps fixture which assigns MagicMock NATSClient, MagicMock DispatchSemaphore, and MagicMock RoutingHistoryWriter (with AsyncMock write_specialist_dispatch). No real connection is made. The manifest, command, build-queued, and topics tests are pure pydantic schema construction + grep \u2014 no I/O at all. The conftest.py autouse fixtures _stub_nats_and_graphiti_connect_seams + _restore_dispatch_layer2_hooks ensure isolation.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "uv run pytest tests/test_contract_nats_core.py -v green.",
+      "status": "complete",
+      "evidence": "Ran 'python -m pytest tests/test_contract_nats_core.py -v' from the worktree root; result: 14 passed, 1 warning in 2.47s. Also smoke-tested against related suites (test_fleet_registration.py, test_dispatch_by_capability.py, test_tools_dispatch.py): 110 passed, 1 warning in 1.80s \u2014 no regressions to neighbouring tests.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    }
+  ]
+}

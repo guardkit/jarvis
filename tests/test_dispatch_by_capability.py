@@ -1,20 +1,31 @@
-"""Behavioural tests for ``dispatch_by_capability`` (TASK-J002-013).
+"""Behavioural tests for ``dispatch_by_capability`` — TASK-J004-011.
+
+Phase 2's stub-path coverage (``_stub_response_hook`` + ``LOG_PREFIX_DISPATCH``
+log anchor) is retired here. The dispatch tool now performs a real NATS
+request/reply round-trip per design §8 and writes routing-history traces
+fire-and-forget per DDR-019.
 
 Each test class maps to one acceptance criterion in
-``tasks/design_approved/TASK-J002-013-implement-dispatch-by-capability-tool.md``.
+``tasks/design_approved/TASK-J004-011-dispatch-tool-real-transport-swap.md``.
+
+Validation tests (timeout range, payload shape) survive the swap as
+tool-boundary invariants; transport tests use mocked ``NATSClient`` /
+``DispatchSemaphore`` / ``RoutingHistoryWriter`` substitutes.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
-import logging
 import re
-import threading
 from collections.abc import Generator
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from nats_core.events import CommandPayload, ResultPayload
+from nats_core.events import ResultPayload
 
+from jarvis.shared.exceptions import NATSConnectionError
 from jarvis.tools import dispatch
 from jarvis.tools.capabilities import CapabilityDescriptor, CapabilityToolSummary
 
@@ -24,8 +35,10 @@ UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
 def _make_registry() -> list[CapabilityDescriptor]:
-    """Return a small but realistic capability registry."""
+    """Realistic capability registry covering the resolution rules."""
     return [
         CapabilityDescriptor(
             agent_id="architect",
@@ -61,9 +74,36 @@ def _make_registry() -> list[CapabilityDescriptor]:
                     description="Duplicate handler for tie-break tests",
                     risk_level="read_only",
                 ),
+                CapabilityToolSummary(
+                    tool_name="review_spec",
+                    description="Backup reviewer for redirect tests",
+                    risk_level="read_only",
+                ),
             ],
         ),
     ]
+
+
+def _success_result(*, command: str, correlation_id: str | None) -> bytes:
+    """Encoded ``ResultPayload`` for a happy-path round-trip."""
+    payload = ResultPayload(
+        command=command,
+        result={"verdict": "ok", "command": command},
+        correlation_id=correlation_id,
+        success=True,
+    )
+    return payload.model_dump_json().encode("utf-8")
+
+
+def _failure_result(*, command: str, correlation_id: str | None, reason: str) -> bytes:
+    """Encoded ``ResultPayload`` with ``success=False`` and a structured reason."""
+    payload = ResultPayload(
+        command=command,
+        result={"error": reason},
+        correlation_id=correlation_id,
+        success=False,
+    )
+    return payload.model_dump_json().encode("utf-8")
 
 
 @pytest.fixture()
@@ -78,24 +118,75 @@ def bound_registry() -> Generator[list[CapabilityDescriptor], None, None]:
 
 
 @pytest.fixture()
-def reset_hook() -> Generator[None, None, None]:
-    """Ensure ``_stub_response_hook`` is restored after each test."""
-    saved = dispatch._stub_response_hook
+def mock_dispatch_deps() -> Generator[dict[str, Any], None, None]:
+    """Wire mock ``NATSClient`` + ``DispatchSemaphore`` + ``RoutingHistoryWriter``.
+
+    The fixture sets ``_nats_client.request`` to an :class:`AsyncMock` that
+    by default returns a ``ResultPayload(success=True)`` reply, an
+    :class:`unittest.mock.MagicMock` semaphore whose ``try_acquire`` returns
+    ``True`` (with ``release`` recorded for AC-008), and a writer whose
+    ``write_specialist_dispatch`` is an :class:`AsyncMock` so the dispatch
+    body's ``asyncio.create_task(...)`` schedule succeeds in the test loop.
+    """
+    saved = (
+        dispatch._nats_client,
+        dispatch._dispatch_semaphore,
+        dispatch._routing_history_writer,
+    )
+
+    nats_client = MagicMock()
+    nats_client.request = AsyncMock()
+
+    semaphore = MagicMock()
+    semaphore.try_acquire = MagicMock(return_value=True)
+    semaphore.release = MagicMock()
+    semaphore.in_flight = 0
+
+    writer = MagicMock()
+    writer.write_specialist_dispatch = AsyncMock(return_value=None)
+
+    dispatch._nats_client = nats_client
+    dispatch._dispatch_semaphore = semaphore
+    dispatch._routing_history_writer = writer
+
     try:
-        yield
+        yield {
+            "nats_client": nats_client,
+            "semaphore": semaphore,
+            "writer": writer,
+        }
     finally:
-        dispatch._stub_response_hook = saved
+        (
+            dispatch._nats_client,
+            dispatch._dispatch_semaphore,
+            dispatch._routing_history_writer,
+        ) = saved
 
 
-def _invoke(**kwargs: object) -> str:
-    """Invoke the @tool-wrapped dispatch_by_capability via the BaseTool API."""
-    return dispatch.dispatch_by_capability.invoke(kwargs)
+async def _ainvoke(**kwargs: Any) -> str:
+    """Invoke the @tool-wrapped async ``dispatch_by_capability`` and return."""
+    return await dispatch.dispatch_by_capability.ainvoke(kwargs)
+
+
+async def _drain_pending() -> None:
+    """Yield to the loop so fire-and-forget ``create_task`` callbacks run.
+
+    ``dispatch_by_capability`` schedules the trace write via
+    ``asyncio.create_task`` and never awaits it — the test suite needs to
+    let those tasks run so writer-call assertions become observable.
+    """
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
 
 
 # ---------------------------------------------------------------------------
-# AC-001 — Module-level @tool exposed with the documented signature
+# AC: tool exposure + validation invariants survive the transport swap
 # ---------------------------------------------------------------------------
-class TestAC001ToolExposure:
+
+
+class TestToolExposureAndDocstring:
+    """The @tool surface must remain byte-identical for the reasoning model."""
+
     def test_dispatch_by_capability_is_module_attribute(self) -> None:
         assert hasattr(dispatch, "dispatch_by_capability")
 
@@ -104,29 +195,32 @@ class TestAC001ToolExposure:
 
         assert isinstance(dispatch.dispatch_by_capability, BaseTool)
 
-    def test_dispatch_by_capability_args_schema_lists_documented_args(
-        self,
-    ) -> None:
+    def test_args_schema_lists_documented_args(self) -> None:
         schema = dispatch.dispatch_by_capability.args_schema.model_json_schema()
         props = schema["properties"]
         assert {"tool_name", "payload_json", "intent_pattern", "timeout_seconds"} <= set(props)
 
-
-# ---------------------------------------------------------------------------
-# AC-002 — Docstring carries documented headings
-# ---------------------------------------------------------------------------
-class TestAC002Docstring:
-    def test_description_contains_resolution_order_heading(self) -> None:
+    def test_docstring_carries_resolution_order_heading(self) -> None:
         doc = dispatch.dispatch_by_capability.description or ""
         assert "Resolution order" in doc
         assert "Use this tool when" in doc
 
-    def test_underlying_docstring_lists_error_strings(self) -> None:
-        # ``@tool(parse_docstring=True)`` parses the Args/Returns sections out
-        # of the description, so we read the raw underlying-function docstring
-        # to verify the documented return-shape strings.
-        underlying = dispatch.dispatch_by_capability.func
-        doc = underlying.__doc__ or ""
+    @staticmethod
+    def _underlying_doc() -> str:
+        tool = dispatch.dispatch_by_capability
+        underlying = tool.func or tool.coroutine
+        return (underlying.__doc__ or "") if underlying is not None else ""
+
+    def test_docstring_lists_new_degraded_strings(self) -> None:
+        doc = self._underlying_doc()
+        # Phase-2 stub mention is gone.
+        assert "transport_stub" not in doc
+        # New DEGRADED strings per design §10.
+        assert "DEGRADED: dispatch_overloaded" in doc
+        assert "DEGRADED: transport_unavailable" in doc
+
+    def test_docstring_still_lists_validation_error_strings(self) -> None:
+        doc = self._underlying_doc()
         assert "ERROR: unresolved" in doc
         assert "ERROR: invalid_payload" in doc
         assert "ERROR: invalid_timeout" in doc
@@ -134,411 +228,500 @@ class TestAC002Docstring:
 
 
 # ---------------------------------------------------------------------------
-# AC-003 — Resolution: exact, then intent fallback, then unresolved
+# AC: payload + timeout validation (boundary invariants)
 # ---------------------------------------------------------------------------
-class TestAC003Resolution:
-    def test_exact_match_wins(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        with caplog.at_level(logging.INFO, logger="jarvis.tools.dispatch"):
-            result = _invoke(
-                tool_name="review_spec",
-                payload_json='{"spec": "x"}',
-            )
-        # Resolved → success canned ResultPayload JSON.
-        parsed = json.loads(result)
-        assert parsed["success"] is True
-        assert parsed["result"] == {"stub": True, "tool_name": "review_spec"}
-        # The log line names the resolved agent_id.
-        assert any("agent_id=product-owner" in r.message for r in caplog.records)
-
-    def test_lexicographic_order_breaks_exact_match_ties(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        # Both ``architect`` and ``zeta-agent`` expose ``run_architecture_session``.
-        with caplog.at_level(logging.INFO, logger="jarvis.tools.dispatch"):
-            _invoke(
-                tool_name="run_architecture_session",
-                payload_json="{}",
-            )
-        # Lexicographic agent_id order picks ``architect`` (a < z).
-        assert any("agent_id=architect" in r.message for r in caplog.records)
-
-    def test_intent_pattern_fallback_when_no_exact_match(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        with caplog.at_level(logging.INFO, logger="jarvis.tools.dispatch"):
-            result = _invoke(
-                tool_name="this_tool_does_not_exist",
-                payload_json="{}",
-                intent_pattern="C4 architecture",
-            )
-        # The intent_pattern matches ``architect.description``.
-        parsed = json.loads(result)
-        assert parsed["success"] is True
-        assert any("agent_id=architect" in r.message for r in caplog.records)
-
-    def test_unknown_capability_returns_unresolved_error(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-    ) -> None:
-        result = _invoke(
-            tool_name="nonexistent_tool",
-            payload_json="{}",
-        )
-        assert result == (
-            "ERROR: unresolved — no capability matches "
-            "tool_name=nonexistent_tool intent_pattern=None"
-        )
-
-    def test_unknown_capability_with_unmatched_intent_pattern(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-    ) -> None:
-        result = _invoke(
-            tool_name="nope",
-            payload_json="{}",
-            intent_pattern="totally-not-anywhere",
-        )
-        assert "ERROR: unresolved" in result
-        assert "tool_name=nope" in result
-        assert "intent_pattern=totally-not-anywhere" in result
 
 
-# ---------------------------------------------------------------------------
-# AC-004 — payload_json must be a JSON object literal
-# ---------------------------------------------------------------------------
-class TestAC004PayloadValidation:
+class TestPayloadValidation:
     @pytest.mark.parametrize(
         "bad",
-        [
-            "[1, 2, 3]",  # JSON array
-            '"a string"',  # JSON string
-            "42",  # JSON number
-            "null",  # JSON null
-            "not json at all",  # not JSON
-            "",  # empty
-            "  {bad",  # malformed
-        ],
+        ["[1, 2, 3]", '"a string"', "42", "null", "not json", "", "  {bad"],
     )
-    def test_non_object_payload_returns_invalid_payload(
+    async def test_non_object_payload_returns_invalid_payload(
         self,
         bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
+        mock_dispatch_deps: dict[str, Any],
         bad: str,
     ) -> None:
-        result = _invoke(
-            tool_name="review_spec",
-            payload_json=bad,
-        )
+        result = await _ainvoke(tool_name="review_spec", payload_json=bad)
         assert result == ("ERROR: invalid_payload — payload_json is not a JSON object literal")
-
-    def test_valid_object_payload_round_trips_into_command_args(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-    ) -> None:
-        captured: list[CommandPayload] = []
-
-        def hook(cmd: CommandPayload) -> tuple:
-            captured.append(cmd)
-            return (
-                "success",
-                ResultPayload(
-                    command=cmd.command,
-                    result={"echoed": cmd.args},
-                    correlation_id=cmd.correlation_id,
-                    success=True,
-                ),
-            )
-
-        dispatch._stub_response_hook = hook
-        result = _invoke(
-            tool_name="review_spec",
-            payload_json='{"spec_id": "FEAT-001", "depth": 2}',
-        )
-        assert captured, "hook must have received the constructed CommandPayload"
-        assert captured[0].args == {"spec_id": "FEAT-001", "depth": 2}
-        # Round-trip via the canned ResultPayload.
-        parsed = json.loads(result)
-        assert parsed["result"] == {"echoed": {"spec_id": "FEAT-001", "depth": 2}}
+        # No NATS call made.
+        mock_dispatch_deps["nats_client"].request.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# AC-005 — timeout_seconds must be 5..600
-# ---------------------------------------------------------------------------
-class TestAC005TimeoutValidation:
+class TestTimeoutValidation:
     @pytest.mark.parametrize("bad", [0, 1, 4, 601, 10_000, -1])
-    def test_out_of_range_timeout_returns_invalid_timeout(
+    async def test_out_of_range_timeout_returns_invalid_timeout(
         self,
         bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
+        mock_dispatch_deps: dict[str, Any],
         bad: int,
     ) -> None:
-        result = _invoke(
+        result = await _ainvoke(
             tool_name="review_spec",
             payload_json="{}",
             timeout_seconds=bad,
         )
         assert result == (f"ERROR: invalid_timeout — timeout_seconds must be 5..600, got {bad}")
+        mock_dispatch_deps["nats_client"].request.assert_not_called()
 
     @pytest.mark.parametrize("good", [5, 60, 600])
-    def test_in_range_timeout_proceeds(
+    async def test_in_range_timeouts_proceed_to_nats(
         self,
         bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
+        mock_dispatch_deps: dict[str, Any],
         good: int,
     ) -> None:
-        result = _invoke(
+        mock_dispatch_deps["nats_client"].request.return_value = MagicMock(
+            data=_success_result(command="review_spec", correlation_id="x")
+        )
+        result = await _ainvoke(
             tool_name="review_spec",
             payload_json="{}",
             timeout_seconds=good,
         )
-        # In-range → resolution proceeds → canned success returned.
         assert "ERROR: invalid_timeout" not in result
+        mock_dispatch_deps["nats_client"].request.assert_awaited()
 
 
 # ---------------------------------------------------------------------------
-# AC-006 — Real nats-core CommandPayload constructed with new_correlation_id()
+# AC: transport — NATSClient.request is called with the contract shape
 # ---------------------------------------------------------------------------
-class TestAC006CommandPayloadConstruction:
-    def test_stub_hook_sees_a_real_command_payload(
+
+
+class TestNATSRequestContract:
+    """Seam test from TASK-J004-011 — NATS_CLIENT_API contract from TASK-J004-006."""
+
+    async def test_request_called_with_subject_payload_timeout(
         self,
         bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
+        mock_dispatch_deps: dict[str, Any],
     ) -> None:
-        seen: list[CommandPayload] = []
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="review_spec", correlation_id="abc")
+        )
 
-        def hook(cmd: CommandPayload) -> tuple:
-            seen.append(cmd)
-            return (
-                "success",
-                ResultPayload(
-                    command=cmd.command,
-                    result={},
-                    correlation_id=cmd.correlation_id,
-                    success=True,
-                ),
-            )
-
-        dispatch._stub_response_hook = hook
-        _invoke(
+        await _ainvoke(
             tool_name="review_spec",
             payload_json='{"x": 1}',
-        )
-        assert len(seen) == 1
-        cmd = seen[0]
-        assert isinstance(cmd, CommandPayload)
-        assert cmd.command == "review_spec"
-        assert cmd.args == {"x": 1}
-        assert cmd.correlation_id is not None
-        assert UUID_RE.match(cmd.correlation_id), (
-            f"correlation_id {cmd.correlation_id!r} must be a UUID4 string"
+            timeout_seconds=30,
         )
 
+        nats_client.request.assert_awaited_once()
+        args, kwargs = nats_client.request.call_args
+        subject = args[0] if args else kwargs.get("subject")
+        payload = args[1] if len(args) > 1 else kwargs.get("payload")
+        assert isinstance(subject, str), "subject must be str"
+        assert isinstance(payload, bytes), "payload must be bytes"
+        assert "timeout" in kwargs, "timeout must be keyword-only"
+        assert kwargs["timeout"] == 30
+        assert subject == "agents.command.product-owner"
 
-# ---------------------------------------------------------------------------
-# AC-007 — Log line shape and grep anchor
-# ---------------------------------------------------------------------------
-class TestAC007LogLineShape:
-    def test_emits_exactly_one_log_line_per_invocation(
+    async def test_subject_built_via_topics_helper_not_hardcoded(
         self,
         bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-        caplog: pytest.LogCaptureFixture,
+        mock_dispatch_deps: dict[str, Any],
     ) -> None:
-        with caplog.at_level(logging.INFO, logger="jarvis.tools.dispatch"):
-            _invoke(tool_name="review_spec", payload_json="{}")
-        anchored = [r for r in caplog.records if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()]
-        assert len(anchored) == 1
-
-    def test_log_line_contains_required_fields(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        with caplog.at_level(logging.INFO, logger="jarvis.tools.dispatch"):
-            _invoke(
-                tool_name="review_spec",
-                payload_json='{"a": 1}',
-            )
-        rendered = next(
-            r.getMessage() for r in caplog.records if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="run_architecture_session", correlation_id=None)
         )
-        assert rendered.startswith(dispatch.LOG_PREFIX_DISPATCH)
-        assert "tool_name=review_spec" in rendered
-        assert "agent_id=product-owner" in rendered
-        assert "correlation_id=" in rendered
-        assert "topic=agents.command.product-owner" in rendered
-        assert "payload_bytes=" in rendered
-
-
-# ---------------------------------------------------------------------------
-# AC-008 — _stub_response_hook variants
-# ---------------------------------------------------------------------------
-class TestAC008StubResponseHook:
-    def test_unset_hook_returns_canned_success(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-    ) -> None:
-        dispatch._stub_response_hook = None
-        result = _invoke(
-            tool_name="review_spec",
+        await _ainvoke(
+            tool_name="run_architecture_session",
             payload_json="{}",
         )
+        subject = nats_client.request.call_args[0][0]
+        # Lexicographic resolution → "architect".
+        assert subject == "agents.command.architect"
+
+    async def test_envelope_carries_source_id_jarvis(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="review_spec", correlation_id=None)
+        )
+        await _ainvoke(tool_name="review_spec", payload_json="{}")
+        payload_bytes = nats_client.request.call_args[0][1]
+        envelope = json.loads(payload_bytes.decode("utf-8"))
+        assert envelope["source_id"] == "jarvis"
+        assert envelope["event_type"] == "command"
+        # Inner CommandPayload carries the same correlation_id as the envelope.
+        assert envelope["correlation_id"] == envelope["payload"]["correlation_id"]
+
+
+# ---------------------------------------------------------------------------
+# AC: happy path round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestHappyPathRoundTrip:
+    async def test_success_returns_result_payload_json(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        nats_client = mock_dispatch_deps["nats_client"]
+        # Use the correlation_id the dispatch tool actually emitted so the
+        # specialist's reply round-trips cleanly.
+        captured: dict[str, str] = {}
+
+        async def _record_request(subject: str, payload: bytes, *, timeout: float) -> Any:
+            envelope = json.loads(payload.decode("utf-8"))
+            cid = envelope["payload"]["correlation_id"]
+            captured["correlation_id"] = cid
+            return MagicMock(data=_success_result(command="review_spec", correlation_id=cid))
+
+        nats_client.request.side_effect = _record_request
+        result = await _ainvoke(tool_name="review_spec", payload_json='{"k": "v"}')
         parsed = json.loads(result)
         assert parsed["success"] is True
         assert parsed["command"] == "review_spec"
-        assert parsed["result"] == {"stub": True, "tool_name": "review_spec"}
-        assert UUID_RE.match(parsed["correlation_id"])
+        assert parsed["correlation_id"] == captured["correlation_id"]
+        assert UUID_RE.match(parsed["correlation_id"]), parsed["correlation_id"]
 
-    def test_timeout_hook_returns_timeout_error(
+
+# ---------------------------------------------------------------------------
+# AC: retry-with-redirect (visited set + MAX_REDIRECTS=1)
+# ---------------------------------------------------------------------------
+
+
+class TestRetryWithRedirect:
+    async def test_timeout_redirect_to_alternate_specialist_succeeds(
         self,
         bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
+        mock_dispatch_deps: dict[str, Any],
     ) -> None:
-        dispatch._stub_response_hook = lambda _cmd: ("timeout",)
-        result = _invoke(
-            tool_name="review_spec",
-            payload_json="{}",
-            timeout_seconds=30,
-        )
-        assert result == (
-            "TIMEOUT: agent_id=product-owner tool_name=review_spec timeout_seconds=30"
-        )
+        nats_client = mock_dispatch_deps["nats_client"]
+        # First call (product-owner) times out; second call (zeta-agent)
+        # — the next-lexicographic match for ``review_spec`` — succeeds.
+        call_count = {"n": 0}
 
-    def test_specialist_error_hook_returns_specialist_error(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-    ) -> None:
-        dispatch._stub_response_hook = lambda _cmd: ("specialist_error", "boom")
-        result = _invoke(
-            tool_name="review_spec",
-            payload_json="{}",
-        )
-        assert result == ("ERROR: specialist_error — agent_id=product-owner detail=boom")
+        async def _flaky(subject: str, payload: bytes, *, timeout: float) -> Any:
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise TimeoutError()
+            envelope = json.loads(payload.decode("utf-8"))
+            return MagicMock(
+                data=_success_result(
+                    command="review_spec",
+                    correlation_id=envelope["payload"]["correlation_id"],
+                )
+            )
 
-    def test_success_hook_returns_result_payload_json(
-        self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-    ) -> None:
-        dispatch._stub_response_hook = lambda cmd: (
-            "success",
-            ResultPayload(
-                command=cmd.command,
-                result={"verdict": "ok"},
-                correlation_id=cmd.correlation_id,
-                success=True,
-            ),
-        )
-        result = _invoke(
-            tool_name="review_spec",
-            payload_json="{}",
-        )
+        nats_client.request.side_effect = _flaky
+        result = await _ainvoke(tool_name="review_spec", payload_json="{}")
         parsed = json.loads(result)
         assert parsed["success"] is True
-        assert parsed["result"] == {"verdict": "ok"}
+        # Two attempts: first product-owner, then zeta-agent.
+        assert call_count["n"] == 2
+        first_subject = nats_client.request.call_args_list[0][0][0]
+        second_subject = nats_client.request.call_args_list[1][0][0]
+        assert first_subject == "agents.command.product-owner"
+        assert second_subject == "agents.command.zeta-agent"
 
-
-# ---------------------------------------------------------------------------
-# AC-009 — Concurrent dispatches: distinct correlation IDs and log lines
-# ---------------------------------------------------------------------------
-class TestAC009Concurrency:
-    def test_concurrent_dispatches_emit_distinct_correlation_ids(
+    async def test_double_timeout_returns_exhausted(
         self,
         bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
-        caplog: pytest.LogCaptureFixture,
+        mock_dispatch_deps: dict[str, Any],
     ) -> None:
-        results: list[str] = []
-        lock = threading.Lock()
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.side_effect = TimeoutError()
+        result = await _ainvoke(tool_name="review_spec", payload_json="{}", timeout_seconds=10)
+        assert result.startswith("TIMEOUT:")
+        assert "exhausted attempts=2" in result
+        # Visited-set prevented loops: distinct agents per attempt.
+        first_subject = nats_client.request.call_args_list[0][0][0]
+        second_subject = nats_client.request.call_args_list[1][0][0]
+        assert first_subject != second_subject
 
-        def worker() -> None:
-            r = _invoke(tool_name="review_spec", payload_json="{}")
-            with lock:
-                results.append(r)
+    async def test_specialist_error_redirect_to_alternate_succeeds(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        nats_client = mock_dispatch_deps["nats_client"]
+        call_count = {"n": 0}
 
-        with caplog.at_level(logging.INFO, logger="jarvis.tools.dispatch"):
-            threads = [threading.Thread(target=worker) for _ in range(5)]
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join()
+        async def _flaky(subject: str, payload: bytes, *, timeout: float) -> Any:
+            call_count["n"] += 1
+            envelope = json.loads(payload.decode("utf-8"))
+            cid = envelope["payload"]["correlation_id"]
+            if call_count["n"] == 1:
+                return MagicMock(
+                    data=_failure_result(
+                        command="review_spec",
+                        correlation_id=cid,
+                        reason="capacity_exceeded",
+                    )
+                )
+            return MagicMock(data=_success_result(command="review_spec", correlation_id=cid))
 
-        anchored = [
-            r.getMessage() for r in caplog.records if dispatch.LOG_PREFIX_DISPATCH in r.getMessage()
-        ]
-        assert len(anchored) == 5
-        # Extract correlation_id from each line.
-        cids = [re.search(r"correlation_id=([0-9a-f-]+)", line).group(1) for line in anchored]
-        assert len(set(cids)) == 5, (
-            f"Concurrent calls must yield distinct correlation_ids; got {cids}"
+        nats_client.request.side_effect = _flaky
+        result = await _ainvoke(tool_name="review_spec", payload_json="{}")
+        parsed = json.loads(result)
+        assert parsed["success"] is True
+        assert call_count["n"] == 2
+
+    async def test_max_redirects_is_one(self) -> None:
+        """DDR-017 invariant: at most 2 attempts per dispatch."""
+        assert dispatch.MAX_REDIRECTS == 1
+
+
+# ---------------------------------------------------------------------------
+# AC: semaphore overflow → DEGRADED synchronously
+# ---------------------------------------------------------------------------
+
+
+class TestSemaphoreOverflow:
+    async def test_overflow_returns_dispatch_overloaded(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        mock_dispatch_deps["semaphore"].try_acquire = MagicMock(return_value=False)
+        result = await _ainvoke(tool_name="review_spec", payload_json="{}")
+        assert result == "DEGRADED: dispatch_overloaded — wait and retry"
+        # No NATS call made — DEGRADED is synchronous per DDR-020.
+        mock_dispatch_deps["nats_client"].request.assert_not_called()
+        # Release was NOT called — try_acquire returned False so the slot
+        # was never held.
+        mock_dispatch_deps["semaphore"].release.assert_not_called()
+
+    async def test_release_called_in_every_outcome_path(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        nats_client = mock_dispatch_deps["nats_client"]
+        # Success path
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="review_spec", correlation_id="z")
         )
-        # Every returned ResultPayload also carries a distinct correlation_id.
-        result_cids = [json.loads(r)["correlation_id"] for r in results]
-        assert len(set(result_cids)) == 5
+        await _ainvoke(tool_name="review_spec", payload_json="{}")
+        assert mock_dispatch_deps["semaphore"].release.call_count == 1
+
+        # Reset and exercise transport-unavailable.
+        mock_dispatch_deps["semaphore"].release.reset_mock()
+        nats_client.request.side_effect = NATSConnectionError("boom")
+        nats_client.request.return_value = None
+        await _ainvoke(tool_name="review_spec", payload_json="{}")
+        assert mock_dispatch_deps["semaphore"].release.call_count == 1
+
+        # Reset and exercise unresolved (no NATS call → no release? Actually
+        # the semaphore is acquired before resolution; release must still
+        # fire).
+        mock_dispatch_deps["semaphore"].release.reset_mock()
+        nats_client.request.side_effect = None
+        result = await _ainvoke(tool_name="totally_unknown", payload_json="{}")
+        assert result.startswith("ERROR: unresolved")
+        assert mock_dispatch_deps["semaphore"].release.call_count == 1
 
 
 # ---------------------------------------------------------------------------
-# AC-010 — Never raises; ValidationError → ERROR: validation
+# AC: NATSConnectionError → DEGRADED: transport_unavailable
 # ---------------------------------------------------------------------------
-class TestAC010NeverRaises:
-    def test_hook_raising_is_caught_as_specialist_error(
+
+
+class TestTransportUnavailable:
+    async def test_nats_connection_error_returns_degraded(
         self,
         bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
+        mock_dispatch_deps: dict[str, Any],
     ) -> None:
-        def boom(_cmd: CommandPayload) -> tuple:
-            raise RuntimeError("kaboom")
+        mock_dispatch_deps["nats_client"].request.side_effect = NATSConnectionError("broker down")
+        result = await _ainvoke(tool_name="review_spec", payload_json="{}")
+        assert result == "DEGRADED: transport_unavailable — NATS connection failed"
 
-        dispatch._stub_response_hook = boom
-        result = _invoke(
-            tool_name="review_spec",
+    async def test_unwired_nats_client_returns_degraded(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+    ) -> None:
+        # No mock_dispatch_deps fixture — _nats_client stays None.
+        saved_sem = dispatch._dispatch_semaphore
+        dispatch._dispatch_semaphore = None
+        try:
+            result = await _ainvoke(tool_name="review_spec", payload_json="{}")
+            assert result == "DEGRADED: transport_unavailable — NATS connection failed"
+        finally:
+            dispatch._dispatch_semaphore = saved_sem
+
+
+# ---------------------------------------------------------------------------
+# AC: unresolved with empty registry never raises
+# ---------------------------------------------------------------------------
+
+
+class TestUnresolvedAndEmptyRegistry:
+    async def test_unknown_capability_returns_unresolved(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        result = await _ainvoke(tool_name="nonexistent_tool", payload_json="{}")
+        assert result == (
+            "ERROR: unresolved — no capability matches "
+            "tool_name=nonexistent_tool intent_pattern=None"
+        )
+        mock_dispatch_deps["nats_client"].request.assert_not_called()
+
+    async def test_intent_pattern_fallback_resolves_when_no_exact_match(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="x", correlation_id=None)
+        )
+        await _ainvoke(
+            tool_name="not_a_registered_tool",
             payload_json="{}",
+            intent_pattern="C4 architecture",
         )
-        assert result.startswith("ERROR: specialist_error — agent_id=product-owner")
-        assert "kaboom" in result
+        # Intent matched architect.description.
+        subject = nats_client.request.call_args[0][0]
+        assert subject == "agents.command.architect"
 
-    def test_invalid_args_type_does_not_raise(
+    async def test_empty_registry_returns_unresolved(
         self,
-        bound_registry: list[CapabilityDescriptor],
-        reset_hook: None,
+        mock_dispatch_deps: dict[str, Any],
     ) -> None:
-        # The @tool wrapper coerces, but this verifies bad shape is graceful.
-        result = _invoke(
-            tool_name="review_spec",
-            payload_json="not-json",
-        )
-        assert "ERROR: invalid_payload" in result
-
-
-# ---------------------------------------------------------------------------
-# AC-011 — Empty registry yields ERROR: unresolved (does not raise)
-# ---------------------------------------------------------------------------
-class TestAC011EmptyRegistry:
-    def test_empty_registry_returns_unresolved(self, reset_hook: None) -> None:
         saved = dispatch._capability_registry
         dispatch._capability_registry = []
         try:
-            result = _invoke(
-                tool_name="anything",
-                payload_json="{}",
-            )
+            result = await _ainvoke(tool_name="anything", payload_json="{}")
             assert "ERROR: unresolved" in result
         finally:
             dispatch._capability_registry = saved
+
+
+# ---------------------------------------------------------------------------
+# AC: trace writes are fire-and-forget (asyncio.create_task, never awaited)
+# ---------------------------------------------------------------------------
+
+
+class TestTraceWritesFireAndForget:
+    async def test_writer_invoked_via_create_task(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="review_spec", correlation_id=None)
+        )
+        await _ainvoke(tool_name="review_spec", payload_json="{}")
+        # Yield to the loop so the scheduled trace task runs.
+        await _drain_pending()
+        mock_dispatch_deps["writer"].write_specialist_dispatch.assert_called()
+
+    async def test_writer_failure_does_not_propagate(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        # Writer raises — dispatch must still return the specialist's result.
+        async def _explode(_entry: Any) -> None:
+            raise RuntimeError("graphiti down")
+
+        mock_dispatch_deps["writer"].write_specialist_dispatch = AsyncMock(side_effect=_explode)
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="review_spec", correlation_id=None)
+        )
+        result = await _ainvoke(tool_name="review_spec", payload_json="{}")
+        parsed = json.loads(result)
+        assert parsed["success"] is True
+        # Drain — the create_task wraps the failing coroutine, exception is
+        # swallowed by the task itself (we never await it).
+        await _drain_pending()
+
+    async def test_unwired_writer_does_not_block_dispatch(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        dispatch._routing_history_writer = None
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="review_spec", correlation_id=None)
+        )
+        result = await _ainvoke(tool_name="review_spec", payload_json="{}")
+        parsed = json.loads(result)
+        assert parsed["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# AC: lexicographic determinism (DDR-017 invariant) preserved on ties
+# ---------------------------------------------------------------------------
+
+
+class TestLexicographicDeterminism:
+    async def test_lexicographic_first_wins_on_exact_match_ties(
+        self,
+        bound_registry: list[CapabilityDescriptor],
+        mock_dispatch_deps: dict[str, Any],
+    ) -> None:
+        nats_client = mock_dispatch_deps["nats_client"]
+        nats_client.request.return_value = MagicMock(
+            data=_success_result(command="run_architecture_session", correlation_id=None)
+        )
+        await _ainvoke(
+            tool_name="run_architecture_session",
+            payload_json="{}",
+        )
+        subject = nats_client.request.call_args[0][0]
+        # Both architect and zeta-agent advertise the tool; lex-first wins.
+        assert subject == "agents.command.architect"
+
+    def test_resolve_helper_skips_excluded_agent_ids(self) -> None:
+        registry = _make_registry()
+        # exclude=architect → next lex match is zeta-agent.
+        agent_id = dispatch._resolve_agent_id(
+            "run_architecture_session",
+            None,
+            registry,
+            exclude={"architect"},
+        )
+        assert agent_id == "zeta-agent"
+
+    def test_resolve_helper_returns_none_when_all_candidates_excluded(self) -> None:
+        registry = _make_registry()
+        agent_id = dispatch._resolve_agent_id(
+            "run_architecture_session",
+            None,
+            registry,
+            exclude={"architect", "zeta-agent"},
+        )
+        assert agent_id is None
+
+
+# ---------------------------------------------------------------------------
+# AC: retired anchors are gone (LOG_PREFIX_DISPATCH, _stub_response_hook)
+# ---------------------------------------------------------------------------
+
+
+class TestRetiredAnchors:
+    """The Phase 2 swap-point grep anchors are deleted from this module.
+
+    The TASK-J002-021 grep invariant is flipped to assert their absence in
+    TASK-J004-020; here we pin the import-time view.
+    """
+
+    def test_log_prefix_dispatch_is_deleted(self) -> None:
+        assert not hasattr(dispatch, "LOG_PREFIX_DISPATCH")
+
+    def test_stub_response_hook_is_deleted(self) -> None:
+        assert not hasattr(dispatch, "_stub_response_hook")
+
+    def test_stub_response_alias_is_deleted(self) -> None:
+        assert not hasattr(dispatch, "StubResponse")
+
+    def test_new_module_attributes_exist(self) -> None:
+        assert hasattr(dispatch, "_nats_client")
+        assert hasattr(dispatch, "_routing_history_writer")
+        assert hasattr(dispatch, "_dispatch_semaphore")

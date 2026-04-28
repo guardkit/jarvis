@@ -1,0 +1,100 @@
+{
+  "task_id": "TASK-J004-002",
+  "turn": 1,
+  "files_modified": [
+    "pyproject.toml",
+    "uv.lock",
+    "tests/test_phase2_dependencies.py"
+  ],
+  "files_created": [
+    "tests/test_phase4_dependencies.py"
+  ],
+  "tests_written": [
+    "tests/test_phase4_dependencies.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "62 passed, 1 warning (graphiti_core internal pydantic deprecation, not actionable). tests/test_phase2_dependencies.py: 42 passed. tests/test_phase4_dependencies.py: 20 passed. ruff check on pyproject.toml + both test files: zero errors.",
+  "implementation_notes": "Added `[nats]` (`nats-py>=2.0,<3`) and `[graphiti]` (`graphiti-core>=0.9,<1`) optional-extras groups to pyproject.toml's `[project.optional-dependencies]` block. Re-exported both into the `[providers]` umbrella via PEP 631 self-extras references (`jarvis[nats]`, `jarvis[graphiti]`) so a single `pip install .[providers]` / `uv sync --extra providers` still installs every provider/integration this project can be configured to use (LCOI policy \u2014 TASK-REV-LES1 / LES1 \u00a73, recorded in `.claude/CLAUDE.md`). Pin rationale: nats-py lower bound `>=2.0` mirrors the sibling `nats-core/pyproject.toml` runtime convention (`nats-py>=2.0`); upper bound `<3` caps at the next major to match the Phase 1 langchain-* `<2` convention. graphiti-core lower bound `>=0.9` is the first 0.9.x line shipping the pydantic-2 / FalkorDB combo Jarvis relies on (`.guardkit/graphiti.yaml` configures `graph_store: falkordb`); upper bound `<1` caps before the expected breaking 1.0 surface change. `uv sync --extra providers` resolved cleanly: nats-py==2.14.0 and graphiti-core==0.29.0 installed alongside their transitives (neo4j, posthog, openai, etc). Updated the Phase 2 `TestAC002NatsPyNotDeclared.test_nats_py_not_in_optional_dependencies` assertion: it was a temporal Phase 2 invariant ('nats-py forbidden in optional-extras until FEAT-JARVIS-004' \u2014 see the original docstring), and Phase 4 is the moment it lifts. Renamed it to `test_nats_py_only_in_phase4_optional_groups` and tightened it to allow nats-py in `[nats]` and `[providers]` only, forbidding any other group. The other Phase 2 invariants (no nats-py in runtime, dev-group, or [tool.uv.sources]) still hold and remain enforced. New `tests/test_phase4_dependencies.py` mirrors the Phase 2 helper layout class-per-AC for review parity.",
+  "concerns": [
+    "graphiti-core 0.29.0 emits a PydanticDeprecatedSince20 warning at import time (class-based `config` instead of `ConfigDict`). Upstream issue, not actionable from Jarvis. Noted as a single warning in the test run.",
+    "`ruff format --check` reports drift on the touched files, but the existing tests/ directory has 25 pre-existing files that also fail format-check (e.g. tests/test_supervisor.py). The project enforces `ruff check` (lint), not `ruff format` \u2014 confirmed by [tool.ruff.lint] config in pyproject.toml and the absence of any [tool.ruff.format] block. AC-006 ('project-configured lint/format checks with zero errors') is satisfied by the passing `ruff check`. Still ran `ruff format` on tests/test_phase4_dependencies.py for cleanliness."
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `pyproject.toml` `[project.optional-dependencies]` gains `nats` and `graphiti` groups.",
+      "status": "complete",
+      "evidence": "Added `nats = [\"nats-py>=2.0,<3\"]` and `graphiti = [\"graphiti-core>=0.9,<1\"]` groups under `[project.optional-dependencies]` in pyproject.toml (lines 70-82). TestAC001OptionalGroupsAdded covers presence checks for both groups and asserts the expected package is listed in each.",
+      "test_file": "tests/test_phase4_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] `[providers]` umbrella includes both new groups.",
+      "status": "complete",
+      "evidence": "`[providers]` umbrella now includes `jarvis[nats]` and `jarvis[graphiti]` PEP 631 self-extras references (pyproject.toml lines 102-103) so `pip install .[providers]` / `uv sync --extra providers` installs every provider. TestAC002ProvidersUmbrellaReExportsBothGroups verifies both re-exports and asserts the Phase 1/3 provider pins (langchain-anthropic, langchain-google-genai, google-genai) remain in place \u2014 Phase 4 is additive, not destructive.",
+      "test_file": "tests/test_phase4_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `uv sync` succeeds against the updated pyproject.",
+      "status": "complete",
+      "evidence": "`uv sync` exit 0; `uv sync` re-run reports no drift (no `+`/`-` lines). uv.lock regenerated and now contains `name = \"nats-py\"` and `name = \"graphiti-core\"` entries. TestAC003UvSyncSucceeds runs `uv sync` twice in subprocess and asserts both exit zero with no env drift on the second call (same two-phase pattern used by Phase 2 dep tests).",
+      "test_file": "tests/test_phase4_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml",
+        "uv.lock"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] `uv run python -c \"import nats; import graphiti_core\"` succeeds after `uv sync --extra providers`.",
+      "status": "complete",
+      "evidence": "Verified manually: `uv run python -c \"import nats; import graphiti_core\"` resolved to `.venv/lib/python3.12/site-packages/nats/__init__.py` and `.venv/lib/python3.12/site-packages/graphiti_core/__init__.py` after `uv sync --extra providers` (which installed nats-py==2.14.0 and graphiti-core==0.29.0 plus transitives). TestAC004ImportSmokeCheck shells out to `uv sync --extra providers` and then parametrises over both modules using `importlib.import_module`.",
+      "test_file": "tests/test_phase4_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml",
+        "uv.lock"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] Version pins explicitly bound: lower bound is the nats-core / forge convention; upper bound is the next major.",
+      "status": "complete",
+      "evidence": "`nats-py>=2.0,<3` \u2014 lower bound `>=2.0` mirrors the sibling `/Users/richardwoollcott/Projects/appmilla_github/nats-core/pyproject.toml` runtime dep `nats-py>=2.0` (verified via direct read); upper bound `<3` is the next major. `graphiti-core>=0.9,<1` \u2014 lower bound `>=0.9` is the first 0.9.x line shipping pydantic-2 / FalkorDB; upper bound `<1` is the next major. TestAC005VersionPinsExplicitlyBound has four assertions covering both lower and upper bounds for both packages, including a regex-based major-version comparison against the nats-core convention.",
+      "test_file": "tests/test_phase4_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`uv run ruff check pyproject.toml tests/test_phase4_dependencies.py tests/test_phase2_dependencies.py` exits 0 with 'All checks passed!'. The project's configured lint surface is `[tool.ruff.lint]` (select = E, F, I, W, UP, B, SIM, RUF) with `[tool.ruff.lint.per-file-ignores]` for `src/jarvis/**`. There is no `[tool.ruff.format]` block \u2014 the project does not enforce `ruff format`, confirmed by 25 pre-existing tests/ files that also fail `ruff format --check`. TestAC006LintFormatPasses parametrises `ruff check` over each touched test file in subprocess and asserts pyproject.toml round-trips through tomllib.",
+      "test_file": "tests/test_phase4_dependencies.py",
+      "implementation_files": [
+        "pyproject.toml",
+        "tests/test_phase4_dependencies.py",
+        "tests/test_phase2_dependencies.py"
+      ]
+    }
+  ],
+  "success": true
+}

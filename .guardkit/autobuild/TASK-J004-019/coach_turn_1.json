@@ -1,0 +1,161 @@
+{
+  "task_id": "TASK-J004-019",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "skipped",
+      "test_output_summary": "Independent test verification skipped (tests not required for testing tasks)",
+      "duration_seconds": 0.0
+    },
+    "requirements": {
+      "criteria_total": 6,
+      "criteria_met": 6,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "All 6 contract tests + the FEAT-J005 carry-forward stub exist.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "tests/test_contract_nats_core.py contains seven test classes mapped to the seven sub-tests in the task description: TestJarvisManifestRoundTrips (#1), TestCommandPayloadEmittedMatchesNatsCore (#2), TestResultPayloadConsumedMatchesNatsCore (#3), TestEnvelopeSourceIdIsJarvis (#4 \u2014 parametrised across both MessageEnvelope emit sites in src/jarvis/), TestTopicSubjectsMatchTopicsClass (#5 \u2014 three Topics.* assertions covering Agents.COMMAND, Pipeline.BUILD_QUEUED, Fleet.REGISTER), TestNoHardcodedSubjectLiteralsInSrc (#6 \u2014 grep invariant), and TestBuildQueuedPayloadEmittedMatchesNatsCore (#7 \u2014 FEAT-J005 carry-forward stub). 14 tests collected, 14 passed.",
+      "notes": "tests/test_contract_nats_core.py contains seven test classes mapped to the seven sub-tests in the task description: TestJarvisManifestRoundTrips (#1), TestCommandPayloadEmittedMatchesNatsCore (#2), TestResultPayloadConsumedMatchesNatsCore (#3), TestEnvelopeSourceIdIsJarvis (#4 \u2014 parametrised across both MessageEnvelope emit sites in src/jarvis/), TestTopicSubjectsMatchTopicsClass (#5 \u2014 three Topics.* assertions covering Agents.COMMAND, Pipeline.BUILD_QUEUED, Fleet.REGISTER), TestNoHardcodedSubjectLiteralsInSrc (#6 \u2014 grep invariant), and TestBuildQueuedPayloadEmittedMatchesNatsCore (#7 \u2014 FEAT-J005 carry-forward stub). 14 tests collected, 14 passed."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Grep invariant test (#6)** uses `pathlib.Path.rglob` + `str.contains` to scan `src/jarvis/` for hard-coded subject literals; allow-list documented in the test docstring.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestNoHardcodedSubjectLiteralsInSrc uses _iter_source_files() which calls _SRC_JARVIS.rglob('*.py') (pathlib.Path.rglob) and `forbidden in content` / `forbidden in line` (str.__contains__) to scan src/jarvis/ for the three forbidden literals 'agents.command.', 'agents.result.', 'fleet.register'. The class docstring documents the four-rule allow-list: (1) module/function docstrings, (2) comment lines, (3) nats_core.Topics import lines, (4) lines that reference Topics.* templates rather than emitting literals.",
+      "notes": "TestNoHardcodedSubjectLiteralsInSrc uses _iter_source_files() which calls _SRC_JARVIS.rglob('*.py') (pathlib.Path.rglob) and `forbidden in content` / `forbidden in line` (str.__contains__) to scan src/jarvis/ for the three forbidden literals 'agents.command.', 'agents.result.', 'fleet.register'. The class docstring documents the four-rule allow-list: (1) module/function docstrings, (2) comment lines, (3) nats_core.Topics import lines, (4) lines that reference Topics.* templates rather than emitting literals."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Tests fail loudly if any subject string is hard-coded (failure message names the offending file + line).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "test_no_hardcoded_subject_literals_in_src walks each line, records offenders as f'{rel}:{lineno}: {line.strip()}' (relative path + line number + line content), and asserts `not offenders` with a multi-line message naming each offender. The assert message is 'Hard-coded subject literal {forbidden!r} found in src/jarvis/ outside the allow-list (...): \\n' followed by the joined offender list \u2014 every offending file:line shows up in the failure output.",
+      "notes": "test_no_hardcoded_subject_literals_in_src walks each line, records offenders as f'{rel}:{lineno}: {line.strip()}' (relative path + line number + line content), and asserts `not offenders` with a multi-line message naming each offender. The assert message is 'Hard-coded subject literal {forbidden!r} found in src/jarvis/ outside the allow-list (...): \\n' followed by the joined offender list \u2014 every offending file:line shows up in the failure output."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Source_id audit (#4)** parametrises across every `MessageEnvelope(source_id=...)` construction site found via grep.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestEnvelopeSourceIdIsJarvis is parametrised over _EMIT_SITES which lists both MessageEnvelope construction sites in src/jarvis/ (dispatch.py:_build_command_envelope at line 242 and dispatch.py:queue_build at line 811 \u2014 verified via Grep for 'MessageEnvelope\\('). The companion test_emit_site_count_matches_grep test re-runs the grep itself (re.compile(r'\\bMessageEnvelope\\s*\\(') over Path.rglob) and asserts len(emit_lines) == len(_EMIT_SITES) so that adding a new emit site without registering it triggers a hard fail rather than a silent miss.",
+      "notes": "TestEnvelopeSourceIdIsJarvis is parametrised over _EMIT_SITES which lists both MessageEnvelope construction sites in src/jarvis/ (dispatch.py:_build_command_envelope at line 242 and dispatch.py:queue_build at line 811 \u2014 verified via Grep for 'MessageEnvelope\\('). The companion test_emit_site_count_matches_grep test re-runs the grep itself (re.compile(r'\\bMessageEnvelope\\s*\\(') over Path.rglob) and asserts len(emit_lines) == len(_EMIT_SITES) so that adding a new emit site without registering it triggers a hard fail rather than a silent miss."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "No real NATS / Graphiti \u2014 these are pure schema + grep contract tests.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "All NATS/Graphiti dependencies are stubbed: the dispatch consumer test uses mock_dispatch_deps fixture which assigns MagicMock NATSClient, MagicMock DispatchSemaphore, and MagicMock RoutingHistoryWriter (with AsyncMock write_specialist_dispatch). No real connection is made. The manifest, command, build-queued, and topics tests are pure pydantic schema construction + grep \u2014 no I/O at all. The conftest.py autouse fixtures _stub_nats_and_graphiti_connect_seams + _restore_dispatch_layer2_hooks ensure isolation.",
+      "notes": "All NATS/Graphiti dependencies are stubbed: the dispatch consumer test uses mock_dispatch_deps fixture which assigns MagicMock NATSClient, MagicMock DispatchSemaphore, and MagicMock RoutingHistoryWriter (with AsyncMock write_specialist_dispatch). No real connection is made. The manifest, command, build-queued, and topics tests are pure pydantic schema construction + grep \u2014 no I/O at all. The conftest.py autouse fixtures _stub_nats_and_graphiti_connect_seams + _restore_dispatch_layer2_hooks ensure isolation."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`uv run pytest tests/test_contract_nats_core.py -v` green.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran 'python -m pytest tests/test_contract_nats_core.py -v' from the worktree root; result: 14 passed, 1 warning in 2.47s. Also smoke-tested against related suites (test_fleet_registration.py, test_dispatch_by_capability.py, test_tools_dispatch.py): 110 passed, 1 warning in 1.80s \u2014 no regressions to neighbouring tests.",
+      "notes": "Ran 'python -m pytest tests/test_contract_nats_core.py -v' from the worktree root; result: 14 passed, 1 warning in 2.47s. Also smoke-tested against related suites (test_fleet_registration.py, test_dispatch_by_capability.py, test_tools_dispatch.py): 110 passed, 1 warning in 1.80s \u2014 no regressions to neighbouring tests."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "All 6 contract tests + the FEAT-J005 carry-forward stub exist.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "tests/test_contract_nats_core.py contains seven test classes mapped to the seven sub-tests in the task description: TestJarvisManifestRoundTrips (#1), TestCommandPayloadEmittedMatchesNatsCore (#2), TestResultPayloadConsumedMatchesNatsCore (#3), TestEnvelopeSourceIdIsJarvis (#4 \u2014 parametrised across both MessageEnvelope emit sites in src/jarvis/), TestTopicSubjectsMatchTopicsClass (#5 \u2014 three Topics.* assertions covering Agents.COMMAND, Pipeline.BUILD_QUEUED, Fleet.REGISTER), TestNoHardcodedSubjectLiteralsInSrc (#6 \u2014 grep invariant), and TestBuildQueuedPayloadEmittedMatchesNatsCore (#7 \u2014 FEAT-J005 carry-forward stub). 14 tests collected, 14 passed.",
+        "notes": "tests/test_contract_nats_core.py contains seven test classes mapped to the seven sub-tests in the task description: TestJarvisManifestRoundTrips (#1), TestCommandPayloadEmittedMatchesNatsCore (#2), TestResultPayloadConsumedMatchesNatsCore (#3), TestEnvelopeSourceIdIsJarvis (#4 \u2014 parametrised across both MessageEnvelope emit sites in src/jarvis/), TestTopicSubjectsMatchTopicsClass (#5 \u2014 three Topics.* assertions covering Agents.COMMAND, Pipeline.BUILD_QUEUED, Fleet.REGISTER), TestNoHardcodedSubjectLiteralsInSrc (#6 \u2014 grep invariant), and TestBuildQueuedPayloadEmittedMatchesNatsCore (#7 \u2014 FEAT-J005 carry-forward stub). 14 tests collected, 14 passed."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Grep invariant test (#6)** uses `pathlib.Path.rglob` + `str.contains` to scan `src/jarvis/` for hard-coded subject literals; allow-list documented in the test docstring.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestNoHardcodedSubjectLiteralsInSrc uses _iter_source_files() which calls _SRC_JARVIS.rglob('*.py') (pathlib.Path.rglob) and `forbidden in content` / `forbidden in line` (str.__contains__) to scan src/jarvis/ for the three forbidden literals 'agents.command.', 'agents.result.', 'fleet.register'. The class docstring documents the four-rule allow-list: (1) module/function docstrings, (2) comment lines, (3) nats_core.Topics import lines, (4) lines that reference Topics.* templates rather than emitting literals.",
+        "notes": "TestNoHardcodedSubjectLiteralsInSrc uses _iter_source_files() which calls _SRC_JARVIS.rglob('*.py') (pathlib.Path.rglob) and `forbidden in content` / `forbidden in line` (str.__contains__) to scan src/jarvis/ for the three forbidden literals 'agents.command.', 'agents.result.', 'fleet.register'. The class docstring documents the four-rule allow-list: (1) module/function docstrings, (2) comment lines, (3) nats_core.Topics import lines, (4) lines that reference Topics.* templates rather than emitting literals."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Tests fail loudly if any subject string is hard-coded (failure message names the offending file + line).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "test_no_hardcoded_subject_literals_in_src walks each line, records offenders as f'{rel}:{lineno}: {line.strip()}' (relative path + line number + line content), and asserts `not offenders` with a multi-line message naming each offender. The assert message is 'Hard-coded subject literal {forbidden!r} found in src/jarvis/ outside the allow-list (...): \\n' followed by the joined offender list \u2014 every offending file:line shows up in the failure output.",
+        "notes": "test_no_hardcoded_subject_literals_in_src walks each line, records offenders as f'{rel}:{lineno}: {line.strip()}' (relative path + line number + line content), and asserts `not offenders` with a multi-line message naming each offender. The assert message is 'Hard-coded subject literal {forbidden!r} found in src/jarvis/ outside the allow-list (...): \\n' followed by the joined offender list \u2014 every offending file:line shows up in the failure output."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Source_id audit (#4)** parametrises across every `MessageEnvelope(source_id=...)` construction site found via grep.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestEnvelopeSourceIdIsJarvis is parametrised over _EMIT_SITES which lists both MessageEnvelope construction sites in src/jarvis/ (dispatch.py:_build_command_envelope at line 242 and dispatch.py:queue_build at line 811 \u2014 verified via Grep for 'MessageEnvelope\\('). The companion test_emit_site_count_matches_grep test re-runs the grep itself (re.compile(r'\\bMessageEnvelope\\s*\\(') over Path.rglob) and asserts len(emit_lines) == len(_EMIT_SITES) so that adding a new emit site without registering it triggers a hard fail rather than a silent miss.",
+        "notes": "TestEnvelopeSourceIdIsJarvis is parametrised over _EMIT_SITES which lists both MessageEnvelope construction sites in src/jarvis/ (dispatch.py:_build_command_envelope at line 242 and dispatch.py:queue_build at line 811 \u2014 verified via Grep for 'MessageEnvelope\\('). The companion test_emit_site_count_matches_grep test re-runs the grep itself (re.compile(r'\\bMessageEnvelope\\s*\\(') over Path.rglob) and asserts len(emit_lines) == len(_EMIT_SITES) so that adding a new emit site without registering it triggers a hard fail rather than a silent miss."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "No real NATS / Graphiti \u2014 these are pure schema + grep contract tests.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "All NATS/Graphiti dependencies are stubbed: the dispatch consumer test uses mock_dispatch_deps fixture which assigns MagicMock NATSClient, MagicMock DispatchSemaphore, and MagicMock RoutingHistoryWriter (with AsyncMock write_specialist_dispatch). No real connection is made. The manifest, command, build-queued, and topics tests are pure pydantic schema construction + grep \u2014 no I/O at all. The conftest.py autouse fixtures _stub_nats_and_graphiti_connect_seams + _restore_dispatch_layer2_hooks ensure isolation.",
+        "notes": "All NATS/Graphiti dependencies are stubbed: the dispatch consumer test uses mock_dispatch_deps fixture which assigns MagicMock NATSClient, MagicMock DispatchSemaphore, and MagicMock RoutingHistoryWriter (with AsyncMock write_specialist_dispatch). No real connection is made. The manifest, command, build-queued, and topics tests are pure pydantic schema construction + grep \u2014 no I/O at all. The conftest.py autouse fixtures _stub_nats_and_graphiti_connect_seams + _restore_dispatch_layer2_hooks ensure isolation."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`uv run pytest tests/test_contract_nats_core.py -v` green.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran 'python -m pytest tests/test_contract_nats_core.py -v' from the worktree root; result: 14 passed, 1 warning in 2.47s. Also smoke-tested against related suites (test_fleet_registration.py, test_dispatch_by_capability.py, test_tools_dispatch.py): 110 passed, 1 warning in 1.80s \u2014 no regressions to neighbouring tests.",
+        "notes": "Ran 'python -m pytest tests/test_contract_nats_core.py -v' from the worktree root; result: 14 passed, 1 warning in 2.47s. Also smoke-tested against related suites (test_fleet_registration.py, test_dispatch_by_capability.py, test_tools_dispatch.py): 110 passed, 1 warning in 1.80s \u2014 no regressions to neighbouring tests."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 3 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 3,
+      "feature_files": [
+        "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+      ],
+      "pending_examples": [
+        "test_the_supervisor_never_emits_a_noncanonical_subject_name \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_a_malformed_specialist_reply_is_treated_as_a_specialist_error_without_redirect \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_every_command_envelope_the_supervisor_emits_identifies_jarvis_as_the_source \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Tests not required for this task type. All acceptance criteria met. Architecture context: 342 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1343/5200 tokens\n\n### \u2705 Similar Outcomes\n- MIGRATES_TO\n- USES_LIBRARY\n\n### \ud83c\udfa8 Relevant Patterns\n- EXAMPLE_CONTAINS\n- USES_FUNCTION\n\n### \u26a0\ufe0f Warnings\n- HAS_INCORRECT_PATH_REFERENCE\n- HAS_ROOT_CAUSE\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE_MUST_DO\n- MONITORS_RESULTS_FROM\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_ENTITY_TYPE\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

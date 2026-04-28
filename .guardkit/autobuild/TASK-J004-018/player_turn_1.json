@@ -1,0 +1,110 @@
+{
+  "task_id": "TASK-J004-018",
+  "turn": 1,
+  "files_modified": [
+    "tasks/backlog/TASK-J004-014-fleet-and-capabilities-integration-tests.md",
+    "tasks/backlog/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md",
+    "tasks/backlog/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md",
+    "tasks/backlog/TASK-J004-017-dispatch-slot-release-scenario-outline.md",
+    "tasks/backlog/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md",
+    "tests/conftest.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J004-014-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-015-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-016-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-017-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-018-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-013/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-014/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-015/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-016/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-017/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-018/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-018/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-018/turn_context.json",
+    ".guardkit/bdd/TASK-J004-018_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-018/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_shutdown_order.py",
+    "tasks/design_approved/TASK-J004-014-fleet-and-capabilities-integration-tests.md",
+    "tasks/design_approved/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md",
+    "tasks/design_approved/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md",
+    "tasks/design_approved/TASK-J004-017-dispatch-slot-release-scenario-outline.md",
+    "tasks/design_approved/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md",
+    "tests/test_dispatch_slot_release.py",
+    "tests/test_lifecycle_shutdown_order.py",
+    "tests/test_nats_unavailable.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_shutdown_order.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: Exact ordering of all 8 steps via call-order recording",
+    "AC-002: Descriptive failure messages on skip/reorder/duplicate",
+    "AC-003: Failure tolerance \u2014 single failed step does not skip subsequent",
+    "AC-004: Heartbeat cancellation produces no traceback",
+    "AC-005: pytest tests/test_lifecycle_shutdown_order.py green"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 21,
+  "sdk_max_turns": 150,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 15,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Test verifies the **exact** ordering of all 8 steps via call-order recording.",
+      "status": "complete",
+      "evidence": "TestExactShutdownOrder.test_exact_8_step_sequence asserts the recorded list matches the canonical EXPECTED_ORDER tuple verbatim \u2014 1.heartbeat.cancel, 2.fleet.deregister, 3.capabilities.close, 4.writer.flush, 5.nats.drain, 6.graphiti.aclose, 7.layer2.disarm, 8.store.close. Each step's invocation is captured via MagicMock(side_effect=lambda *a, **kw: calls.append(STEP_NAME)) per the task's Test Requirements; step 7 is observed via a _DispatchProxy on jarvis.infrastructure.lifecycle._dispatch that records the moment _current_session_hook transitions to None. TestPairwiseOrderingInvariants adds 6 additional assertions covering each rationale from the task description (3 before 5, 4 before 5, 2 before 5, 4 before 6, 1 first, 8 last).",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Test fails (descriptively) if any step is skipped, reordered, or duplicated.",
+      "status": "complete",
+      "evidence": "test_exact_8_step_sequence's assertion message prints both expected and actual sequences with a human-readable explanation ('Any reorder, skip, or duplicate would surface a hung pipeline or lost final trace in production'). test_no_step_appears_twice catches duplicates with per-step counts; test_no_step_is_skipped catches skips with a missing-list. Six pairwise tests in TestPairwiseOrderingInvariants each carry a step-specific failure message that names the violated rationale and prints the full call sequence.",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Failure tolerance: a separate test asserts that a single failed step (e.g. deregister_from_fleet raises) does NOT skip subsequent steps \u2014 they all execute, errors are WARN-logged.",
+      "status": "complete",
+      "evidence": "TestFailureToleranceInvariant contains four tests: test_deregister_failure_does_not_skip_subsequent_steps verifies that RuntimeError('broker offline') from deregister leaves all six later steps still observed; test_capabilities_close_failure_does_not_skip_subsequent does the same for the registry; test_nats_drain_failure_does_not_skip_subsequent does it for NATS drain; test_shutdown_does_not_propagate_step_exceptions exercises three simultaneous failures and asserts shutdown returns without raising. Each test uses caplog.at_level(logging.WARNING) so WARN-logged errors are observable; production code already wraps each step in try/except + log.warning per the lifecycle.py implementation.",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Heartbeat cancellation produces no traceback / unhandled-exception warning.",
+      "status": "complete",
+      "evidence": "TestHeartbeatCancellationClean.test_cancellation_no_traceback_in_logs asserts no caplog records carry exc_info and no records exceed logging.ERROR level after shutdown completes. test_cancellation_completes_task_state confirms heartbeat_task.done() and heartbeat_task.cancelled() are both True (clean cancel \u2014 no leaked exception state). The production heartbeat_loop CancelledError contract (re-raise after INFO log) is respected.",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "uv run pytest tests/test_lifecycle_shutdown_order.py -v green.",
+      "status": "complete",
+      "evidence": "Executed: `uv run pytest tests/test_lifecycle_shutdown_order.py -v` \u2014 15 passed in 0.74s. No warnings, no skipped tests, no errors. Confirmed with `uv run pytest tests/ --ignore=tests/test_assemble_tool_list.py` \u2014 1885 passed (the single failure in test_assemble_tool_list.py::TestAC005NoSubmoduleImports is a pre-existing, unrelated issue about jarvis/infrastructure/capabilities_registry.py importing from jarvis.tools.capabilities \u2014 orthogonal to TASK-J004-018).",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    }
+  ]
+}

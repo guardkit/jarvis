@@ -1,0 +1,67 @@
+{
+  "task_id": "TASK-J004-005",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    "tests/test_routing_history_schema.py"
+  ],
+  "tests_written": [
+    "tests/test_routing_history_schema.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "uv run pytest tests/test_routing_history_schema.py -v -> 61 passed in 0.85s. Zero xfail, zero skip, zero failures.",
+  "implementation_notes": "Authored tests/test_routing_history_schema.py as the DDR-018 schema-authority gate against TASK-J004-004's JarvisRoutingHistoryEntry (src/jarvis/infrastructure/routing_history.py). The file contains 41 test functions across 11 test classes (61 collected items after parametrize expansion), mirroring DM-routing-history.md \u00a77 'Validation tests anchor' coverage points 1-8: (1) TestHappyPathFullShape \u2014 full-shape construct with every \u00a71-\u00a77 base field + every Jarvis extension populated, plus Python (model_dump/model_validate) and JSON (model_dump_json/model_validate_json) round-trips that assert every documented field survives losslessly; (2) TestDispatchOutcomeMembership \u2014 closed seven-member Literal (success, redirected, timeout, specialist_error, exhausted, transport_unavailable, unresolved); each member parametrized as accepted, unknown + empty rejected; (3) TestAttemptsListSemantics \u2014 monotonic 0,1,2 attempt_index sequence accepted; reason_skipped Literal closed (timeout/specialist_error/transport_error); negative attempt_index raises; default-empty attempts list; (4) TestFrozenSemantics \u2014 direct field assignment to session_id and outcome_type post-construction raises ValidationError; (5) TestExtraIgnoreForwardCompat \u2014 unknown top-level fields silently dropped (forward-compat for ADR-FLEET-00X); (6) TestDecisionIdRegex \u2014 6 parametrized non-UUIDv4 inputs raise, valid UUIDv4 round-trips; (7) TestTimestampTzAware \u2014 UTC tz-aware preserved, non-UTC tz-aware accepted, JSON round-trip remains tz-aware; (8) Helper-type boundary validators in TestTraceRefBoundary, TestToolCallRecordBoundary, TestModelCallRecordBoundary, TestCapabilityDescriptorRefBoundary, TestConcurrentWorkloadSnapshotBoundary \u2014 each constructs a real instance, asserts model_dump round-trip, and asserts the documented validators (sha256 regex, min_length=1, max_length=512, ge=0, agent_id pattern, etc.). Plus TestSeamContractWithTaskJ004004 pinning the producer model_config (frozen=True, extra='ignore') and the full required field set per DDR-018. No mocks anywhere \u2014 Pydantic models constructed directly. Zero pytest.xfail or pytest.skip.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `tests/test_routing_history_schema.py` exists with \u2265 12 test functions covering points 1\u20138 above.",
+      "status": "complete",
+      "evidence": "Created tests/test_routing_history_schema.py with 41 test functions (61 parametrized cases) organised into 11 TestCase classes, each mapped one-to-one to coverage points 1\u20138: TestHappyPathFullShape (1), TestDispatchOutcomeMembership (2), TestAttemptsListSemantics (3), TestFrozenSemantics (4), TestExtraIgnoreForwardCompat (5), TestDecisionIdRegex (6), TestTimestampTzAware (7), TestTraceRefBoundary/TestToolCallRecordBoundary/TestModelCallRecordBoundary/TestCapabilityDescriptorRefBoundary/TestConcurrentWorkloadSnapshotBoundary (8), and TestSeamContractWithTaskJ004004 for the producer-side seam.",
+      "test_file": "tests/test_routing_history_schema.py",
+      "implementation_files": [
+        "tests/test_routing_history_schema.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Tests pass against TASK-J004-004's schema with no `pytest.xfail` or `pytest.skip`.",
+      "status": "complete",
+      "evidence": "All 61 collected tests pass cleanly against TASK-J004-004's src/jarvis/infrastructure/routing_history.py with zero xfail markers and zero skip markers (verified by grep on the test file \u2014 the only matches are the documentation strings calling out the 'no xfail/no skip' invariant). Tests construct real JarvisRoutingHistoryEntry, RedirectAttempt, TraceRef, ToolCallRecord, ModelCallRecord, CapabilityDescriptorRef, and ConcurrentWorkloadSnapshot instances against the live schema.",
+      "test_file": "tests/test_routing_history_schema.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `uv run pytest tests/test_routing_history_schema.py -v` green.",
+      "status": "complete",
+      "evidence": "Ran `uv run pytest tests/test_routing_history_schema.py -v` from the worktree root \u2014 result: 61 passed in 0.85s, exit code 0. No failures, no errors, no warnings.",
+      "test_file": "tests/test_routing_history_schema.py",
+      "implementation_files": [
+        "tests/test_routing_history_schema.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] No mocks \u2014 Pydantic models are pure-data; tests construct real instances.",
+      "status": "complete",
+      "evidence": "The test module contains no imports of unittest.mock, no Mock/MagicMock/patch usage, and no monkeypatch fixtures. Every assertion exercises real Pydantic instances constructed via direct keyword args (TraceRef(...), ToolCallRecord(...), RedirectAttempt(...), ModelCallRecord(...), CapabilityDescriptorRef(...), ConcurrentWorkloadSnapshot(...)) or via JarvisRoutingHistoryEntry.model_validate(payload_dict). Round-trip tests use model_dump / model_validate / model_dump_json / model_validate_json on real instances.",
+      "test_file": "tests/test_routing_history_schema.py",
+      "implementation_files": [
+        "tests/test_routing_history_schema.py"
+      ]
+    }
+  ],
+  "success": true
+}

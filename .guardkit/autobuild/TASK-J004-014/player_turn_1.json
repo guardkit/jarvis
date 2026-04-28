@@ -1,0 +1,177 @@
+{
+  "task_id": "TASK-J004-014",
+  "turn": 1,
+  "files_modified": [
+    ".claude/task-plans/TASK-J004-014-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-015-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-016-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-017-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-018-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-013/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-014/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-015/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J004-015/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-015/specialist_results.json",
+    ".guardkit/autobuild/TASK-J004-015/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-015/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-016/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-016/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-016/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J004-016/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-016/specialist_results.json",
+    ".guardkit/autobuild/TASK-J004-016/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-016/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-016/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-017/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-017/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-017/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J004-017/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-017/specialist_results.json",
+    ".guardkit/autobuild/TASK-J004-017/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-017/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-017/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-018/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-018/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J004-018/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-018/specialist_results.json",
+    ".guardkit/autobuild/TASK-J004-018/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-018/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-018/turn_state_turn_1.json",
+    ".guardkit/bdd/TASK-J004-015_junit.xml",
+    ".guardkit/bdd/TASK-J004-016_junit.xml",
+    ".guardkit/bdd/TASK-J004-017_junit.xml",
+    ".guardkit/bdd/TASK-J004-018_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/conftest.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_capabilities_real.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_fleet_registration_integration.py",
+    "coverage_full_TASK-J004-018.json",
+    "coverage_phase4_TASK-J004-015.json",
+    "coverage_phase4_TASK-J004-016.json",
+    "coverage_phase4_TASK-J004-017.json",
+    "coverage_phase4_TASK-J004-018.json",
+    "tasks/design_approved/TASK-J004-014-fleet-and-capabilities-integration-tests.md",
+    "tasks/design_approved/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md",
+    "tasks/design_approved/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md",
+    "tasks/design_approved/TASK-J004-017-dispatch-slot-release-scenario-outline.md",
+    "tasks/design_approved/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md",
+    "tests/conftest.py",
+    "tests/test_capabilities_real.py",
+    "tests/test_dispatch_by_capability_integration.py",
+    "tests/test_dispatch_slot_release.py",
+    "tests/test_fleet_registration_integration.py",
+    "tests/test_graphiti_unavailable.py",
+    "tests/test_lifecycle_partial_failure.py",
+    "tests/test_lifecycle_shutdown_order.py",
+    "tests/test_nats_unavailable.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J004-014/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-014/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-018/checkpoints.json",
+    ".guardkit/bdd/TASK-J004-014_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-014/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_capabilities_real.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_fleet_registration_integration.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_capabilities_real.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_fleet_registration_integration.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001 in-process NATS test server fixture",
+    "AC-002 all 8 scenarios covered with one test function each",
+    "AC-003 no external NATS dependency",
+    "AC-004 test order independence",
+    "AC-005 green pytest invocation",
+    "TR-001 Topics.* anchoring",
+    "TR-002 explicit pytest-asyncio decorators"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 65,
+  "sdk_max_turns": 150,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 8,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "In-process NATS test server fixture in tests/conftest.py (or a feature-local conftest) \u2014 reusable, port=0 so the OS picks a free port.",
+      "status": "complete",
+      "evidence": "Added `nats_test_server`, `nats_server_binary`, and `_free_tcp_port` fixtures to tests/conftest.py. The fixture spawns `nats-server -p <free> -a 127.0.0.1 -js -sd <tmp>` as a subprocess (port discovered via socket bind to port 0), poll-connects until ready (5s budget), yields a connected NATSClient wrapper, and cleanly drains + terminates on teardown. If `nats-server` is missing from PATH, the fixture raises pytest.skip('install nats-server CLI for integration tests'). Reusable across the suite (any future integration test can request the same fixture).",
+      "test_file": "tests/conftest.py",
+      "implementation_files": [
+        "tests/conftest.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "All scenarios above covered with one test function each.",
+      "status": "complete",
+      "evidence": "tests/test_fleet_registration_integration.py covers the 4 fleet scenarios: register-then-query, heartbeat-fires-at-interval, deregister-removes-entry, register-then-register-again-idempotent. tests/test_capabilities_real.py covers the 4 capabilities scenarios: pre-seeded-specialists-listed, kv-watch-invalidates-on-registration, kv-watch-invalidates-on-deregistration, capabilities_refresh-forces-immediate-reread. Each scenario is exactly one test function.",
+      "test_file": "tests/test_fleet_registration_integration.py, tests/test_capabilities_real.py",
+      "implementation_files": [
+        "tests/test_fleet_registration_integration.py",
+        "tests/test_capabilities_real.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "No GB10 / external NATS dependency \u2014 pure portable tests.",
+      "status": "complete",
+      "evidence": "All NATS I/O routes through the in-process subprocess broker bound to a tmp_path JetStream store directory. No reference to GB10 (100.84.90.91) or external broker addresses. The fixture uses `nats://127.0.0.1:<free_port>` exclusively. No .creds file, no Tailscale, no external network requirement.",
+      "test_file": "tests/conftest.py",
+      "implementation_files": [
+        "tests/conftest.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Tests survive --randomly-seed=0 (no inter-test state leakage).",
+      "status": "complete",
+      "evidence": "Each test gets a fresh subprocess broker (function-scoped fixture) and a fresh JetStream store dir under tmp_path \u2014 no fixture state outlives a single test. The capabilities tests rebind the module-level `_capability_registry` and use a `restore_capability_registry` snapshot/restore fixture so the binding is restored on teardown. Verified ordering-invariance by running the suite in both forward and reverse module order \u2014 both passed (8/8 each). pytest-randomly is not installed in the environment but the isolation contract is independently satisfied by per-test fixture scoping.",
+      "test_file": "tests/test_fleet_registration_integration.py, tests/test_capabilities_real.py",
+      "implementation_files": [
+        "tests/conftest.py",
+        "tests/test_capabilities_real.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "uv run pytest tests/test_fleet_registration_integration.py tests/test_capabilities_real.py -v green.",
+      "status": "complete",
+      "evidence": "Verified: `uv run pytest tests/test_fleet_registration_integration.py tests/test_capabilities_real.py -v` yields '8 passed in 17.80s' against an installed nats-server (v2.12.8 via brew). On systems lacking the binary the suite cleanly skips with the documented operator hint.",
+      "test_file": "tests/test_fleet_registration_integration.py, tests/test_capabilities_real.py",
+      "implementation_files": [
+        "tests/test_fleet_registration_integration.py",
+        "tests/test_capabilities_real.py"
+      ]
+    },
+    {
+      "criterion_id": "TR-001",
+      "criterion_text": "Subjects asserted via nats_core.Topics.* formatters (no hard-coded literals in the assertions).",
+      "status": "complete",
+      "evidence": "Both test files import `from nats_core.topics import Topics` and anchor subject-related assertions against `Topics.Fleet.REGISTER` and `Topics.Fleet.DEREGISTER`. The agent-registry KV bucket name is anchored against `nats_core.client.AGENT_REGISTRY_BUCKET` rather than the literal 'agent-registry'. No fleet/agents subject literals appear in assertion expressions.",
+      "test_file": "tests/test_fleet_registration_integration.py, tests/test_capabilities_real.py",
+      "implementation_files": [
+        "tests/test_fleet_registration_integration.py",
+        "tests/test_capabilities_real.py"
+      ]
+    },
+    {
+      "criterion_id": "TR-002",
+      "criterion_text": "pytest-asyncio (@pytest_asyncio.fixture, @pytest.mark.asyncio) used consistently.",
+      "status": "complete",
+      "evidence": "`nats_test_server` is decorated with `@pytest_asyncio.fixture()`. Every async test function in both new test files carries `@pytest.mark.asyncio` even though `asyncio_mode = 'auto'` is configured (explicit decorators per the task requirement). pytest_asyncio is imported at the top of tests/conftest.py.",
+      "test_file": "tests/test_fleet_registration_integration.py, tests/test_capabilities_real.py",
+      "implementation_files": [
+        "tests/conftest.py",
+        "tests/test_fleet_registration_integration.py",
+        "tests/test_capabilities_real.py"
+      ]
+    }
+  ]
+}

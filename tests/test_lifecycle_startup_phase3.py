@@ -240,7 +240,11 @@ class TestAC003AttendedAndAmbientToolListsAssembled:
             _registry: list[CapabilityDescriptor],
             *,
             include_frontier: bool = True,
+            **_extra_kwargs: Any,
         ) -> list[Any]:
+            # Absorb FEAT-JARVIS-004 kwargs (``nats_client``,
+            # ``routing_history_writer``, ``dispatch_semaphore``) added by
+            # TASK-J004-013 so the fake matches the real signature.
             return attended_marker if include_frontier else ambient_marker
 
         with (
@@ -274,7 +278,11 @@ class TestAC003AttendedAndAmbientToolListsAssembled:
             _registry: list[CapabilityDescriptor],
             *,
             include_frontier: bool = True,
+            **_extra_kwargs: Any,
         ) -> list[Any]:
+            # Absorb FEAT-JARVIS-004 kwargs (``nats_client``,
+            # ``routing_history_writer``, ``dispatch_semaphore``) added by
+            # TASK-J004-013 so the fake matches the real signature.
             return attended_marker if include_frontier else ambient_marker
 
         with (

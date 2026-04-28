@@ -1,0 +1,7 @@
+{
+  "tests_run": 19,
+  "tests_failed": 0,
+  "coverage_pct": 95.08,
+  "output_summary": "pytest tests/test_nats_client.py: 19 passed, 0 failed; nats_client.py line coverage 95% (58/61 stmts).",
+  "quality_gates_passed": true
+}

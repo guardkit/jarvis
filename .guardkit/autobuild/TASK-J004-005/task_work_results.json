@@ -1,0 +1,84 @@
+{
+  "task_id": "TASK-J004-005",
+  "timestamp": "2026-04-28T11:04:01.318337",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [],
+  "files_created": [
+    "tests/test_routing_history_schema.py"
+  ],
+  "tests_written": [
+    "tests/test_routing_history_schema.py"
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `tests/test_routing_history_schema.py` exists with \u2265 12 test functions covering points 1\u20138 above.",
+      "status": "complete",
+      "evidence": "Created tests/test_routing_history_schema.py with 41 test functions (61 parametrized cases) organised into 11 TestCase classes, each mapped one-to-one to coverage points 1\u20138: TestHappyPathFullShape (1), TestDispatchOutcomeMembership (2), TestAttemptsListSemantics (3), TestFrozenSemantics (4), TestExtraIgnoreForwardCompat (5), TestDecisionIdRegex (6), TestTimestampTzAware (7), TestTraceRefBoundary/TestToolCallRecordBoundary/TestModelCallRecordBoundary/TestCapabilityDescriptorRefBoundary/TestConcurrentWorkloadSnapshotBoundary (8), and TestSeamContractWithTaskJ004004 for the producer-side seam.",
+      "test_file": "tests/test_routing_history_schema.py",
+      "implementation_files": [
+        "tests/test_routing_history_schema.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Tests pass against TASK-J004-004's schema with no `pytest.xfail` or `pytest.skip`.",
+      "status": "complete",
+      "evidence": "All 61 collected tests pass cleanly against TASK-J004-004's src/jarvis/infrastructure/routing_history.py with zero xfail markers and zero skip markers (verified by grep on the test file \u2014 the only matches are the documentation strings calling out the 'no xfail/no skip' invariant). Tests construct real JarvisRoutingHistoryEntry, RedirectAttempt, TraceRef, ToolCallRecord, ModelCallRecord, CapabilityDescriptorRef, and ConcurrentWorkloadSnapshot instances against the live schema.",
+      "test_file": "tests/test_routing_history_schema.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `uv run pytest tests/test_routing_history_schema.py -v` green.",
+      "status": "complete",
+      "evidence": "Ran `uv run pytest tests/test_routing_history_schema.py -v` from the worktree root \u2014 result: 61 passed in 0.85s, exit code 0. No failures, no errors, no warnings.",
+      "test_file": "tests/test_routing_history_schema.py",
+      "implementation_files": [
+        "tests/test_routing_history_schema.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] No mocks \u2014 Pydantic models are pure-data; tests construct real instances.",
+      "status": "complete",
+      "evidence": "The test module contains no imports of unittest.mock, no Mock/MagicMock/patch usage, and no monkeypatch fixtures. Every assertion exercises real Pydantic instances constructed via direct keyword args (TraceRef(...), ToolCallRecord(...), RedirectAttempt(...), ModelCallRecord(...), CapabilityDescriptorRef(...), ConcurrentWorkloadSnapshot(...)) or via JarvisRoutingHistoryEntry.model_validate(payload_dict). Round-trip tests use model_dump / model_validate / model_dump_json / model_validate_json on real instances.",
+      "test_file": "tests/test_routing_history_schema.py",
+      "implementation_files": [
+        "tests/test_routing_history_schema.py"
+      ]
+    }
+  ]
+}

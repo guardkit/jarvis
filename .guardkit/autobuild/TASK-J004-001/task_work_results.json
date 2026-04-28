@@ -1,0 +1,96 @@
+{
+  "task_id": "TASK-J004-001",
+  "timestamp": "2026-04-28T10:53:42.702721",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": null,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    "docs/design/FEAT-JARVIS-004/design.md",
+    "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_assumptions.yaml"
+  ],
+  "files_created": [
+    "docs/design/FEAT-JARVIS-004/decisions/DDR-023-trace-file-collision-warn-and-preserve.md",
+    "docs/design/FEAT-JARVIS-004/decisions/DDR-024-degraded-specialists-eligible-v1.md"
+  ],
+  "tests_written": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `docs/design/FEAT-JARVIS-004/decisions/DDR-023-trace-file-collision-warn-and-preserve.md` created with Status / Date / Context / Decision / Rationale / Alternatives / Consequences sections matching the existing DDR-016..022 template.",
+      "status": "complete",
+      "evidence": "Created DDR-023-trace-file-collision-warn-and-preserve.md following the DDR-016..022 template verbatim (Status / Date / Feature / Related / Promotes header block, then Context / Decision / Rationale / Alternatives considered / Consequences / Status sections). Decision pins O_EXCL atomic create-or-fail, original preserved, WARN routing_history_write_failed reason=trace_file_exists, Graphiti entity points at the pre-existing file, dispatch outcome unaffected. Cross-references DDR-018, DDR-019, ADR-FLEET-001, ADR-ARCH-020, ADR-ARCH-029 + DM-routing-history.md and explicitly names ASSUM-009 in the Promotes field.",
+      "test_file": null,
+      "implementation_files": [
+        "docs/design/FEAT-JARVIS-004/decisions/DDR-023-trace-file-collision-warn-and-preserve.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] `docs/design/FEAT-JARVIS-004/decisions/DDR-024-degraded-specialists-eligible-v1.md` created using the same template.",
+      "status": "complete",
+      "evidence": "Created DDR-024-degraded-specialists-eligible-v1.md using the same DDR-016..022 template. Decision: degraded specialists remain dispatch-eligible in v1; _resolve_agent_id applies no status filter (only 'offline' is filtered by registry); lexicographic determinism preserved; redirect-with-retry handles failures; routing history schema gains chosen_specialist_status + RedirectAttempt.reported_status (append-only per DDR-018). Alternatives considered enumerates exclude-at-resolve, down-rank, conditional-exclude, hard-fail, partial-status-capture, defer-to-FEAT-J008, and operator-tunable \u2014 all rejected with reasons. Cross-references DDR-017, DDR-018, ADR-ARCH-015/020/021 + nats_core.AgentManifest status enum, and explicitly names ASSUM-008 in the Promotes field.",
+      "test_file": null,
+      "implementation_files": [
+        "docs/design/FEAT-JARVIS-004/decisions/DDR-024-degraded-specialists-eligible-v1.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `feat-jarvis-004-fleet-registration-and-specialist-dispatch_assumptions.yaml` updated: ASSUM-008 confidence \u2192 \"high\" with `resolved_by: DDR-024`; ASSUM-009 confidence \u2192 \"high\" with `resolved_by: DDR-023`. The `human_response` line on both is updated to reflect promotion.",
+      "status": "complete",
+      "evidence": "ASSUM-008 confidence flipped medium \u2192 high; resolved_by: 'DDR-024' added; human_response rewritten to 'promoted to DDR-024 (degraded-specialists-eligible-v1) \u2014 binding decision; trace captures chosen_specialist_status + per-attempt reported_status'. ASSUM-009 confidence flipped low \u2192 high; resolved_by: 'DDR-023' added; human_response rewritten to 'promoted to DDR-023 (trace-file-collision-warn-and-preserve) \u2014 binding decision; O_EXCL atomic create-or-fail, original preserved, WARN routing_history_write_failed reason=trace_file_exists'. Verified by running yaml.safe_load \u2014 both records parse cleanly with confidence='high' and the resolved_by field present.",
+      "test_file": null,
+      "implementation_files": [
+        "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_assumptions.yaml"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] `docs/design/FEAT-JARVIS-004/design.md` \u00a75 (Design decisions captured) and \u00a711 (Contradiction detection) reference the new DDRs.",
+      "status": "complete",
+      "evidence": "\u00a75 (Design decisions captured): added two new table rows for DDR-023 and DDR-024 with linked anchors to the new DDR files; updated the trailing line from 'FEAT-JARVIS-004 uses DDR-016..022; next available after this design is DDR-023' to 'FEAT-JARVIS-004 uses DDR-016..024; next available after this design is DDR-025'. \u00a711 (Contradiction detection): updated the 'checked against' bullet list to add 'The 9 DDRs introduced by this design (DDR-016..024 \u2014 DDR-023 + DDR-024 promoted from ASSUM-009 + ASSUM-008 respectively).'; added three compatibility notes \u2014 DDR-018 schema extended (not contradicted) by DDR-023 + DDR-024; DDR-017 redirect-with-retry policy load-bearing under DDR-024; ADR-FLEET-001 'Do-not-reopen' actively honoured by DDR-023. \u00a714 file manifest also updated for consistency to list the two new DDR files with promotion annotations.",
+      "test_file": null,
+      "implementation_files": [
+        "docs/design/FEAT-JARVIS-004/design.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] No code changes \u2014 pure documentation task.",
+      "status": "complete",
+      "evidence": "All four touched paths are documentation: two new .md files under docs/design/FEAT-JARVIS-004/decisions/, an edit to docs/design/FEAT-JARVIS-004/design.md, and an edit to a feature-spec assumptions YAML manifest. No files under src/, tests/, scripts/, langgraph.json, pyproject.toml, or any other code surface were touched.",
+      "test_file": null,
+      "implementation_files": []
+    }
+  ]
+}

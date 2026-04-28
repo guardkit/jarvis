@@ -124,9 +124,15 @@ def descriptor_bravo() -> CapabilityDescriptor:
 
 @pytest.fixture()
 def reset_tool_state() -> None:
-    """Snapshot and restore tool-module state around each test."""
+    """Snapshot and restore tool-module state around each test.
+
+    FEAT-JARVIS-004 (TASK-J004-012) changed the capabilities-module's
+    ``_capability_registry`` swap-point type from ``list`` to
+    ``CapabilitiesRegistry | None``; the snapshot is preserved as an
+    opaque object reference rather than a list copy.
+    """
     saved_general = general_module._config
-    saved_caps = list(capabilities_module._capability_registry)
+    saved_caps = capabilities_module._capability_registry
     saved_dispatch = list(dispatch_module._capability_registry)
     yield
     general_module._config = saved_general
@@ -306,8 +312,43 @@ class TestAC004SnapshotIsolation:
         descriptor_alpha: CapabilityDescriptor,
         reset_tool_state: None,
     ) -> None:
-        """End-to-end: the catalogue tool reflects the assembled snapshot."""
+        """End-to-end: the catalogue tool reflects the assembled snapshot.
+
+        FEAT-JARVIS-004 (TASK-J004-012) swapped the
+        ``capabilities._capability_registry`` swap-point from a ``list``
+        to a ``CapabilitiesRegistry`` Protocol object; the matching
+        ``assemble_tool_list`` upgrade is owned by TASK-J004-013. Until
+        that lands, wrap the assembled list in a Protocol-compatible
+        adapter inside the test so the catalogue tool has a
+        ``.snapshot()`` callable to consume.
+        """
+
+        class _ListBackedRegistry:
+            """Test-local Protocol adapter for FEAT-J004-012 swap."""
+
+            def __init__(self, descriptors: list[CapabilityDescriptor]) -> None:
+                self._descriptors = descriptors
+
+            def snapshot(self) -> list[CapabilityDescriptor]:
+                return list(self._descriptors)
+
+            async def refresh(self) -> None:
+                return None
+
+            async def subscribe_updates(self, callback: object) -> None:
+                return None
+
+            async def close(self) -> None:
+                return None
+
         assemble_tool_list(test_config, [descriptor_alpha])
+        # Wrap the assembled list (still a J002-shape ``list``) in the
+        # Protocol adapter so the FEAT-J004 ``snapshot()``-based tool
+        # body can consume it.
+        capabilities_module._capability_registry = _ListBackedRegistry(
+            list(capabilities_module._capability_registry)
+        )
+
         rendered = list_available_capabilities.invoke({})
         loaded = json.loads(rendered)
         assert isinstance(loaded, list)

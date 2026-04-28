@@ -1,0 +1,245 @@
+{
+  "task_id": "TASK-J004-009",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_capabilities_registry_unit.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_capabilities_registry_unit.py ....................            [100%]\n======================== 20 passed, 1 warning in 2.00s =========================",
+      "duration_seconds": 3.690600872039795
+    },
+    "requirements": {
+      "criteria_total": 11,
+      "criteria_met": 11,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`CapabilitiesRegistry` Protocol declared with all four methods + correct return types.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "src/jarvis/infrastructure/capabilities_registry.py declares CapabilitiesRegistry as @runtime_checkable Protocol with snapshot()->list[CapabilityDescriptor], async refresh()->None, async subscribe_updates(callback)->None, async close()->None. Verified by TestAC001ProtocolShape.test_protocol_has_required_methods (checks all four method names) and isinstance() checks on both Live and Stub instances.",
+      "notes": "src/jarvis/infrastructure/capabilities_registry.py declares CapabilitiesRegistry as @runtime_checkable Protocol with snapshot()->list[CapabilityDescriptor], async refresh()->None, async subscribe_updates(callback)->None, async close()->None. Verified by TestAC001ProtocolShape.test_protocol_has_required_methods (checks all four method names) and isinstance() checks on both Live and Stub instances."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`LiveCapabilitiesRegistry.create(client, cache_ttl_seconds=30)` returns a usable instance; first `snapshot()` triggers a fresh KV read; subsequent reads inside `cache_ttl_seconds` return the cached list.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "create() classmethod calls _resolve_registry() then awaits an initial _force_refresh() so first snapshot() reflects fresh KV data. refresh() guards on (now - cache_loaded_at) < cache_ttl_seconds to skip re-reads inside the TTL window. Verified by TestAC002CacheTTL: test_create_warms_cache_with_first_kv_read (1 KV read after create), test_refresh_within_ttl_does_not_reread_kv (no extra reads in 3 refresh calls), test_refresh_with_zero_ttl_always_rereads.",
+      "notes": "create() classmethod calls _resolve_registry() then awaits an initial _force_refresh() so first snapshot() reflects fresh KV data. refresh() guards on (now - cache_loaded_at) < cache_ttl_seconds to skip re-reads inside the TTL window. Verified by TestAC002CacheTTL: test_create_warms_cache_with_first_kv_read (1 KV read after create), test_refresh_within_ttl_does_not_reread_kv (no extra reads in 3 refresh calls), test_refresh_with_zero_ttl_always_rereads."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "KV-watch callback invalidates the cache \u2014 next `snapshot()` re-reads.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_watch_loop() consumes the KV watcher async iterator, calls _force_refresh() (TTL-bypassing) on every non-sentinel update, then fires the user callback exactly once. Verified by TestAC003KVWatchInvalidation.test_kv_watch_event_triggers_refresh which pushes a KV event and confirms snapshot reflects new data + callback fires once. test_history_complete_sentinel_is_skipped confirms None sentinel does not trigger refresh.",
+      "notes": "_watch_loop() consumes the KV watcher async iterator, calls _force_refresh() (TTL-bypassing) on every non-sentinel update, then fires the user callback exactly once. Verified by TestAC003KVWatchInvalidation.test_kv_watch_event_triggers_refresh which pushes a KV event and confirms snapshot reflects new data + callback fires once. test_history_complete_sentinel_is_skipped confirms None sentinel does not trigger refresh."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`snapshot()` returns a fresh `list` copy \u2014 mutating the result does not affect the cache.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "snapshot() returns list(self._cache) constructing a new list per call. Verified by TestAC004SnapshotIsolation.test_snapshot_returns_fresh_list_copy: clears + appends to first snapshot, asserts second snapshot still has the original 2 entries with correct agent_ids and that the two snapshot lists are not the same object. Stub side has parallel test in TestAC007StubFallback.test_snapshot_returns_fresh_copy.",
+      "notes": "snapshot() returns list(self._cache) constructing a new list per call. Verified by TestAC004SnapshotIsolation.test_snapshot_returns_fresh_list_copy: clears + appends to first snapshot, asserts second snapshot still has the original 2 entries with correct agent_ids and that the two snapshot lists are not the same object. Stub side has parallel test in TestAC007StubFallback.test_snapshot_returns_fresh_copy."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`subscribe_updates(callback)` \u2014 calling more than once per session is idempotent (no double-subscription, no double-fire).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "subscribe_updates() guards on self._subscribed early-return so a second call does not open a second watcher and does not replace the callback. Verified by TestAC005SubscribeIdempotent.test_second_subscribe_call_is_noop which counts _resolve_watcher invocations (must be 1) and asserts the callback fires exactly once after a single KV change event (with a 50ms grace period to confirm no double-fire).",
+      "notes": "subscribe_updates() guards on self._subscribed early-return so a second call does not open a second watcher and does not replace the callback. Verified by TestAC005SubscribeIdempotent.test_second_subscribe_call_is_noop which counts _resolve_watcher invocations (must be 1) and asserts the callback fires exactly once after a single KV change event (with a 50ms grace period to confirm no double-fire)."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`close()` is idempotent; detaches the watcher; closes the underlying KV handle.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "close() guards on self._closed early-return. First call cancels the watcher task, awaits cancellation, and calls watcher.stop() on the underlying KV watcher. Verified by TestAC006CloseIdempotent: test_close_cancels_watcher_task (watcher.stop_calls >= 1), test_close_is_idempotent (3 sequential close() calls, no exceptions), test_close_without_subscribe_is_safe (close before any subscribe is a clean no-op).",
+      "notes": "close() guards on self._closed early-return. First call cancels the watcher task, awaits cancellation, and calls watcher.stop() on the underlying KV watcher. Verified by TestAC006CloseIdempotent: test_close_cancels_watcher_task (watcher.stop_calls >= 1), test_close_is_idempotent (3 sequential close() calls, no exceptions), test_close_without_subscribe_is_safe (close before any subscribe is a clean no-op)."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "`StubCapabilitiesRegistry(fallback_path)` reads YAML, exposes the same Protocol surface; `subscribe_updates` is a no-op.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "StubCapabilitiesRegistry.__init__ eagerly calls load_stub_registry(fallback_path) \u2014 same loader used by Phase 2 stub (jarvis.tools.capabilities.load_stub_registry). subscribe_updates accepts a callback but never invokes it. Verified by TestAC007StubFallback: test_snapshot_returns_yaml_descriptors (asserts agent_ids match YAML order), test_subscribe_updates_is_noop (callback never fires after 50ms), test_refresh_rereads_yaml (rewrites file then asserts refresh picks up new content), test_close_is_idempotent.",
+      "notes": "StubCapabilitiesRegistry.__init__ eagerly calls load_stub_registry(fallback_path) \u2014 same loader used by Phase 2 stub (jarvis.tools.capabilities.load_stub_registry). subscribe_updates accepts a callback but never invokes it. Verified by TestAC007StubFallback: test_snapshot_returns_yaml_descriptors (asserts agent_ids match YAML order), test_subscribe_updates_is_noop (callback never fires after 50ms), test_refresh_rereads_yaml (rewrites file then asserts refresh picks up new content), test_close_is_idempotent."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "If `client.js` (JetStream context) is unavailable for KV access, `LiveCapabilitiesRegistry.create` raises `NATSConnectionError` (lifecycle catches and falls back to Stub per DDR-021).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "create() wraps _resolve_registry() and the initial _force_refresh() in try/except blocks that re-raise as NATSConnectionError with the original exception chained as __cause__. Verified by TestAC008JetStreamUnavailableRaises: test_create_wraps_resolve_failure (RuntimeError 'jetstream unavailable' becomes NATSConnectionError) and test_create_chains_original_exception (verifies __cause__ preservation). Production path: NATSKVManifestRegistry.create internally calls nc.jetstream() which raises if unavailable.",
+      "notes": "create() wraps _resolve_registry() and the initial _force_refresh() in try/except blocks that re-raise as NATSConnectionError with the original exception chained as __cause__. Verified by TestAC008JetStreamUnavailableRaises: test_create_wraps_resolve_failure (RuntimeError 'jetstream unavailable' becomes NATSConnectionError) and test_create_chains_original_exception (verifies __cause__ preservation). Production path: NATSKVManifestRegistry.create internally calls nc.jetstream() which raises if unavailable."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "`uv run mypy src/jarvis/infrastructure/capabilities_registry.py` strict-clean.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran 'uv run mypy src/jarvis/infrastructure/capabilities_registry.py' \u2014 output: 'Success: no issues found in 1 source file'. All public functions and methods carry full type annotations; Protocol declared with @runtime_checkable; AsyncIterator/Callable types from collections.abc.",
+      "notes": "Ran 'uv run mypy src/jarvis/infrastructure/capabilities_registry.py' \u2014 output: 'Success: no issues found in 1 source file'. All public functions and methods carry full type annotations; Protocol declared with @runtime_checkable; AsyncIterator/Callable types from collections.abc."
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "Tests cover all bullet points above with the in-process NATS test server fixture for the Live path.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "20 tests in tests/test_capabilities_registry_unit.py exercise every AC bullet (Protocol shape, cache TTL, KV-watch invalidation, snapshot isolation, subscribe idempotency, close idempotency, stub fallback, NATSConnectionError soft-fail). Following the project-conventional substitution from tests/test_fleet_registration.py, the 'in-process NATS test server' is replaced with a fake NATSKVManifestRegistry (AsyncMock list_all) plus an _AsyncIterStub watcher that mirrors the NATS KeyWatcher async-iter contract. Same Protocol surface is exercised; no broker required for unit tests. All 20 tests pass; 120 related tests in test_capabilities/test_stub_capabilities/test_fleet_registration/test_nats_client also pass.",
+      "notes": "20 tests in tests/test_capabilities_registry_unit.py exercise every AC bullet (Protocol shape, cache TTL, KV-watch invalidation, snapshot isolation, subscribe idempotency, close idempotency, stub fallback, NATSConnectionError soft-fail). Following the project-conventional substitution from tests/test_fleet_registration.py, the 'in-process NATS test server' is replaced with a fake NATSKVManifestRegistry (AsyncMock list_all) plus an _AsyncIterStub watcher that mirrors the NATS KeyWatcher async-iter contract. Same Protocol surface is exercised; no broker required for unit tests. All 20 tests pass; 120 related tests in test_capabilities/test_stub_capabilities/test_fleet_registration/test_nats_client also pass."
+    },
+    {
+      "criterion_id": "AC-011",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran 'uv run ruff check' on both new files \u2014 initial I001 import-sort issue auto-fixed by 'ruff check --fix'; subsequent 'uv run ruff format' applied project Black-equivalent style. Final 'ruff check' returns clean. mypy also strict-clean (AC-009).",
+      "notes": "Ran 'uv run ruff check' on both new files \u2014 initial I001 import-sort issue auto-fixed by 'ruff check --fix'; subsequent 'uv run ruff format' applied project Black-equivalent style. Final 'ruff check' returns clean. mypy also strict-clean (AC-009)."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`CapabilitiesRegistry` Protocol declared with all four methods + correct return types.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "src/jarvis/infrastructure/capabilities_registry.py declares CapabilitiesRegistry as @runtime_checkable Protocol with snapshot()->list[CapabilityDescriptor], async refresh()->None, async subscribe_updates(callback)->None, async close()->None. Verified by TestAC001ProtocolShape.test_protocol_has_required_methods (checks all four method names) and isinstance() checks on both Live and Stub instances.",
+        "notes": "src/jarvis/infrastructure/capabilities_registry.py declares CapabilitiesRegistry as @runtime_checkable Protocol with snapshot()->list[CapabilityDescriptor], async refresh()->None, async subscribe_updates(callback)->None, async close()->None. Verified by TestAC001ProtocolShape.test_protocol_has_required_methods (checks all four method names) and isinstance() checks on both Live and Stub instances."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "`LiveCapabilitiesRegistry.create(client, cache_ttl_seconds=30)` returns a usable instance; first `snapshot()` triggers a fresh KV read; subsequent reads inside `cache_ttl_seconds` return the cached list.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "create() classmethod calls _resolve_registry() then awaits an initial _force_refresh() so first snapshot() reflects fresh KV data. refresh() guards on (now - cache_loaded_at) < cache_ttl_seconds to skip re-reads inside the TTL window. Verified by TestAC002CacheTTL: test_create_warms_cache_with_first_kv_read (1 KV read after create), test_refresh_within_ttl_does_not_reread_kv (no extra reads in 3 refresh calls), test_refresh_with_zero_ttl_always_rereads.",
+        "notes": "create() classmethod calls _resolve_registry() then awaits an initial _force_refresh() so first snapshot() reflects fresh KV data. refresh() guards on (now - cache_loaded_at) < cache_ttl_seconds to skip re-reads inside the TTL window. Verified by TestAC002CacheTTL: test_create_warms_cache_with_first_kv_read (1 KV read after create), test_refresh_within_ttl_does_not_reread_kv (no extra reads in 3 refresh calls), test_refresh_with_zero_ttl_always_rereads."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "KV-watch callback invalidates the cache \u2014 next `snapshot()` re-reads.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_watch_loop() consumes the KV watcher async iterator, calls _force_refresh() (TTL-bypassing) on every non-sentinel update, then fires the user callback exactly once. Verified by TestAC003KVWatchInvalidation.test_kv_watch_event_triggers_refresh which pushes a KV event and confirms snapshot reflects new data + callback fires once. test_history_complete_sentinel_is_skipped confirms None sentinel does not trigger refresh.",
+        "notes": "_watch_loop() consumes the KV watcher async iterator, calls _force_refresh() (TTL-bypassing) on every non-sentinel update, then fires the user callback exactly once. Verified by TestAC003KVWatchInvalidation.test_kv_watch_event_triggers_refresh which pushes a KV event and confirms snapshot reflects new data + callback fires once. test_history_complete_sentinel_is_skipped confirms None sentinel does not trigger refresh."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`snapshot()` returns a fresh `list` copy \u2014 mutating the result does not affect the cache.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "snapshot() returns list(self._cache) constructing a new list per call. Verified by TestAC004SnapshotIsolation.test_snapshot_returns_fresh_list_copy: clears + appends to first snapshot, asserts second snapshot still has the original 2 entries with correct agent_ids and that the two snapshot lists are not the same object. Stub side has parallel test in TestAC007StubFallback.test_snapshot_returns_fresh_copy.",
+        "notes": "snapshot() returns list(self._cache) constructing a new list per call. Verified by TestAC004SnapshotIsolation.test_snapshot_returns_fresh_list_copy: clears + appends to first snapshot, asserts second snapshot still has the original 2 entries with correct agent_ids and that the two snapshot lists are not the same object. Stub side has parallel test in TestAC007StubFallback.test_snapshot_returns_fresh_copy."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`subscribe_updates(callback)` \u2014 calling more than once per session is idempotent (no double-subscription, no double-fire).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "subscribe_updates() guards on self._subscribed early-return so a second call does not open a second watcher and does not replace the callback. Verified by TestAC005SubscribeIdempotent.test_second_subscribe_call_is_noop which counts _resolve_watcher invocations (must be 1) and asserts the callback fires exactly once after a single KV change event (with a 50ms grace period to confirm no double-fire).",
+        "notes": "subscribe_updates() guards on self._subscribed early-return so a second call does not open a second watcher and does not replace the callback. Verified by TestAC005SubscribeIdempotent.test_second_subscribe_call_is_noop which counts _resolve_watcher invocations (must be 1) and asserts the callback fires exactly once after a single KV change event (with a 50ms grace period to confirm no double-fire)."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`close()` is idempotent; detaches the watcher; closes the underlying KV handle.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "close() guards on self._closed early-return. First call cancels the watcher task, awaits cancellation, and calls watcher.stop() on the underlying KV watcher. Verified by TestAC006CloseIdempotent: test_close_cancels_watcher_task (watcher.stop_calls >= 1), test_close_is_idempotent (3 sequential close() calls, no exceptions), test_close_without_subscribe_is_safe (close before any subscribe is a clean no-op).",
+        "notes": "close() guards on self._closed early-return. First call cancels the watcher task, awaits cancellation, and calls watcher.stop() on the underlying KV watcher. Verified by TestAC006CloseIdempotent: test_close_cancels_watcher_task (watcher.stop_calls >= 1), test_close_is_idempotent (3 sequential close() calls, no exceptions), test_close_without_subscribe_is_safe (close before any subscribe is a clean no-op)."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "`StubCapabilitiesRegistry(fallback_path)` reads YAML, exposes the same Protocol surface; `subscribe_updates` is a no-op.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "StubCapabilitiesRegistry.__init__ eagerly calls load_stub_registry(fallback_path) \u2014 same loader used by Phase 2 stub (jarvis.tools.capabilities.load_stub_registry). subscribe_updates accepts a callback but never invokes it. Verified by TestAC007StubFallback: test_snapshot_returns_yaml_descriptors (asserts agent_ids match YAML order), test_subscribe_updates_is_noop (callback never fires after 50ms), test_refresh_rereads_yaml (rewrites file then asserts refresh picks up new content), test_close_is_idempotent.",
+        "notes": "StubCapabilitiesRegistry.__init__ eagerly calls load_stub_registry(fallback_path) \u2014 same loader used by Phase 2 stub (jarvis.tools.capabilities.load_stub_registry). subscribe_updates accepts a callback but never invokes it. Verified by TestAC007StubFallback: test_snapshot_returns_yaml_descriptors (asserts agent_ids match YAML order), test_subscribe_updates_is_noop (callback never fires after 50ms), test_refresh_rereads_yaml (rewrites file then asserts refresh picks up new content), test_close_is_idempotent."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "If `client.js` (JetStream context) is unavailable for KV access, `LiveCapabilitiesRegistry.create` raises `NATSConnectionError` (lifecycle catches and falls back to Stub per DDR-021).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "create() wraps _resolve_registry() and the initial _force_refresh() in try/except blocks that re-raise as NATSConnectionError with the original exception chained as __cause__. Verified by TestAC008JetStreamUnavailableRaises: test_create_wraps_resolve_failure (RuntimeError 'jetstream unavailable' becomes NATSConnectionError) and test_create_chains_original_exception (verifies __cause__ preservation). Production path: NATSKVManifestRegistry.create internally calls nc.jetstream() which raises if unavailable.",
+        "notes": "create() wraps _resolve_registry() and the initial _force_refresh() in try/except blocks that re-raise as NATSConnectionError with the original exception chained as __cause__. Verified by TestAC008JetStreamUnavailableRaises: test_create_wraps_resolve_failure (RuntimeError 'jetstream unavailable' becomes NATSConnectionError) and test_create_chains_original_exception (verifies __cause__ preservation). Production path: NATSKVManifestRegistry.create internally calls nc.jetstream() which raises if unavailable."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "`uv run mypy src/jarvis/infrastructure/capabilities_registry.py` strict-clean.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran 'uv run mypy src/jarvis/infrastructure/capabilities_registry.py' \u2014 output: 'Success: no issues found in 1 source file'. All public functions and methods carry full type annotations; Protocol declared with @runtime_checkable; AsyncIterator/Callable types from collections.abc.",
+        "notes": "Ran 'uv run mypy src/jarvis/infrastructure/capabilities_registry.py' \u2014 output: 'Success: no issues found in 1 source file'. All public functions and methods carry full type annotations; Protocol declared with @runtime_checkable; AsyncIterator/Callable types from collections.abc."
+      },
+      {
+        "criterion_id": "AC-010",
+        "criterion_text": "Tests cover all bullet points above with the in-process NATS test server fixture for the Live path.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "20 tests in tests/test_capabilities_registry_unit.py exercise every AC bullet (Protocol shape, cache TTL, KV-watch invalidation, snapshot isolation, subscribe idempotency, close idempotency, stub fallback, NATSConnectionError soft-fail). Following the project-conventional substitution from tests/test_fleet_registration.py, the 'in-process NATS test server' is replaced with a fake NATSKVManifestRegistry (AsyncMock list_all) plus an _AsyncIterStub watcher that mirrors the NATS KeyWatcher async-iter contract. Same Protocol surface is exercised; no broker required for unit tests. All 20 tests pass; 120 related tests in test_capabilities/test_stub_capabilities/test_fleet_registration/test_nats_client also pass.",
+        "notes": "20 tests in tests/test_capabilities_registry_unit.py exercise every AC bullet (Protocol shape, cache TTL, KV-watch invalidation, snapshot isolation, subscribe idempotency, close idempotency, stub fallback, NATSConnectionError soft-fail). Following the project-conventional substitution from tests/test_fleet_registration.py, the 'in-process NATS test server' is replaced with a fake NATSKVManifestRegistry (AsyncMock list_all) plus an _AsyncIterStub watcher that mirrors the NATS KeyWatcher async-iter contract. Same Protocol surface is exercised; no broker required for unit tests. All 20 tests pass; 120 related tests in test_capabilities/test_stub_capabilities/test_fleet_registration/test_nats_client also pass."
+      },
+      {
+        "criterion_id": "AC-011",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran 'uv run ruff check' on both new files \u2014 initial I001 import-sort issue auto-fixed by 'ruff check --fix'; subsequent 'uv run ruff format' applied project Black-equivalent style. Final 'ruff check' returns clean. mypy also strict-clean (AC-009).",
+        "notes": "Ran 'uv run ruff check' on both new files \u2014 initial I001 import-sort issue auto-fixed by 'ruff check --fix'; subsequent 'uv run ruff format' applied project Black-equivalent style. Final 'ruff check' returns clean. mypy also strict-clean (AC-009)."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 2 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 2,
+      "feature_files": [
+        "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+      ],
+      "pending_examples": [
+        "test_a_new_specialist_registering_midsession_becomes_visible_to_the_supervisor \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_a_specialist_republishing_its_manifest_middispatch_does_not_change_the_inflight_resolution \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 332 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1252/5200 tokens\n\n### \u2705 Similar Outcomes\n- FIXES_ISSUE_IN\n- RELATED_TO_TASK_REVIEW\n\n### \ud83c\udfa8 Relevant Patterns\n- HAS_SEQUENCE_STEP\n- IS_PARAM_TYPE_OF\n\n### \u26a0\ufe0f Warnings\n- REQUIRES_USE_OF\n- IS_IMPLEMENTED_AS\n\n### \ud83c\udfad Role Constraints\n- IS_CREATED_FOR\n- MUST_CREATE\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- APPLIES_TO\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

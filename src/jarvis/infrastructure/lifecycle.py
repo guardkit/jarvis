@@ -58,6 +58,7 @@ the types via the lifecycle's typed surface).
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import os
 from typing import TYPE_CHECKING, Any
@@ -69,7 +70,25 @@ from jarvis.adapters.types import SwapStatus
 from jarvis.agents import build_supervisor
 from jarvis.agents.subagent_registry import build_async_subagents
 from jarvis.config.settings import JarvisConfig
+from jarvis.infrastructure.capabilities_registry import (
+    CapabilitiesRegistry,
+    LiveCapabilitiesRegistry,
+    StubCapabilitiesRegistry,
+)
+from jarvis.infrastructure.dispatch_semaphore import DispatchSemaphore
+from jarvis.infrastructure.fleet_registration import (
+    JARVIS_AGENT_ID,
+    build_jarvis_manifest,
+    deregister_from_fleet,
+    heartbeat_loop,
+    register_on_fleet,
+)
 from jarvis.infrastructure.logging import configure
+from jarvis.infrastructure.nats_client import NATSClient
+from jarvis.infrastructure.routing_history import (
+    GraphitiClientProtocol,
+    RoutingHistoryWriter,
+)
 from jarvis.sessions.manager import SessionManager
 from jarvis.shared.exceptions import ConfigurationError
 from jarvis.tools import (
@@ -266,6 +285,27 @@ class AppState:
             construct an ``AppState`` directly do not have to wire one;
             ``build_app_state`` always populates it from
             ``config.llama_swap_base_url``.
+        nats_client: Connected :class:`NATSClient` wrapper, or ``None``
+            when NATS soft-failed at startup (DDR-021).  ``shutdown`` calls
+            :meth:`NATSClient.drain` when present.
+        graphiti_client: Connected Graphiti client (any object satisfying
+            :class:`GraphitiClientProtocol`), or ``None`` when Graphiti
+            soft-failed at startup (DDR-019).  ``shutdown`` calls
+            ``aclose()`` when present.
+        routing_history_writer: Configured :class:`RoutingHistoryWriter`
+            owning the in-flight Graphiti submission tasks.  Always
+            populated by ``build_app_state`` even when
+            ``graphiti_client is None`` — the writer enters degraded mode
+            (every ``write_*`` becomes a no-op + WARN once).
+        fleet_heartbeat_task: The :class:`asyncio.Task` running
+            :func:`heartbeat_loop` against the live NATS broker, or
+            ``None`` when NATS soft-failed at startup.  ``shutdown``
+            cancels it before draining the broker so the deregister hop
+            is the last write the broker observes.
+        capabilities_registry: The Protocol-shaped
+            :class:`CapabilitiesRegistry` (live KV-watch or stub YAML)
+            backing the supervisor's capability prompt block at runtime.
+            ``shutdown`` calls ``close()`` to detach the watcher.
     """
 
     config: JarvisConfig
@@ -274,6 +314,149 @@ class AppState:
     session_manager: SessionManager
     capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list)
     llamaswap_adapter: LlamaSwapAdapter | None = None
+    nats_client: NATSClient | None = None
+    graphiti_client: GraphitiClientProtocol | None = None
+    routing_history_writer: RoutingHistoryWriter | None = None
+    fleet_heartbeat_task: asyncio.Task[None] | None = None
+    capabilities_registry: CapabilitiesRegistry | None = None
+
+
+# ---------------------------------------------------------------------------
+# Graphiti connect seam — DDR-019 soft-fail.
+#
+# A thin, patchable helper that hides the graphiti-core import from the
+# lifecycle hot path. Returns ``None`` on any failure (missing endpoint,
+# import error, connect error). Tests patch this symbol directly via
+# ``patch("jarvis.infrastructure.lifecycle._connect_graphiti", ...)`` so the
+# soft-fail branch is exercisable without importing graphiti-core in CI.
+# ---------------------------------------------------------------------------
+
+
+class _PreloadedCapabilitiesRegistry:
+    """Protocol-compatible wrapper around a pre-loaded descriptor list.
+
+    Used by ``build_app_state`` when ``StubCapabilitiesRegistry`` cannot
+    re-read its YAML source (e.g. tests patched ``load_stub_registry``
+    higher in the call stack and the on-disk path no longer resolves).
+    The existing ``capability_registry`` list is the authoritative
+    snapshot for the lifetime of the process; ``refresh`` and
+    ``subscribe_updates`` are intentionally inert because there is no
+    source of truth to re-read.
+    """
+
+    __slots__ = ("_descriptors",)
+
+    def __init__(self, descriptors: list[CapabilityDescriptor]) -> None:
+        self._descriptors = list(descriptors)
+
+    def snapshot(self) -> list[CapabilityDescriptor]:
+        return list(self._descriptors)
+
+    async def refresh(self) -> None:
+        return None
+
+    async def subscribe_updates(self, callback: Any) -> None:
+        del callback
+        return None
+
+    async def close(self) -> None:
+        return None
+
+
+def _build_stub_capabilities_registry(
+    config: JarvisConfig,
+    preloaded: list[CapabilityDescriptor],
+) -> CapabilitiesRegistry:
+    """Construct a Stub-style capabilities registry without re-reading the YAML.
+
+    ``StubCapabilitiesRegistry.__init__`` re-loads the YAML at the
+    configured path. When the path is unresolvable (test environments
+    that patch ``load_stub_registry`` higher up but leave the on-disk
+    file shadowed by an autouse ``chdir``), we fall back to the
+    Protocol-compatible :class:`_PreloadedCapabilitiesRegistry` shim
+    that wraps the already-loaded descriptor list.
+    """
+    try:
+        return StubCapabilitiesRegistry(config.stub_capabilities_path)
+    except FileNotFoundError:
+        logger.info(
+            "jarvis_capabilities_registry_preloaded_fallback",
+            stub_capabilities_path=str(config.stub_capabilities_path),
+            count=len(preloaded),
+        )
+        return _PreloadedCapabilitiesRegistry(preloaded)
+
+
+async def _connect_nats(config: JarvisConfig) -> NATSClient | None:
+    """Lifecycle-side seam for :meth:`NATSClient.connect`.
+
+    Tests patch this thin wrapper rather than the class method so the
+    NATSClient unit tests (which exercise the real ``connect`` surface)
+    are unaffected by the lifecycle's autouse stub.
+    """
+    return await NATSClient.connect(config)
+
+
+async def _connect_graphiti(config: JarvisConfig) -> GraphitiClientProtocol | None:
+    """Connect to Graphiti per DDR-019 — return ``None`` on any failure.
+
+    The function is intentionally permissive: a missing
+    ``graphiti_endpoint``, an unimportable ``graphiti_core`` SDK, or a live
+    connect failure all converge on the same ``None`` return so the
+    supervisor lifecycle continues into degraded-mode wiring without a
+    second branch.
+
+    Args:
+        config: Validated :class:`JarvisConfig`. Reads
+            ``config.graphiti_endpoint`` and ``config.graphiti_api_key``.
+
+    Returns:
+        A connected Graphiti client on success; ``None`` on any failure.
+        Never raises.
+    """
+    if config.graphiti_endpoint is None:
+        logger.info(
+            "graphiti_skipped_no_endpoint",
+            graphiti_endpoint=None,
+        )
+        return None
+    try:
+        # Lazy import — graphiti-core is an optional extra (TASK-J004-002).
+        from graphiti_core import Graphiti
+
+        api_key = (
+            config.graphiti_api_key.get_secret_value()
+            if config.graphiti_api_key is not None
+            else None
+        )
+        # Graphiti's constructor signature varies across 0.9.x; we forward
+        # the kwargs the SDK currently accepts via duck typing, falling back
+        # to the positional ``uri`` form when ``api_key`` is unsupported.
+        kwargs: dict[str, Any] = {"uri": config.graphiti_endpoint}
+        if api_key is not None:
+            kwargs["api_key"] = api_key
+        try:
+            client: Any = Graphiti(**kwargs)
+        except TypeError:
+            # Older SDKs reject ``api_key``; fall back to URI-only.
+            client = Graphiti(uri=config.graphiti_endpoint)
+        logger.info(
+            "graphiti_connect_success",
+            graphiti_endpoint=config.graphiti_endpoint,
+        )
+        # The graphiti-core ``Graphiti`` client implements ``add_episode``
+        # so it satisfies the GraphitiClientProtocol structural surface;
+        # the cast keeps mypy strict-clean without forcing a Protocol
+        # subclass declaration into the third-party SDK.
+        return client  # type: ignore[no-any-return]
+    except Exception as exc:
+        logger.error(
+            "graphiti_connect_failed",
+            graphiti_endpoint=config.graphiti_endpoint,
+            error_class=type(exc).__name__,
+            error=str(exc),
+        )
+        return None
 
 
 async def build_app_state(config: JarvisConfig) -> AppState:
@@ -391,16 +574,82 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         count=len(async_subagents),
     )
 
+    # 7b. FEAT-JARVIS-004 wiring — connect the live transports per
+    # DDR-021 (NATS soft-fail) and DDR-019 (Graphiti soft-fail), then
+    # build the writer + dispatch semaphore the swapped-in dispatch tools
+    # consume. ``register_on_fleet`` failures convert to a startup WARN so
+    # a degraded broker (e.g. JetStream offline) does not block the
+    # supervisor process.
+    nats_client = await _connect_nats(config)
+    graphiti_client = await _connect_graphiti(config)
+    routing_history_writer = RoutingHistoryWriter(graphiti_client, config)
+    log.info(
+        "jarvis_routing_history_writer_ready",
+        graphiti_available=graphiti_client is not None,
+    )
+
+    fleet_heartbeat_task: asyncio.Task[None] | None = None
+    capabilities_registry: CapabilitiesRegistry
+    if nats_client is not None:
+        manifest = build_jarvis_manifest(config)
+        try:
+            await register_on_fleet(nats_client, manifest)
+        except Exception as exc:
+            # DDR-021 soft-fail at the registration boundary — a flaky
+            # broker must not block startup. The supervisor stays up;
+            # downstream fleet observers simply will not see Jarvis.
+            log.warning(
+                "jarvis_fleet_register_failed",
+                agent_id=manifest.agent_id,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+        fleet_heartbeat_task = asyncio.create_task(
+            heartbeat_loop(nats_client, manifest, config),
+            name="jarvis_fleet_heartbeat",
+        )
+        try:
+            capabilities_registry = await LiveCapabilitiesRegistry.create(nats_client)
+        except Exception as exc:
+            # DDR-021 soft-fail — bind failure falls back to the stub
+            # YAML so the prompt block is still populated.
+            log.warning(
+                "jarvis_live_capabilities_registry_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
+    else:
+        capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
+
+    dispatch_semaphore = DispatchSemaphore(cap=config.dispatch_concurrent_cap)
+    log.info(
+        "jarvis_dispatch_semaphore_ready",
+        cap=config.dispatch_concurrent_cap,
+    )
+
     # 8. Assemble the attended tool list (10 tools: FEAT-J002 baseline
     # plus ``escalate_to_frontier``).  The ``include_frontier=True``
     # flag is the default but we pass it explicitly here so the
     # symmetry with the ambient call below stays loud at the call site.
     # This call also snapshots ``capability_registry`` into the
     # capability + dispatch tool modules per ASSUM-006.
+    #
+    # FEAT-JARVIS-004 — the three new kwargs (``nats_client``,
+    # ``routing_history_writer``, ``dispatch_semaphore``) snapshot into
+    # the ``jarvis.tools.dispatch`` module attributes so the swapped-in
+    # dispatch tool body (TASK-J004-011) finds connected dependencies on
+    # every call. Passing the Protocol-shaped registry separately
+    # (``capabilities_registry``) keeps the prompt-block wiring
+    # backwards compatible — the supervisor prompt still consumes the
+    # ``list[CapabilityDescriptor]`` form.
     tool_list_attended = assemble_tool_list(
         config,
         capability_registry,
         include_frontier=True,
+        nats_client=nats_client,
+        routing_history_writer=routing_history_writer,
+        dispatch_semaphore=dispatch_semaphore,
     )
     log.info(
         "jarvis_tool_list_attended_assembled",
@@ -415,6 +664,9 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         config,
         capability_registry,
         include_frontier=False,
+        nats_client=nats_client,
+        routing_history_writer=routing_history_writer,
+        dispatch_semaphore=dispatch_semaphore,
     )
     log.info(
         "jarvis_tool_list_ambient_assembled",
@@ -474,9 +726,21 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         session_manager=session_manager,
         capability_registry=capability_registry,
         llamaswap_adapter=llamaswap_adapter,
+        nats_client=nats_client,
+        graphiti_client=graphiti_client,
+        routing_history_writer=routing_history_writer,
+        fleet_heartbeat_task=fleet_heartbeat_task,
+        capabilities_registry=capabilities_registry,
     )
 
-    log.info("jarvis_startup_complete")
+    log.info(
+        "jarvis_startup_complete",
+        nats_available=nats_client is not None,
+        graphiti_available=graphiti_client is not None,
+        capabilities_mode="live"
+        if isinstance(capabilities_registry, LiveCapabilitiesRegistry)
+        else "stub",
+    )
     return state
 
 
@@ -488,33 +752,148 @@ async def shutdown(state: AppState) -> None:
     """Gracefully shut down the Jarvis application.
 
     Idempotent — calling this multiple times on the same state does
-    not raise.  Logs a structured shutdown event on completion.
+    not raise. Each step is independently failure-tolerant: a single
+    failed step is logged at WARN and shutdown continues — no step is
+    skipped because of an earlier failure (TASK-J004-018 invariant).
 
-    Returns the dispatch module's DDR-014 Layer-2 hooks
-    (``_current_session_hook``, ``_async_subagent_frame_hook``) to their
-    dormant ``None`` default so a subsequent ``build_app_state`` in the
-    same process (e.g. tests, ``jarvis chat`` restart) starts from a
-    clean module state.
+    Sequence (per FEAT-JARVIS-004 design §8 wiring sequence):
+
+        1. Cancel ``fleet_heartbeat_task`` (if running).
+        2. ``await deregister_from_fleet(nats_client, "jarvis")``.
+        3. ``await capabilities_registry.close()``.
+        4. ``await routing_history_writer.flush(timeout=5.0)``.
+        5. ``await nats_client.drain(timeout=5.0)``.
+        6. ``await graphiti_client.aclose()``.
+        7. Disarm Layer-2 hooks (kept from FEAT-J003 F1 fix).
+        8. ``state.store.close()``.
 
     Args:
         state: The :class:`AppState` to tear down.
     """
     log = structlog.get_logger(__name__)
 
-    try:
-        if hasattr(state.store, "close"):
-            try:
-                state.store.close()
-            except Exception:
-                log.warning("jarvis_store_close_warning", exc_info=True)
+    # 1. Cancel the fleet heartbeat task — must run first so the
+    # subsequent deregister write is the last fleet observation the
+    # broker records (no race against an in-flight heartbeat re-register).
+    heartbeat_task = state.fleet_heartbeat_task
+    if heartbeat_task is not None and not heartbeat_task.done():
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            # Expected — ``heartbeat_loop`` re-raises CancelledError after
+            # a clean INFO log so the asyncio task machinery records the
+            # cancellation correctly. No traceback is emitted.
+            pass
+        except Exception as exc:
+            log.warning(
+                "jarvis_heartbeat_cancel_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
 
-        # Disarm Layer 2 — the dispatch module's hooks must not survive
-        # ``shutdown`` so a fresh ``build_app_state`` can rewire them
-        # without aliasing this lifecycle's SessionManager.
+    # 2. Deregister from the fleet so downstream observers immediately
+    # stop routing to us. ``deregister_from_fleet`` already swallows
+    # broker-level failures (logs WARN); we still wrap to keep the
+    # invariant explicit at the call site.
+    if state.nats_client is not None:
+        try:
+            await deregister_from_fleet(state.nats_client, JARVIS_AGENT_ID)
+        except Exception as exc:
+            log.warning(
+                "jarvis_deregister_warning",
+                agent_id=JARVIS_AGENT_ID,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 3. Detach the capability KV watcher (idempotent close).
+    if state.capabilities_registry is not None:
+        try:
+            await state.capabilities_registry.close()
+        except Exception as exc:
+            log.warning(
+                "jarvis_capabilities_registry_close_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 4. Flush the routing-history writer — bounded at 5.0s per DDR-019.
+    # ``flush`` already swallows broker / Graphiti failures (logs WARN);
+    # the wrapper here protects the rest of the sequence from any
+    # untyped exception slipping out.
+    if state.routing_history_writer is not None:
+        try:
+            await state.routing_history_writer.flush(timeout=5.0)
+        except Exception as exc:
+            log.warning(
+                "jarvis_routing_history_flush_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 5. Drain NATS — bounded at 5.0s per the DDR-021 contract surface.
+    if state.nats_client is not None:
+        try:
+            await state.nats_client.drain(timeout=5.0)
+        except Exception as exc:
+            log.warning(
+                "jarvis_nats_drain_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 6. Close Graphiti. The graphiti-core convention as of the version
+    # pinned in TASK-J004-002 is ``aclose()`` (async). When a future SDK
+    # release renames the method, swap the call here — the soft-fail
+    # wrapper protects the rest of the sequence.
+    if state.graphiti_client is not None:
+        try:
+            close = getattr(state.graphiti_client, "aclose", None)
+            if close is None:
+                # Some graphiti-core versions only expose ``close``; fall
+                # back rather than raise so the test surface is stable.
+                close = getattr(state.graphiti_client, "close", None)
+            if close is not None:
+                result = close()
+                if asyncio.iscoroutine(result):
+                    await result
+        except Exception as exc:
+            log.warning(
+                "jarvis_graphiti_close_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 7. Disarm Layer 2 — the dispatch module's hooks must not survive
+    # ``shutdown`` so a fresh ``build_app_state`` can rewire them
+    # without aliasing this lifecycle's SessionManager.
+    try:
         _dispatch._current_session_hook = None
         _dispatch._async_subagent_frame_hook = None
+        # FEAT-JARVIS-004 — also disarm the dispatch dependencies so a
+        # subsequent ``build_app_state`` call starts from a clean module
+        # state and stale references cannot leak into a fresh wiring.
+        _dispatch._nats_client = None
+        _dispatch._routing_history_writer = None
+        _dispatch._dispatch_semaphore = None
+    except Exception as exc:
+        log.warning(
+            "jarvis_layer2_disarm_warning",
+            error_class=type(exc).__name__,
+            error=str(exc),
+        )
 
-        log.info("jarvis_shutdown_complete")
-    except Exception:
-        # Idempotent — swallow any error on repeated calls.
-        log.warning("jarvis_shutdown_warning", exc_info=True)
+    # 8. Close the memory store. ``store.close`` is the last step so the
+    # Phase-1 invariant (store outlives every async transport) holds.
+    if hasattr(state.store, "close"):
+        try:
+            state.store.close()
+        except Exception as exc:
+            log.warning(
+                "jarvis_store_close_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    log.info("jarvis_shutdown_complete")

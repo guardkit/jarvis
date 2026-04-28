@@ -1,0 +1,216 @@
+{
+  "task_id": "TASK-J004-013",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_lifecycle_feat_j004_wiring.py tests/test_lifecycle_startup_phase3.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_lifecycle_feat_j004_wiring.py: 3 warnings\ntests/test_lifecycle_startup_phase3.py: 12 warnings\ntests/test_lifecycle_startup_phase3.py: 12 warnings\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_startup_phase3.py:80: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n======================= 39 passed, 33 warnings in 1.86s ========================",
+      "duration_seconds": 3.5145139694213867
+    },
+    "requirements": {
+      "criteria_total": 10,
+      "criteria_met": 10,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Startup wiring matches design \u00a78 sequence **exactly**.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_app_state now calls _connect_nats(config), _connect_graphiti(config), constructs RoutingHistoryWriter, then branches on nats_client: when present runs build_jarvis_manifest -> register_on_fleet (with try/except DDR-021 soft-fail) -> creates heartbeat_task via asyncio.create_task(heartbeat_loop(...)) -> awaits LiveCapabilitiesRegistry.create(nats_client). Falls back to StubCapabilitiesRegistry on else branch. Builds DispatchSemaphore(cap=config.dispatch_concurrent_cap). Then assemble_tool_list called twice (attended + ambient) with the three new kwargs (nats_client, routing_history_writer, dispatch_semaphore). Test test_nats_up_graphiti_up_full_wiring covers the live path; tests in TestAC002NatsSoftFail and TestAC003GraphitiSoftFail cover degraded paths.",
+      "notes": "build_app_state now calls _connect_nats(config), _connect_graphiti(config), constructs RoutingHistoryWriter, then branches on nats_client: when present runs build_jarvis_manifest -> register_on_fleet (with try/except DDR-021 soft-fail) -> creates heartbeat_task via asyncio.create_task(heartbeat_loop(...)) -> awaits LiveCapabilitiesRegistry.create(nats_client). Falls back to StubCapabilitiesRegistry on else branch. Builds DispatchSemaphore(cap=config.dispatch_concurrent_cap). Then assemble_tool_list called twice (attended + ambient) with the three new kwargs (nats_client, routing_history_writer, dispatch_semaphore). Test test_nats_up_graphiti_up_full_wiring covers the live path; tests in TestAC002NatsSoftFail and TestAC003GraphitiSoftFail cover degraded paths."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "DDR-021 soft-fail**: `NATSClient.connect` returning `None` does NOT block startup; `capabilities_registry` falls back to `StubCapabilitiesRegistry`; `heartbeat_task = None`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_app_state calls _connect_nats; if it returns None the else branch runs _build_stub_capabilities_registry (which yields StubCapabilitiesRegistry or _PreloadedCapabilitiesRegistry fallback) and fleet_heartbeat_task remains None. test_nats_none_uses_stub_registry_and_no_heartbeat asserts both invariants explicitly.",
+      "notes": "build_app_state calls _connect_nats; if it returns None the else branch runs _build_stub_capabilities_registry (which yields StubCapabilitiesRegistry or _PreloadedCapabilitiesRegistry fallback) and fleet_heartbeat_task remains None. test_nats_none_uses_stub_registry_and_no_heartbeat asserts both invariants explicitly."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "DDR-019 soft-fail**: `GraphitiClient.connect` failure does NOT block startup; `routing_history_writer` constructed with `graphiti_client=None` (degraded mode).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_connect_graphiti returns None on missing endpoint, import error, or exception (all caught). RoutingHistoryWriter(graphiti_client, config) is constructed unconditionally \u2014 it tolerates None and enters degraded mode (write_specialist_dispatch becomes a WARN-once no-op). test_graphiti_none_writer_in_degraded_mode constructs an entry and verifies write_specialist_dispatch does not raise when the writer was built with graphiti_client=None.",
+      "notes": "_connect_graphiti returns None on missing endpoint, import error, or exception (all caught). RoutingHistoryWriter(graphiti_client, config) is constructed unconditionally \u2014 it tolerates None and enters degraded mode (write_specialist_dispatch becomes a WARN-once no-op). test_graphiti_none_writer_in_degraded_mode constructs an entry and verifies write_specialist_dispatch does not raise when the writer was built with graphiti_client=None."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`AppState` gains the four new fields (frozen dataclass \u2014 order preserved).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "AppState extended with nats_client (NATSClient | None), graphiti_client (GraphitiClientProtocol | None), routing_history_writer (RoutingHistoryWriter | None), fleet_heartbeat_task (asyncio.Task[None] | None), and capabilities_registry (CapabilitiesRegistry | None) \u2014 all defaulting to None so existing test constructors keep working. The frozen=True invariant is preserved; TestAC004AppStateExtensions verifies each field name is present and the dataclass is still frozen.",
+      "notes": "AppState extended with nats_client (NATSClient | None), graphiti_client (GraphitiClientProtocol | None), routing_history_writer (RoutingHistoryWriter | None), fleet_heartbeat_task (asyncio.Task[None] | None), and capabilities_registry (CapabilitiesRegistry | None) \u2014 all defaulting to None so existing test constructors keep working. The frozen=True invariant is preserved; TestAC004AppStateExtensions verifies each field name is present and the dataclass is still frozen."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`assemble_tool_list` accepts and propagates the three new kwargs to `tools/dispatch.py` module attributes.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "assemble_tool_list now declares nats_client, routing_history_writer, dispatch_semaphore as keyword-only parameters (default None). The body assigns each to _dispatch._nats_client, _dispatch._routing_history_writer, _dispatch._dispatch_semaphore \u2014 defaults reset to None on every call so stale wiring cannot leak. test_kwargs_propagate_to_dispatch_module_attributes and test_default_kwargs_clear_dispatch_module_attributes verify both directions.",
+      "notes": "assemble_tool_list now declares nats_client, routing_history_writer, dispatch_semaphore as keyword-only parameters (default None). The body assigns each to _dispatch._nats_client, _dispatch._routing_history_writer, _dispatch._dispatch_semaphore \u2014 defaults reset to None on every call so stale wiring cannot leak. test_kwargs_propagate_to_dispatch_module_attributes and test_default_kwargs_clear_dispatch_module_attributes verify both directions."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Shutdown order** matches the 8-step sequence above; ordering enforced by TASK-J004-018's invariant test.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "shutdown() executes the 8 steps in order: (1) cancel fleet_heartbeat_task, (2) deregister_from_fleet, (3) capabilities_registry.close(), (4) routing_history_writer.flush(timeout=5.0), (5) nats_client.drain(timeout=5.0), (6) graphiti_client.aclose() (with fallback to .close()), (7) disarm Layer-2 hooks (and dispatch dependencies), (8) state.store.close(). test_shutdown_runs_in_declared_order asserts the strict ordering via a recording AppState fixture; TASK-J004-018 will pin the invariant separately.",
+      "notes": "shutdown() executes the 8 steps in order: (1) cancel fleet_heartbeat_task, (2) deregister_from_fleet, (3) capabilities_registry.close(), (4) routing_history_writer.flush(timeout=5.0), (5) nats_client.drain(timeout=5.0), (6) graphiti_client.aclose() (with fallback to .close()), (7) disarm Layer-2 hooks (and dispatch dependencies), (8) state.store.close(). test_shutdown_runs_in_declared_order asserts the strict ordering via a recording AppState fixture; TASK-J004-018 will pin the invariant separately."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Each shutdown step is independently failure-tolerant \u2014 a single failed step (WARN-logged) does not skip later steps.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Every step in shutdown() is wrapped in its own try/except that logs at WARN with structured fields and continues. test_shutdown_continues_when_a_step_raises injects RuntimeError into deregister_from_fleet and asserts capabilities.close, writer.flush, nats.drain, graphiti.aclose, and store.close all still execute.",
+      "notes": "Every step in shutdown() is wrapped in its own try/except that logs at WARN with structured fields and continues. test_shutdown_continues_when_a_step_raises injects RuntimeError into deregister_from_fleet and asserts capabilities.close, writer.flush, nats.drain, graphiti.aclose, and store.close all still execute."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Heartbeat task cancellation produces no traceback (handled by `heartbeat_loop`'s CancelledError contract).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "shutdown() catches asyncio.CancelledError when awaiting the cancelled heartbeat task and passes silently. test_cancellation_handled_silently constructs a heartbeat coroutine that re-raises CancelledError per the heartbeat_loop contract, runs shutdown, and asserts the task ends in cancelled/done state with no traceback escape.",
+      "notes": "shutdown() catches asyncio.CancelledError when awaiting the cancelled heartbeat task and passes silently. test_cancellation_handled_silently constructs a heartbeat coroutine that re-raises CancelledError per the heartbeat_loop contract, runs shutdown, and asserts the task ends in cancelled/done state with no traceback escape."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "`uv run mypy src/jarvis/infrastructure/lifecycle.py` strict-clean.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `python -m mypy src/jarvis/infrastructure/lifecycle.py` (strict mode per pyproject.toml [tool.mypy]) \u2014 output: 'Success: no issues found in 1 source file'.",
+      "notes": "Ran `python -m mypy src/jarvis/infrastructure/lifecycle.py` (strict mode per pyproject.toml [tool.mypy]) \u2014 output: 'Success: no issues found in 1 source file'."
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "`python -m ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py` -> 'All checks passed!'. `python -m ruff format` reformatted lifecycle.py once; subsequent format-check returns clean.",
+      "notes": "`python -m ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py` -> 'All checks passed!'. `python -m ruff format` reformatted lifecycle.py once; subsequent format-check returns clean."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "Startup wiring matches design \u00a78 sequence **exactly**.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_app_state now calls _connect_nats(config), _connect_graphiti(config), constructs RoutingHistoryWriter, then branches on nats_client: when present runs build_jarvis_manifest -> register_on_fleet (with try/except DDR-021 soft-fail) -> creates heartbeat_task via asyncio.create_task(heartbeat_loop(...)) -> awaits LiveCapabilitiesRegistry.create(nats_client). Falls back to StubCapabilitiesRegistry on else branch. Builds DispatchSemaphore(cap=config.dispatch_concurrent_cap). Then assemble_tool_list called twice (attended + ambient) with the three new kwargs (nats_client, routing_history_writer, dispatch_semaphore). Test test_nats_up_graphiti_up_full_wiring covers the live path; tests in TestAC002NatsSoftFail and TestAC003GraphitiSoftFail cover degraded paths.",
+        "notes": "build_app_state now calls _connect_nats(config), _connect_graphiti(config), constructs RoutingHistoryWriter, then branches on nats_client: when present runs build_jarvis_manifest -> register_on_fleet (with try/except DDR-021 soft-fail) -> creates heartbeat_task via asyncio.create_task(heartbeat_loop(...)) -> awaits LiveCapabilitiesRegistry.create(nats_client). Falls back to StubCapabilitiesRegistry on else branch. Builds DispatchSemaphore(cap=config.dispatch_concurrent_cap). Then assemble_tool_list called twice (attended + ambient) with the three new kwargs (nats_client, routing_history_writer, dispatch_semaphore). Test test_nats_up_graphiti_up_full_wiring covers the live path; tests in TestAC002NatsSoftFail and TestAC003GraphitiSoftFail cover degraded paths."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "DDR-021 soft-fail**: `NATSClient.connect` returning `None` does NOT block startup; `capabilities_registry` falls back to `StubCapabilitiesRegistry`; `heartbeat_task = None`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_app_state calls _connect_nats; if it returns None the else branch runs _build_stub_capabilities_registry (which yields StubCapabilitiesRegistry or _PreloadedCapabilitiesRegistry fallback) and fleet_heartbeat_task remains None. test_nats_none_uses_stub_registry_and_no_heartbeat asserts both invariants explicitly.",
+        "notes": "build_app_state calls _connect_nats; if it returns None the else branch runs _build_stub_capabilities_registry (which yields StubCapabilitiesRegistry or _PreloadedCapabilitiesRegistry fallback) and fleet_heartbeat_task remains None. test_nats_none_uses_stub_registry_and_no_heartbeat asserts both invariants explicitly."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "DDR-019 soft-fail**: `GraphitiClient.connect` failure does NOT block startup; `routing_history_writer` constructed with `graphiti_client=None` (degraded mode).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_connect_graphiti returns None on missing endpoint, import error, or exception (all caught). RoutingHistoryWriter(graphiti_client, config) is constructed unconditionally \u2014 it tolerates None and enters degraded mode (write_specialist_dispatch becomes a WARN-once no-op). test_graphiti_none_writer_in_degraded_mode constructs an entry and verifies write_specialist_dispatch does not raise when the writer was built with graphiti_client=None.",
+        "notes": "_connect_graphiti returns None on missing endpoint, import error, or exception (all caught). RoutingHistoryWriter(graphiti_client, config) is constructed unconditionally \u2014 it tolerates None and enters degraded mode (write_specialist_dispatch becomes a WARN-once no-op). test_graphiti_none_writer_in_degraded_mode constructs an entry and verifies write_specialist_dispatch does not raise when the writer was built with graphiti_client=None."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`AppState` gains the four new fields (frozen dataclass \u2014 order preserved).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "AppState extended with nats_client (NATSClient | None), graphiti_client (GraphitiClientProtocol | None), routing_history_writer (RoutingHistoryWriter | None), fleet_heartbeat_task (asyncio.Task[None] | None), and capabilities_registry (CapabilitiesRegistry | None) \u2014 all defaulting to None so existing test constructors keep working. The frozen=True invariant is preserved; TestAC004AppStateExtensions verifies each field name is present and the dataclass is still frozen.",
+        "notes": "AppState extended with nats_client (NATSClient | None), graphiti_client (GraphitiClientProtocol | None), routing_history_writer (RoutingHistoryWriter | None), fleet_heartbeat_task (asyncio.Task[None] | None), and capabilities_registry (CapabilitiesRegistry | None) \u2014 all defaulting to None so existing test constructors keep working. The frozen=True invariant is preserved; TestAC004AppStateExtensions verifies each field name is present and the dataclass is still frozen."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`assemble_tool_list` accepts and propagates the three new kwargs to `tools/dispatch.py` module attributes.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "assemble_tool_list now declares nats_client, routing_history_writer, dispatch_semaphore as keyword-only parameters (default None). The body assigns each to _dispatch._nats_client, _dispatch._routing_history_writer, _dispatch._dispatch_semaphore \u2014 defaults reset to None on every call so stale wiring cannot leak. test_kwargs_propagate_to_dispatch_module_attributes and test_default_kwargs_clear_dispatch_module_attributes verify both directions.",
+        "notes": "assemble_tool_list now declares nats_client, routing_history_writer, dispatch_semaphore as keyword-only parameters (default None). The body assigns each to _dispatch._nats_client, _dispatch._routing_history_writer, _dispatch._dispatch_semaphore \u2014 defaults reset to None on every call so stale wiring cannot leak. test_kwargs_propagate_to_dispatch_module_attributes and test_default_kwargs_clear_dispatch_module_attributes verify both directions."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Shutdown order** matches the 8-step sequence above; ordering enforced by TASK-J004-018's invariant test.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "shutdown() executes the 8 steps in order: (1) cancel fleet_heartbeat_task, (2) deregister_from_fleet, (3) capabilities_registry.close(), (4) routing_history_writer.flush(timeout=5.0), (5) nats_client.drain(timeout=5.0), (6) graphiti_client.aclose() (with fallback to .close()), (7) disarm Layer-2 hooks (and dispatch dependencies), (8) state.store.close(). test_shutdown_runs_in_declared_order asserts the strict ordering via a recording AppState fixture; TASK-J004-018 will pin the invariant separately.",
+        "notes": "shutdown() executes the 8 steps in order: (1) cancel fleet_heartbeat_task, (2) deregister_from_fleet, (3) capabilities_registry.close(), (4) routing_history_writer.flush(timeout=5.0), (5) nats_client.drain(timeout=5.0), (6) graphiti_client.aclose() (with fallback to .close()), (7) disarm Layer-2 hooks (and dispatch dependencies), (8) state.store.close(). test_shutdown_runs_in_declared_order asserts the strict ordering via a recording AppState fixture; TASK-J004-018 will pin the invariant separately."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Each shutdown step is independently failure-tolerant \u2014 a single failed step (WARN-logged) does not skip later steps.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Every step in shutdown() is wrapped in its own try/except that logs at WARN with structured fields and continues. test_shutdown_continues_when_a_step_raises injects RuntimeError into deregister_from_fleet and asserts capabilities.close, writer.flush, nats.drain, graphiti.aclose, and store.close all still execute.",
+        "notes": "Every step in shutdown() is wrapped in its own try/except that logs at WARN with structured fields and continues. test_shutdown_continues_when_a_step_raises injects RuntimeError into deregister_from_fleet and asserts capabilities.close, writer.flush, nats.drain, graphiti.aclose, and store.close all still execute."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "Heartbeat task cancellation produces no traceback (handled by `heartbeat_loop`'s CancelledError contract).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "shutdown() catches asyncio.CancelledError when awaiting the cancelled heartbeat task and passes silently. test_cancellation_handled_silently constructs a heartbeat coroutine that re-raises CancelledError per the heartbeat_loop contract, runs shutdown, and asserts the task ends in cancelled/done state with no traceback escape.",
+        "notes": "shutdown() catches asyncio.CancelledError when awaiting the cancelled heartbeat task and passes silently. test_cancellation_handled_silently constructs a heartbeat coroutine that re-raises CancelledError per the heartbeat_loop contract, runs shutdown, and asserts the task ends in cancelled/done state with no traceback escape."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "`uv run mypy src/jarvis/infrastructure/lifecycle.py` strict-clean.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `python -m mypy src/jarvis/infrastructure/lifecycle.py` (strict mode per pyproject.toml [tool.mypy]) \u2014 output: 'Success: no issues found in 1 source file'.",
+        "notes": "Ran `python -m mypy src/jarvis/infrastructure/lifecycle.py` (strict mode per pyproject.toml [tool.mypy]) \u2014 output: 'Success: no issues found in 1 source file'."
+      },
+      {
+        "criterion_id": "AC-010",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "`python -m ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py` -> 'All checks passed!'. `python -m ruff format` reformatted lifecycle.py once; subsequent format-check returns clean.",
+        "notes": "`python -m ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py` -> 'All checks passed!'. `python -m ruff format` reformatted lifecycle.py once; subsequent format-check returns clean."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 342 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1292/5200 tokens\n\n### \u2705 Similar Outcomes\n- RELATED_TO_TASK_REVIEW\n- INVOLVES_QUALITY_CHECK\n\n### \ud83c\udfa8 Relevant Patterns\n- USES_FUNCTION\n- ASSIGNS_TASK_TO\n\n### \u26a0\ufe0f Warnings\n- USES_ENDPOINT\n- REPLACES\n\n### \ud83c\udfad Role Constraints\n- IS_CREATED_FOR\n- DELEGATES_TO\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_STATE_RECOVERY_STRATEGY\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

@@ -1,0 +1,317 @@
+{
+  "task_id": "TASK-J004-010",
+  "timestamp": "2026-04-28T11:24:37.472125",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 59,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".claude/task-plans/TASK-J004-006-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-007-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-010-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-004/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-005/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-005/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-005/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-005/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-005/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-005/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-006/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-006/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-006/coverage.json",
+    ".guardkit/autobuild/TASK-J004-006/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J004-006/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-006/specialist_results.json",
+    ".guardkit/autobuild/TASK-J004-006/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-006/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-006/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-007/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-007/coach_feedback_for_turn_2.json",
+    ".guardkit/autobuild/TASK-J004-007/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-007/coach_turn_2.json",
+    ".guardkit/autobuild/TASK-J004-007/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J004-007/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-007/player_turn_2.json",
+    ".guardkit/autobuild/TASK-J004-007/specialist_results.json",
+    ".guardkit/autobuild/TASK-J004-007/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-007/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-007/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-007/turn_state_turn_2.json",
+    ".guardkit/autobuild/TASK-J004-008/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-008/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-008/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-008/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-008/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-008/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-010/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-010/coach_feedback_for_turn_2.json",
+    ".guardkit/autobuild/TASK-J004-010/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-010/coverage.json",
+    ".guardkit/autobuild/TASK-J004-010/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J004-010/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-010/specialist_results.json",
+    ".guardkit/autobuild/TASK-J004-010/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-010/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-010/turn_state_turn_1.json",
+    ".guardkit/bdd/TASK-J004-007_junit.xml",
+    ".guardkit/bdd/TASK-J004-010_junit.xml",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/test_feat_jarvis_004_fleet_registration_and_specialist_dispatch.py",
+    "coverage_phase4_TASK-J004-007.json",
+    "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/test_feat_jarvis_004_fleet_registration_and_specialist_dispatch.py",
+    "src/jarvis/infrastructure/dispatch_semaphore.py",
+    "src/jarvis/infrastructure/fleet_registration.py",
+    "src/jarvis/infrastructure/nats_client.py",
+    "src/jarvis/infrastructure/routing_history.py",
+    "src/jarvis/shared/exceptions.py",
+    "tasks/backlog/TASK-J004-007-fleet-registration-and-heartbeat.md",
+    "tasks/backlog/TASK-J004-010-routing-history-writer-with-offload-and-redaction.md",
+    "tasks/design_approved/TASK-J004-006-nats-client-async-wrapper.md",
+    "tasks/design_approved/TASK-J004-007-fleet-registration-and-heartbeat.md",
+    "tasks/design_approved/TASK-J004-010-routing-history-writer-with-offload-and-redaction.md",
+    "tests/test_dispatch_semaphore.py",
+    "tests/test_fleet_registration.py",
+    "tests/test_nats_client.py",
+    "tests/test_routing_history_schema.py",
+    "tests/test_routing_history_schema_exports.py",
+    "tests/test_routing_history_writer.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J004-010/player_turn_2.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-010/player_turn_2.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/test_feat_jarvis_004_fleet_registration_and_specialist_dispatch.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/test_feat_jarvis_004_fleet_registration_and_specialist_dispatch.py"
+  ],
+  "summary": "59 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 26,
+    "max_turns": 170,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 6,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_a_successful_dispatch_writes_a_tracerich_record_to_the_routing_history",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_a_trace_record_below_the_offload_threshold_is_stored_inline",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_a_trace_record_above_the_offload_threshold_is_offloaded_to_the_filesystem",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_a_successful_dispatch_returns_to_the_supervisor_before_its_trace_write_completes",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_sensitive_content_in_a_trace_record_is_redacted_before_persistence",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_writing_a_trace_file_that_already_exists_for_the_same_decision_is_treated_as_a_write_failure",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+    ],
+    "tag": "@task:TASK-J004-010"
+  },
+  "task_type": "feature",
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "All 5 methods land with the exact API-internal.md \u00a74 signatures.",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: RoutingHistoryWriter exposes __init__(graphiti_client, config), async write_specialist_dispatch(entry), async write_build_queue_dispatch(entry), async append_build_queue_event(correlation_id, event), async flush(*, timeout=5.0). TestPublicSignatures (4 tests) verifies the surface; mypy --strict passes. Re-run on turn 2: still passing.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Inline write path (<=16KB JSON-encoded) \u2014 no filesystem touch.",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: writer encodes (supervisor_tool_call_sequence + subagent_trace_ref) with stable separators and only triggers _offload_to_filesystem when len(encoded) > 16384. TestInlineWritePath asserts the per-day traces dir is never created and the inline body lands as a list (not a TraceRef).",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Filesystem offload (>16KB) \u2014 directory created with mode 0700 lazily on first write; file written with mode 0600.",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: _offload_to_filesystem calls Path.mkdir(parents=True, exist_ok=True, mode=0o700), then chmod(0o700) to defeat umask, writes via write_bytes, then chmod(0o600). TestFilesystemOffload.test_offload_creates_dir_with_mode_0700_and_file_with_mode_0600 asserts both modes via stat.S_IMODE.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "TraceRef.content_sha256 matches the SHA-256 of the on-disk file contents.",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: hashlib.sha256(encoded).hexdigest() over the bytes written. TestFilesystemOffload.test_traceref_content_sha256_matches_on_disk_bytes re-reads on-disk bytes and asserts SHA-256 equality plus size_bytes and path equality.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "DDR-023 collision policy: pre-existing trace file at the same path \u2192 WARN + preserve original; the writer does not call Graphiti add_episode for that record.",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: _offload_to_filesystem checks file_path.exists() before mkdir/chmod/write; on collision logs WARN routing_history_write_failed reason=trace_file_exists and returns None, which makes _write_entry skip add_episode. TestCollisionPolicy.test_collision_preserves_original_and_skips_graphiti_write asserts byte-for-byte preservation, add_episode_calls == 0, and the WARN with reason=trace_file_exists.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "ADR-ARCH-029 redaction runs at the write boundary, not in a Pydantic validator. Synthetic OPENAI_API_KEY=sk-... in human_response_text lands as ***REDACTED*** in the persisted entity (and offloaded file content).",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: _redact_recursive walks entry.model_dump(mode='json') applying _REDACTION_PATTERNS (sk-/xai-/etc API key prefixes, eyJ...-prefixed JWTs, NKEY/NSEED-prefixed NATS keys, RFC-loose emails), substituting REDACTION_PLACEHOLDER='***REDACTED***'. The redacted dict is what's JSON-encoded for both the offload file and the Graphiti episode body. TestRedaction has 3 tests (inline, offload, email); the seam test independently asserts the source entry is not mutated.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Graphiti unreachable (graphiti_client is None) \u2192 write is a no-op with one-time WARN log; subsequent writes silent (no log spam).",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: _graphiti_unavailable_warned flag is False at init; _warn_graphiti_unavailable_once emits WARN routing_history_write_failed reason=graphiti_unavailable then sets the flag, returning silently on subsequent calls. TestGraphitiUnavailable.test_first_write_logs_warn_and_subsequent_writes_are_silent invokes the writer 3 times against a None client and asserts exactly 1 matching WARN.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "flush(timeout=5.0) drains pending tasks; bounded; WARN on overflow; never raises.",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: flush filters _pending_tasks for not-done entries, uses asyncio.wait(..., timeout=timeout, return_when=ALL_COMPLETED), and on still_pending logs WARN routing_history_flush_timeout. The body is wrapped in a broad try/except that re-logs as flush_timeout, so flush never raises. TestFlushBounded covers both happy-path drain and overflow WARN.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "write_build_queue_dispatch and append_build_queue_event exist with type-checked signatures but bodies are pass + a single DEBUG line ('FEAT-J005 not yet implemented') \u2014 preserves forward-compat without faking work.",
+      "status": "complete",
+      "evidence": "Carried forward from turn 1: both methods are async, take the documented signatures, and emit a single logger.debug call carrying note='FEAT-J005 not yet implemented' before returning. The AC explicitly permits this stub form. TestReservedBuildQueueMethods asserts add_episode_calls == 0 after invocation, proving no work is faked.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "tests/test_routing_history_writer.py covers: inline, offload, collision (DDR-023), redaction inline + offload, Graphiti-down WARN-once, flush bounded by timeout.",
+      "status": "complete",
+      "evidence": "tests/test_routing_history_writer.py contains TestInlineWritePath (2), TestFilesystemOffload (3), TestCollisionPolicy (1), TestRedaction (3), TestGraphitiUnavailable (2), TestFlushBounded (2), TestReservedBuildQueueMethods (2), TestPublicSignatures (4), and the @pytest.mark.seam TestSeamFrozenEntryInvariant (1). All 20 writer tests + 39 schema-export tests = 59/59 passing on turn 2 re-run; mypy --strict and ruff stay clean.",
+      "test_file": "tests/test_routing_history_writer.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-011",
+      "criterion_text": "uv run mypy src/jarvis/infrastructure/routing_history.py strict-clean.",
+      "status": "complete",
+      "evidence": "Re-ran 'python -m mypy --strict src/jarvis/infrastructure/routing_history.py' on turn 2 \u2192 'Success: no issues found in 1 source file'. TYPE_CHECKING import of JarvisConfig avoids the runtime pydantic-settings round-trip; GraphitiClientProtocol uses Protocol with kwargs+defaults so duck-typed clients (incl. the test recording client) stay assignment-compatible.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-012",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Re-ran 'python -m ruff check' on turn 2 across src/jarvis/infrastructure/routing_history.py, tests/test_routing_history_writer.py, tests/test_routing_history_schema_exports.py, and the new BDD glue features/feat-jarvis-004-\u2026/test_feat_jarvis_004_\u2026.py \u2192 'All checks passed!'. One E501 (>100-char docstring) on the BDD glue's first line was fixed in this turn by tightening the docstring summary.",
+      "test_file": null,
+      "implementation_files": [
+        "tests/test_routing_history_writer.py",
+        "tests/test_routing_history_schema_exports.py",
+        "src/jarvis/infrastructure/routing_history.py",
+        "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/test_feat_jarvis_004_fleet_registration_and_specialist_dispatch.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 58.048685666988604
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 249.57511016601347
+    }
+  ]
+}

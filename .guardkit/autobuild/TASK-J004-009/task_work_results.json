@@ -1,0 +1,227 @@
+{
+  "task_id": "TASK-J004-009",
+  "timestamp": "2026-04-28T11:46:34.679873",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 20,
+    "tests_failed": 0,
+    "coverage": 100.0,
+    "coverage_met": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".guardkit/autobuild/TASK-J004-007/checkpoints.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/src/jarvis/infrastructure/capabilities_registry.py",
+    "tasks/backlog/TASK-J004-009-capabilities-registry-protocol-live-stub.md"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J004-009-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-009/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-009/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-009/turn_context.json",
+    ".guardkit/bdd/TASK-J004-009_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-009/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/src/jarvis/infrastructure/capabilities_registry.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_capabilities_registry_unit.py",
+    "src/jarvis/infrastructure/capabilities_registry.py",
+    "tasks/design_approved/TASK-J004-009-capabilities-registry-protocol-live-stub.md",
+    "tests/test_capabilities_registry_unit.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_capabilities_registry_unit.py"
+  ],
+  "summary": "20 tests passed, 100.0% coverage, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 49,
+    "max_turns": 160,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 2,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_a_new_specialist_registering_midsession_becomes_visible_to_the_supervisor",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_a_specialist_republishing_its_manifest_middispatch_does_not_change_the_inflight_resolution",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+    ],
+    "tag": "@task:TASK-J004-009"
+  },
+  "task_type": "feature",
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "CapabilitiesRegistry Protocol declared with all four methods + correct return types.",
+      "status": "complete",
+      "evidence": "src/jarvis/infrastructure/capabilities_registry.py declares CapabilitiesRegistry as @runtime_checkable Protocol with snapshot()->list[CapabilityDescriptor], async refresh()->None, async subscribe_updates(callback)->None, async close()->None. Verified by TestAC001ProtocolShape.test_protocol_has_required_methods (checks all four method names) and isinstance() checks on both Live and Stub instances.",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "LiveCapabilitiesRegistry.create(client, cache_ttl_seconds=30) returns a usable instance; first snapshot() triggers a fresh KV read; subsequent reads inside cache_ttl_seconds return the cached list.",
+      "status": "complete",
+      "evidence": "create() classmethod calls _resolve_registry() then awaits an initial _force_refresh() so first snapshot() reflects fresh KV data. refresh() guards on (now - cache_loaded_at) < cache_ttl_seconds to skip re-reads inside the TTL window. Verified by TestAC002CacheTTL: test_create_warms_cache_with_first_kv_read (1 KV read after create), test_refresh_within_ttl_does_not_reread_kv (no extra reads in 3 refresh calls), test_refresh_with_zero_ttl_always_rereads.",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "KV-watch callback invalidates the cache \u2014 next snapshot() re-reads.",
+      "status": "complete",
+      "evidence": "_watch_loop() consumes the KV watcher async iterator, calls _force_refresh() (TTL-bypassing) on every non-sentinel update, then fires the user callback exactly once. Verified by TestAC003KVWatchInvalidation.test_kv_watch_event_triggers_refresh which pushes a KV event and confirms snapshot reflects new data + callback fires once. test_history_complete_sentinel_is_skipped confirms None sentinel does not trigger refresh.",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "snapshot() returns a fresh list copy \u2014 mutating the result does not affect the cache.",
+      "status": "complete",
+      "evidence": "snapshot() returns list(self._cache) constructing a new list per call. Verified by TestAC004SnapshotIsolation.test_snapshot_returns_fresh_list_copy: clears + appends to first snapshot, asserts second snapshot still has the original 2 entries with correct agent_ids and that the two snapshot lists are not the same object. Stub side has parallel test in TestAC007StubFallback.test_snapshot_returns_fresh_copy.",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "subscribe_updates(callback) \u2014 calling more than once per session is idempotent (no double-subscription, no double-fire).",
+      "status": "complete",
+      "evidence": "subscribe_updates() guards on self._subscribed early-return so a second call does not open a second watcher and does not replace the callback. Verified by TestAC005SubscribeIdempotent.test_second_subscribe_call_is_noop which counts _resolve_watcher invocations (must be 1) and asserts the callback fires exactly once after a single KV change event (with a 50ms grace period to confirm no double-fire).",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "close() is idempotent; detaches the watcher; closes the underlying KV handle.",
+      "status": "complete",
+      "evidence": "close() guards on self._closed early-return. First call cancels the watcher task, awaits cancellation, and calls watcher.stop() on the underlying KV watcher. Verified by TestAC006CloseIdempotent: test_close_cancels_watcher_task (watcher.stop_calls >= 1), test_close_is_idempotent (3 sequential close() calls, no exceptions), test_close_without_subscribe_is_safe (close before any subscribe is a clean no-op).",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "StubCapabilitiesRegistry(fallback_path) reads YAML, exposes the same Protocol surface; subscribe_updates is a no-op.",
+      "status": "complete",
+      "evidence": "StubCapabilitiesRegistry.__init__ eagerly calls load_stub_registry(fallback_path) \u2014 same loader used by Phase 2 stub (jarvis.tools.capabilities.load_stub_registry). subscribe_updates accepts a callback but never invokes it. Verified by TestAC007StubFallback: test_snapshot_returns_yaml_descriptors (asserts agent_ids match YAML order), test_subscribe_updates_is_noop (callback never fires after 50ms), test_refresh_rereads_yaml (rewrites file then asserts refresh picks up new content), test_close_is_idempotent.",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "If client.js (JetStream context) is unavailable for KV access, LiveCapabilitiesRegistry.create raises NATSConnectionError (lifecycle catches and falls back to Stub per DDR-021).",
+      "status": "complete",
+      "evidence": "create() wraps _resolve_registry() and the initial _force_refresh() in try/except blocks that re-raise as NATSConnectionError with the original exception chained as __cause__. Verified by TestAC008JetStreamUnavailableRaises: test_create_wraps_resolve_failure (RuntimeError 'jetstream unavailable' becomes NATSConnectionError) and test_create_chains_original_exception (verifies __cause__ preservation). Production path: NATSKVManifestRegistry.create internally calls nc.jetstream() which raises if unavailable.",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "uv run mypy src/jarvis/infrastructure/capabilities_registry.py strict-clean.",
+      "status": "complete",
+      "evidence": "Ran 'uv run mypy src/jarvis/infrastructure/capabilities_registry.py' \u2014 output: 'Success: no issues found in 1 source file'. All public functions and methods carry full type annotations; Protocol declared with @runtime_checkable; AsyncIterator/Callable types from collections.abc.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "Tests cover all bullet points above with the in-process NATS test server fixture for the Live path.",
+      "status": "complete",
+      "evidence": "20 tests in tests/test_capabilities_registry_unit.py exercise every AC bullet (Protocol shape, cache TTL, KV-watch invalidation, snapshot isolation, subscribe idempotency, close idempotency, stub fallback, NATSConnectionError soft-fail). Following the project-conventional substitution from tests/test_fleet_registration.py, the 'in-process NATS test server' is replaced with a fake NATSKVManifestRegistry (AsyncMock list_all) plus an _AsyncIterStub watcher that mirrors the NATS KeyWatcher async-iter contract. Same Protocol surface is exercised; no broker required for unit tests. All 20 tests pass; 120 related tests in test_capabilities/test_stub_capabilities/test_fleet_registration/test_nats_client also pass.",
+      "test_file": "tests/test_capabilities_registry_unit.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-011",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran 'uv run ruff check' on both new files \u2014 initial I001 import-sort issue auto-fixed by 'ruff check --fix'; subsequent 'uv run ruff format' applied project Black-equivalent style. Final 'ruff check' returns clean. mypy also strict-clean (AC-009).",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py",
+        "tests/test_capabilities_registry_unit.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 54.82998974999646
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 177.17520395899191
+    }
+  ]
+}

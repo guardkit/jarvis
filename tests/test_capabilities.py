@@ -350,9 +350,27 @@ class TestModuleIsLeaf:
         )
 
     def test_no_forbidden_static_imports(self) -> None:
+        """capabilities.py must be a leaf at *runtime* — TYPE_CHECKING imports
+        are excluded from this check (FEAT-JARVIS-004 references the
+        ``CapabilitiesRegistry`` Protocol type only under ``TYPE_CHECKING``)."""
         tree = ast.parse(self._capabilities_path().read_text(encoding="utf-8"))
+
+        def _is_type_checking_guard(node: ast.AST) -> bool:
+            if not isinstance(node, ast.If):
+                return False
+            test = node.test
+            if isinstance(test, ast.Name) and test.id == "TYPE_CHECKING":
+                return True
+            if isinstance(test, ast.Attribute):
+                return test.attr == "TYPE_CHECKING"
+            return False
+
         imports: list[str] = []
-        for node in ast.walk(tree):
+        for node in tree.body:
+            if _is_type_checking_guard(node):
+                # Skip the TYPE_CHECKING block — those imports do not
+                # create a runtime dependency.
+                continue
             if isinstance(node, ast.Import):
                 imports.extend(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
@@ -373,11 +391,16 @@ class TestModuleIsLeaf:
 # Capability-catalogue tools — TASK-J002-012
 # ---------------------------------------------------------------------------
 
-# Exact strings from API-tools.md §2.2 / §2.3 (and the matching task
-# acceptance criteria). Kept as module-level constants so a docstring drift
-# in API-tools.md is caught by the tests, not silently shipped.
-EXPECTED_REFRESH_OK = (
-    "OK: refresh queued (stubbed in Phase 2 — in-memory registry is always fresh)"
+# Exact strings from API-tools.md (FEAT-JARVIS-002 §2.3 + FEAT-JARVIS-004
+# §4). Kept as module-level constants so a docstring drift in API-tools.md
+# is caught by the tests, not silently shipped.
+#
+# FEAT-JARVIS-004 (TASK-J004-012) swapped the ``capabilities_refresh``
+# return surface from the Phase 2 acknowledgement to the KV-backed
+# OK / DEGRADED pair. The subscribe OK string is unchanged across phases.
+EXPECTED_REFRESH_OK = "OK: refresh queued — registry resynchronised"
+EXPECTED_REFRESH_DEGRADED = (
+    "DEGRADED: transport_unavailable — NATS connection failed"
 )
 EXPECTED_SUBSCRIBE_OK = "OK: subscribed (stubbed in Phase 2 — no live updates)"
 
@@ -418,27 +441,88 @@ def _sample_registry() -> list[CapabilityDescriptor]:
     ]
 
 
+class _ListBackedRegistry:
+    """Test adapter wrapping a ``list[CapabilityDescriptor]`` as a
+    :class:`jarvis.infrastructure.capabilities_registry.CapabilitiesRegistry`.
+
+    FEAT-JARVIS-004 (TASK-J004-012) swapped ``_capability_registry``'s type
+    from ``list[CapabilityDescriptor]`` to ``CapabilitiesRegistry | None``.
+    The legacy Phase 2 tests in this module want to assert on a known list
+    of descriptors; this adapter exposes them through the new Protocol
+    surface (``snapshot/refresh/subscribe_updates/close``) so the tools'
+    new bodies can call ``.snapshot()`` on them unchanged.
+    """
+
+    def __init__(self, descriptors: list[CapabilityDescriptor]) -> None:
+        self._descriptors = descriptors
+        self.refresh_calls = 0
+        self.subscribe_calls = 0
+
+    def snapshot(self) -> list[CapabilityDescriptor]:
+        # Return a fresh ``list`` copy on every call to satisfy the
+        # ASSUM-006 snapshot-isolation contract.
+        return list(self._descriptors)
+
+    async def refresh(self) -> None:
+        self.refresh_calls += 1
+
+    async def subscribe_updates(self, callback: object) -> None:
+        self.subscribe_calls += 1
+
+    async def close(self) -> None:
+        return None
+
+
 @pytest.fixture()
 def bound_registry() -> Generator[list[CapabilityDescriptor], None, None]:
-    """Bind a fresh registry into the capabilities module for the test scope."""
+    """Bind a fresh registry into the capabilities module for the test scope.
+
+    The fixture yields the underlying ``list[CapabilityDescriptor]`` (so
+    tests can assert against the descriptors directly) and resets the
+    module-level subscribe-idempotency flag on entry/exit so tests stay
+    isolated.
+    """
     saved = capabilities_module._capability_registry
-    fresh = _sample_registry()
-    capabilities_module._capability_registry = fresh
+    saved_subscribed = capabilities_module._subscribe_invoked
+    descriptors = _sample_registry()
+    capabilities_module._capability_registry = _ListBackedRegistry(descriptors)
+    capabilities_module._subscribe_invoked = False
     try:
-        yield fresh
+        yield descriptors
     finally:
         capabilities_module._capability_registry = saved
+        capabilities_module._subscribe_invoked = saved_subscribed
 
 
 @pytest.fixture()
 def empty_registry() -> Generator[None, None, None]:
     """Bind an empty registry into the capabilities module for the test scope."""
     saved = capabilities_module._capability_registry
-    capabilities_module._capability_registry = []
+    saved_subscribed = capabilities_module._subscribe_invoked
+    capabilities_module._capability_registry = _ListBackedRegistry([])
+    capabilities_module._subscribe_invoked = False
     try:
         yield
     finally:
         capabilities_module._capability_registry = saved
+        capabilities_module._subscribe_invoked = saved_subscribed
+
+
+@pytest.fixture()
+def configured_registry() -> Generator[None, None, None]:
+    """Ensure a non-None registry is wired (used by refresh/subscribe tests
+    that don't care about the descriptor contents)."""
+    saved = capabilities_module._capability_registry
+    saved_subscribed = capabilities_module._subscribe_invoked
+    capabilities_module._capability_registry = _ListBackedRegistry(
+        _sample_registry()
+    )
+    capabilities_module._subscribe_invoked = False
+    try:
+        yield
+    finally:
+        capabilities_module._capability_registry = saved
+        capabilities_module._subscribe_invoked = saved_subscribed
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +580,8 @@ class TestAC002DocstringContract:
     """AC-002 — docstrings match the authoritative API-tools.md text."""
 
     def test_list_available_capabilities_docstring_phrases(self) -> None:
-        """Spot-check the §2.1 contract phrases the reasoning model relies on."""
+        """Spot-check the §3 (FEAT-J004) contract phrases the reasoning
+        model relies on."""
         # ``parse_docstring=True`` strips the Returns: section out of
         # ``tool.description`` (it becomes the schema), so we check both the
         # truncated description and the full ``func.__doc__`` original.
@@ -504,29 +589,48 @@ class TestAC002DocstringContract:
         full_doc = list_available_capabilities.func.__doc__ or ""
         assert "Return the current fleet capability catalogue as JSON." in description
         assert "## Available Capabilities" in description
-        assert "in-memory stub registry" in description
+        # FEAT-JARVIS-004 (TASK-J004-012) replaced the Phase 2 stub
+        # paragraph with the new latency line — the model now sees the
+        # cached-live-registry timing instead of the in-memory stub note.
+        assert "in-memory stub registry" not in description
+        assert "<30ms (cached live registry" in description
         # The Returns: section names the only contract-defined error string.
         assert "ERROR: registry_unavailable" in full_doc
 
     def test_capabilities_refresh_docstring_phrases(self) -> None:
-        """Spot-check the §2.2 contract phrases."""
+        """Spot-check the FEAT-J004 §4 contract phrases."""
         description = capabilities_refresh.description or ""
         full_doc = capabilities_refresh.func.__doc__ or ""
         assert "Invalidate the cached capability catalogue" in description
-        assert "STUB in Phase 2" in description
-        # The exact OK string lives in the Returns: section.
+        # FEAT-JARVIS-004: Phase 2 stub paragraph deleted; replaced by the
+        # NATS KV re-read behavioural line.
+        assert "STUB in Phase 2" not in description
+        assert "NATSKVManifestRegistry" in description
+        # The exact OK / DEGRADED strings live in the Returns: section.
         assert EXPECTED_REFRESH_OK in full_doc
+        assert EXPECTED_REFRESH_DEGRADED in full_doc
 
     def test_capabilities_subscribe_updates_docstring_phrases(self) -> None:
-        """Spot-check the §2.3 contract phrases."""
+        """Spot-check the FEAT-J004 §5 contract phrases."""
         description = capabilities_subscribe_updates.description or ""
         full_doc = capabilities_subscribe_updates.func.__doc__ or ""
         assert "Subscribe the current session" in description
-        assert "STUB in Phase 2" in description
+        # FEAT-JARVIS-004: Phase 2 stub paragraph deleted; replaced by the
+        # NATS KV watcher / idempotency behavioural line.
+        assert "STUB in Phase 2" not in description
+        assert "NATS KV watcher" in description
+        assert "Idempotent" in description
         assert EXPECTED_SUBSCRIBE_OK in full_doc
 
-    def test_swap_point_grep_anchor_present(self) -> None:
-        """The ``stubbed in Phase 2`` swap-point grep anchor must be in the file."""
+    def test_phase2_swap_targets_were_removed(self) -> None:
+        """FEAT-JARVIS-004 swapped the Phase 2 stubs; the grep-anchor is gone.
+
+        TASK-J002-021's pre-FEAT-J004 invariant required at least two
+        ``stubbed in Phase 2`` substrings in the module (the constant and
+        the docstrings). FEAT-J004 §3-§5 deleted those paragraphs and the
+        ``_REFRESH_OK_MESSAGE`` constant; the only surviving occurrence is
+        the ``_SUBSCRIBE_OK_MESSAGE`` literal that the model has been
+        reading byte-identical since Phase 2."""
         path = (
             pathlib.Path(__file__).resolve().parent.parent
             / "src"
@@ -535,9 +639,13 @@ class TestAC002DocstringContract:
             / "capabilities.py"
         )
         text = path.read_text(encoding="utf-8")
-        # Per task swap_point_note: a future Phase-3 patch greps for this
-        # exact substring inside capabilities.py to find the swap targets.
-        assert text.count("stubbed in Phase 2") >= 2
+        # The deleted Phase 2 paragraphs each contained
+        # ``stubbed in Phase 2``; only the literal in the SUBSCRIBE
+        # constant should remain (count ≤ 2 — the value AND its repeat in
+        # the docstring's Returns: line).
+        assert "STUB in Phase 2" not in text
+        # The deleted ``_REFRESH_OK_MESSAGE`` constant must not survive.
+        assert "_REFRESH_OK_MESSAGE" not in text
 
 
 # ---------------------------------------------------------------------------
@@ -581,7 +689,10 @@ class TestAC003ListReturnsJsonSnapshot:
     ) -> None:
         """Rebinding ``_capability_registry`` after the call must not retro-mutate the JSON."""
         before = list_available_capabilities.invoke({})
-        capabilities_module._capability_registry = []
+        # Swap the registry handle out for an empty-list-backed adapter
+        # (FEAT-JARVIS-004: the swap-point now holds a Protocol object,
+        # not a list).
+        capabilities_module._capability_registry = _ListBackedRegistry([])
         after = list_available_capabilities.invoke({})
         # The first call's serialised string is captured as a value — no
         # references back into the registry list — so it is unaffected by
@@ -600,12 +711,16 @@ class TestAC003ListReturnsJsonSnapshot:
 
 
 class TestAC004CapabilitiesRefreshOk:
-    """AC-004 — refresh returns the exact stub acknowledgement."""
+    """AC-004 — refresh returns the FEAT-JARVIS-004 KV-backed OK string."""
 
-    def test_returns_exact_ok_string(self) -> None:
+    def test_returns_exact_ok_string(
+        self, configured_registry: None
+    ) -> None:
         assert capabilities_refresh.invoke({}) == EXPECTED_REFRESH_OK
 
-    def test_call_is_idempotent(self) -> None:
+    def test_call_is_idempotent(
+        self, configured_registry: None
+    ) -> None:
         """Repeated calls return the same byte-exact string."""
         first = capabilities_refresh.invoke({})
         second = capabilities_refresh.invoke({})
@@ -613,12 +728,16 @@ class TestAC004CapabilitiesRefreshOk:
 
 
 class TestAC005CapabilitiesSubscribeUpdatesOk:
-    """AC-005 — subscribe returns the exact stub acknowledgement."""
+    """AC-005 — subscribe returns the OK acknowledgement (unchanged across phases)."""
 
-    def test_returns_exact_ok_string(self) -> None:
+    def test_returns_exact_ok_string(
+        self, configured_registry: None
+    ) -> None:
         assert capabilities_subscribe_updates.invoke({}) == EXPECTED_SUBSCRIBE_OK
 
-    def test_call_is_idempotent(self) -> None:
+    def test_call_is_idempotent(
+        self, configured_registry: None
+    ) -> None:
         first = capabilities_subscribe_updates.invoke({})
         second = capabilities_subscribe_updates.invoke({})
         assert first == second == EXPECTED_SUBSCRIBE_OK
@@ -649,8 +768,13 @@ class TestAC006NeverRaisesStructuredErrors:
     def test_list_available_capabilities_returns_structured_error_on_failure(
         self,
     ) -> None:
+        # FEAT-JARVIS-004: the registry surface is a Protocol object whose
+        # ``snapshot()`` returns descriptors. Wrap a boom descriptor so the
+        # serialiser path explodes on ``model_dump`` deterministically.
         saved = capabilities_module._capability_registry
-        capabilities_module._capability_registry = [_BoomDescriptor()]  # type: ignore[list-item]
+        capabilities_module._capability_registry = _ListBackedRegistry(
+            [_BoomDescriptor()]  # type: ignore[list-item]
+        )
         try:
             result = list_available_capabilities.invoke({})
         finally:
@@ -661,7 +785,9 @@ class TestAC006NeverRaisesStructuredErrors:
 
     def test_list_available_capabilities_never_raises(self) -> None:
         saved = capabilities_module._capability_registry
-        capabilities_module._capability_registry = [_BoomDescriptor()]  # type: ignore[list-item]
+        capabilities_module._capability_registry = _ListBackedRegistry(
+            [_BoomDescriptor()]  # type: ignore[list-item]
+        )
         try:
             list_available_capabilities.invoke({})  # must not raise
         except Exception as exc:  # pragma: no cover - guard regression
@@ -669,13 +795,13 @@ class TestAC006NeverRaisesStructuredErrors:
         finally:
             capabilities_module._capability_registry = saved
 
-    def test_refresh_never_raises(self) -> None:
+    def test_refresh_never_raises(self, configured_registry: None) -> None:
         try:
             capabilities_refresh.invoke({})
         except Exception as exc:  # pragma: no cover - guard regression
             pytest.fail(f"capabilities_refresh raised {exc!r}")
 
-    def test_subscribe_never_raises(self) -> None:
+    def test_subscribe_never_raises(self, configured_registry: None) -> None:
         try:
             capabilities_subscribe_updates.invoke({})
         except Exception as exc:  # pragma: no cover - guard regression

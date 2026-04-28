@@ -83,6 +83,67 @@ class JarvisConfig(BaseSettings):
     # (ADR-ARCH-016 consumer-surface list).
     attended_adapter_ids: frozenset[str] = frozenset({"telegram", "cli", "dashboard", "reachy"})
 
+    # -- FEAT-JARVIS-004: NATS / fleet / dispatch / Graphiti settings --------
+    # See docs/design/FEAT-JARVIS-004/contracts/API-internal.md §8 for the
+    # authoritative field list. This module remains dependency-free — no
+    # ``nats-py`` or ``graphiti-core`` import lives here; the typed Python
+    # APIs that consume these values live under ``src/jarvis/infrastructure``.
+
+    # ── NATS ────────────────────────────────────────────
+    # JARVIS_NATS_URL — NATS broker endpoint. Default is the in-process
+    # localhost broker used by the integration test pattern.
+    nats_url: str = "nats://localhost:4222"
+    # JARVIS_NATS_CREDENTIALS_PATH — optional path to a NATS .creds file.
+    # ``None`` means "anonymous / dev broker"; production deployments set
+    # this to the operator-provisioned credentials file.
+    nats_credentials_path: Path | None = None
+    # JARVIS_HEARTBEAT_INTERVAL_SECONDS — fleet heartbeat cadence per
+    # DDR-021/heartbeat. Constrained to 5..300 seconds.
+    heartbeat_interval_seconds: int = Field(default=30, ge=5, le=300)
+
+    # ── Graphiti ────────────────────────────────────────
+    # JARVIS_GRAPHITI_ENDPOINT — Graphiti service endpoint. ``None`` triggers
+    # the DDR-019 soft-fail path (fire-and-forget writes are dropped, the
+    # supervisor stays up).
+    graphiti_endpoint: str | None = None
+    # JARVIS_GRAPHITI_API_KEY — optional Graphiti API key.
+    graphiti_api_key: SecretStr | None = None
+    # JARVIS_TRACES_DIR — local directory for offloaded routing-history
+    # payloads when the Graphiti write path soft-fails. Bound via
+    # ``validation_alias`` so the friendlier ``JARVIS_TRACES_DIR`` env name
+    # resolves to this field instead of the double-prefixed
+    # ``JARVIS_JARVIS_TRACES_DIR`` form the env_prefix would otherwise produce.
+    jarvis_traces_dir: Path = Field(
+        default=Path.home() / ".jarvis" / "traces",
+        validation_alias=AliasChoices(
+            "JARVIS_TRACES_DIR",
+            "jarvis_traces_dir",
+        ),
+    )
+
+    # ── Dispatch ────────────────────────────────────────
+    # JARVIS_SPECIALIST_DISPATCH_TIMEOUT_SECONDS — per-call timeout for
+    # specialist dispatch per DDR-016. Constrained to 5..600 seconds.
+    specialist_dispatch_timeout_seconds: int = Field(default=60, ge=5, le=600)
+    # JARVIS_DISPATCH_CONCURRENT_CAP — concurrent dispatch cap per DDR-020.
+    # Constrained to 1..64.
+    dispatch_concurrent_cap: int = Field(default=8, ge=1, le=64)
+
+    # ── Fleet ───────────────────────────────────────────
+    # JARVIS_AGENT_VERSION — semver string emitted on heartbeat /
+    # registration frames. Tracks the FEAT-JARVIS-004 release. Bound via
+    # ``validation_alias`` so the friendlier ``JARVIS_AGENT_VERSION`` env
+    # name resolves here instead of the double-prefixed
+    # ``JARVIS_JARVIS_AGENT_VERSION`` form.
+    jarvis_agent_version: str = Field(
+        default="0.4.0",
+        pattern=r"^\d+\.\d+\.\d+(?:-[a-z0-9.]+)?$",
+        validation_alias=AliasChoices(
+            "JARVIS_AGENT_VERSION",
+            "jarvis_agent_version",
+        ),
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
         env_file=".env",

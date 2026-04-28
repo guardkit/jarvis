@@ -1,0 +1,181 @@
+{
+  "task_id": "TASK-J004-018",
+  "timestamp": "2026-04-28T13:09:07.010704",
+  "completed": true,
+  "phases": {
+    "phase_1": {
+      "detected": true,
+      "text": "Reading lifecycle module",
+      "completed": false
+    },
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 15,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    "tasks/backlog/TASK-J004-014-fleet-and-capabilities-integration-tests.md",
+    "tasks/backlog/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md",
+    "tasks/backlog/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md",
+    "tasks/backlog/TASK-J004-017-dispatch-slot-release-scenario-outline.md",
+    "tasks/backlog/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md",
+    "tests/conftest.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J004-014-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-015-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-016-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-017-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-018-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-013/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-014/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-015/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-016/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-017/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-018/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-018/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-018/turn_context.json",
+    ".guardkit/bdd/TASK-J004-018_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-018/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_shutdown_order.py",
+    "tasks/design_approved/TASK-J004-014-fleet-and-capabilities-integration-tests.md",
+    "tasks/design_approved/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md",
+    "tasks/design_approved/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md",
+    "tasks/design_approved/TASK-J004-017-dispatch-slot-release-scenario-outline.md",
+    "tasks/design_approved/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md",
+    "tests/test_dispatch_slot_release.py",
+    "tests/test_lifecycle_shutdown_order.py",
+    "tests/test_nats_unavailable.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_shutdown_order.py"
+  ],
+  "summary": "15 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 21,
+    "max_turns": 150,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 1,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_shutdown_drains_inflight_dispatches_and_deregisters_from_the_fleet",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+    ],
+    "tag": "@task:TASK-J004-018"
+  },
+  "task_type": "testing",
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Test verifies the **exact** ordering of all 8 steps via call-order recording.",
+      "status": "complete",
+      "evidence": "TestExactShutdownOrder.test_exact_8_step_sequence asserts the recorded list matches the canonical EXPECTED_ORDER tuple verbatim \u2014 1.heartbeat.cancel, 2.fleet.deregister, 3.capabilities.close, 4.writer.flush, 5.nats.drain, 6.graphiti.aclose, 7.layer2.disarm, 8.store.close. Each step's invocation is captured via MagicMock(side_effect=lambda *a, **kw: calls.append(STEP_NAME)) per the task's Test Requirements; step 7 is observed via a _DispatchProxy on jarvis.infrastructure.lifecycle._dispatch that records the moment _current_session_hook transitions to None. TestPairwiseOrderingInvariants adds 6 additional assertions covering each rationale from the task description (3 before 5, 4 before 5, 2 before 5, 4 before 6, 1 first, 8 last).",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Test fails (descriptively) if any step is skipped, reordered, or duplicated.",
+      "status": "complete",
+      "evidence": "test_exact_8_step_sequence's assertion message prints both expected and actual sequences with a human-readable explanation ('Any reorder, skip, or duplicate would surface a hung pipeline or lost final trace in production'). test_no_step_appears_twice catches duplicates with per-step counts; test_no_step_is_skipped catches skips with a missing-list. Six pairwise tests in TestPairwiseOrderingInvariants each carry a step-specific failure message that names the violated rationale and prints the full call sequence.",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Failure tolerance: a separate test asserts that a single failed step (e.g. deregister_from_fleet raises) does NOT skip subsequent steps \u2014 they all execute, errors are WARN-logged.",
+      "status": "complete",
+      "evidence": "TestFailureToleranceInvariant contains four tests: test_deregister_failure_does_not_skip_subsequent_steps verifies that RuntimeError('broker offline') from deregister leaves all six later steps still observed; test_capabilities_close_failure_does_not_skip_subsequent does the same for the registry; test_nats_drain_failure_does_not_skip_subsequent does it for NATS drain; test_shutdown_does_not_propagate_step_exceptions exercises three simultaneous failures and asserts shutdown returns without raising. Each test uses caplog.at_level(logging.WARNING) so WARN-logged errors are observable; production code already wraps each step in try/except + log.warning per the lifecycle.py implementation.",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Heartbeat cancellation produces no traceback / unhandled-exception warning.",
+      "status": "complete",
+      "evidence": "TestHeartbeatCancellationClean.test_cancellation_no_traceback_in_logs asserts no caplog records carry exc_info and no records exceed logging.ERROR level after shutdown completes. test_cancellation_completes_task_state confirms heartbeat_task.done() and heartbeat_task.cancelled() are both True (clean cancel \u2014 no leaked exception state). The production heartbeat_loop CancelledError contract (re-raise after INFO log) is respected.",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "uv run pytest tests/test_lifecycle_shutdown_order.py -v green.",
+      "status": "complete",
+      "evidence": "Executed: `uv run pytest tests/test_lifecycle_shutdown_order.py -v` \u2014 15 passed in 0.74s. No warnings, no skipped tests, no errors. Confirmed with `uv run pytest tests/ --ignore=tests/test_assemble_tool_list.py` \u2014 1885 passed (the single failure in test_assemble_tool_list.py::TestAC005NoSubmoduleImports is a pre-existing, unrelated issue about jarvis/infrastructure/capabilities_registry.py importing from jarvis.tools.capabilities \u2014 orthogonal to TASK-J004-018).",
+      "test_file": "tests/test_lifecycle_shutdown_order.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 186.67617504199734
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 902.9285006250138
+    }
+  ]
+}

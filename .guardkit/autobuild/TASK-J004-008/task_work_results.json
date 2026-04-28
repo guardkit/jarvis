@@ -1,0 +1,123 @@
+{
+  "task_id": "TASK-J004-008",
+  "timestamp": "2026-04-28T11:03:40.142179",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [],
+  "files_created": [
+    "src/jarvis/infrastructure/dispatch_semaphore.py",
+    "tests/test_dispatch_semaphore.py"
+  ],
+  "tests_written": [
+    "tests/test_dispatch_semaphore.py"
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] `DispatchSemaphore(cap=8)` allows exactly 8 concurrent acquisitions; the 9th `try_acquire()` returns `False` synchronously (no `await`).",
+      "status": "complete",
+      "evidence": "DispatchSemaphore.try_acquire() is a regular def returning bool \u2014 guarded by threading.Lock, increments _in_flight only when _in_flight < _cap, returns False otherwise without mutating state. TestExactCeiling asserts (a) eight successive try_acquire() calls all return True with in_flight==8, (b) the ninth returns False with in_flight still ==8, (c) inspect.iscoroutine / isawaitable on the return value are both False to lock in the synchronous contract per DDR-020.",
+      "test_file": "tests/test_dispatch_semaphore.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/dispatch_semaphore.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] `release()` after a successful `try_acquire()` returns the slot.",
+      "status": "complete",
+      "evidence": "release() decrements _in_flight by 1 under the lock when _in_flight > 0. TestReleaseOnSuccess covers (a) acquire+release leaves in_flight==0, (b) post-release a new try_acquire succeeds even after the cap was previously reached, (c) the timeout path (try_acquire\u2192raise TimeoutError\u2192except\u2192release), (d) the exception path (try_acquire\u2192raise RuntimeError\u2192except\u2192release) \u2014 both return the slot to in_flight==0.",
+      "test_file": "tests/test_dispatch_semaphore.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/dispatch_semaphore.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] `release()` without a matching acquire is a no-op (no exception, no underflow).",
+      "status": "complete",
+      "evidence": "release() early-returns when _in_flight <= 0 \u2014 no decrement, no exception. TestReleaseIdempotency covers (a) release on a fresh semaphore is a no-op, (b) double release after a single acquire stays at 0 without raising, (c) 20 spurious releases stay at 0, (d) an overflow-release sequence does not 'owe' the caller a free slot \u2014 three releases against two acquires still cap try_acquire at the configured ceiling.",
+      "test_file": "tests/test_dispatch_semaphore.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/dispatch_semaphore.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] `in_flight` reflects acquired slots accurately at any inspection point.",
+      "status": "complete",
+      "evidence": "in_flight is exposed as a @property that reads _in_flight under the lock; cap exposes _cap for diagnostics. TestInFlightAccuracy covers zero-init, monotonic increment per acquire (1..8), monotonic decrement per release, unchanged on overflow (snapshot==2 across the failing 3rd try_acquire), read-only enforcement (assigning to in_flight raises AttributeError), and the cap property.",
+      "test_file": "tests/test_dispatch_semaphore.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/dispatch_semaphore.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] `tests/test_dispatch_semaphore.py` covers: exact ceiling (8 OK, 9th False); release on success; release on timeout; release on exception path; double-release idempotency; `in_flight` accuracy.",
+      "status": "complete",
+      "evidence": "tests/test_dispatch_semaphore.py contains 21 tests organised into five class buckets that mirror the AC list: TestExactCeiling (6 tests, AC-001), TestReleaseOnSuccess (4 tests including the timeout and exception paths, AC-002), TestReleaseIdempotency (4 tests, AC-003), TestInFlightAccuracy (6 tests, AC-004), TestDispatchUsageShape (1 asyncio integration test asserting the try_acquire/try/finally usage shape from inside an async caller). Per the task's Test Requirements \u00a71, no mocks \u2014 the tests exercise the real DispatchSemaphore end-to-end. Full suite passes: '21 passed in 1.31s'.",
+      "test_file": "tests/test_dispatch_semaphore.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/dispatch_semaphore.py",
+        "tests/test_dispatch_semaphore.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] `uv run mypy src/jarvis/infrastructure/dispatch_semaphore.py` strict-clean.",
+      "status": "complete",
+      "evidence": "Module uses `from __future__ import annotations`, fully annotates __init__ / try_acquire / release / in_flight / cap with primitive types and threading.Lock, and declares __all__. Verified: `uv run mypy src/jarvis/infrastructure/dispatch_semaphore.py` \u2192 'Success: no issues found in 1 source file' under the project's strict=True / warn_unused_ignores / warn_return_any / warn_unreachable mypy config (pyproject.toml [tool.mypy]).",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/dispatch_semaphore.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Verified against the project's [tool.ruff] config (line-length=100, target=py312, select=E/F/I/W/UP/B/SIM/RUF). `uv run ruff check src/jarvis/infrastructure/dispatch_semaphore.py tests/test_dispatch_semaphore.py` \u2192 'All checks passed!'. `uv run ruff format --check` on the same paths \u2192 '2 files already formatted'. No edits to existing files, so no other lint/format surface was touched.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/dispatch_semaphore.py",
+        "tests/test_dispatch_semaphore.py"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,166 @@
+{
+  "task_id": "TASK-J004-003",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_config_settings.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_config_settings.py .......................................... [ 85%]\ntests/test_config_settings.py::TestAC001NewFieldsAndDefaults::test_default_nats_url_is_localhost\n======================== 49 passed, 1 warning in 0.33s =========================",
+      "duration_seconds": 1.18342924118042
+    },
+    "requirements": {
+      "criteria_total": 8,
+      "criteria_met": 8,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Nine fields added to `JarvisConfig` with the exact validators above.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added all nine fields (nats_url, nats_credentials_path, heartbeat_interval_seconds, graphiti_endpoint, graphiti_api_key, jarvis_traces_dir, specialist_dispatch_timeout_seconds, dispatch_concurrent_cap, jarvis_agent_version) to JarvisConfig in src/jarvis/config/settings.py under a clearly delimited FEAT-JARVIS-004 block. Types, defaults, and validators match API-internal.md \u00a78 verbatim. TestAC001NewFieldsAndDefaults verifies each field's default value and TestAC001 final test inspects type hints to confirm Path | None / SecretStr | None / int / str shapes match the contract.",
+      "notes": "Added all nine fields (nats_url, nats_credentials_path, heartbeat_interval_seconds, graphiti_endpoint, graphiti_api_key, jarvis_traces_dir, specialist_dispatch_timeout_seconds, dispatch_concurrent_cap, jarvis_agent_version) to JarvisConfig in src/jarvis/config/settings.py under a clearly delimited FEAT-JARVIS-004 block. Types, defaults, and validators match API-internal.md \u00a78 verbatim. TestAC001NewFieldsAndDefaults verifies each field's default value and TestAC001 final test inspects type hints to confirm Path | None / SecretStr | None / int / str shapes match the contract."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`Field(ge=, le=)` constraints applied per DDR-016 (timeout 5..600), DDR-020 (cap 1..64), DDR-021/heartbeat (5..300).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "specialist_dispatch_timeout_seconds uses Field(default=60, ge=5, le=600) per DDR-016; dispatch_concurrent_cap uses Field(default=8, ge=1, le=64) per DDR-020; heartbeat_interval_seconds uses Field(default=30, ge=5, le=300) per DDR-021/heartbeat. TestAC002RangeConstraints covers boundary rejection for all three: timeout=4 raises (DDR-016 floor), timeout=601 raises (ceiling), cap=0 raises (DDR-020 floor), cap=65 raises (ceiling), heartbeat=4 raises (DDR-021 floor), heartbeat=301 raises (ceiling). In-range parametrized tests confirm 5/60/600, 1/8/64, 5/30/300 are all accepted.",
+      "notes": "specialist_dispatch_timeout_seconds uses Field(default=60, ge=5, le=600) per DDR-016; dispatch_concurrent_cap uses Field(default=8, ge=1, le=64) per DDR-020; heartbeat_interval_seconds uses Field(default=30, ge=5, le=300) per DDR-021/heartbeat. TestAC002RangeConstraints covers boundary rejection for all three: timeout=4 raises (DDR-016 floor), timeout=601 raises (ceiling), cap=0 raises (DDR-020 floor), cap=65 raises (ceiling), heartbeat=4 raises (DDR-021 floor), heartbeat=301 raises (ceiling). In-range parametrized tests confirm 5/60/600, 1/8/64, 5/30/300 are all accepted."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`jarvis_agent_version` defaults to `\"0.4.0\"` with semver regex validator.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "jarvis_agent_version: str = Field(default='0.4.0', pattern=r'^\\d+\\.\\d+\\.\\d+(?:-[a-z0-9.]+)?$', validation_alias=AliasChoices('JARVIS_AGENT_VERSION', 'jarvis_agent_version')). TestAC003JarvisAgentVersionSemver parametrized tests confirm valid semver inputs (0.4.0, 1.2.3, 10.20.30, 0.4.0-rc1, 0.4.0-alpha.1, 1.0.0-beta.2) accepted and invalid inputs (0.4, v0.4.0, 0.4.0.0, not-a-version, empty string, 1.2.3-UPPER) raise ValidationError.",
+      "notes": "jarvis_agent_version: str = Field(default='0.4.0', pattern=r'^\\d+\\.\\d+\\.\\d+(?:-[a-z0-9.]+)?$', validation_alias=AliasChoices('JARVIS_AGENT_VERSION', 'jarvis_agent_version')). TestAC003JarvisAgentVersionSemver parametrized tests confirm valid semver inputs (0.4.0, 1.2.3, 10.20.30, 0.4.0-rc1, 0.4.0-alpha.1, 1.0.0-beta.2) accepted and invalid inputs (0.4, v0.4.0, 0.4.0.0, not-a-version, empty string, 1.2.3-UPPER) raise ValidationError."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`.env.example` (if present) updated with stub entries for each `JARVIS_*` env var, marked optional.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Appended a new 'FEAT-JARVIS-004 \u2014 Fleet registration + specialist dispatch' section to .env.example with stub entries for JARVIS_NATS_URL, JARVIS_NATS_CREDENTIALS_PATH, JARVIS_HEARTBEAT_INTERVAL_SECONDS, JARVIS_GRAPHITI_ENDPOINT, JARVIS_GRAPHITI_API_KEY, JARVIS_TRACES_DIR, JARVIS_SPECIALIST_DISPATCH_TIMEOUT_SECONDS, JARVIS_DISPATCH_CONCURRENT_CAP, JARVIS_AGENT_VERSION. All entries are commented out and the section header explicitly states 'All values below are OPTIONAL \u2014 defaults \u2026 yield a working zero-env developer setup.'",
+      "notes": "Appended a new 'FEAT-JARVIS-004 \u2014 Fleet registration + specialist dispatch' section to .env.example with stub entries for JARVIS_NATS_URL, JARVIS_NATS_CREDENTIALS_PATH, JARVIS_HEARTBEAT_INTERVAL_SECONDS, JARVIS_GRAPHITI_ENDPOINT, JARVIS_GRAPHITI_API_KEY, JARVIS_TRACES_DIR, JARVIS_SPECIALIST_DISPATCH_TIMEOUT_SECONDS, JARVIS_DISPATCH_CONCURRENT_CAP, JARVIS_AGENT_VERSION. All entries are commented out and the section header explicitly states 'All values below are OPTIONAL \u2014 defaults \u2026 yield a working zero-env developer setup.'"
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`tests/test_config_settings.py` (new or extended) covers: out-of-range rejection (timeout=4 \u2192 ValidationError; cap=0 \u2192 ValidationError; heartbeat=4 \u2192 ValidationError); env-prefix resolution (`JARVIS_NATS_URL` \u2192 `nats_url`); default values applied when env vars absent.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Created tests/test_config_settings.py (49 tests, all pass). Out-of-range rejection covered by TestAC002RangeConstraints (test_dispatch_timeout_below_floor_raises with value=4, test_dispatch_cap_zero_raises with value=0, test_heartbeat_below_floor_raises with value=4). Env-prefix resolution covered by TestAC005EnvPrefixResolution (test_jarvis_nats_url_env_var asserts JARVIS_NATS_URL='nats://test:4222' resolves to cfg.nats_url, plus equivalent tests for every other field). Defaults-when-unset covered by TestAC001NewFieldsAndDefaults (per-field tests) and the consolidated test_defaults_applied_when_env_unset.",
+      "notes": "Created tests/test_config_settings.py (49 tests, all pass). Out-of-range rejection covered by TestAC002RangeConstraints (test_dispatch_timeout_below_floor_raises with value=4, test_dispatch_cap_zero_raises with value=0, test_heartbeat_below_floor_raises with value=4). Env-prefix resolution covered by TestAC005EnvPrefixResolution (test_jarvis_nats_url_env_var asserts JARVIS_NATS_URL='nats://test:4222' resolves to cfg.nats_url, plus equivalent tests for every other field). Defaults-when-unset covered by TestAC001NewFieldsAndDefaults (per-field tests) and the consolidated test_defaults_applied_when_env_unset."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "No `nats-py` or `graphiti-core` import inside `settings.py` \u2014 keep this module dependency-free.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "settings.py imports only stdlib (logging, warnings, pathlib, typing, __future__), pydantic (AliasChoices, Field, SecretStr, field_validator), pydantic_settings (BaseSettings, SettingsConfigDict), and jarvis.shared.exceptions.ConfigurationError. No 'import nats' / 'from nats' / 'import graphiti' / 'from graphiti' lines exist. Verified statically by TestAC006SettingsModuleDependencyFree (test_settings_source_does_not_import_nats and test_settings_source_does_not_import_graphiti read the module source via __file__ and assert absence of import statements).",
+      "notes": "settings.py imports only stdlib (logging, warnings, pathlib, typing, __future__), pydantic (AliasChoices, Field, SecretStr, field_validator), pydantic_settings (BaseSettings, SettingsConfigDict), and jarvis.shared.exceptions.ConfigurationError. No 'import nats' / 'from nats' / 'import graphiti' / 'from graphiti' lines exist. Verified statically by TestAC006SettingsModuleDependencyFree (test_settings_source_does_not_import_nats and test_settings_source_does_not_import_graphiti read the module source via __file__ and assert absence of import statements)."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "`uv run mypy src/jarvis/config/` passes.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `uv run mypy src/jarvis/config/` \u2192 'Success: no issues found in 2 source files'. New fields use straightforward annotations (str, Path | None, int, SecretStr | None) that mypy resolves without complaint; pattern= and ge/le constraints live inside Field() and don't affect static types.",
+      "notes": "Ran `uv run mypy src/jarvis/config/` \u2192 'Success: no issues found in 2 source files'. New fields use straightforward annotations (str, Path | None, int, SecretStr | None) that mypy resolves without complaint; pattern= and ge/le constraints live inside Field() and don't affect static types."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `uv run ruff check src/jarvis/config/settings.py tests/test_config_settings.py` \u2192 'All checks passed!'. Ran `uv run ruff format --check src/jarvis/config/settings.py tests/test_config_settings.py` \u2192 '2 files already formatted'. .env.example is config text, not source \u2014 not subject to ruff.",
+      "notes": "Ran `uv run ruff check src/jarvis/config/settings.py tests/test_config_settings.py` \u2192 'All checks passed!'. Ran `uv run ruff format --check src/jarvis/config/settings.py tests/test_config_settings.py` \u2192 '2 files already formatted'. .env.example is config text, not source \u2014 not subject to ruff."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "Nine fields added to `JarvisConfig` with the exact validators above.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added all nine fields (nats_url, nats_credentials_path, heartbeat_interval_seconds, graphiti_endpoint, graphiti_api_key, jarvis_traces_dir, specialist_dispatch_timeout_seconds, dispatch_concurrent_cap, jarvis_agent_version) to JarvisConfig in src/jarvis/config/settings.py under a clearly delimited FEAT-JARVIS-004 block. Types, defaults, and validators match API-internal.md \u00a78 verbatim. TestAC001NewFieldsAndDefaults verifies each field's default value and TestAC001 final test inspects type hints to confirm Path | None / SecretStr | None / int / str shapes match the contract.",
+        "notes": "Added all nine fields (nats_url, nats_credentials_path, heartbeat_interval_seconds, graphiti_endpoint, graphiti_api_key, jarvis_traces_dir, specialist_dispatch_timeout_seconds, dispatch_concurrent_cap, jarvis_agent_version) to JarvisConfig in src/jarvis/config/settings.py under a clearly delimited FEAT-JARVIS-004 block. Types, defaults, and validators match API-internal.md \u00a78 verbatim. TestAC001NewFieldsAndDefaults verifies each field's default value and TestAC001 final test inspects type hints to confirm Path | None / SecretStr | None / int / str shapes match the contract."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "`Field(ge=, le=)` constraints applied per DDR-016 (timeout 5..600), DDR-020 (cap 1..64), DDR-021/heartbeat (5..300).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "specialist_dispatch_timeout_seconds uses Field(default=60, ge=5, le=600) per DDR-016; dispatch_concurrent_cap uses Field(default=8, ge=1, le=64) per DDR-020; heartbeat_interval_seconds uses Field(default=30, ge=5, le=300) per DDR-021/heartbeat. TestAC002RangeConstraints covers boundary rejection for all three: timeout=4 raises (DDR-016 floor), timeout=601 raises (ceiling), cap=0 raises (DDR-020 floor), cap=65 raises (ceiling), heartbeat=4 raises (DDR-021 floor), heartbeat=301 raises (ceiling). In-range parametrized tests confirm 5/60/600, 1/8/64, 5/30/300 are all accepted.",
+        "notes": "specialist_dispatch_timeout_seconds uses Field(default=60, ge=5, le=600) per DDR-016; dispatch_concurrent_cap uses Field(default=8, ge=1, le=64) per DDR-020; heartbeat_interval_seconds uses Field(default=30, ge=5, le=300) per DDR-021/heartbeat. TestAC002RangeConstraints covers boundary rejection for all three: timeout=4 raises (DDR-016 floor), timeout=601 raises (ceiling), cap=0 raises (DDR-020 floor), cap=65 raises (ceiling), heartbeat=4 raises (DDR-021 floor), heartbeat=301 raises (ceiling). In-range parametrized tests confirm 5/60/600, 1/8/64, 5/30/300 are all accepted."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`jarvis_agent_version` defaults to `\"0.4.0\"` with semver regex validator.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "jarvis_agent_version: str = Field(default='0.4.0', pattern=r'^\\d+\\.\\d+\\.\\d+(?:-[a-z0-9.]+)?$', validation_alias=AliasChoices('JARVIS_AGENT_VERSION', 'jarvis_agent_version')). TestAC003JarvisAgentVersionSemver parametrized tests confirm valid semver inputs (0.4.0, 1.2.3, 10.20.30, 0.4.0-rc1, 0.4.0-alpha.1, 1.0.0-beta.2) accepted and invalid inputs (0.4, v0.4.0, 0.4.0.0, not-a-version, empty string, 1.2.3-UPPER) raise ValidationError.",
+        "notes": "jarvis_agent_version: str = Field(default='0.4.0', pattern=r'^\\d+\\.\\d+\\.\\d+(?:-[a-z0-9.]+)?$', validation_alias=AliasChoices('JARVIS_AGENT_VERSION', 'jarvis_agent_version')). TestAC003JarvisAgentVersionSemver parametrized tests confirm valid semver inputs (0.4.0, 1.2.3, 10.20.30, 0.4.0-rc1, 0.4.0-alpha.1, 1.0.0-beta.2) accepted and invalid inputs (0.4, v0.4.0, 0.4.0.0, not-a-version, empty string, 1.2.3-UPPER) raise ValidationError."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`.env.example` (if present) updated with stub entries for each `JARVIS_*` env var, marked optional.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Appended a new 'FEAT-JARVIS-004 \u2014 Fleet registration + specialist dispatch' section to .env.example with stub entries for JARVIS_NATS_URL, JARVIS_NATS_CREDENTIALS_PATH, JARVIS_HEARTBEAT_INTERVAL_SECONDS, JARVIS_GRAPHITI_ENDPOINT, JARVIS_GRAPHITI_API_KEY, JARVIS_TRACES_DIR, JARVIS_SPECIALIST_DISPATCH_TIMEOUT_SECONDS, JARVIS_DISPATCH_CONCURRENT_CAP, JARVIS_AGENT_VERSION. All entries are commented out and the section header explicitly states 'All values below are OPTIONAL \u2014 defaults \u2026 yield a working zero-env developer setup.'",
+        "notes": "Appended a new 'FEAT-JARVIS-004 \u2014 Fleet registration + specialist dispatch' section to .env.example with stub entries for JARVIS_NATS_URL, JARVIS_NATS_CREDENTIALS_PATH, JARVIS_HEARTBEAT_INTERVAL_SECONDS, JARVIS_GRAPHITI_ENDPOINT, JARVIS_GRAPHITI_API_KEY, JARVIS_TRACES_DIR, JARVIS_SPECIALIST_DISPATCH_TIMEOUT_SECONDS, JARVIS_DISPATCH_CONCURRENT_CAP, JARVIS_AGENT_VERSION. All entries are commented out and the section header explicitly states 'All values below are OPTIONAL \u2014 defaults \u2026 yield a working zero-env developer setup.'"
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`tests/test_config_settings.py` (new or extended) covers: out-of-range rejection (timeout=4 \u2192 ValidationError; cap=0 \u2192 ValidationError; heartbeat=4 \u2192 ValidationError); env-prefix resolution (`JARVIS_NATS_URL` \u2192 `nats_url`); default values applied when env vars absent.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Created tests/test_config_settings.py (49 tests, all pass). Out-of-range rejection covered by TestAC002RangeConstraints (test_dispatch_timeout_below_floor_raises with value=4, test_dispatch_cap_zero_raises with value=0, test_heartbeat_below_floor_raises with value=4). Env-prefix resolution covered by TestAC005EnvPrefixResolution (test_jarvis_nats_url_env_var asserts JARVIS_NATS_URL='nats://test:4222' resolves to cfg.nats_url, plus equivalent tests for every other field). Defaults-when-unset covered by TestAC001NewFieldsAndDefaults (per-field tests) and the consolidated test_defaults_applied_when_env_unset.",
+        "notes": "Created tests/test_config_settings.py (49 tests, all pass). Out-of-range rejection covered by TestAC002RangeConstraints (test_dispatch_timeout_below_floor_raises with value=4, test_dispatch_cap_zero_raises with value=0, test_heartbeat_below_floor_raises with value=4). Env-prefix resolution covered by TestAC005EnvPrefixResolution (test_jarvis_nats_url_env_var asserts JARVIS_NATS_URL='nats://test:4222' resolves to cfg.nats_url, plus equivalent tests for every other field). Defaults-when-unset covered by TestAC001NewFieldsAndDefaults (per-field tests) and the consolidated test_defaults_applied_when_env_unset."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "No `nats-py` or `graphiti-core` import inside `settings.py` \u2014 keep this module dependency-free.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "settings.py imports only stdlib (logging, warnings, pathlib, typing, __future__), pydantic (AliasChoices, Field, SecretStr, field_validator), pydantic_settings (BaseSettings, SettingsConfigDict), and jarvis.shared.exceptions.ConfigurationError. No 'import nats' / 'from nats' / 'import graphiti' / 'from graphiti' lines exist. Verified statically by TestAC006SettingsModuleDependencyFree (test_settings_source_does_not_import_nats and test_settings_source_does_not_import_graphiti read the module source via __file__ and assert absence of import statements).",
+        "notes": "settings.py imports only stdlib (logging, warnings, pathlib, typing, __future__), pydantic (AliasChoices, Field, SecretStr, field_validator), pydantic_settings (BaseSettings, SettingsConfigDict), and jarvis.shared.exceptions.ConfigurationError. No 'import nats' / 'from nats' / 'import graphiti' / 'from graphiti' lines exist. Verified statically by TestAC006SettingsModuleDependencyFree (test_settings_source_does_not_import_nats and test_settings_source_does_not_import_graphiti read the module source via __file__ and assert absence of import statements)."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "`uv run mypy src/jarvis/config/` passes.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `uv run mypy src/jarvis/config/` \u2192 'Success: no issues found in 2 source files'. New fields use straightforward annotations (str, Path | None, int, SecretStr | None) that mypy resolves without complaint; pattern= and ge/le constraints live inside Field() and don't affect static types.",
+        "notes": "Ran `uv run mypy src/jarvis/config/` \u2192 'Success: no issues found in 2 source files'. New fields use straightforward annotations (str, Path | None, int, SecretStr | None) that mypy resolves without complaint; pattern= and ge/le constraints live inside Field() and don't affect static types."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `uv run ruff check src/jarvis/config/settings.py tests/test_config_settings.py` \u2192 'All checks passed!'. Ran `uv run ruff format --check src/jarvis/config/settings.py tests/test_config_settings.py` \u2192 '2 files already formatted'. .env.example is config text, not source \u2014 not subject to ruff.",
+        "notes": "Ran `uv run ruff check src/jarvis/config/settings.py tests/test_config_settings.py` \u2192 'All checks passed!'. Ran `uv run ruff format --check src/jarvis/config/settings.py tests/test_config_settings.py` \u2192 '2 files already formatted'. .env.example is config text, not source \u2014 not subject to ruff."
+      }
+    ]
+  },
+  "issues": [],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 340 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1337/5200 tokens\n\n### \u2705 Similar Outcomes\n- RELATED_TO_TASK_REVIEW\n- REFERENCED_IN\n\n### \ud83c\udfa8 Relevant Patterns\n- HAS_FILED_TYPE\n- IS_USED_IN_PROJECT\n\n### \u26a0\ufe0f Warnings\n- PATH_SHOULD_USE\n- REQUIRES_USE_OF\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE_MUST_DO\n- MONITORS_RESULTS_FROM\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- APPLIES_TO\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

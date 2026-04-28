@@ -13,38 +13,60 @@ with double newlines.
 
 Model contract — DM-tool-types §1.
 
-Catalogue tools (TASK-J002-012)
--------------------------------
+Catalogue tools (FEAT-JARVIS-004 — KV-backed bodies, TASK-J004-012)
+-------------------------------------------------------------------
 This module also hosts the three capability-catalogue ``@tool`` functions
 the reasoning model invokes at runtime:
 
-* :func:`list_available_capabilities` — return the registry as JSON.
-* :func:`capabilities_refresh` — Phase 2 no-op acknowledgement.
-* :func:`capabilities_subscribe_updates` — Phase 2 no-op acknowledgement.
+* :func:`list_available_capabilities` — JSON snapshot via
+  ``_capability_registry.snapshot()``.
+* :func:`capabilities_refresh` — drives ``_capability_registry.refresh()``
+  and renders ``OK: refresh queued — registry resynchronised`` on success or
+  ``DEGRADED: transport_unavailable — NATS connection failed`` if the KV
+  read raises.
+* :func:`capabilities_subscribe_updates` — drives
+  ``_capability_registry.subscribe_updates(...)`` exactly once per session.
 
-The tools read ``_capability_registry`` — a module-level
-``list[CapabilityDescriptor]`` snapshot that ``assemble_tool_list``
-(TASK-J002-015) assigns at supervisor build time. Snapshot isolation
-(ASSUM-006) is preserved by capturing a *local* reference at the start of
-:func:`list_available_capabilities`: even if ``_capability_registry`` is
-re-bound mid-call (e.g. by a concurrent :func:`capabilities_refresh` in a
-future phase) the in-flight call still sees the snapshot it captured.
+The tools speak only the
+:class:`jarvis.infrastructure.capabilities_registry.CapabilitiesRegistry`
+Protocol surface (``snapshot/refresh/subscribe_updates/close``); they never
+branch on Live vs Stub and never import the production registry class
+directly. ``assemble_tool_list`` (TASK-J004-013) populates the module-level
+``_capability_registry`` swap-point with whichever implementation the
+DDR-021 lifecycle picked.
+
+Snapshot isolation (ASSUM-006) is preserved by the registry implementations
+— :meth:`CapabilitiesRegistry.snapshot` returns a fresh ``list`` copy on
+every call so a concurrent KV-watch invalidation rebuilding the cache cannot
+mutate the JSON an in-flight call is about to render.
 
 This module is a leaf in the import graph (ADR-ARCH-002): it must not import
-from ``jarvis.agents.*``, ``jarvis.infrastructure.*``, or ``jarvis.cli.*``.
+from ``jarvis.agents.*``, ``jarvis.infrastructure.*``, or ``jarvis.cli.*``
+at runtime. The CapabilitiesRegistry Protocol type is referenced only under
+``TYPE_CHECKING`` so ``from __future__ import annotations`` keeps the
+runtime import graph clean.
 """
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import logging
+from collections.abc import Callable, Coroutine
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import yaml
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:  # pragma: no cover - import-time only, no runtime cost
+    # Forward-reference only: the Protocol lives in jarvis.infrastructure
+    # (which imports *from* this module). Pulling it in under TYPE_CHECKING
+    # keeps capabilities.py a true leaf at runtime (ADR-ARCH-002).
+    from jarvis.infrastructure.capabilities_registry import CapabilitiesRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +78,8 @@ __all__ = [
     "list_available_capabilities",
     "load_stub_registry",
 ]
+
+_T = TypeVar("_T")
 
 
 class CapabilityToolSummary(BaseModel):
@@ -224,36 +248,102 @@ def load_stub_registry(path: Path) -> list[CapabilityDescriptor]:
 
 
 # ---------------------------------------------------------------------------
-# Capability registry binding — TASK-J002-012.
+# Capability registry binding — TASK-J004-012 (KV-backed swap).
 #
-# ``assemble_tool_list`` (TASK-J002-015) snapshots a
-# ``list[CapabilityDescriptor]`` into this module-level attribute at
-# supervisor build time. The default empty list keeps a bare import safe:
-# :func:`list_available_capabilities` returns ``"[]"`` rather than raising
-# if no operator has wired up a registry yet.
+# Module-level ``CapabilitiesRegistry`` handle. ``assemble_tool_list``
+# (TASK-J004-013) assigns either a ``LiveCapabilitiesRegistry`` or a
+# ``StubCapabilitiesRegistry`` here at supervisor build time; the lifecycle
+# decides which one based on DDR-021 soft-fail. Tool bodies speak only the
+# Protocol surface (``snapshot/refresh/subscribe_updates/close``) so they
+# never branch on which implementation is in use.
 #
-# Snapshot isolation (ASSUM-006): ``assemble_tool_list`` MUST assign a
-# fresh ``list(...)`` copy here, never share a reference to the operator's
-# mutable registry. The tool implementations capture a *local* reference
-# at the start of each call so that even if a concurrent rebinding (or a
-# future Phase 3 :func:`capabilities_refresh`) replaces this list mid-call,
-# the in-flight invocation still sees the original snapshot.
+# ``None`` is the pre-wired sentinel — a tool invoked before lifecycle
+# wiring (e.g. by an early-boot test) surfaces a structured ``ERROR:
+# registry_unavailable`` / ``DEGRADED: transport_unavailable`` string per
+# ADR-ARCH-021 rather than dereferencing ``None``.
 # ---------------------------------------------------------------------------
-_capability_registry: list[CapabilityDescriptor] = []
+_capability_registry: CapabilitiesRegistry | None = None
 
 
 # ---------------------------------------------------------------------------
-# Phase 2 stub acknowledgements — Phase 2->3 swap targets.
+# Tool-level idempotency for ``capabilities_subscribe_updates``.
 #
-# Grep anchor (per task swap_point_note): the literal ``stubbed in Phase 2``
-# substring. A FEAT-JARVIS-004 implementation replaces these constants (and
-# the bodies of the two functions that return them) with real NATS KV
-# refresh / watcher wiring without touching the docstrings.
+# The Protocol's :meth:`CapabilitiesRegistry.subscribe_updates` is itself
+# idempotent (a second call is a no-op there), but we layer a tool-level
+# flag too so the tool returns the same OK string without paying the
+# coroutine-drive cost on every reasoning-model invocation. ``False`` is
+# the pre-wired default; ``assemble_tool_list`` resets it to ``False`` at
+# supervisor build so a re-wired session starts subscribed-once again.
 # ---------------------------------------------------------------------------
-_REFRESH_OK_MESSAGE: str = (
-    "OK: refresh queued (stubbed in Phase 2 — in-memory registry is always fresh)"
-)
+_subscribe_invoked: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Acknowledgement constants.
+#
+# The Phase 2 refresh-OK constant is gone — FEAT-JARVIS-004 §4 introduces
+# the new OK / DEGRADED return strings as inline module-private constants
+# below. ``_SUBSCRIBE_OK_MESSAGE`` is preserved byte-identical because the
+# reasoning model has been routing against this exact string since
+# FEAT-JARVIS-002 (API-tools.md §5 keeps the OK shape unchanged across the
+# swap).
+# ---------------------------------------------------------------------------
 _SUBSCRIBE_OK_MESSAGE: str = "OK: subscribed (stubbed in Phase 2 — no live updates)"
+
+# Inline constants for the FEAT-J004 refresh return shape (API-tools.md §4).
+# Kept module-private (single underscore) so test suites can pin against
+# byte-exact drift, but not re-exported as part of the public surface.
+_REFRESH_OK: str = "OK: refresh queued — registry resynchronised"
+_REFRESH_DEGRADED: str = "DEGRADED: transport_unavailable — NATS connection failed"
+
+
+def _drive_coroutine(coro: Coroutine[Any, Any, _T]) -> _T:
+    """Run an async coroutine to completion from sync code.
+
+    Most tool invocations come in on a thread that does not own a running
+    event loop (LangGraph's sync-tool runner posts the call onto a worker
+    thread). In that case ``asyncio.run`` is the cheapest path: it spins
+    up a fresh loop, runs the coroutine, and tears the loop down.
+
+    When the runtime invokes a sync tool from inside its own loop's
+    thread, ``asyncio.get_running_loop`` succeeds and ``asyncio.run``
+    cannot be used directly (it would refuse to nest loops). We delegate
+    to a single-shot worker thread so ``asyncio.run`` runs on a clean
+    thread with no running loop — paying one thread context switch in
+    the rare nested-loop path is cheaper than depending on ``nest_asyncio``
+    or maintaining a long-lived bridge thread.
+
+    Args:
+        coro: Coroutine produced by an ``async def`` method on the
+            registry Protocol (``refresh`` or ``subscribe_updates``).
+
+    Returns:
+        Whatever the coroutine returns. Exceptions raised by the coroutine
+        propagate verbatim (the caller is responsible for translating
+        transport failures into structured error strings).
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop in this thread — drive the coroutine directly.
+        return asyncio.run(coro)
+
+    # Running loop in the calling thread — hand off to a worker thread so
+    # ``asyncio.run`` does not collide with the existing loop.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
+
+def _noop_subscribe_callback() -> None:
+    """Default no-op callback for ``capabilities_subscribe_updates``.
+
+    The watcher's job is to invalidate the registry's cached snapshot so
+    the next ``list_available_capabilities`` call returns fresh data; the
+    callback exists only to satisfy the Protocol surface and to be a
+    later wiring seam for session-level reactions to fleet changes.
+    """
+    return None
 
 
 @tool(parse_docstring=True)
@@ -265,11 +355,7 @@ def list_available_capabilities() -> str:
     the injected snapshot is stale — e.g., the user says "a new agent just came
     online" or more than ~10 minutes have elapsed in the same session.
 
-    In Phase 2 this reads from an in-memory stub registry; in FEAT-JARVIS-004
-    (Phase 3) it will read from the live NATS KV manifest registry. The
-    signature and response shape are identical across phases.
-
-    Near-zero cost, <5ms latency (stub) / <30ms (cached live registry).
+    Near-zero cost, <30ms (cached live registry; <5ms when serving the stub fallback).
 
     Returns:
         JSON array of CapabilityDescriptor objects:
@@ -283,18 +369,26 @@ def list_available_capabilities() -> str:
           - ``ERROR: registry_unavailable — <detail>``
     """
     try:
-        # Snapshot isolation (ASSUM-006): capture the registry reference
-        # ONCE at call start. ``assemble_tool_list`` (and any future Phase 3
-        # refresh) rebinds ``_capability_registry`` to a fresh list rather
-        # than mutating in place, so a concurrent rebind never affects the
-        # JSON we are about to render below.
-        snapshot: list[CapabilityDescriptor] = _capability_registry
-        serialised = [descriptor.model_dump(mode="json") for descriptor in snapshot]
+        registry = _capability_registry
+        if registry is None:
+            # Pre-wired path: lifecycle has not run ``assemble_tool_list``
+            # yet. Surface a structured error rather than crash so the
+            # reasoning model sees a recoverable state per ADR-ARCH-021.
+            return (
+                "ERROR: registry_unavailable — capability registry has not been "
+                "wired into jarvis.tools.capabilities yet"
+            )
+        # Snapshot isolation (ASSUM-006): the Protocol contract requires
+        # ``snapshot()`` to return a fresh ``list`` copy, so a concurrent
+        # KV-watch invalidation rebuilding the underlying cache cannot
+        # mutate the descriptors we are about to render.
+        descriptors = registry.snapshot()
+        serialised = [descriptor.model_dump(mode="json") for descriptor in descriptors]
         return json.dumps(serialised)
     except Exception as exc:
-        # ADR-ARCH-021 — never raise across the tool boundary. Log with full
-        # stack so operators can diagnose unexpected failures, then return
-        # the structured ERROR string the reasoning model can read.
+        # ADR-ARCH-021 — never raise across the tool boundary. Log with
+        # full stack so operators can diagnose unexpected failures, then
+        # return the structured ERROR string the reasoning model can read.
         logger.exception("list_available_capabilities failed unexpectedly")
         return f"ERROR: registry_unavailable — {exc}"
 
@@ -308,43 +402,70 @@ def capabilities_refresh() -> str:
     system-prompt snapshot is refreshed at session start; mid-session refresh
     is rarely useful.
 
-    STUB in Phase 2: no-op that returns a structured acknowledgement. Phase 3
-    (FEAT-JARVIS-004) triggers a real NATS KV re-read.
+    Forces an immediate re-read of NATSKVManifestRegistry; returns
+    ``OK: refresh queued`` on success, or ``DEGRADED: transport_unavailable``
+    if NATS is down (registry continues serving the stub fallback).
 
     Returns:
-        ``OK: refresh queued (stubbed in Phase 2 — in-memory registry is always fresh)``
-        OR a structured error in Phase 3+.
+        ``OK: refresh queued — registry resynchronised`` on success, or
+        ``DEGRADED: transport_unavailable — NATS connection failed`` if the
+        underlying KV read raises.
     """
-    # Phase 2->3 swap point. The body is intentionally trivial; FEAT-JARVIS-004
-    # replaces it with a NATS KV re-read followed by a fresh
-    # ``_capability_registry`` rebinding. The catch-all preserves the
-    # ADR-ARCH-021 never-raises invariant against future edits that make the
-    # body non-trivial.
+    registry = _capability_registry
+    if registry is None:
+        # No registry wired — treat as the strongest form of transport
+        # degradation per DDR-021. The lifecycle's stub fallback should
+        # always have populated this, so reaching here is an operator
+        # signal that wiring is incomplete.
+        logger.warning(
+            "capabilities_refresh called before _capability_registry was wired"
+        )
+        return _REFRESH_DEGRADED
     try:
-        return _REFRESH_OK_MESSAGE
-    except Exception as exc:
-        logger.exception("capabilities_refresh failed unexpectedly")
-        return f"ERROR: registry_unavailable — {exc}"
+        _drive_coroutine(registry.refresh())
+    except Exception:
+        # Any failure inside the registry's KV re-read is a transport
+        # degradation from the model's perspective — the registry itself
+        # logged a structured warning before it raised.
+        logger.exception(
+            "capabilities_refresh: registry.refresh() failed; surfacing DEGRADED"
+        )
+        return _REFRESH_DEGRADED
+    return _REFRESH_OK
 
 
 @tool(parse_docstring=True)
 def capabilities_subscribe_updates() -> str:
     """Subscribe the current session to live capability-change notifications.
 
-    STUB in Phase 2: no-op that returns a structured acknowledgement. Phase 3
-    (FEAT-JARVIS-004) attaches a NATS KV watcher that will re-inject the
-    capability block into future turns when fleet membership changes.
+    Attaches a NATS KV watcher; when fleet membership changes, the cached
+    registry invalidates and the next ``list_available_capabilities`` call
+    returns fresh data. Idempotent — calling more than once per session is a
+    no-op (the registry's underlying watcher is opened at most once).
 
     Call at most once per session.
 
     Returns:
         ``OK: subscribed (stubbed in Phase 2 — no live updates)``
-        OR a structured error in Phase 3+.
+        OR a structured error:
+          - ``ERROR: registry_unavailable — <detail>``
     """
-    # Phase 2->3 swap point. FEAT-JARVIS-004 replaces this body with a real
-    # NATS KV watcher attachment that re-injects the capability block on
-    # change. Catch-all upholds ADR-ARCH-021 never-raises invariant.
+    global _subscribe_invoked
     try:
+        registry = _capability_registry
+        if registry is None:
+            return (
+                "ERROR: registry_unavailable — capability registry has not been "
+                "wired into jarvis.tools.capabilities yet"
+            )
+        if _subscribe_invoked:
+            # Tool-level idempotency: skip the coroutine drive entirely on
+            # the second-and-later calls. The registry implements its own
+            # idempotency guard too, so a missed flag here is still safe;
+            # the flag is purely a perf shortcut.
+            return _SUBSCRIBE_OK_MESSAGE
+        _drive_coroutine(registry.subscribe_updates(_noop_subscribe_callback))
+        _subscribe_invoked = True
         return _SUBSCRIBE_OK_MESSAGE
     except Exception as exc:
         logger.exception("capabilities_subscribe_updates failed unexpectedly")

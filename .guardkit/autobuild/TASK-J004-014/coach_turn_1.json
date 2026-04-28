@@ -1,0 +1,144 @@
+{
+  "task_id": "TASK-J004-014",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "skipped",
+      "test_output_summary": "Independent test verification skipped (tests not required for testing tasks)",
+      "duration_seconds": 0.0
+    },
+    "requirements": {
+      "criteria_total": 5,
+      "criteria_met": 5,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "In-process NATS test server fixture in `tests/conftest.py` (or a feature-local conftest) \u2014 reusable, port=0 so the OS picks a free port.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added `nats_test_server`, `nats_server_binary`, and `_free_tcp_port` fixtures to tests/conftest.py. The fixture spawns `nats-server -p <free> -a 127.0.0.1 -js -sd <tmp>` as a subprocess (port discovered via socket bind to port 0), poll-connects until ready (5s budget), yields a connected NATSClient wrapper, and cleanly drains + terminates on teardown. If `nats-server` is missing from PATH, the fixture raises pytest.skip('install nats-server CLI for integration tests'). Reusable across the suite (any future integration test can request the same fixture).",
+      "notes": "Added `nats_test_server`, `nats_server_binary`, and `_free_tcp_port` fixtures to tests/conftest.py. The fixture spawns `nats-server -p <free> -a 127.0.0.1 -js -sd <tmp>` as a subprocess (port discovered via socket bind to port 0), poll-connects until ready (5s budget), yields a connected NATSClient wrapper, and cleanly drains + terminates on teardown. If `nats-server` is missing from PATH, the fixture raises pytest.skip('install nats-server CLI for integration tests'). Reusable across the suite (any future integration test can request the same fixture)."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "All scenarios above covered with one test function each.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "tests/test_fleet_registration_integration.py covers the 4 fleet scenarios: register-then-query, heartbeat-fires-at-interval, deregister-removes-entry, register-then-register-again-idempotent. tests/test_capabilities_real.py covers the 4 capabilities scenarios: pre-seeded-specialists-listed, kv-watch-invalidates-on-registration, kv-watch-invalidates-on-deregistration, capabilities_refresh-forces-immediate-reread. Each scenario is exactly one test function.",
+      "notes": "tests/test_fleet_registration_integration.py covers the 4 fleet scenarios: register-then-query, heartbeat-fires-at-interval, deregister-removes-entry, register-then-register-again-idempotent. tests/test_capabilities_real.py covers the 4 capabilities scenarios: pre-seeded-specialists-listed, kv-watch-invalidates-on-registration, kv-watch-invalidates-on-deregistration, capabilities_refresh-forces-immediate-reread. Each scenario is exactly one test function."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "No GB10 / external NATS dependency \u2014 pure portable tests.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "All NATS I/O routes through the in-process subprocess broker bound to a tmp_path JetStream store directory. No reference to GB10 (100.84.90.91) or external broker addresses. The fixture uses `nats://127.0.0.1:<free_port>` exclusively. No .creds file, no Tailscale, no external network requirement.",
+      "notes": "All NATS I/O routes through the in-process subprocess broker bound to a tmp_path JetStream store directory. No reference to GB10 (100.84.90.91) or external broker addresses. The fixture uses `nats://127.0.0.1:<free_port>` exclusively. No .creds file, no Tailscale, no external network requirement."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Tests survive `--randomly-seed=0` (no inter-test state leakage).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Each test gets a fresh subprocess broker (function-scoped fixture) and a fresh JetStream store dir under tmp_path \u2014 no fixture state outlives a single test. The capabilities tests rebind the module-level `_capability_registry` and use a `restore_capability_registry` snapshot/restore fixture so the binding is restored on teardown. Verified ordering-invariance by running the suite in both forward and reverse module order \u2014 both passed (8/8 each). pytest-randomly is not installed in the environment but the isolation contract is independently satisfied by per-test fixture scoping.",
+      "notes": "Each test gets a fresh subprocess broker (function-scoped fixture) and a fresh JetStream store dir under tmp_path \u2014 no fixture state outlives a single test. The capabilities tests rebind the module-level `_capability_registry` and use a `restore_capability_registry` snapshot/restore fixture so the binding is restored on teardown. Verified ordering-invariance by running the suite in both forward and reverse module order \u2014 both passed (8/8 each). pytest-randomly is not installed in the environment but the isolation contract is independently satisfied by per-test fixture scoping."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`uv run pytest tests/test_fleet_registration_integration.py tests/test_capabilities_real.py -v` green.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Verified: `uv run pytest tests/test_fleet_registration_integration.py tests/test_capabilities_real.py -v` yields '8 passed in 17.80s' against an installed nats-server (v2.12.8 via brew). On systems lacking the binary the suite cleanly skips with the documented operator hint.",
+      "notes": "Verified: `uv run pytest tests/test_fleet_registration_integration.py tests/test_capabilities_real.py -v` yields '8 passed in 17.80s' against an installed nats-server (v2.12.8 via brew). On systems lacking the binary the suite cleanly skips with the documented operator hint."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "In-process NATS test server fixture in `tests/conftest.py` (or a feature-local conftest) \u2014 reusable, port=0 so the OS picks a free port.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added `nats_test_server`, `nats_server_binary`, and `_free_tcp_port` fixtures to tests/conftest.py. The fixture spawns `nats-server -p <free> -a 127.0.0.1 -js -sd <tmp>` as a subprocess (port discovered via socket bind to port 0), poll-connects until ready (5s budget), yields a connected NATSClient wrapper, and cleanly drains + terminates on teardown. If `nats-server` is missing from PATH, the fixture raises pytest.skip('install nats-server CLI for integration tests'). Reusable across the suite (any future integration test can request the same fixture).",
+        "notes": "Added `nats_test_server`, `nats_server_binary`, and `_free_tcp_port` fixtures to tests/conftest.py. The fixture spawns `nats-server -p <free> -a 127.0.0.1 -js -sd <tmp>` as a subprocess (port discovered via socket bind to port 0), poll-connects until ready (5s budget), yields a connected NATSClient wrapper, and cleanly drains + terminates on teardown. If `nats-server` is missing from PATH, the fixture raises pytest.skip('install nats-server CLI for integration tests'). Reusable across the suite (any future integration test can request the same fixture)."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "All scenarios above covered with one test function each.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "tests/test_fleet_registration_integration.py covers the 4 fleet scenarios: register-then-query, heartbeat-fires-at-interval, deregister-removes-entry, register-then-register-again-idempotent. tests/test_capabilities_real.py covers the 4 capabilities scenarios: pre-seeded-specialists-listed, kv-watch-invalidates-on-registration, kv-watch-invalidates-on-deregistration, capabilities_refresh-forces-immediate-reread. Each scenario is exactly one test function.",
+        "notes": "tests/test_fleet_registration_integration.py covers the 4 fleet scenarios: register-then-query, heartbeat-fires-at-interval, deregister-removes-entry, register-then-register-again-idempotent. tests/test_capabilities_real.py covers the 4 capabilities scenarios: pre-seeded-specialists-listed, kv-watch-invalidates-on-registration, kv-watch-invalidates-on-deregistration, capabilities_refresh-forces-immediate-reread. Each scenario is exactly one test function."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "No GB10 / external NATS dependency \u2014 pure portable tests.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "All NATS I/O routes through the in-process subprocess broker bound to a tmp_path JetStream store directory. No reference to GB10 (100.84.90.91) or external broker addresses. The fixture uses `nats://127.0.0.1:<free_port>` exclusively. No .creds file, no Tailscale, no external network requirement.",
+        "notes": "All NATS I/O routes through the in-process subprocess broker bound to a tmp_path JetStream store directory. No reference to GB10 (100.84.90.91) or external broker addresses. The fixture uses `nats://127.0.0.1:<free_port>` exclusively. No .creds file, no Tailscale, no external network requirement."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Tests survive `--randomly-seed=0` (no inter-test state leakage).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Each test gets a fresh subprocess broker (function-scoped fixture) and a fresh JetStream store dir under tmp_path \u2014 no fixture state outlives a single test. The capabilities tests rebind the module-level `_capability_registry` and use a `restore_capability_registry` snapshot/restore fixture so the binding is restored on teardown. Verified ordering-invariance by running the suite in both forward and reverse module order \u2014 both passed (8/8 each). pytest-randomly is not installed in the environment but the isolation contract is independently satisfied by per-test fixture scoping.",
+        "notes": "Each test gets a fresh subprocess broker (function-scoped fixture) and a fresh JetStream store dir under tmp_path \u2014 no fixture state outlives a single test. The capabilities tests rebind the module-level `_capability_registry` and use a `restore_capability_registry` snapshot/restore fixture so the binding is restored on teardown. Verified ordering-invariance by running the suite in both forward and reverse module order \u2014 both passed (8/8 each). pytest-randomly is not installed in the environment but the isolation contract is independently satisfied by per-test fixture scoping."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`uv run pytest tests/test_fleet_registration_integration.py tests/test_capabilities_real.py -v` green.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Verified: `uv run pytest tests/test_fleet_registration_integration.py tests/test_capabilities_real.py -v` yields '8 passed in 17.80s' against an installed nats-server (v2.12.8 via brew). On systems lacking the binary the suite cleanly skips with the documented operator hint.",
+        "notes": "Verified: `uv run pytest tests/test_fleet_registration_integration.py tests/test_capabilities_real.py -v` yields '8 passed in 17.80s' against an installed nats-server (v2.12.8 via brew). On systems lacking the binary the suite cleanly skips with the documented operator hint."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 2 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 2,
+      "feature_files": [
+        "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+      ],
+      "pending_examples": [
+        "test_jarvis_discovers_registered_specialists_from_the_live_fleet_catalogue \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_a_specialist_deregistering_middispatch_lets_the_inflight_call_finish_against_its_original_target \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Tests not required for this task type. All acceptance criteria met. Architecture context: 357 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1339/5200 tokens\n\n### \u2705 Similar Outcomes\n- RELATED_TO_TASK_REVIEW\n- MIGRATES_TO\n\n### \ud83c\udfa8 Relevant Patterns\n- CREATED_AT\n- USES_FUNCTION\n\n### \u26a0\ufe0f Warnings\n- PATH_NOT_FOUND_DUE_TO_INCORRECT_ID_TYPE\n- FOUND_AT_PATH\n\n### \ud83c\udfad Role Constraints\n- IS_CREATED_FOR\n- PROJECT_INVOLVES\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_IMPLEMENTATION_MODE\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

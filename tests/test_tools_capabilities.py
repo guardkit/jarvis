@@ -63,11 +63,13 @@ EXPECTED_AGENT_IDS: list[str] = [
 ]
 
 # Exact ``OK:`` strings the reasoning model relies on. Kept verbatim here so
-# any drift in the production constants (or in API-tools.md §2.2 / §2.3)
-# fails this test rather than silently propagating to the model.
-EXPECTED_REFRESH_OK = (
-    "OK: refresh queued (stubbed in Phase 2 — in-memory registry is always fresh)"
-)
+# any drift in the production constants (or in API-tools.md §3-§5) fails
+# this test rather than silently propagating to the model.
+#
+# FEAT-JARVIS-004 (TASK-J004-012) swapped the refresh OK shape from the
+# Phase 2 acknowledgement to the KV-backed string; subscribe OK is
+# preserved byte-identical across the swap.
+EXPECTED_REFRESH_OK = "OK: refresh queued — registry resynchronised"
 EXPECTED_SUBSCRIBE_OK = "OK: subscribed (stubbed in Phase 2 — no live updates)"
 
 
@@ -80,23 +82,54 @@ def _write_yaml(path: Path, data: Any) -> Path:
     return path
 
 
+class _ListBackedRegistry:
+    """Test adapter exposing a ``list[CapabilityDescriptor]`` through the
+    FEAT-JARVIS-004 ``CapabilitiesRegistry`` Protocol surface.
+
+    The Protocol's contract:
+      - ``snapshot()`` (sync) returns a fresh ``list`` copy.
+      - ``refresh()`` (async) re-reads the source of truth.
+      - ``subscribe_updates(callback)`` (async) attaches a watcher.
+      - ``close()`` (async) releases handles.
+    """
+
+    def __init__(self, descriptors: list[CapabilityDescriptor]) -> None:
+        self._descriptors = descriptors
+
+    def snapshot(self) -> list[CapabilityDescriptor]:
+        return list(self._descriptors)
+
+    async def refresh(self) -> None:  # no-op for the canonical-stub fixture
+        return None
+
+    async def subscribe_updates(self, callback: object) -> None:
+        return None
+
+    async def close(self) -> None:
+        return None
+
+
 @pytest.fixture()
 def bound_canonical_registry() -> Generator[list[CapabilityDescriptor], None, None]:
     """Bind the canonical Phase 2 stub registry into the module under test.
 
     The fixture mirrors what ``assemble_tool_list`` does at supervisor build
-    time: it snapshots a fresh ``list[CapabilityDescriptor]`` into the
-    module-level ``_capability_registry`` attribute. The original registry
-    binding is restored on teardown so this fixture composes cleanly with
-    other tests that mutate the same global.
+    time: it wraps a freshly-loaded ``list[CapabilityDescriptor]`` in a
+    Protocol-compatible adapter and assigns it to the module-level
+    ``_capability_registry`` attribute. The original registry binding is
+    restored on teardown so this fixture composes cleanly with other tests
+    that mutate the same global.
     """
     saved = capabilities_module._capability_registry
+    saved_subscribed = capabilities_module._subscribe_invoked
     fresh = load_stub_registry(STUB_YAML_PATH)
-    capabilities_module._capability_registry = fresh
+    capabilities_module._capability_registry = _ListBackedRegistry(fresh)
+    capabilities_module._subscribe_invoked = False
     try:
         yield fresh
     finally:
         capabilities_module._capability_registry = saved
+        capabilities_module._subscribe_invoked = saved_subscribed
 
 
 # ---------------------------------------------------------------------------
@@ -235,35 +268,54 @@ class TestListAvailableCapabilitiesReturnsFourDescriptors:
 
 
 class TestRefreshAndSubscribeOkAcks:
-    """AC-001 / AC-002 — refresh and subscribe return byte-exact OK strings."""
+    """AC-001 / AC-002 — refresh and subscribe return byte-exact OK strings.
 
-    def test_refresh_returns_byte_exact_ok_string(self) -> None:
+    All four refresh / subscribe tests now require a wired
+    ``_capability_registry`` because FEAT-JARVIS-004 routes the tool bodies
+    through the Protocol surface. The shared ``bound_canonical_registry``
+    fixture supplies one with the canonical Phase 2 stub descriptors.
+    """
+
+    def test_refresh_returns_byte_exact_ok_string(
+        self, bound_canonical_registry: list[CapabilityDescriptor]
+    ) -> None:
         result = capabilities_refresh.invoke({})
 
         # Byte-equal: a substring or prefix match would let drift slip
         # past — the model relies on the literal contract surface.
         assert result == EXPECTED_REFRESH_OK
 
-    def test_subscribe_returns_byte_exact_ok_string(self) -> None:
+    def test_subscribe_returns_byte_exact_ok_string(
+        self, bound_canonical_registry: list[CapabilityDescriptor]
+    ) -> None:
         result = capabilities_subscribe_updates.invoke({})
 
         assert result == EXPECTED_SUBSCRIBE_OK
 
-    def test_refresh_ok_string_is_idempotent(self) -> None:
+    def test_refresh_ok_string_is_idempotent(
+        self, bound_canonical_registry: list[CapabilityDescriptor]
+    ) -> None:
         first = capabilities_refresh.invoke({})
         second = capabilities_refresh.invoke({})
 
         assert first == second == EXPECTED_REFRESH_OK
 
-    def test_subscribe_ok_string_is_idempotent(self) -> None:
+    def test_subscribe_ok_string_is_idempotent(
+        self, bound_canonical_registry: list[CapabilityDescriptor]
+    ) -> None:
         first = capabilities_subscribe_updates.invoke({})
         second = capabilities_subscribe_updates.invoke({})
 
         assert first == second == EXPECTED_SUBSCRIBE_OK
 
     def test_module_constants_match_expected_ok_strings(self) -> None:
-        """A drift in the module-level constants is caught here too."""
-        assert capabilities_module._REFRESH_OK_MESSAGE == EXPECTED_REFRESH_OK
+        """A drift in the module-level subscribe constant is caught here too.
+
+        The Phase 2 ``_REFRESH_OK_MESSAGE`` constant was deleted in
+        FEAT-JARVIS-004 (TASK-J004-012); the new OK / DEGRADED return
+        strings live inline in the tool body.
+        """
+        assert not hasattr(capabilities_module, "_REFRESH_OK_MESSAGE")
         assert capabilities_module._SUBSCRIBE_OK_MESSAGE == EXPECTED_SUBSCRIBE_OK
 
 
@@ -315,11 +367,12 @@ class TestSnapshotIsolationUnderConcurrentRefresh:
         observed_ids = [entry["agent_id"] for entry in payload]
         assert observed_ids == EXPECTED_AGENT_IDS
 
-        # And the module-level registry binding itself is unchanged —
-        # capabilities_refresh is a Phase-2 no-op.
-        assert (
-            capabilities_module._capability_registry is bound_canonical_registry
-        )
+        # And the underlying descriptor contents are unchanged — refresh
+        # against the canonical-stub adapter is a no-op (it does not
+        # rebuild the descriptor list).
+        registry = capabilities_module._capability_registry
+        assert registry is not None
+        assert registry.snapshot() == bound_canonical_registry
 
     def test_repeated_concurrent_pairs_keep_snapshot_stable(
         self, bound_canonical_registry: list[CapabilityDescriptor]
@@ -349,8 +402,8 @@ class TestSnapshotIsolationUnderConcurrentRefresh:
                     EXPECTED_AGENT_IDS
                 )
 
-        # Registry binding still matches the fixture snapshot after the
+        # The registry's descriptor contents are unchanged after the
         # repeated race — ASSUM-006 invariant holds across iterations.
-        assert (
-            capabilities_module._capability_registry is bound_canonical_registry
-        )
+        registry = capabilities_module._capability_registry
+        assert registry is not None
+        assert registry.snapshot() == bound_canonical_registry

@@ -1,0 +1,143 @@
+{
+  "task_id": "TASK-J004-018",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "skipped",
+      "test_output_summary": "Independent test verification skipped (tests not required for testing tasks)",
+      "duration_seconds": 0.0
+    },
+    "requirements": {
+      "criteria_total": 5,
+      "criteria_met": 5,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Test verifies the **exact** ordering of all 8 steps via call-order recording.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestExactShutdownOrder.test_exact_8_step_sequence asserts the recorded list matches the canonical EXPECTED_ORDER tuple verbatim \u2014 1.heartbeat.cancel, 2.fleet.deregister, 3.capabilities.close, 4.writer.flush, 5.nats.drain, 6.graphiti.aclose, 7.layer2.disarm, 8.store.close. Each step's invocation is captured via MagicMock(side_effect=lambda *a, **kw: calls.append(STEP_NAME)) per the task's Test Requirements; step 7 is observed via a _DispatchProxy on jarvis.infrastructure.lifecycle._dispatch that records the moment _current_session_hook transitions to None. TestPairwiseOrderingInvariants adds 6 additional assertions covering each rationale from the task description (3 before 5, 4 before 5, 2 before 5, 4 before 6, 1 first, 8 last).",
+      "notes": "TestExactShutdownOrder.test_exact_8_step_sequence asserts the recorded list matches the canonical EXPECTED_ORDER tuple verbatim \u2014 1.heartbeat.cancel, 2.fleet.deregister, 3.capabilities.close, 4.writer.flush, 5.nats.drain, 6.graphiti.aclose, 7.layer2.disarm, 8.store.close. Each step's invocation is captured via MagicMock(side_effect=lambda *a, **kw: calls.append(STEP_NAME)) per the task's Test Requirements; step 7 is observed via a _DispatchProxy on jarvis.infrastructure.lifecycle._dispatch that records the moment _current_session_hook transitions to None. TestPairwiseOrderingInvariants adds 6 additional assertions covering each rationale from the task description (3 before 5, 4 before 5, 2 before 5, 4 before 6, 1 first, 8 last)."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Test fails (descriptively) if any step is skipped, reordered, or duplicated.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "test_exact_8_step_sequence's assertion message prints both expected and actual sequences with a human-readable explanation ('Any reorder, skip, or duplicate would surface a hung pipeline or lost final trace in production'). test_no_step_appears_twice catches duplicates with per-step counts; test_no_step_is_skipped catches skips with a missing-list. Six pairwise tests in TestPairwiseOrderingInvariants each carry a step-specific failure message that names the violated rationale and prints the full call sequence.",
+      "notes": "test_exact_8_step_sequence's assertion message prints both expected and actual sequences with a human-readable explanation ('Any reorder, skip, or duplicate would surface a hung pipeline or lost final trace in production'). test_no_step_appears_twice catches duplicates with per-step counts; test_no_step_is_skipped catches skips with a missing-list. Six pairwise tests in TestPairwiseOrderingInvariants each carry a step-specific failure message that names the violated rationale and prints the full call sequence."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Failure tolerance**: a separate test asserts that a single failed step (e.g. `deregister_from_fleet` raises) does NOT skip subsequent steps \u2014 they all execute, errors are WARN-logged.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestFailureToleranceInvariant contains four tests: test_deregister_failure_does_not_skip_subsequent_steps verifies that RuntimeError('broker offline') from deregister leaves all six later steps still observed; test_capabilities_close_failure_does_not_skip_subsequent does the same for the registry; test_nats_drain_failure_does_not_skip_subsequent does it for NATS drain; test_shutdown_does_not_propagate_step_exceptions exercises three simultaneous failures and asserts shutdown returns without raising. Each test uses caplog.at_level(logging.WARNING) so WARN-logged errors are observable; production code already wraps each step in try/except + log.warning per the lifecycle.py implementation.",
+      "notes": "TestFailureToleranceInvariant contains four tests: test_deregister_failure_does_not_skip_subsequent_steps verifies that RuntimeError('broker offline') from deregister leaves all six later steps still observed; test_capabilities_close_failure_does_not_skip_subsequent does the same for the registry; test_nats_drain_failure_does_not_skip_subsequent does it for NATS drain; test_shutdown_does_not_propagate_step_exceptions exercises three simultaneous failures and asserts shutdown returns without raising. Each test uses caplog.at_level(logging.WARNING) so WARN-logged errors are observable; production code already wraps each step in try/except + log.warning per the lifecycle.py implementation."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Heartbeat cancellation produces no traceback / unhandled-exception warning.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestHeartbeatCancellationClean.test_cancellation_no_traceback_in_logs asserts no caplog records carry exc_info and no records exceed logging.ERROR level after shutdown completes. test_cancellation_completes_task_state confirms heartbeat_task.done() and heartbeat_task.cancelled() are both True (clean cancel \u2014 no leaked exception state). The production heartbeat_loop CancelledError contract (re-raise after INFO log) is respected.",
+      "notes": "TestHeartbeatCancellationClean.test_cancellation_no_traceback_in_logs asserts no caplog records carry exc_info and no records exceed logging.ERROR level after shutdown completes. test_cancellation_completes_task_state confirms heartbeat_task.done() and heartbeat_task.cancelled() are both True (clean cancel \u2014 no leaked exception state). The production heartbeat_loop CancelledError contract (re-raise after INFO log) is respected."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`uv run pytest tests/test_lifecycle_shutdown_order.py -v` green.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Executed: `uv run pytest tests/test_lifecycle_shutdown_order.py -v` \u2014 15 passed in 0.74s. No warnings, no skipped tests, no errors. Confirmed with `uv run pytest tests/ --ignore=tests/test_assemble_tool_list.py` \u2014 1885 passed (the single failure in test_assemble_tool_list.py::TestAC005NoSubmoduleImports is a pre-existing, unrelated issue about jarvis/infrastructure/capabilities_registry.py importing from jarvis.tools.capabilities \u2014 orthogonal to TASK-J004-018).",
+      "notes": "Executed: `uv run pytest tests/test_lifecycle_shutdown_order.py -v` \u2014 15 passed in 0.74s. No warnings, no skipped tests, no errors. Confirmed with `uv run pytest tests/ --ignore=tests/test_assemble_tool_list.py` \u2014 1885 passed (the single failure in test_assemble_tool_list.py::TestAC005NoSubmoduleImports is a pre-existing, unrelated issue about jarvis/infrastructure/capabilities_registry.py importing from jarvis.tools.capabilities \u2014 orthogonal to TASK-J004-018)."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "Test verifies the **exact** ordering of all 8 steps via call-order recording.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestExactShutdownOrder.test_exact_8_step_sequence asserts the recorded list matches the canonical EXPECTED_ORDER tuple verbatim \u2014 1.heartbeat.cancel, 2.fleet.deregister, 3.capabilities.close, 4.writer.flush, 5.nats.drain, 6.graphiti.aclose, 7.layer2.disarm, 8.store.close. Each step's invocation is captured via MagicMock(side_effect=lambda *a, **kw: calls.append(STEP_NAME)) per the task's Test Requirements; step 7 is observed via a _DispatchProxy on jarvis.infrastructure.lifecycle._dispatch that records the moment _current_session_hook transitions to None. TestPairwiseOrderingInvariants adds 6 additional assertions covering each rationale from the task description (3 before 5, 4 before 5, 2 before 5, 4 before 6, 1 first, 8 last).",
+        "notes": "TestExactShutdownOrder.test_exact_8_step_sequence asserts the recorded list matches the canonical EXPECTED_ORDER tuple verbatim \u2014 1.heartbeat.cancel, 2.fleet.deregister, 3.capabilities.close, 4.writer.flush, 5.nats.drain, 6.graphiti.aclose, 7.layer2.disarm, 8.store.close. Each step's invocation is captured via MagicMock(side_effect=lambda *a, **kw: calls.append(STEP_NAME)) per the task's Test Requirements; step 7 is observed via a _DispatchProxy on jarvis.infrastructure.lifecycle._dispatch that records the moment _current_session_hook transitions to None. TestPairwiseOrderingInvariants adds 6 additional assertions covering each rationale from the task description (3 before 5, 4 before 5, 2 before 5, 4 before 6, 1 first, 8 last)."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Test fails (descriptively) if any step is skipped, reordered, or duplicated.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "test_exact_8_step_sequence's assertion message prints both expected and actual sequences with a human-readable explanation ('Any reorder, skip, or duplicate would surface a hung pipeline or lost final trace in production'). test_no_step_appears_twice catches duplicates with per-step counts; test_no_step_is_skipped catches skips with a missing-list. Six pairwise tests in TestPairwiseOrderingInvariants each carry a step-specific failure message that names the violated rationale and prints the full call sequence.",
+        "notes": "test_exact_8_step_sequence's assertion message prints both expected and actual sequences with a human-readable explanation ('Any reorder, skip, or duplicate would surface a hung pipeline or lost final trace in production'). test_no_step_appears_twice catches duplicates with per-step counts; test_no_step_is_skipped catches skips with a missing-list. Six pairwise tests in TestPairwiseOrderingInvariants each carry a step-specific failure message that names the violated rationale and prints the full call sequence."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Failure tolerance**: a separate test asserts that a single failed step (e.g. `deregister_from_fleet` raises) does NOT skip subsequent steps \u2014 they all execute, errors are WARN-logged.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestFailureToleranceInvariant contains four tests: test_deregister_failure_does_not_skip_subsequent_steps verifies that RuntimeError('broker offline') from deregister leaves all six later steps still observed; test_capabilities_close_failure_does_not_skip_subsequent does the same for the registry; test_nats_drain_failure_does_not_skip_subsequent does it for NATS drain; test_shutdown_does_not_propagate_step_exceptions exercises three simultaneous failures and asserts shutdown returns without raising. Each test uses caplog.at_level(logging.WARNING) so WARN-logged errors are observable; production code already wraps each step in try/except + log.warning per the lifecycle.py implementation.",
+        "notes": "TestFailureToleranceInvariant contains four tests: test_deregister_failure_does_not_skip_subsequent_steps verifies that RuntimeError('broker offline') from deregister leaves all six later steps still observed; test_capabilities_close_failure_does_not_skip_subsequent does the same for the registry; test_nats_drain_failure_does_not_skip_subsequent does it for NATS drain; test_shutdown_does_not_propagate_step_exceptions exercises three simultaneous failures and asserts shutdown returns without raising. Each test uses caplog.at_level(logging.WARNING) so WARN-logged errors are observable; production code already wraps each step in try/except + log.warning per the lifecycle.py implementation."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Heartbeat cancellation produces no traceback / unhandled-exception warning.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestHeartbeatCancellationClean.test_cancellation_no_traceback_in_logs asserts no caplog records carry exc_info and no records exceed logging.ERROR level after shutdown completes. test_cancellation_completes_task_state confirms heartbeat_task.done() and heartbeat_task.cancelled() are both True (clean cancel \u2014 no leaked exception state). The production heartbeat_loop CancelledError contract (re-raise after INFO log) is respected.",
+        "notes": "TestHeartbeatCancellationClean.test_cancellation_no_traceback_in_logs asserts no caplog records carry exc_info and no records exceed logging.ERROR level after shutdown completes. test_cancellation_completes_task_state confirms heartbeat_task.done() and heartbeat_task.cancelled() are both True (clean cancel \u2014 no leaked exception state). The production heartbeat_loop CancelledError contract (re-raise after INFO log) is respected."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`uv run pytest tests/test_lifecycle_shutdown_order.py -v` green.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Executed: `uv run pytest tests/test_lifecycle_shutdown_order.py -v` \u2014 15 passed in 0.74s. No warnings, no skipped tests, no errors. Confirmed with `uv run pytest tests/ --ignore=tests/test_assemble_tool_list.py` \u2014 1885 passed (the single failure in test_assemble_tool_list.py::TestAC005NoSubmoduleImports is a pre-existing, unrelated issue about jarvis/infrastructure/capabilities_registry.py importing from jarvis.tools.capabilities \u2014 orthogonal to TASK-J004-018).",
+        "notes": "Executed: `uv run pytest tests/test_lifecycle_shutdown_order.py -v` \u2014 15 passed in 0.74s. No warnings, no skipped tests, no errors. Confirmed with `uv run pytest tests/ --ignore=tests/test_assemble_tool_list.py` \u2014 1885 passed (the single failure in test_assemble_tool_list.py::TestAC005NoSubmoduleImports is a pre-existing, unrelated issue about jarvis/infrastructure/capabilities_registry.py importing from jarvis.tools.capabilities \u2014 orthogonal to TASK-J004-018)."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 1 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 1,
+      "feature_files": [
+        "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+      ],
+      "pending_examples": [
+        "test_shutdown_drains_inflight_dispatches_and_deregisters_from_the_fleet \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Tests not required for this task type. All acceptance criteria met. Architecture context: 350 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1325/5200 tokens\n\n### \u2705 Similar Outcomes\n- RELATED_TO_TASK_REVIEW\n- USES_LIBRARY\n\n### \ud83c\udfa8 Relevant Patterns\n- IS_USED_FOR\n- HAS_SEQUENCE_STEP\n\n### \u26a0\ufe0f Warnings\n- IS_IMPLEMENTED_AS\n- CALLS\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE_MUST_DO\n- RUNS_TESTS_BEFORE_REPORTING\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_STATE_RECOVERY_STRATEGY\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

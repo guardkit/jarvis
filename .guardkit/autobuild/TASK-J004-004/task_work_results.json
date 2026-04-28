@@ -1,0 +1,219 @@
+{
+  "task_id": "TASK-J004-004",
+  "timestamp": "2026-04-28T10:56:26.753885",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 42,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".claude/task-plans/TASK-J004-004-implementation-plan.md",
+    ".env.example",
+    ".guardkit/autobuild/TASK-J004-001/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-001/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-001/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-001/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-001/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-001/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-002/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-002/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-002/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-002/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-002/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-003/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-003/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-003/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-003/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-003/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-003/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-004/turn_context.json",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_routing_history_schema_exports.py",
+    "docs/design/FEAT-JARVIS-004/decisions/DDR-023-trace-file-collision-warn-and-preserve.md",
+    "docs/design/FEAT-JARVIS-004/decisions/DDR-024-degraded-specialists-eligible-v1.md",
+    "docs/design/FEAT-JARVIS-004/design.md",
+    "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch_assumptions.yaml",
+    "pyproject.toml",
+    "src/jarvis/config/settings.py",
+    "src/jarvis/infrastructure/routing_history.py",
+    "tasks/backlog/TASK-J004-001-promote-assum-008-009-to-ddrs.md",
+    "tasks/backlog/TASK-J004-002-pyproject-extras-nats-py-and-graphiti-core.md",
+    "tasks/backlog/TASK-J004-003-extend-jarvisconfig-with-feat-j004-fields.md",
+    "tasks/backlog/TASK-J004-005-routing-history-schema-conformance-test.md",
+    "tasks/backlog/TASK-J004-006-nats-client-async-wrapper.md",
+    "tasks/backlog/TASK-J004-007-fleet-registration-and-heartbeat.md",
+    "tasks/backlog/TASK-J004-008-dispatch-semaphore-wrapper.md",
+    "tasks/backlog/TASK-J004-009-capabilities-registry-protocol-live-stub.md",
+    "tasks/backlog/TASK-J004-010-routing-history-writer-with-offload-and-redaction.md",
+    "tasks/backlog/TASK-J004-011-dispatch-tool-real-transport-swap.md",
+    "tasks/backlog/TASK-J004-012-capabilities-tools-real-kv-bodies.md",
+    "tasks/backlog/TASK-J004-013-lifecycle-startup-and-shutdown-wiring.md",
+    "tasks/backlog/TASK-J004-014-fleet-and-capabilities-integration-tests.md",
+    "tasks/backlog/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md",
+    "tasks/backlog/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md",
+    "tasks/backlog/TASK-J004-017-dispatch-slot-release-scenario-outline.md",
+    "tasks/backlog/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md",
+    "tasks/backlog/TASK-J004-019-contract-tests-vs-nats-core.md",
+    "tasks/backlog/TASK-J004-020-retire-phase-2-stubs-and-update-routing-e2e.md",
+    "tasks/design_approved/TASK-J004-004-routing-history-pydantic-schema.md",
+    "tests/test_config_settings.py",
+    "tests/test_phase2_dependencies.py",
+    "tests/test_phase4_dependencies.py",
+    "tests/test_routing_history_schema_exports.py",
+    "uv.lock"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J004-002/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-004/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-004/task_work_results.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-004/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/src/jarvis/infrastructure/routing_history.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_routing_history_schema_exports.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_routing_history_schema_exports.py"
+  ],
+  "summary": "42 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 39,
+    "max_turns": 150,
+    "ceiling_hit": false
+  },
+  "task_type": "declarative",
+  "agent_invocations_validation": {
+    "status": "passed",
+    "expected_phases": 2,
+    "actual_invocations": 2,
+    "missing_phases": [],
+    "violation_message": null
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "src/jarvis/infrastructure/routing_history.py exports the 8 types listed above (JarvisRoutingHistoryEntry, DispatchOutcome, RedirectAttempt, TraceRef, ToolCallRecord, ModelCallRecord, CapabilityDescriptorRef, ConcurrentWorkloadSnapshot).",
+      "status": "complete",
+      "evidence": "Module defines all 8 types and exposes them via __all__; verified by TestModuleExports::test_module_exports_eight_named_types and TestModuleExports::test_module_dunder_all_is_explicit. Each model export passes the BaseModel-subclass check in test_basemodel_subclasses_are_pydantic.",
+      "test_file": "tests/test_routing_history_schema_exports.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "JarvisRoutingHistoryEntry.model_config = ConfigDict(extra=\"ignore\", frozen=True).",
+      "status": "complete",
+      "evidence": "model_config is set to ConfigDict(extra='ignore', frozen=True) on JarvisRoutingHistoryEntry (and the helper types). Verified by TestJarvisRoutingHistoryEntryConfig::test_extra_is_ignore, ::test_frozen_is_true, TestFrozenSemantics::test_assignment_after_construction_raises (frozen enforcement), and TestExtraIgnoreForwardCompat::test_unknown_field_is_dropped_not_raised (extra='ignore' enforcement).",
+      "test_file": "tests/test_routing_history_schema_exports.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "All Field validators match DM-routing-history.md verbatim (regex patterns, max_length, ge/le bounds).",
+      "status": "complete",
+      "evidence": "All 8 model classes use Field constraints copied verbatim from DM-routing-history.md \u00a71-\u00a77 and \u00a74: UUIDv4 regex on decision_id; SHA-256 regex on capability_snapshot_hash + TraceRef.content_sha256; agent_id regex on RedirectAttempt.agent_id, chosen_specialist_id, CapabilityDescriptorRef.agent_id; HH:MM regex on local_time_of_day; max_length=512 on detail/args_summary/result_summary; max_length=1024 on supervisor_reasoning_summary; max_length=4096 on human_response_text; max_length=10 on recent_session_refs; ge=0 on every counter and duration_ms; ge=0.0 on every cost_usd; min_length=1 on session_id, subagent_task_id, tool_name, model_id, role. Coverage spans 24 negative + positive validator tests in TestFieldValidators.",
+      "test_file": "tests/test_routing_history_schema_exports.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "DispatchOutcome is a closed Literal[...] with exactly the seven members listed.",
+      "status": "complete",
+      "evidence": "DispatchOutcome = Literal['success', 'redirected', 'timeout', 'specialist_error', 'exhausted', 'transport_unavailable', 'unresolved']. Verified by TestDispatchOutcomeLiteral::test_dispatch_outcome_is_a_literal_alias (typing.get_args returns 7 args) and ::test_dispatch_outcome_has_seven_members (set equality with the canonical 7).",
+      "test_file": "tests/test_routing_history_schema_exports.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "__all__ exports are explicit.",
+      "status": "complete",
+      "evidence": "Module declares __all__ = [CapabilityDescriptorRef, ConcurrentWorkloadSnapshot, DispatchOutcome, JarvisRoutingHistoryEntry, ModelCallRecord, RedirectAttempt, ToolCallRecord, TraceRef] (alphabetised). Verified by TestModuleExports::test_module_dunder_all_is_explicit which asserts set equality against EXPECTED_EXPORTS.",
+      "test_file": "tests/test_routing_history_schema_exports.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "No writer logic, no filesystem I/O, no Graphiti import in this file.",
+      "status": "complete",
+      "evidence": "Module imports only datetime.datetime, typing.Any/Literal, and pydantic.BaseModel/ConfigDict/Field. No RoutingHistoryWriter, write_specialist_dispatch, os, pathlib, open(), or graphiti import. Verified by TestModuleHasNoForbiddenSymbols::test_module_has_no_writer_class, ::test_module_has_no_filesystem_io_imports (greps for 'import os', 'from os ', 'import pathlib', 'from pathlib ', 'open('), and ::test_module_has_no_graphiti_import (greps for 'import graphiti' and 'from graphiti').",
+      "test_file": "tests/test_routing_history_schema_exports.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "uv run mypy src/jarvis/infrastructure/routing_history.py passes (strict mode).",
+      "status": "complete",
+      "evidence": "Ran `python -m mypy --strict src/jarvis/infrastructure/routing_history.py` (the project's mypy config has strict=true under [tool.mypy]). Result: 'Success: no issues found in 1 source file'. All function signatures and class attributes are fully typed; pydantic Field constraints satisfy strict-mode return-type and any-return checks.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran `python -m ruff check src/jarvis/infrastructure/routing_history.py tests/test_routing_history_schema_exports.py` against the project's ruff config (line-length=100, target-version=py312, select=E/F/I/W/UP/B/SIM/RUF). Result: 'All checks passed!'. Initial run flagged unused imports + ClassVar annotations + datetime.UTC alias; all addressed before final commit.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/routing_history.py",
+        "tests/test_routing_history_schema_exports.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 49.56572187499842
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 143.57829591698828
+    }
+  ]
+}

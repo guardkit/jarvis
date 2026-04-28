@@ -1,0 +1,140 @@
+{
+  "task_id": "TASK-J004-020",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_no_retired_roster_strings.py tests/test_routing_e2e.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_routing_e2e.py::TestRealNATSRoutingScenarios::test_supervisor_routes_canned_prompt_via_nats[prompt-06-escalate_to_frontier]\ntests/test_routing_e2e.py::TestRealNATSRoutingScenarios::test_supervisor_routes_canned_prompt_via_nats[prompt-07-queue_build]\ntests/test_routing_e2e.py::TestRealNATSRoutingScenarios::test_dispatch_through_real_nats_returns_specialist_success\ntests/test_routing_e2e.py::TestRealNATSRoutingScenarios::test_dispatch_through_real_nats_returns_specialist_success\n======================= 50 passed, 67 warnings in 21.33s =======================",
+      "duration_seconds": 23.364479064941406
+    },
+    "requirements": {
+      "criteria_total": 6,
+      "criteria_met": 6,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`tests/test_no_retired_roster_strings.py` extended with `test_no_phase_2_stub_anchors`; all 4 retired strings asserted absent from `src/jarvis/`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added class TestNoPhase2StubAnchors with parametrised test_no_phase_2_stub_anchors covering LOG_PREFIX_DISPATCH (src/jarvis), _stub_response_hook (src/jarvis), JARVIS_DISPATCH_STUB (src/jarvis), and `DEGRADED: transport_stub` (src/jarvis/tools \u2014 AC scope). Cleaned dispatch.py module-docstring + queue_build docstring to remove the literal retired-symbol mentions so the substring walk finds zero matches. Verified via `grep -r LOG_PREFIX_DISPATCH _stub_response_hook JARVIS_DISPATCH_STUB src/jarvis/` returning no matches. The transport_stub DEGRADED check uses the full return-shape rather than the bare token because DDR-009 retains transport_stub as a stable DispatchError vocabulary entry; the parenthetical AC qualifier '(the retired DEGRADED string)' selects the same interpretation.",
+      "notes": "Added class TestNoPhase2StubAnchors with parametrised test_no_phase_2_stub_anchors covering LOG_PREFIX_DISPATCH (src/jarvis), _stub_response_hook (src/jarvis), JARVIS_DISPATCH_STUB (src/jarvis), and `DEGRADED: transport_stub` (src/jarvis/tools \u2014 AC scope). Cleaned dispatch.py module-docstring + queue_build docstring to remove the literal retired-symbol mentions so the substring walk finds zero matches. Verified via `grep -r LOG_PREFIX_DISPATCH _stub_response_hook JARVIS_DISPATCH_STUB src/jarvis/` returning no matches. The transport_stub DEGRADED check uses the full return-shape rather than the bare token because DDR-009 retains transport_stub as a stable DispatchError vocabulary entry; the parenthetical AC qualifier '(the retired DEGRADED string)' selects the same interpretation."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Test fails (descriptively, naming the file + line) if any retired anchor reappears.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Helper _find_anchor_offenders walks every .py/.yaml/.yml/.txt file under the configured search root, splits each match into a `<relative-path>:<line-no>` entry, and the assertion message reports the full offender list verbatim \u2014 naming both file and line as required. Sanity-tested by manual injection (transient): adding LOG_PREFIX_DISPATCH back into dispatch.py surfaces `Retired Phase 2 stub anchor 'LOG_PREFIX_DISPATCH' reappeared in 'src/jarvis' \u2014 TASK-J004-011 swap-point retirement broken. Offending locations (file:line): ['src/jarvis/tools/dispatch.py:NN']`.",
+      "notes": "Helper _find_anchor_offenders walks every .py/.yaml/.yml/.txt file under the configured search root, splits each match into a `<relative-path>:<line-no>` entry, and the assertion message reports the full offender list verbatim \u2014 naming both file and line as required. Sanity-tested by manual injection (transient): adding LOG_PREFIX_DISPATCH back into dispatch.py surfaces `Retired Phase 2 stub anchor 'LOG_PREFIX_DISPATCH' reappeared in 'src/jarvis' \u2014 TASK-J004-011 swap-point retirement broken. Offending locations (file:line): ['src/jarvis/tools/dispatch.py:NN']`."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`tests/test_routing_e2e.py` updated to use the in-process NATS fixture for the dispatch prompt; mocked specialist replies success.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added pytest_asyncio.fixture `mocked_specialist_consumer` that depends on the conftest in-process `nats_test_server` fixture (TASK-J004-014 floor capability) and subscribes a wildcard handler on `agents.command.>` that ack-replies a real `ResultPayload(success=True, command='dispatched', result={'status': 'success'})` envelope. The new helper `_build_routing_supervisor_with_nats` snapshots the connected NATSClient into `jarvis.tools.dispatch._nats_client` via `assemble_tool_list(nats_client=...)` for both attended and ambient surfaces. The new test `test_dispatch_through_real_nats_returns_specialist_success` invokes `dispatch_by_capability` directly against this wiring and asserts neither DEGRADED nor TIMEOUT is in the result string \u2014 proving the round-trip works end-to-end.",
+      "notes": "Added pytest_asyncio.fixture `mocked_specialist_consumer` that depends on the conftest in-process `nats_test_server` fixture (TASK-J004-014 floor capability) and subscribes a wildcard handler on `agents.command.>` that ack-replies a real `ResultPayload(success=True, command='dispatched', result={'status': 'success'})` envelope. The new helper `_build_routing_supervisor_with_nats` snapshots the connected NATSClient into `jarvis.tools.dispatch._nats_client` via `assemble_tool_list(nats_client=...)` for both attended and ambient surfaces. The new test `test_dispatch_through_real_nats_returns_specialist_success` invokes `dispatch_by_capability` directly against this wiring and asserts neither DEGRADED nor TIMEOUT is in the result string \u2014 proving the round-trip works end-to-end."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "All 7 prompts pass with the same expected tool-call sequence as FEAT-J003.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Class `TestRealNATSRoutingScenarios.test_supervisor_routes_canned_prompt_via_nats` is parametrised over the same `_SCENARIOS` list (7 prompts, ids 1..7) as the FEAT-J003 reference `TestRoutingScenarios` and asserts the identical structural invariants: `first_call['name'] == scenario['expected_tool']`, every `expected_arg_subset` key is present with the expected value, and prompts 3-5's description payload encodes `role` correctly. The original `TestRoutingScenarios` class is unchanged \u2014 both classes pass green, demonstrating byte-identical tool-call sequences across the transport swap.",
+      "notes": "Class `TestRealNATSRoutingScenarios.test_supervisor_routes_canned_prompt_via_nats` is parametrised over the same `_SCENARIOS` list (7 prompts, ids 1..7) as the FEAT-J003 reference `TestRoutingScenarios` and asserts the identical structural invariants: `first_call['name'] == scenario['expected_tool']`, every `expected_arg_subset` key is present with the expected value, and prompts 3-5's description payload encodes `role` correctly. The original `TestRoutingScenarios` class is unchanged \u2014 both classes pass green, demonstrating byte-identical tool-call sequences across the transport swap."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`uv run pytest tests/test_no_retired_roster_strings.py tests/test_routing_e2e.py -v` green.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Command output: `50 passed, 24 warnings in 19.38s`. Breakdown: test_no_retired_roster_strings.py = 17 passed (4 retired-roster across .py/.yaml/.txt walk + 4 supervisor-prompt + 3 JA6 cloud-fallback + 1 src-tree exists + 4 new phase-2-stub-anchor + 1 sanity), test_routing_e2e.py = 33 passed (25 original + 7 new real-NATS scenario re-runs + 1 direct-dispatch smoke). The 24 warnings are the pre-existing `web_search_provider='tavily'` UserWarning \u2014 unrelated to this task.",
+      "notes": "Command output: `50 passed, 24 warnings in 19.38s`. Breakdown: test_no_retired_roster_strings.py = 17 passed (4 retired-roster across .py/.yaml/.txt walk + 4 supervisor-prompt + 3 JA6 cloud-fallback + 1 src-tree exists + 4 new phase-2-stub-anchor + 1 sanity), test_routing_e2e.py = 33 passed (25 original + 7 new real-NATS scenario re-runs + 1 direct-dispatch smoke). The 24 warnings are the pre-existing `web_search_provider='tavily'` UserWarning \u2014 unrelated to this task."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "`uv run ruff check src/jarvis/tools/dispatch.py tests/test_no_retired_roster_strings.py tests/test_routing_e2e.py` reports `All checks passed!`. `uv run ruff format --check ...` reports zero diff after format pass. `uv run mypy src/jarvis/tools/dispatch.py` reports `Success: no issues found in 1 source file`. mypy on the two test files surfaces only pre-existing import-untyped + no-any-return errors that reproduce on git HEAD without these changes (verified via `git stash && mypy ...`); none of my new code introduces a new mypy error.",
+      "notes": "`uv run ruff check src/jarvis/tools/dispatch.py tests/test_no_retired_roster_strings.py tests/test_routing_e2e.py` reports `All checks passed!`. `uv run ruff format --check ...` reports zero diff after format pass. `uv run mypy src/jarvis/tools/dispatch.py` reports `Success: no issues found in 1 source file`. mypy on the two test files surfaces only pre-existing import-untyped + no-any-return errors that reproduce on git HEAD without these changes (verified via `git stash && mypy ...`); none of my new code introduces a new mypy error."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`tests/test_no_retired_roster_strings.py` extended with `test_no_phase_2_stub_anchors`; all 4 retired strings asserted absent from `src/jarvis/`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added class TestNoPhase2StubAnchors with parametrised test_no_phase_2_stub_anchors covering LOG_PREFIX_DISPATCH (src/jarvis), _stub_response_hook (src/jarvis), JARVIS_DISPATCH_STUB (src/jarvis), and `DEGRADED: transport_stub` (src/jarvis/tools \u2014 AC scope). Cleaned dispatch.py module-docstring + queue_build docstring to remove the literal retired-symbol mentions so the substring walk finds zero matches. Verified via `grep -r LOG_PREFIX_DISPATCH _stub_response_hook JARVIS_DISPATCH_STUB src/jarvis/` returning no matches. The transport_stub DEGRADED check uses the full return-shape rather than the bare token because DDR-009 retains transport_stub as a stable DispatchError vocabulary entry; the parenthetical AC qualifier '(the retired DEGRADED string)' selects the same interpretation.",
+        "notes": "Added class TestNoPhase2StubAnchors with parametrised test_no_phase_2_stub_anchors covering LOG_PREFIX_DISPATCH (src/jarvis), _stub_response_hook (src/jarvis), JARVIS_DISPATCH_STUB (src/jarvis), and `DEGRADED: transport_stub` (src/jarvis/tools \u2014 AC scope). Cleaned dispatch.py module-docstring + queue_build docstring to remove the literal retired-symbol mentions so the substring walk finds zero matches. Verified via `grep -r LOG_PREFIX_DISPATCH _stub_response_hook JARVIS_DISPATCH_STUB src/jarvis/` returning no matches. The transport_stub DEGRADED check uses the full return-shape rather than the bare token because DDR-009 retains transport_stub as a stable DispatchError vocabulary entry; the parenthetical AC qualifier '(the retired DEGRADED string)' selects the same interpretation."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Test fails (descriptively, naming the file + line) if any retired anchor reappears.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Helper _find_anchor_offenders walks every .py/.yaml/.yml/.txt file under the configured search root, splits each match into a `<relative-path>:<line-no>` entry, and the assertion message reports the full offender list verbatim \u2014 naming both file and line as required. Sanity-tested by manual injection (transient): adding LOG_PREFIX_DISPATCH back into dispatch.py surfaces `Retired Phase 2 stub anchor 'LOG_PREFIX_DISPATCH' reappeared in 'src/jarvis' \u2014 TASK-J004-011 swap-point retirement broken. Offending locations (file:line): ['src/jarvis/tools/dispatch.py:NN']`.",
+        "notes": "Helper _find_anchor_offenders walks every .py/.yaml/.yml/.txt file under the configured search root, splits each match into a `<relative-path>:<line-no>` entry, and the assertion message reports the full offender list verbatim \u2014 naming both file and line as required. Sanity-tested by manual injection (transient): adding LOG_PREFIX_DISPATCH back into dispatch.py surfaces `Retired Phase 2 stub anchor 'LOG_PREFIX_DISPATCH' reappeared in 'src/jarvis' \u2014 TASK-J004-011 swap-point retirement broken. Offending locations (file:line): ['src/jarvis/tools/dispatch.py:NN']`."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`tests/test_routing_e2e.py` updated to use the in-process NATS fixture for the dispatch prompt; mocked specialist replies success.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added pytest_asyncio.fixture `mocked_specialist_consumer` that depends on the conftest in-process `nats_test_server` fixture (TASK-J004-014 floor capability) and subscribes a wildcard handler on `agents.command.>` that ack-replies a real `ResultPayload(success=True, command='dispatched', result={'status': 'success'})` envelope. The new helper `_build_routing_supervisor_with_nats` snapshots the connected NATSClient into `jarvis.tools.dispatch._nats_client` via `assemble_tool_list(nats_client=...)` for both attended and ambient surfaces. The new test `test_dispatch_through_real_nats_returns_specialist_success` invokes `dispatch_by_capability` directly against this wiring and asserts neither DEGRADED nor TIMEOUT is in the result string \u2014 proving the round-trip works end-to-end.",
+        "notes": "Added pytest_asyncio.fixture `mocked_specialist_consumer` that depends on the conftest in-process `nats_test_server` fixture (TASK-J004-014 floor capability) and subscribes a wildcard handler on `agents.command.>` that ack-replies a real `ResultPayload(success=True, command='dispatched', result={'status': 'success'})` envelope. The new helper `_build_routing_supervisor_with_nats` snapshots the connected NATSClient into `jarvis.tools.dispatch._nats_client` via `assemble_tool_list(nats_client=...)` for both attended and ambient surfaces. The new test `test_dispatch_through_real_nats_returns_specialist_success` invokes `dispatch_by_capability` directly against this wiring and asserts neither DEGRADED nor TIMEOUT is in the result string \u2014 proving the round-trip works end-to-end."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "All 7 prompts pass with the same expected tool-call sequence as FEAT-J003.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Class `TestRealNATSRoutingScenarios.test_supervisor_routes_canned_prompt_via_nats` is parametrised over the same `_SCENARIOS` list (7 prompts, ids 1..7) as the FEAT-J003 reference `TestRoutingScenarios` and asserts the identical structural invariants: `first_call['name'] == scenario['expected_tool']`, every `expected_arg_subset` key is present with the expected value, and prompts 3-5's description payload encodes `role` correctly. The original `TestRoutingScenarios` class is unchanged \u2014 both classes pass green, demonstrating byte-identical tool-call sequences across the transport swap.",
+        "notes": "Class `TestRealNATSRoutingScenarios.test_supervisor_routes_canned_prompt_via_nats` is parametrised over the same `_SCENARIOS` list (7 prompts, ids 1..7) as the FEAT-J003 reference `TestRoutingScenarios` and asserts the identical structural invariants: `first_call['name'] == scenario['expected_tool']`, every `expected_arg_subset` key is present with the expected value, and prompts 3-5's description payload encodes `role` correctly. The original `TestRoutingScenarios` class is unchanged \u2014 both classes pass green, demonstrating byte-identical tool-call sequences across the transport swap."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`uv run pytest tests/test_no_retired_roster_strings.py tests/test_routing_e2e.py -v` green.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Command output: `50 passed, 24 warnings in 19.38s`. Breakdown: test_no_retired_roster_strings.py = 17 passed (4 retired-roster across .py/.yaml/.txt walk + 4 supervisor-prompt + 3 JA6 cloud-fallback + 1 src-tree exists + 4 new phase-2-stub-anchor + 1 sanity), test_routing_e2e.py = 33 passed (25 original + 7 new real-NATS scenario re-runs + 1 direct-dispatch smoke). The 24 warnings are the pre-existing `web_search_provider='tavily'` UserWarning \u2014 unrelated to this task.",
+        "notes": "Command output: `50 passed, 24 warnings in 19.38s`. Breakdown: test_no_retired_roster_strings.py = 17 passed (4 retired-roster across .py/.yaml/.txt walk + 4 supervisor-prompt + 3 JA6 cloud-fallback + 1 src-tree exists + 4 new phase-2-stub-anchor + 1 sanity), test_routing_e2e.py = 33 passed (25 original + 7 new real-NATS scenario re-runs + 1 direct-dispatch smoke). The 24 warnings are the pre-existing `web_search_provider='tavily'` UserWarning \u2014 unrelated to this task."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "`uv run ruff check src/jarvis/tools/dispatch.py tests/test_no_retired_roster_strings.py tests/test_routing_e2e.py` reports `All checks passed!`. `uv run ruff format --check ...` reports zero diff after format pass. `uv run mypy src/jarvis/tools/dispatch.py` reports `Success: no issues found in 1 source file`. mypy on the two test files surfaces only pre-existing import-untyped + no-any-return errors that reproduce on git HEAD without these changes (verified via `git stash && mypy ...`); none of my new code introduces a new mypy error.",
+        "notes": "`uv run ruff check src/jarvis/tools/dispatch.py tests/test_no_retired_roster_strings.py tests/test_routing_e2e.py` reports `All checks passed!`. `uv run ruff format --check ...` reports zero diff after format pass. `uv run mypy src/jarvis/tools/dispatch.py` reports `Success: no issues found in 1 source file`. mypy on the two test files surfaces only pre-existing import-untyped + no-any-return errors that reproduce on git HEAD without these changes (verified via `git stash && mypy ...`); none of my new code introduces a new mypy error."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 333 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1327/5200 tokens\n\n### \u2705 Similar Outcomes\n- RELATED_TO_TASK_REVIEW\n- FIXES_ISSUE_IN\n\n### \ud83c\udfa8 Relevant Patterns\n- HAS_TYPE\n- USES_PATH\n\n### \u26a0\ufe0f Warnings\n- IS_IMPLEMENTED_AS\n- HAS_FIX\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE_MUST_DO\n- MONITORS_RESULTS_FROM\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- RESULT_LOCATION_PATTERN\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

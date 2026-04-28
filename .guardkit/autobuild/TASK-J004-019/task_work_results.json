@@ -1,0 +1,181 @@
+{
+  "task_id": "TASK-J004-019",
+  "timestamp": "2026-04-28T13:40:24.453117",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 14,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    "src/jarvis/tools/dispatch.py",
+    "tasks/backlog/TASK-J004-019-contract-tests-vs-nats-core.md",
+    "tests/test_no_retired_roster_strings.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J004-019-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-014/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-019/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-019/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-019/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-020/turn_context.json",
+    ".guardkit/bdd/TASK-J004-019_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-019/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_contract_nats_core.py",
+    "tasks/design_approved/TASK-J004-019-contract-tests-vs-nats-core.md",
+    "tests/test_contract_nats_core.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_contract_nats_core.py"
+  ],
+  "summary": "14 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 52,
+    "max_turns": 150,
+    "ceiling_hit": false
+  },
+  "bdd_results": {
+    "scenarios_passed": 0,
+    "scenarios_failed": 0,
+    "scenarios_pending": 3,
+    "failures": [],
+    "pending": [
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_the_supervisor_never_emits_a_noncanonical_subject_name",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_a_malformed_specialist_reply_is_treated_as_a_specialist_error_without_redirect",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      },
+      {
+        "feature_file": "features.feat-jarvis-004-fleet-registration-and-specialist-dispatch.test_feat_jarvis_004_fleet_registration_and_specialist_dispatch",
+        "scenario_name": "test_every_command_envelope_the_supervisor_emits_identifies_jarvis_as_the_source",
+        "pending_step": "All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      }
+    ],
+    "feature_files": [
+      "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+    ],
+    "tag": "@task:TASK-J004-019"
+  },
+  "task_type": "testing",
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "All 6 contract tests + the FEAT-J005 carry-forward stub exist.",
+      "status": "complete",
+      "evidence": "tests/test_contract_nats_core.py contains seven test classes mapped to the seven sub-tests in the task description: TestJarvisManifestRoundTrips (#1), TestCommandPayloadEmittedMatchesNatsCore (#2), TestResultPayloadConsumedMatchesNatsCore (#3), TestEnvelopeSourceIdIsJarvis (#4 \u2014 parametrised across both MessageEnvelope emit sites in src/jarvis/), TestTopicSubjectsMatchTopicsClass (#5 \u2014 three Topics.* assertions covering Agents.COMMAND, Pipeline.BUILD_QUEUED, Fleet.REGISTER), TestNoHardcodedSubjectLiteralsInSrc (#6 \u2014 grep invariant), and TestBuildQueuedPayloadEmittedMatchesNatsCore (#7 \u2014 FEAT-J005 carry-forward stub). 14 tests collected, 14 passed.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Grep invariant test (#6) uses pathlib.Path.rglob + str.contains to scan src/jarvis/ for hard-coded subject literals; allow-list documented in the test docstring.",
+      "status": "complete",
+      "evidence": "TestNoHardcodedSubjectLiteralsInSrc uses _iter_source_files() which calls _SRC_JARVIS.rglob('*.py') (pathlib.Path.rglob) and `forbidden in content` / `forbidden in line` (str.__contains__) to scan src/jarvis/ for the three forbidden literals 'agents.command.', 'agents.result.', 'fleet.register'. The class docstring documents the four-rule allow-list: (1) module/function docstrings, (2) comment lines, (3) nats_core.Topics import lines, (4) lines that reference Topics.* templates rather than emitting literals.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Tests fail loudly if any subject string is hard-coded (failure message names the offending file + line).",
+      "status": "complete",
+      "evidence": "test_no_hardcoded_subject_literals_in_src walks each line, records offenders as f'{rel}:{lineno}: {line.strip()}' (relative path + line number + line content), and asserts `not offenders` with a multi-line message naming each offender. The assert message is 'Hard-coded subject literal {forbidden!r} found in src/jarvis/ outside the allow-list (...): \\n' followed by the joined offender list \u2014 every offending file:line shows up in the failure output.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Source_id audit (#4) parametrises across every MessageEnvelope(source_id=...) construction site found via grep.",
+      "status": "complete",
+      "evidence": "TestEnvelopeSourceIdIsJarvis is parametrised over _EMIT_SITES which lists both MessageEnvelope construction sites in src/jarvis/ (dispatch.py:_build_command_envelope at line 242 and dispatch.py:queue_build at line 811 \u2014 verified via Grep for 'MessageEnvelope\\('). The companion test_emit_site_count_matches_grep test re-runs the grep itself (re.compile(r'\\bMessageEnvelope\\s*\\(') over Path.rglob) and asserts len(emit_lines) == len(_EMIT_SITES) so that adding a new emit site without registering it triggers a hard fail rather than a silent miss.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "No real NATS / Graphiti \u2014 these are pure schema + grep contract tests.",
+      "status": "complete",
+      "evidence": "All NATS/Graphiti dependencies are stubbed: the dispatch consumer test uses mock_dispatch_deps fixture which assigns MagicMock NATSClient, MagicMock DispatchSemaphore, and MagicMock RoutingHistoryWriter (with AsyncMock write_specialist_dispatch). No real connection is made. The manifest, command, build-queued, and topics tests are pure pydantic schema construction + grep \u2014 no I/O at all. The conftest.py autouse fixtures _stub_nats_and_graphiti_connect_seams + _restore_dispatch_layer2_hooks ensure isolation.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "uv run pytest tests/test_contract_nats_core.py -v green.",
+      "status": "complete",
+      "evidence": "Ran 'python -m pytest tests/test_contract_nats_core.py -v' from the worktree root; result: 14 passed, 1 warning in 2.47s. Also smoke-tested against related suites (test_fleet_registration.py, test_dispatch_by_capability.py, test_tools_dispatch.py): 110 passed, 1 warning in 1.80s \u2014 no regressions to neighbouring tests.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 93.91105075000087
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 271.3294104170054
+    }
+  ]
+}

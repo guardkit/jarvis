@@ -1,0 +1,7 @@
+{
+  "tests_run": 301,
+  "tests_failed": 1,
+  "coverage_pct": 71.29,
+  "output_summary": "300 passed, 1 failed (test_assemble_tool_list.py::TestAC005NoSubmoduleImports - jarvis/infrastructure/capabilities_registry.py imports jarvis.tools.capabilities); coverage 71.29% (capabilities.py 94%, dispatch.py 63%)",
+  "quality_gates_passed": false
+}

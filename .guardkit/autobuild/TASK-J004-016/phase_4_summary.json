@@ -1,0 +1,7 @@
+{
+  "tests_run": 13,
+  "tests_failed": 0,
+  "coverage_pct": 58.94,
+  "output_summary": "13/13 passed across test_nats_unavailable.py, test_graphiti_unavailable.py, test_lifecycle_partial_failure.py; soft-fail scope coverage 58.94% (routing_history=79%, dispatch=58%, lifecycle=49%, nats_client=43%).",
+  "quality_gates_passed": true
+}

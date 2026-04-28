@@ -1,0 +1,200 @@
+{
+  "task_id": "TASK-J004-006",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_dispatch_semaphore.py tests/test_fleet_registration.py tests/test_nats_client.py tests/test_routing_history_schema.py tests/test_routing_history_schema_exports.py tests/test_routing_history_writer.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_routing_history_writer.py:555\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_routing_history_writer.py:555: PytestUnknownMarkWarning: Unknown pytest.mark.seam - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\ntests/test_routing_history_writer.py:556\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_routing_history_writer.py:556: PytestUnknownMarkWarning: Unknown pytest.mark.integration_contract - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\n======================= 183 passed, 3 warnings in 2.23s ========================",
+      "duration_seconds": 3.946413993835449
+    },
+    "requirements": {
+      "criteria_total": 9,
+      "criteria_met": 9,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`NATSClient.connect(config)` returns `NATSClient | None` \u2014 never raises on connect failure.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "NATSClient.connect catches every exception from the underlying nats.connect call (broad `except Exception` is intentional and DDR-021-mandated) and returns None instead of raising. Verified by tests TestAC002ConnectFailureSoftFails::test_connect_returns_none_when_underlying_connect_raises (NoServersError) and ::test_connect_swallows_arbitrary_exceptions (OSError) \u2014 both assert wrapper is None and neither test expects an exception. The success path test_connect_returns_wrapper_with_client_and_js_properties asserts the return type is NATSClient.",
+      "notes": "NATSClient.connect catches every exception from the underlying nats.connect call (broad `except Exception` is intentional and DDR-021-mandated) and returns None instead of raising. Verified by tests TestAC002ConnectFailureSoftFails::test_connect_returns_none_when_underlying_connect_raises (NoServersError) and ::test_connect_swallows_arbitrary_exceptions (OSError) \u2014 both assert wrapper is None and neither test expects an exception. The success path test_connect_returns_wrapper_with_client_and_js_properties asserts the return type is NATSClient."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Connect failure \u2192 ERROR log with `nats_url` and underlying exception, return `None`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "On connect failure NATSClient.connect emits logger.error('nats_connect_failed', nats_url=..., error_class=..., error=...) before returning None. test_connect_logs_error_with_nats_url_and_exception_class verifies the log contains 'nats_connect_failed', the configured 'nats://down:4222' URL, and the exception class name 'NoServersError'.",
+      "notes": "On connect failure NATSClient.connect emits logger.error('nats_connect_failed', nats_url=..., error_class=..., error=...) before returning None. test_connect_logs_error_with_nats_url_and_exception_class verifies the log contains 'nats_connect_failed', the configured 'nats://down:4222' URL, and the exception class name 'NoServersError'."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Connect success \u2192 INFO log; the returned wrapper exposes `client` and `js` properties.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "On success the wrapper logs logger.info('nats_connect_success', nats_url=...) and exposes the @property `client` (returns the underlying nats Client) and @property `js` (returns Client.jetstream()). Tests test_connect_returns_wrapper_with_client_and_js_properties and test_connect_emits_info_log_on_success verify both behaviours.",
+      "notes": "On success the wrapper logs logger.info('nats_connect_success', nats_url=...) and exposes the @property `client` (returns the underlying nats Client) and @property `js` (returns Client.jetstream()). Tests test_connect_returns_wrapper_with_client_and_js_properties and test_connect_emits_info_log_on_success verify both behaviours."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`request(subject, payload, *, timeout)` issues NATS request/reply and raises `asyncio.TimeoutError` on timeout, `NATSConnectionError` on transport failure (per design \u00a78 dispatch sequence).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "request() forwards (subject, payload, timeout=...) to Client.request, lets nats.errors.TimeoutError (which inherits from builtin TimeoutError == asyncio.TimeoutError) propagate verbatim, and wraps any other Exception (e.g. ConnectionClosedError) in NATSConnectionError via raise NATSConnectionError(...) from exc. Verified by test_request_returns_message_on_success, test_request_raises_asyncio_timeout_error_on_timeout, and test_request_raises_nats_connection_error_on_transport_failure.",
+      "notes": "request() forwards (subject, payload, timeout=...) to Client.request, lets nats.errors.TimeoutError (which inherits from builtin TimeoutError == asyncio.TimeoutError) propagate verbatim, and wraps any other Exception (e.g. ConnectionClosedError) in NATSConnectionError via raise NATSConnectionError(...) from exc. Verified by test_request_returns_message_on_success, test_request_raises_asyncio_timeout_error_on_timeout, and test_request_raises_nats_connection_error_on_transport_failure."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`drain(timeout=5.0)` is **idempotent** \u2014 second call after drain is a no-op (no second log line, no exception).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "NATSClient.__slots__ includes `_drained`, set False at __init__ and flipped to True only on a successful drain. Subsequent drain() calls return immediately without logging or invoking the underlying client. Verified by test_drain_calls_underlying_drain_once, test_drain_second_call_is_no_op (3 calls \u2192 1 underlying drain), test_drain_second_call_does_not_log (capsys assertion: 'nats_drain_complete' present once after first call, absent after second), and test_drain_respects_timeout (asyncio.wait_for bound).",
+      "notes": "NATSClient.__slots__ includes `_drained`, set False at __init__ and flipped to True only on a successful drain. Subsequent drain() calls return immediately without logging or invoking the underlying client. Verified by test_drain_calls_underlying_drain_once, test_drain_second_call_is_no_op (3 calls \u2192 1 underlying drain), test_drain_second_call_does_not_log (capsys assertion: 'nats_drain_complete' present once after first call, absent after second), and test_drain_respects_timeout (asyncio.wait_for bound)."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Reconnect events emit structured logs (`nats_reconnect`, `nats_disconnect`) per ADR-ARCH-020.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Module-level callbacks _on_reconnect / _on_disconnect / _on_error / _on_closed are wired through NATSClient.connect's kwargs (reconnected_cb / disconnected_cb / error_cb / closed_cb) and each calls structlog.get_logger(__name__) with canonical event names ('nats_reconnect', 'nats_disconnect', 'nats_error', 'nats_closed'). Tests test_reconnect_callback_emits_structured_log, test_disconnect_callback_emits_structured_log, and test_error_callback_emits_structured_log pull the callbacks from the patched _nats_connect kwargs and assert the structured event names appear in stdout.",
+      "notes": "Module-level callbacks _on_reconnect / _on_disconnect / _on_error / _on_closed are wired through NATSClient.connect's kwargs (reconnected_cb / disconnected_cb / error_cb / closed_cb) and each calls structlog.get_logger(__name__) with canonical event names ('nats_reconnect', 'nats_disconnect', 'nats_error', 'nats_closed'). Tests test_reconnect_callback_emits_structured_log, test_disconnect_callback_emits_structured_log, and test_error_callback_emits_structured_log pull the callbacks from the patched _nats_connect kwargs and assert the structured event names appear in stdout."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "`tests/test_nats_client.py` covers: successful connect (mock `nats.connect`), failed connect \u2192 returns None, idempotent drain, reconnect-event logging, request \u2192 TimeoutError on no reply, request \u2192 NATSConnectionError on transport-down.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "tests/test_nats_client.py defines six AC-aligned classes covering the full surface: TestAC001ConnectSuccess (3 tests), TestAC002ConnectFailureSoftFails (3 tests including arbitrary-exception path), TestAC004RequestErrorMapping (3 tests: success / timeout / transport), TestAC005DrainIdempotent (4 tests including timeout bound), TestAC006ReconnectEventLogging (3 callbacks), and TestModuleSurface (3 sanity exports). All 19 tests use unittest.mock to patch the module-level `_nats_connect` seam \u2014 no real network I/O.",
+      "notes": "tests/test_nats_client.py defines six AC-aligned classes covering the full surface: TestAC001ConnectSuccess (3 tests), TestAC002ConnectFailureSoftFails (3 tests including arbitrary-exception path), TestAC004RequestErrorMapping (3 tests: success / timeout / transport), TestAC005DrainIdempotent (4 tests including timeout bound), TestAC006ReconnectEventLogging (3 callbacks), and TestModuleSurface (3 sanity exports). All 19 tests use unittest.mock to patch the module-level `_nats_connect` seam \u2014 no real network I/O."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "`uv run mypy src/jarvis/infrastructure/nats_client.py` strict-clean.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `uv run mypy src/jarvis/infrastructure/nats_client.py src/jarvis/shared/exceptions.py` \u2014 output: 'Success: no issues found in 2 source files'. The implementation uses TYPE_CHECKING-guarded imports for nats.aio.client.Client / nats.aio.msg.Msg / nats.js.JetStreamContext to satisfy strict mode without forcing a runtime import cost.",
+      "notes": "Ran `uv run mypy src/jarvis/infrastructure/nats_client.py src/jarvis/shared/exceptions.py` \u2014 output: 'Success: no issues found in 2 source files'. The implementation uses TYPE_CHECKING-guarded imports for nats.aio.client.Client / nats.aio.msg.Msg / nats.js.JetStreamContext to satisfy strict mode without forcing a runtime import cost."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `uv run ruff check src/jarvis/infrastructure/nats_client.py tests/test_nats_client.py src/jarvis/shared/exceptions.py` \u2014 output: 'All checks passed!'. Two UP041 findings (asyncio.TimeoutError vs TimeoutError alias) were fixed before the green run.",
+      "notes": "Ran `uv run ruff check src/jarvis/infrastructure/nats_client.py tests/test_nats_client.py src/jarvis/shared/exceptions.py` \u2014 output: 'All checks passed!'. Two UP041 findings (asyncio.TimeoutError vs TimeoutError alias) were fixed before the green run."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`NATSClient.connect(config)` returns `NATSClient | None` \u2014 never raises on connect failure.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "NATSClient.connect catches every exception from the underlying nats.connect call (broad `except Exception` is intentional and DDR-021-mandated) and returns None instead of raising. Verified by tests TestAC002ConnectFailureSoftFails::test_connect_returns_none_when_underlying_connect_raises (NoServersError) and ::test_connect_swallows_arbitrary_exceptions (OSError) \u2014 both assert wrapper is None and neither test expects an exception. The success path test_connect_returns_wrapper_with_client_and_js_properties asserts the return type is NATSClient.",
+        "notes": "NATSClient.connect catches every exception from the underlying nats.connect call (broad `except Exception` is intentional and DDR-021-mandated) and returns None instead of raising. Verified by tests TestAC002ConnectFailureSoftFails::test_connect_returns_none_when_underlying_connect_raises (NoServersError) and ::test_connect_swallows_arbitrary_exceptions (OSError) \u2014 both assert wrapper is None and neither test expects an exception. The success path test_connect_returns_wrapper_with_client_and_js_properties asserts the return type is NATSClient."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Connect failure \u2192 ERROR log with `nats_url` and underlying exception, return `None`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "On connect failure NATSClient.connect emits logger.error('nats_connect_failed', nats_url=..., error_class=..., error=...) before returning None. test_connect_logs_error_with_nats_url_and_exception_class verifies the log contains 'nats_connect_failed', the configured 'nats://down:4222' URL, and the exception class name 'NoServersError'.",
+        "notes": "On connect failure NATSClient.connect emits logger.error('nats_connect_failed', nats_url=..., error_class=..., error=...) before returning None. test_connect_logs_error_with_nats_url_and_exception_class verifies the log contains 'nats_connect_failed', the configured 'nats://down:4222' URL, and the exception class name 'NoServersError'."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Connect success \u2192 INFO log; the returned wrapper exposes `client` and `js` properties.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "On success the wrapper logs logger.info('nats_connect_success', nats_url=...) and exposes the @property `client` (returns the underlying nats Client) and @property `js` (returns Client.jetstream()). Tests test_connect_returns_wrapper_with_client_and_js_properties and test_connect_emits_info_log_on_success verify both behaviours.",
+        "notes": "On success the wrapper logs logger.info('nats_connect_success', nats_url=...) and exposes the @property `client` (returns the underlying nats Client) and @property `js` (returns Client.jetstream()). Tests test_connect_returns_wrapper_with_client_and_js_properties and test_connect_emits_info_log_on_success verify both behaviours."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`request(subject, payload, *, timeout)` issues NATS request/reply and raises `asyncio.TimeoutError` on timeout, `NATSConnectionError` on transport failure (per design \u00a78 dispatch sequence).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "request() forwards (subject, payload, timeout=...) to Client.request, lets nats.errors.TimeoutError (which inherits from builtin TimeoutError == asyncio.TimeoutError) propagate verbatim, and wraps any other Exception (e.g. ConnectionClosedError) in NATSConnectionError via raise NATSConnectionError(...) from exc. Verified by test_request_returns_message_on_success, test_request_raises_asyncio_timeout_error_on_timeout, and test_request_raises_nats_connection_error_on_transport_failure.",
+        "notes": "request() forwards (subject, payload, timeout=...) to Client.request, lets nats.errors.TimeoutError (which inherits from builtin TimeoutError == asyncio.TimeoutError) propagate verbatim, and wraps any other Exception (e.g. ConnectionClosedError) in NATSConnectionError via raise NATSConnectionError(...) from exc. Verified by test_request_returns_message_on_success, test_request_raises_asyncio_timeout_error_on_timeout, and test_request_raises_nats_connection_error_on_transport_failure."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`drain(timeout=5.0)` is **idempotent** \u2014 second call after drain is a no-op (no second log line, no exception).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "NATSClient.__slots__ includes `_drained`, set False at __init__ and flipped to True only on a successful drain. Subsequent drain() calls return immediately without logging or invoking the underlying client. Verified by test_drain_calls_underlying_drain_once, test_drain_second_call_is_no_op (3 calls \u2192 1 underlying drain), test_drain_second_call_does_not_log (capsys assertion: 'nats_drain_complete' present once after first call, absent after second), and test_drain_respects_timeout (asyncio.wait_for bound).",
+        "notes": "NATSClient.__slots__ includes `_drained`, set False at __init__ and flipped to True only on a successful drain. Subsequent drain() calls return immediately without logging or invoking the underlying client. Verified by test_drain_calls_underlying_drain_once, test_drain_second_call_is_no_op (3 calls \u2192 1 underlying drain), test_drain_second_call_does_not_log (capsys assertion: 'nats_drain_complete' present once after first call, absent after second), and test_drain_respects_timeout (asyncio.wait_for bound)."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Reconnect events emit structured logs (`nats_reconnect`, `nats_disconnect`) per ADR-ARCH-020.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Module-level callbacks _on_reconnect / _on_disconnect / _on_error / _on_closed are wired through NATSClient.connect's kwargs (reconnected_cb / disconnected_cb / error_cb / closed_cb) and each calls structlog.get_logger(__name__) with canonical event names ('nats_reconnect', 'nats_disconnect', 'nats_error', 'nats_closed'). Tests test_reconnect_callback_emits_structured_log, test_disconnect_callback_emits_structured_log, and test_error_callback_emits_structured_log pull the callbacks from the patched _nats_connect kwargs and assert the structured event names appear in stdout.",
+        "notes": "Module-level callbacks _on_reconnect / _on_disconnect / _on_error / _on_closed are wired through NATSClient.connect's kwargs (reconnected_cb / disconnected_cb / error_cb / closed_cb) and each calls structlog.get_logger(__name__) with canonical event names ('nats_reconnect', 'nats_disconnect', 'nats_error', 'nats_closed'). Tests test_reconnect_callback_emits_structured_log, test_disconnect_callback_emits_structured_log, and test_error_callback_emits_structured_log pull the callbacks from the patched _nats_connect kwargs and assert the structured event names appear in stdout."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "`tests/test_nats_client.py` covers: successful connect (mock `nats.connect`), failed connect \u2192 returns None, idempotent drain, reconnect-event logging, request \u2192 TimeoutError on no reply, request \u2192 NATSConnectionError on transport-down.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "tests/test_nats_client.py defines six AC-aligned classes covering the full surface: TestAC001ConnectSuccess (3 tests), TestAC002ConnectFailureSoftFails (3 tests including arbitrary-exception path), TestAC004RequestErrorMapping (3 tests: success / timeout / transport), TestAC005DrainIdempotent (4 tests including timeout bound), TestAC006ReconnectEventLogging (3 callbacks), and TestModuleSurface (3 sanity exports). All 19 tests use unittest.mock to patch the module-level `_nats_connect` seam \u2014 no real network I/O.",
+        "notes": "tests/test_nats_client.py defines six AC-aligned classes covering the full surface: TestAC001ConnectSuccess (3 tests), TestAC002ConnectFailureSoftFails (3 tests including arbitrary-exception path), TestAC004RequestErrorMapping (3 tests: success / timeout / transport), TestAC005DrainIdempotent (4 tests including timeout bound), TestAC006ReconnectEventLogging (3 callbacks), and TestModuleSurface (3 sanity exports). All 19 tests use unittest.mock to patch the module-level `_nats_connect` seam \u2014 no real network I/O."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "`uv run mypy src/jarvis/infrastructure/nats_client.py` strict-clean.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `uv run mypy src/jarvis/infrastructure/nats_client.py src/jarvis/shared/exceptions.py` \u2014 output: 'Success: no issues found in 2 source files'. The implementation uses TYPE_CHECKING-guarded imports for nats.aio.client.Client / nats.aio.msg.Msg / nats.js.JetStreamContext to satisfy strict mode without forcing a runtime import cost.",
+        "notes": "Ran `uv run mypy src/jarvis/infrastructure/nats_client.py src/jarvis/shared/exceptions.py` \u2014 output: 'Success: no issues found in 2 source files'. The implementation uses TYPE_CHECKING-guarded imports for nats.aio.client.Client / nats.aio.msg.Msg / nats.js.JetStreamContext to satisfy strict mode without forcing a runtime import cost."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `uv run ruff check src/jarvis/infrastructure/nats_client.py tests/test_nats_client.py src/jarvis/shared/exceptions.py` \u2014 output: 'All checks passed!'. Two UP041 findings (asyncio.TimeoutError vs TimeoutError alias) were fixed before the green run.",
+        "notes": "Ran `uv run ruff check src/jarvis/infrastructure/nats_client.py tests/test_nats_client.py src/jarvis/shared/exceptions.py` \u2014 output: 'All checks passed!'. Two UP041 findings (asyncio.TimeoutError vs TimeoutError alias) were fixed before the green run."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 351 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1257/5200 tokens\n\n### \u2705 Similar Outcomes\n- RELATED_TO_TASK_REVIEW\n- INVOLVES\n\n### \ud83c\udfa8 Relevant Patterns\n- USES_FUNCTION\n- USES_TEMPLATE\n\n### \u26a0\ufe0f Warnings\n- HAS_INCORRECT_PATH_REFERENCE\n- RELATED_PROJECT\n\n### \ud83c\udfad Role Constraints\n- MONITORS_RESULTS_FROM\n- DELEGATES_TO\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_IMPLEMENTATION_MODE\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

@@ -1,0 +1,201 @@
+{
+  "task_id": "TASK-J004-013",
+  "timestamp": "2026-04-28T12:54:50.792836",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1835,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/src/jarvis/infrastructure/lifecycle.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/src/jarvis/tools/__init__.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/conftest.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_feat_j004_wiring.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_startup_phase3.py",
+    "src/jarvis/infrastructure/lifecycle.py",
+    "src/jarvis/tools/__init__.py",
+    "tasks/backlog/TASK-J004-013-lifecycle-startup-and-shutdown-wiring.md",
+    "tests/conftest.py",
+    "tests/test_lifecycle_startup_phase3.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J004-013-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-011/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-013/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-013/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-013/turn_context.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-013/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_feat_j004_wiring.py",
+    "tasks/design_approved/TASK-J004-013-lifecycle-startup-and-shutdown-wiring.md",
+    "tests/test_lifecycle_feat_j004_wiring.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_feat_j004_wiring.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_lifecycle_startup_phase3.py"
+  ],
+  "summary": "1835 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 136,
+    "max_turns": 160,
+    "ceiling_hit": false
+  },
+  "task_type": "feature",
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Startup wiring matches design \u00a78 sequence exactly.",
+      "status": "complete",
+      "evidence": "build_app_state now calls _connect_nats(config), _connect_graphiti(config), constructs RoutingHistoryWriter, then branches on nats_client: when present runs build_jarvis_manifest -> register_on_fleet (with try/except DDR-021 soft-fail) -> creates heartbeat_task via asyncio.create_task(heartbeat_loop(...)) -> awaits LiveCapabilitiesRegistry.create(nats_client). Falls back to StubCapabilitiesRegistry on else branch. Builds DispatchSemaphore(cap=config.dispatch_concurrent_cap). Then assemble_tool_list called twice (attended + ambient) with the three new kwargs (nats_client, routing_history_writer, dispatch_semaphore). Test test_nats_up_graphiti_up_full_wiring covers the live path; tests in TestAC002NatsSoftFail and TestAC003GraphitiSoftFail cover degraded paths.",
+      "test_file": "tests/test_lifecycle_feat_j004_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "DDR-021 soft-fail: NATSClient.connect returning None does NOT block startup; capabilities_registry falls back to StubCapabilitiesRegistry; heartbeat_task = None.",
+      "status": "complete",
+      "evidence": "build_app_state calls _connect_nats; if it returns None the else branch runs _build_stub_capabilities_registry (which yields StubCapabilitiesRegistry or _PreloadedCapabilitiesRegistry fallback) and fleet_heartbeat_task remains None. test_nats_none_uses_stub_registry_and_no_heartbeat asserts both invariants explicitly.",
+      "test_file": "tests/test_lifecycle_feat_j004_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "DDR-019 soft-fail: GraphitiClient.connect failure does NOT block startup; routing_history_writer constructed with graphiti_client=None (degraded mode).",
+      "status": "complete",
+      "evidence": "_connect_graphiti returns None on missing endpoint, import error, or exception (all caught). RoutingHistoryWriter(graphiti_client, config) is constructed unconditionally \u2014 it tolerates None and enters degraded mode (write_specialist_dispatch becomes a WARN-once no-op). test_graphiti_none_writer_in_degraded_mode constructs an entry and verifies write_specialist_dispatch does not raise when the writer was built with graphiti_client=None.",
+      "test_file": "tests/test_lifecycle_feat_j004_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "AppState gains the four new fields (frozen dataclass \u2014 order preserved).",
+      "status": "complete",
+      "evidence": "AppState extended with nats_client (NATSClient | None), graphiti_client (GraphitiClientProtocol | None), routing_history_writer (RoutingHistoryWriter | None), fleet_heartbeat_task (asyncio.Task[None] | None), and capabilities_registry (CapabilitiesRegistry | None) \u2014 all defaulting to None so existing test constructors keep working. The frozen=True invariant is preserved; TestAC004AppStateExtensions verifies each field name is present and the dataclass is still frozen.",
+      "test_file": "tests/test_lifecycle_feat_j004_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "assemble_tool_list accepts and propagates the three new kwargs to tools/dispatch.py module attributes.",
+      "status": "complete",
+      "evidence": "assemble_tool_list now declares nats_client, routing_history_writer, dispatch_semaphore as keyword-only parameters (default None). The body assigns each to _dispatch._nats_client, _dispatch._routing_history_writer, _dispatch._dispatch_semaphore \u2014 defaults reset to None on every call so stale wiring cannot leak. test_kwargs_propagate_to_dispatch_module_attributes and test_default_kwargs_clear_dispatch_module_attributes verify both directions.",
+      "test_file": "tests/test_lifecycle_feat_j004_wiring.py",
+      "implementation_files": [
+        "src/jarvis/tools/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Shutdown order matches the 8-step sequence above; ordering enforced by TASK-J004-018's invariant test.",
+      "status": "complete",
+      "evidence": "shutdown() executes the 8 steps in order: (1) cancel fleet_heartbeat_task, (2) deregister_from_fleet, (3) capabilities_registry.close(), (4) routing_history_writer.flush(timeout=5.0), (5) nats_client.drain(timeout=5.0), (6) graphiti_client.aclose() (with fallback to .close()), (7) disarm Layer-2 hooks (and dispatch dependencies), (8) state.store.close(). test_shutdown_runs_in_declared_order asserts the strict ordering via a recording AppState fixture; TASK-J004-018 will pin the invariant separately.",
+      "test_file": "tests/test_lifecycle_feat_j004_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Each shutdown step is independently failure-tolerant \u2014 a single failed step (WARN-logged) does not skip later steps.",
+      "status": "complete",
+      "evidence": "Every step in shutdown() is wrapped in its own try/except that logs at WARN with structured fields and continues. test_shutdown_continues_when_a_step_raises injects RuntimeError into deregister_from_fleet and asserts capabilities.close, writer.flush, nats.drain, graphiti.aclose, and store.close all still execute.",
+      "test_file": "tests/test_lifecycle_feat_j004_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Heartbeat task cancellation produces no traceback (handled by heartbeat_loop's CancelledError contract).",
+      "status": "complete",
+      "evidence": "shutdown() catches asyncio.CancelledError when awaiting the cancelled heartbeat task and passes silently. test_cancellation_handled_silently constructs a heartbeat coroutine that re-raises CancelledError per the heartbeat_loop contract, runs shutdown, and asserts the task ends in cancelled/done state with no traceback escape.",
+      "test_file": "tests/test_lifecycle_feat_j004_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "uv run mypy src/jarvis/infrastructure/lifecycle.py strict-clean.",
+      "status": "complete",
+      "evidence": "Ran `python -m mypy src/jarvis/infrastructure/lifecycle.py` (strict mode per pyproject.toml [tool.mypy]) \u2014 output: 'Success: no issues found in 1 source file'.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "`python -m ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py` -> 'All checks passed!'. `python -m ruff format` reformatted lifecycle.py once; subsequent format-check returns clean.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py",
+        "src/jarvis/tools/__init__.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 199.23878879199037
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 323.54219720800756
+    }
+  ]
+}

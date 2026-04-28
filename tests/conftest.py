@@ -26,6 +26,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import pytest_asyncio
 
 # ---------------------------------------------------------------------------
 # Inject src/ into sys.path so tests can ``from jarvis import ...`` even
@@ -125,9 +126,52 @@ def _restore_dispatch_layer2_hooks() -> Generator[None, None, None]:
 
     original_session_hook = _dispatch._current_session_hook
     original_frame_hook = _dispatch._async_subagent_frame_hook
+    original_nats = _dispatch._nats_client
+    original_writer = _dispatch._routing_history_writer
+    original_sem = _dispatch._dispatch_semaphore
     yield
     _dispatch._current_session_hook = original_session_hook
     _dispatch._async_subagent_frame_hook = original_frame_hook
+    _dispatch._nats_client = original_nats
+    _dispatch._routing_history_writer = original_writer
+    _dispatch._dispatch_semaphore = original_sem
+
+
+# ---------------------------------------------------------------------------
+# Autouse: short-circuit ``NATSClient.connect`` to ``None`` by default.
+#
+# TASK-J004-013 wired ``build_app_state`` to call ``NATSClient.connect`` on
+# every startup. nats-py's default ``connect()`` blocks for tens of seconds
+# (or hangs entirely) when no broker is reachable on ``nats://localhost:4222``
+# — every existing lifecycle test that does not explicitly patch the seam
+# would stall under the new wiring.
+#
+# Returning ``None`` here mirrors the DDR-021 soft-fail: lifecycle falls back
+# to ``StubCapabilitiesRegistry`` and ``fleet_heartbeat_task = None`` — the
+# behaviour the pre-J004-013 tests implicitly assumed (NATS untouched). Tests
+# that need to exercise the NATS-up path opt in by wrapping their body in an
+# inner ``patch("jarvis.infrastructure.lifecycle.NATSClient.connect", ...)``
+# block — the inner ``patch`` shadows this autouse stub for the duration.
+#
+# The Graphiti seam gets the same treatment so the optional graphiti-core
+# import never fires during unit tests (the seam is pure-stub by default).
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _stub_nats_and_graphiti_connect_seams() -> Generator[None, None, None]:
+    from unittest.mock import AsyncMock as _AsyncMock
+    from unittest.mock import patch as _patch
+
+    with (
+        _patch(
+            "jarvis.infrastructure.lifecycle._connect_nats",
+            new=_AsyncMock(return_value=None),
+        ),
+        _patch(
+            "jarvis.infrastructure.lifecycle._connect_graphiti",
+            new=_AsyncMock(return_value=None),
+        ),
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -211,3 +255,152 @@ def app_state() -> dict[str, Any]:
         "config": None,
         "store": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# nats_test_server — in-process JetStream-enabled NATS broker for integration
+# tests (TASK-J004-014, FEAT-JARVIS-004 Phase 3 floor capability).
+#
+# Each test gets a fresh ``nats-server -p <free> -js`` subprocess bound to
+# a tmp_path JetStream store directory and a lifecycle-managed
+# :class:`NATSClient` wired against it. The fixture skips with a clear
+# operator message when the ``nats-server`` CLI is not on PATH so the suite
+# remains green on developer machines without the binary installed —
+# CI/operators install ``nats-server`` (e.g. ``brew install nats-server``)
+# to exercise the integration path.
+#
+# Function-scoped (the default) so each test starts from a clean KV bucket
+# state — survives ``pytest-randomly --randomly-seed=0`` because no fixture
+# state outlives a single test.
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def nats_server_binary() -> str:
+    """Resolve the ``nats-server`` CLI or skip the test cleanly.
+
+    Returns:
+        Absolute path to the ``nats-server`` executable.
+    """
+    import shutil as _shutil
+
+    binary = _shutil.which("nats-server")
+    if binary is None:
+        pytest.skip("install nats-server CLI for integration tests")
+    return binary
+
+
+@pytest.fixture()
+def _free_tcp_port() -> int:
+    """Return a TCP port that is currently free on localhost.
+
+    There is an inherent TOCTOU race between closing the discovery socket
+    and the subprocess binding to the same port; the integration tests
+    accept that risk because pytest-randomly seeds make collisions rare and
+    a flake here surfaces as a connect-timeout, not a silent corruption.
+    """
+    import socket as _socket
+
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+@pytest_asyncio.fixture()
+async def nats_test_server(
+    nats_server_binary: str,
+    _free_tcp_port: int,
+    tmp_path: Path,
+) -> Any:
+    """Yield a connected :class:`NATSClient` against an in-process broker.
+
+    Steps:
+      1. Spawn ``nats-server -p <port> -js -sd <tmp_path>``.
+      2. Poll-connect until the server accepts traffic (5s budget).
+      3. Build a :class:`NATSClient` via ``NATSClient.connect`` so the
+         production wrapper exercises the same connect path as the
+         supervisor lifecycle.
+      4. Yield the wrapper to the test.
+      5. On teardown drain the wrapper, terminate the subprocess, and wait
+         (SIGKILL after 5s if the broker fails to exit cleanly).
+
+    The ``-sd`` flag points JetStream's storage at ``tmp_path`` so each
+    test gets an isolated KV state without polluting the working directory.
+    """
+    import asyncio as _asyncio
+    import subprocess as _subprocess
+    import time as _time
+
+    import nats as _nats
+
+    from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.nats_client import NATSClient
+
+    # Keep stdio attached to /dev/null so a long-running pytest does not
+    # eventually fill the kernel pipe buffer and block the broker.
+    process = _subprocess.Popen(
+        [
+            nats_server_binary,
+            "-p",
+            str(_free_tcp_port),
+            "-a",
+            "127.0.0.1",
+            "-js",
+            "-sd",
+            str(tmp_path / "jetstream"),
+        ],
+        stdout=_subprocess.DEVNULL,
+        stderr=_subprocess.DEVNULL,
+    )
+
+    nats_url = f"nats://127.0.0.1:{_free_tcp_port}"
+    client: NATSClient | None = None
+    try:
+        # Poll-connect until the server is ready (or budget exhausted).
+        deadline = _time.monotonic() + 5.0
+        last_error: Exception | None = None
+        while _time.monotonic() < deadline:
+            # Bail early if the broker died before accepting traffic.
+            if process.poll() is not None:
+                raise RuntimeError(
+                    f"nats-server exited prematurely with code {process.returncode}"
+                )
+            try:
+                probe = await _nats.connect(nats_url, connect_timeout=1)
+                await probe.close()
+                break
+            except Exception as exc:  # broker not ready yet — keep polling
+                last_error = exc
+                await _asyncio.sleep(0.1)
+        else:
+            raise RuntimeError(
+                f"nats-server at {nats_url} did not accept connections "
+                f"within 5s: {type(last_error).__name__}: {last_error}"
+            )
+
+        config = JarvisConfig(
+            openai_base_url="http://fake-endpoint/v1",
+            nats_url=nats_url,
+        )
+        client = await NATSClient.connect(config)
+        if client is None:
+            raise RuntimeError(
+                f"NATSClient.connect returned None for {nats_url} — "
+                "in-process broker handshake failed"
+            )
+
+        yield client
+    finally:
+        # Best-effort drain: a flaky broker should not mask the test result.
+        if client is not None:
+            try:
+                await client.drain(timeout=2.0)
+            except Exception:
+                # Drain failure during teardown is not actionable; the
+                # subprocess termination below cleans up regardless.
+                pass
+
+        process.terminate()
+        try:
+            process.wait(timeout=5.0)
+        except _subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2.0)

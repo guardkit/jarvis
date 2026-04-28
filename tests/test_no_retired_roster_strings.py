@@ -1,9 +1,11 @@
-"""Regression test — retired four-roster names + JA6 cloud-fallback phrases.
+"""Regression test — retired four-roster names + JA6 cloud-fallback phrases
++ Phase 2 dispatch stub anchors.
 
 This test guards against accidental reintroduction of legacy strings that
 were superseded by FEAT-JARVIS-003 (ADR-ARCH-011 — single ``jarvis-reasoner``
-async subagent) and the JA6 reset that removed the cloud-cheap-tier
-fallback chain.
+async subagent), the JA6 reset that removed the cloud-cheap-tier
+fallback chain, and FEAT-JARVIS-004 (TASK-J004-011 dispatch transport
+swap) which retired the Phase 2 stub anchors that pinned the swap point.
 
 Acceptance criteria covered (TASK-J003-020):
 
@@ -13,6 +15,13 @@ Acceptance criteria covered (TASK-J003-020):
   none of those four retired names.
 - AC-003: asserts :data:`SUPERVISOR_SYSTEM_PROMPT` contains none of the
   retired JA6 cloud-fallback phrases.
+
+Acceptance criteria covered (TASK-J004-020):
+
+- AC-001/AC-002: ``test_no_phase_2_stub_anchors`` walks ``src/jarvis/``
+  (with the ``transport_stub`` DEGRADED return-string scoped to
+  ``src/jarvis/tools/``) and asserts the four Phase 2 dispatch stub
+  anchors do NOT appear, naming the offending file + line on failure.
 """
 
 from __future__ import annotations
@@ -138,3 +147,119 @@ class TestAC003SupervisorPromptFreeOfJA6CloudFallback:
         assert forbidden.lower() not in rendered, (
             f"SUPERVISOR_SYSTEM_PROMPT mentions retired JA6 cloud-fallback phrase {forbidden!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# TASK-J004-020 — Phase 2 dispatch stub anchors retirement gate.
+#
+# TASK-J002-021 originally landed a grep test that pinned the presence of
+# ``LOG_PREFIX_DISPATCH = "JARVIS_DISPATCH_STUB"`` in
+# ``src/jarvis/tools/dispatch.py`` as the DDR-009 swap-point anchor for the
+# Phase 2 stub. FEAT-JARVIS-004 (TASK-J004-011) swapped the dispatch body
+# to a real NATS round-trip and deleted the four anchors that pinned the
+# old transport. This test is the *flipped* invariant: assert the four
+# anchors are GONE.
+#
+# Forbidden tokens (paired with their search root):
+#
+# - ``LOG_PREFIX_DISPATCH``    — the retired swap-point constant name.
+# - ``_stub_response_hook``    — the retired Phase 2 test stub callable.
+# - ``JARVIS_DISPATCH_STUB``   — the retired log-prefix grep token.
+# - ``DEGRADED: transport_stub`` — the retired DEGRADED return-shape that
+#   the Phase 2 stub emitted; bare ``transport_stub`` is preserved as a
+#   stable :class:`~jarvis.tools.types.DispatchError` vocabulary entry per
+#   DDR-009, so the assertion targets the full DEGRADED literal that was
+#   actually retired.
+#
+# The ``transport_stub`` check is scoped to ``src/jarvis/tools/`` per the
+# task AC; the other three are scoped to all of ``src/jarvis/``.
+# ---------------------------------------------------------------------------
+_RETIRED_PHASE_2_STUB_ANCHORS: tuple[tuple[str, str], ...] = (
+    ("LOG_PREFIX_DISPATCH", "src/jarvis"),
+    ("_stub_response_hook", "src/jarvis"),
+    ("JARVIS_DISPATCH_STUB", "src/jarvis"),
+    ("DEGRADED: transport_stub", "src/jarvis/tools"),
+)
+
+
+def _iter_files_under(root: Path) -> list[Path]:
+    """Recursively enumerate ``.py``/``.yaml``/``.yml``/``.txt`` files under ``root``.
+
+    Mirrors :func:`_iter_source_files` but with a configurable root so the
+    Phase 2 stub-anchor walk can scope ``transport_stub`` to
+    ``src/jarvis/tools/`` without re-implementing the traversal.
+    """
+    files: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix not in _EXTENSIONS:
+            continue
+        if "__pycache__" in path.parts:
+            continue
+        files.append(path)
+    return files
+
+
+def _find_anchor_offenders(forbidden: str, search_root: Path) -> list[str]:
+    """Return ``"<rel-path>:<line-no>"`` entries for every line containing ``forbidden``.
+
+    Naming both the file *and* the line number satisfies AC-002 of
+    TASK-J004-020 — a future regression that reintroduces a retired
+    anchor must surface a descriptive failure pointing to the exact
+    location.
+    """
+    offenders: list[str] = []
+    for path in _iter_files_under(search_root):
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            # Binary or unreadable files are not the regression target.
+            continue
+        if forbidden not in content:
+            continue
+        rel = path.relative_to(_PROJECT_ROOT)
+        for lineno, line in enumerate(content.splitlines(), start=1):
+            if forbidden in line:
+                offenders.append(f"{rel}:{lineno}")
+    return offenders
+
+
+class TestNoPhase2StubAnchors:
+    """All four retired Phase 2 stub anchors are absent from the source tree.
+
+    TASK-J004-020 acceptance criteria:
+
+    - AC-001: ``tests/test_no_retired_roster_strings.py`` extended with
+      ``test_no_phase_2_stub_anchors``; all 4 retired strings asserted
+      absent from ``src/jarvis/`` (with the ``transport_stub`` DEGRADED
+      string scoped to ``src/jarvis/tools/`` per the AC).
+    - AC-002: Test fails (descriptively, naming the file + line) if any
+      retired anchor reappears.
+    """
+
+    @pytest.mark.parametrize(
+        ("forbidden", "search_root"),
+        _RETIRED_PHASE_2_STUB_ANCHORS,
+        ids=[token for token, _ in _RETIRED_PHASE_2_STUB_ANCHORS],
+    )
+    def test_no_phase_2_stub_anchors(self, forbidden: str, search_root: str) -> None:
+        root = _PROJECT_ROOT / search_root
+        assert root.is_dir(), f"Expected search root at {root}; layout has changed."
+        offenders = _find_anchor_offenders(forbidden, root)
+        assert not offenders, (
+            f"Retired Phase 2 stub anchor {forbidden!r} reappeared in "
+            f"{search_root!r} — TASK-J004-011 swap-point retirement broken. "
+            f"Offending locations (file:line): {offenders}"
+        )
+
+    def test_all_four_anchors_enumerated(self) -> None:
+        """Sanity guard: the AC enumerates exactly four retired anchors."""
+        assert len(_RETIRED_PHASE_2_STUB_ANCHORS) == 4
+        tokens = {token for token, _ in _RETIRED_PHASE_2_STUB_ANCHORS}
+        assert tokens == {
+            "LOG_PREFIX_DISPATCH",
+            "_stub_response_hook",
+            "JARVIS_DISPATCH_STUB",
+            "DEGRADED: transport_stub",
+        }

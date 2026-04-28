@@ -59,6 +59,9 @@ from jarvis.tools.types import CalendarEvent, DispatchError, WebResult
 
 if TYPE_CHECKING:
     from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.dispatch_semaphore import DispatchSemaphore
+    from jarvis.infrastructure.nats_client import NATSClient
+    from jarvis.infrastructure.routing_history import RoutingHistoryWriter
 
 
 # Category grouping (pydantic types → general → catalogue → dispatch →
@@ -95,6 +98,9 @@ def assemble_tool_list(
     capability_registry: list[CapabilityDescriptor],
     *,
     include_frontier: bool = True,
+    nats_client: NATSClient | None = None,
+    routing_history_writer: RoutingHistoryWriter | None = None,
+    dispatch_semaphore: DispatchSemaphore | None = None,
 ) -> list[BaseTool]:
     """Wire and return the Jarvis tool list in stable alphabetical order.
 
@@ -156,6 +162,21 @@ def assemble_tool_list(
             flag must be supplied explicitly at the call site so a
             misplaced positional argument cannot accidentally enable the
             cloud escape hatch.
+        nats_client: Connected :class:`~jarvis.infrastructure.NATSClient`
+            wrapper, or ``None`` when NATS soft-failed at startup
+            (DDR-021). Snapshotted into ``jarvis.tools.dispatch._nats_client``
+            so :func:`dispatch_by_capability` can issue real NATS
+            request/reply round-trips. ``None`` keeps the dispatch tool in
+            ``DEGRADED: transport_unavailable`` mode.
+        routing_history_writer: Configured
+            :class:`~jarvis.infrastructure.routing_history.RoutingHistoryWriter`,
+            or ``None`` to disable trace persistence entirely. The writer
+            itself may carry a ``None`` Graphiti client (DDR-019 degraded
+            mode); that is independent of this flag.
+        dispatch_semaphore: A
+            :class:`~jarvis.infrastructure.dispatch_semaphore.DispatchSemaphore`
+            used to bound concurrent dispatch calls (DDR-020). ``None``
+            disables the cap (Phase-1 import-only invariant).
 
     Returns:
         A fresh ``list[BaseTool]`` in stable alphabetical order:
@@ -185,6 +206,16 @@ def assemble_tool_list(
     # at the start of each invocation so they remain consistent.
     _capabilities._capability_registry = list(capability_registry)
     _dispatch._capability_registry = list(capability_registry)
+
+    # 4. FEAT-JARVIS-004 — snapshot the dispatch dependencies into the
+    # ``jarvis.tools.dispatch`` module attributes per ASSUM-006. ``None``
+    # values are honoured (degraded mode); production wiring assigns a
+    # connected ``NATSClient``, the active ``RoutingHistoryWriter`` and the
+    # configured ``DispatchSemaphore`` so the swapped-in dispatch body has
+    # everything it needs without re-importing or re-wiring at call time.
+    _dispatch._nats_client = nats_client
+    _dispatch._routing_history_writer = routing_history_writer
+    _dispatch._dispatch_semaphore = dispatch_semaphore
 
     # Stable alphabetical ordering — the test suite and the supervisor
     # wiring rely on this being deterministic. A literal list (rather

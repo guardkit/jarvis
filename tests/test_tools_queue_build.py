@@ -440,19 +440,26 @@ class TestAC012NeverRaises:
 
 
 # ---------------------------------------------------------------------------
-# AC-013 — Seam test (TASK-J002-007 contract: _stub_response_hook + LOG_PREFIX)
+# AC-013 — Seam test (queue_build half — dispatch half retired by TASK-J004-011).
 # ---------------------------------------------------------------------------
 @pytest.mark.seam
 class TestAC013SeamContract:
-    """Seam contract from TASK-J002-007 + payload JSON round-trip."""
+    """Seam contract for the queue_build half of TASK-J002-007.
 
-    def test_log_prefix_constants_are_grep_anchors(self) -> None:
+    The dispatch-side anchors (``LOG_PREFIX_DISPATCH``, ``_stub_response_hook``)
+    were retired by TASK-J004-011 when the dispatch tool gained a real NATS
+    round-trip. The queue_build anchor remains until FEAT-JARVIS-005 swaps
+    its transport.
+    """
+
+    def test_queue_build_log_prefix_is_grep_anchor(self) -> None:
         # Producer side (TASK-J002-007).
         assert dispatch.LOG_PREFIX_QUEUE_BUILD == "JARVIS_QUEUE_BUILD" + "_STUB"
-        assert dispatch.LOG_PREFIX_DISPATCH == "JARVIS_DISPATCH" + "_STUB"
 
-    def test_stub_response_hook_attribute_exists(self) -> None:
-        assert hasattr(dispatch, "_stub_response_hook")
+    def test_dispatch_log_prefix_anchor_retired(self) -> None:
+        # TASK-J004-011 retirement gate.
+        assert not hasattr(dispatch, "LOG_PREFIX_DISPATCH")
+        assert not hasattr(dispatch, "_stub_response_hook")
 
     def test_payload_json_round_trips_through_basetool_invocation(
         self,

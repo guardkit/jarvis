@@ -58,6 +58,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# ---- Phase 4 (FEAT-JARVIS-004) — TASK-J004-002 -----------------------------
+# `[nats]` declares the live `nats-py` async client used by
+# `jarvis.transport.nats.*` (DDR-021 — soft-fail when unavailable). The lower
+# bound `>=2.0` mirrors the sibling `nats-core` repository convention
+# (`nats-core/pyproject.toml` runtime dep `nats-py>=2.0`); the upper bound
+# `<3` caps at the next major to protect against the next major-bump churn,
+# matching the Phase 1 `<2` convention applied across the langchain-* pins.
+# `nats-py` stays OUT of `[project].dependencies` per the Phase 2 scope
+# invariant lifted in FEAT-JARVIS-004 — the live transport is opt-in.
+nats = [
+    "nats-py>=2.0,<3",
+]
+# `[graphiti]` declares the `graphiti-core` SDK used by the routing-history
+# writer (DDR-019 — fire-and-forget Graphiti writes). The lower bound
+# `>=0.9` is the first 0.9.x line shipping the pydantic-2 / falkordb backend
+# combo Jarvis relies on (`.guardkit/graphiti.yaml` configures
+# `graph_store: falkordb`). The upper bound `<1` caps at the next major;
+# graphiti-core is still on its 0.x stabilisation path and a 1.0 bump is
+# expected to ship breaking surface changes.
+graphiti = [
+    "graphiti-core>=0.9,<1",
+]
 providers = [
     # langchain-* providers rebaselined 2026-04-27 to coherent 1.x; see
     # ADR-ARCH-010-rev2 / TASK-REV-FA04 follow-up.
@@ -68,6 +90,17 @@ providers = [
     # adapter (e.g. native Files API, structured output via genai.types).
     # Added in TASK-J003-006.
     "google-genai>=0.3.0",
+    # ---- Phase 4 (FEAT-JARVIS-004) — TASK-J004-002 -------------------------
+    # Re-export the FEAT-JARVIS-004 optional groups under the `[providers]`
+    # umbrella so a single `pip install .[providers]` (or
+    # `uv sync --extra providers`) installs every provider/integration this
+    # project can be configured to use. This mirrors the LCOI policy
+    # (TASK-REV-LES1 / LES1 §3) recorded in `.claude/CLAUDE.md`. PEP 631
+    # self-extras references resolve in pip and uv: depending on
+    # `jarvis[nats]` from inside the `jarvis` distribution pulls in the
+    # `[nats]` group's deps.
+    "jarvis[nats]",
+    "jarvis[graphiti]",
 ]
 # `dev` mirrors the PEP 735 `[dependency-groups].dev` entries below for
 # consumers (and CI) that prefer the older PEP 631 extras syntax

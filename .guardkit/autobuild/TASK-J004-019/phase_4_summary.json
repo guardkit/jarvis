@@ -1,0 +1,7 @@
+{
+  "tests_run": 31,
+  "tests_failed": 0,
+  "coverage_pct": 44.0,
+  "output_summary": "tests/test_contract_nats_core.py 14/14 + test_no_retired_roster_strings.py 17/17 pass in 1.50s; dispatch.py 44% (changes were docstring-only); src/jarvis aggregate 38% under focused suite.",
+  "quality_gates_passed": true
+}

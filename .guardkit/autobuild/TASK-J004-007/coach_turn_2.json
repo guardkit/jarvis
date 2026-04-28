@@ -1,0 +1,225 @@
+{
+  "task_id": "TASK-J004-007",
+  "turn": 2,
+  "decision": "feedback",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_dispatch_semaphore.py tests/test_fleet_registration.py tests/test_nats_client.py tests/test_routing_history_schema.py tests/test_routing_history_schema_exports.py tests/test_routing_history_writer.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_routing_history_writer.py:555\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_routing_history_writer.py:555: PytestUnknownMarkWarning: Unknown pytest.mark.seam - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\ntests/test_routing_history_writer.py:556\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_routing_history_writer.py:556: PytestUnknownMarkWarning: Unknown pytest.mark.integration_contract - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\n======================= 183 passed, 3 warnings in 2.12s ========================",
+      "duration_seconds": 3.791923761367798
+    },
+    "requirements": {
+      "criteria_total": 10,
+      "criteria_met": 10,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`build_jarvis_manifest(config)` is **pure** \u2014 no network, no filesystem; output is fully determined by `config`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Implementation reads only `config.jarvis_agent_version` and `os.environ.get('HOSTNAME')` (in-process, deterministic). Test `test_function_is_pure_no_network_no_filesystem` patches `socket.socket` and `builtins.open` to raise on access; the function still completes successfully. `test_function_is_deterministic` proves identical inputs produce identical model_dump output. All purity tests pass on turn 2 re-run.",
+      "notes": "Implementation reads only `config.jarvis_agent_version` and `os.environ.get('HOSTNAME')` (in-process, deterministic). Test `test_function_is_pure_no_network_no_filesystem` patches `socket.socket` and `builtins.open` to raise on access; the function still completes successfully. `test_function_is_deterministic` proves identical inputs produce identical model_dump output. All purity tests pass on turn 2 re-run."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Manifest validates against `nats_core.AgentManifest` (kebab-case `agent_id`, semver `version`, valid `trust_tier` enum).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Manifest is constructed via `AgentManifest(...)`, which runs pydantic validation (kebab-case `^[a-z][a-z0-9-]*$`, semver pattern, `Literal` trust_tier enum). Test `test_manifest_validates_as_agent_manifest` round-trips through `AgentManifest.model_validate(manifest.model_dump())` to confirm validation. `test_invalid_version_rejected_at_config_time` confirms the semver gate fires upstream in `JarvisConfig`. Both pass on turn 2.",
+      "notes": "Manifest is constructed via `AgentManifest(...)`, which runs pydantic validation (kebab-case `^[a-z][a-z0-9-]*$`, semver pattern, `Literal` trust_tier enum). Test `test_manifest_validates_as_agent_manifest` round-trips through `AgentManifest.model_validate(manifest.model_dump())` to confirm validation. `test_invalid_version_rejected_at_config_time` confirms the semver gate fires upstream in `JarvisConfig`. Both pass on turn 2."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`metadata` dict on manifest is JSON-serializable; \u226464KB encoded (validator-enforced by `nats_core.AgentManifest`).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Static `_METADATA = {'adapter_set': 'telegram,cli,dashboard,reachy', 'phase': 'v1'}` is `dict[str, str]` and serializes to ~70 bytes. Test `test_metadata_is_json_serializable_and_under_64kb` confirms `json.dumps(manifest.metadata).encode()` produces well under 1KB and under the 65536-byte AgentManifest validator limit. Test passes on turn 2.",
+      "notes": "Static `_METADATA = {'adapter_set': 'telegram,cli,dashboard,reachy', 'phase': 'v1'}` is `dict[str, str]` and serializes to ~70 bytes. Test `test_metadata_is_json_serializable_and_under_64kb` confirms `json.dumps(manifest.metadata).encode()` produces well under 1KB and under the 65536-byte AgentManifest validator limit. Test passes on turn 2."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`register_on_fleet` is idempotent \u2014 registering a second time replaces the prior entry, no exception.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Implementation delegates to `NATSKVManifestRegistry.register`, which performs a KV upsert (`InMemoryManifestRegistry` mirrors this with `dict[agent_id]`). Test `test_register_is_idempotent` registers v0.4.0 then v0.4.1 and asserts `len(registry.list_all()) == 1` with `version == '0.4.1'`. Test passes on turn 2.",
+      "notes": "Implementation delegates to `NATSKVManifestRegistry.register`, which performs a KV upsert (`InMemoryManifestRegistry` mirrors this with `dict[agent_id]`). Test `test_register_is_idempotent` registers v0.4.0 then v0.4.1 and asserts `len(registry.list_all()) == 1` with `version == '0.4.1'`. Test passes on turn 2."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`heartbeat_loop` cancels cleanly on `asyncio.CancelledError` (no traceback, INFO log line).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "`heartbeat_loop` wraps the `while True` in `try/except asyncio.CancelledError`, logs `fleet_heartbeat_cancelled` at INFO without `exc_info`, then re-raises so the asyncio task is recorded as cancelled. Test `test_heartbeat_cancels_cleanly_with_info_log` cancels the task, asserts CancelledError propagates to the caller, and uses `structlog.testing.capture_logs` to confirm the event fires at `log_level='info'` with no `exc_info` key. Test passes on turn 2.",
+      "notes": "`heartbeat_loop` wraps the `while True` in `try/except asyncio.CancelledError`, logs `fleet_heartbeat_cancelled` at INFO without `exc_info`, then re-raises so the asyncio task is recorded as cancelled. Test `test_heartbeat_cancels_cleanly_with_info_log` cancels the task, asserts CancelledError propagates to the caller, and uses `structlog.testing.capture_logs` to confirm the event fires at `log_level='info'` with no `exc_info` key. Test passes on turn 2."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`heartbeat_loop` survives a single failed publish (WARN log, next tick succeeds).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Per-tick `try/except Exception` catches transient failures, logs `fleet_heartbeat_failed` at WARN, and continues to the next `asyncio.sleep`. Test `test_heartbeat_survives_single_publish_failure` patches `registry.register` so attempt 1 raises and attempts \u22652 succeed; asserts the loop reached attempt 2 (so the failure did not kill the task) and the manifest is now stored. Test passes on turn 2.",
+      "notes": "Per-tick `try/except Exception` catches transient failures, logs `fleet_heartbeat_failed` at WARN, and continues to the next `asyncio.sleep`. Test `test_heartbeat_survives_single_publish_failure` patches `registry.register` so attempt 1 raises and attempts \u22652 succeed; asserts the loop reached attempt 2 (so the failure did not kill the task) and the manifest is now stored. Test passes on turn 2."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "`deregister_from_fleet` does not raise even if the registry has no entry for `agent_id`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Implementation wraps the `_resolve_registry` + `registry.deregister` calls in `try/except Exception` that logs WARN and returns. `InMemoryManifestRegistry.deregister` already silently no-ops on missing keys. Tests `test_deregister_silent_on_missing_entry` (empty registry) and `test_deregister_swallows_transport_errors` (resolver raises) both confirm no exception escapes. Both pass on turn 2.",
+      "notes": "Implementation wraps the `_resolve_registry` + `registry.deregister` calls in `try/except Exception` that logs WARN and returns. `InMemoryManifestRegistry.deregister` already silently no-ops on missing keys. Tests `test_deregister_silent_on_missing_entry` (empty registry) and `test_deregister_swallows_transport_errors` (resolver raises) both confirm no exception escapes. Both pass on turn 2."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "`tests/test_fleet_registration.py` covers: manifest shape, register-then-query, heartbeat fires at interval (use `freezegun` or `asyncio.sleep` mocking), heartbeat survives one publish failure, deregister removes the entry, deregister of missing entry is silent.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "All six scenarios are covered by named tests: TestBuildJarvisManifest::test_manifest_has_canonical_static_fields and ::test_manifest_carries_four_canonical_intents (manifest shape); TestRegisterOnFleet::test_register_then_query_returns_manifest (register-then-query); TestHeartbeatLoop::test_heartbeat_fires_at_interval (asyncio.sleep mocked via patch.object, asserts \u22653 sleeps at the configured interval); TestHeartbeatLoop::test_heartbeat_survives_single_publish_failure (one register raises, next succeeds); TestDeregisterFromFleet::test_deregister_removes_entry (registry.get returns None after deregister); TestDeregisterFromFleet::test_deregister_silent_on_missing_entry (deregister of empty registry does not raise). All 23 tests pass on turn 2.",
+      "notes": "All six scenarios are covered by named tests: TestBuildJarvisManifest::test_manifest_has_canonical_static_fields and ::test_manifest_carries_four_canonical_intents (manifest shape); TestRegisterOnFleet::test_register_then_query_returns_manifest (register-then-query); TestHeartbeatLoop::test_heartbeat_fires_at_interval (asyncio.sleep mocked via patch.object, asserts \u22653 sleeps at the configured interval); TestHeartbeatLoop::test_heartbeat_survives_single_publish_failure (one register raises, next succeeds); TestDeregisterFromFleet::test_deregister_removes_entry (registry.get returns None after deregister); TestDeregisterFromFleet::test_deregister_silent_on_missing_entry (deregister of empty registry does not raise). All 23 tests pass on turn 2."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "`uv run mypy src/jarvis/infrastructure/fleet_registration.py` strict-clean.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "`python -m mypy --strict src/jarvis/infrastructure/fleet_registration.py` re-run on turn 2 reports `Success: no issues found in 1 source file`. Module uses `from __future__ import annotations`, `typing.Any` for the duck-typed `client` parameter, explicit return type annotations on all functions, and no `# type: ignore` directives.",
+      "notes": "`python -m mypy --strict src/jarvis/infrastructure/fleet_registration.py` re-run on turn 2 reports `Success: no issues found in 1 source file`. Module uses `from __future__ import annotations`, `typing.Any` for the duck-typed `client` parameter, explicit return type annotations on all functions, and no `# type: ignore` directives."
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "`python -m ruff check src/jarvis/infrastructure/fleet_registration.py tests/test_fleet_registration.py` re-run on turn 2 reports `All checks passed!`. `python -m ruff format --check` reports `2 files already formatted`. Combined-`with` block in the heartbeat-cancel test (SIM117) and import organization remain compliant.",
+      "notes": "`python -m ruff check src/jarvis/infrastructure/fleet_registration.py tests/test_fleet_registration.py` re-run on turn 2 reports `All checks passed!`. `python -m ruff format --check` reports `2 files already formatted`. Combined-`with` block in the heartbeat-cancel test (SIM117) and import organization remain compliant."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`build_jarvis_manifest(config)` is **pure** \u2014 no network, no filesystem; output is fully determined by `config`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Implementation reads only `config.jarvis_agent_version` and `os.environ.get('HOSTNAME')` (in-process, deterministic). Test `test_function_is_pure_no_network_no_filesystem` patches `socket.socket` and `builtins.open` to raise on access; the function still completes successfully. `test_function_is_deterministic` proves identical inputs produce identical model_dump output. All purity tests pass on turn 2 re-run.",
+        "notes": "Implementation reads only `config.jarvis_agent_version` and `os.environ.get('HOSTNAME')` (in-process, deterministic). Test `test_function_is_pure_no_network_no_filesystem` patches `socket.socket` and `builtins.open` to raise on access; the function still completes successfully. `test_function_is_deterministic` proves identical inputs produce identical model_dump output. All purity tests pass on turn 2 re-run."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Manifest validates against `nats_core.AgentManifest` (kebab-case `agent_id`, semver `version`, valid `trust_tier` enum).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Manifest is constructed via `AgentManifest(...)`, which runs pydantic validation (kebab-case `^[a-z][a-z0-9-]*$`, semver pattern, `Literal` trust_tier enum). Test `test_manifest_validates_as_agent_manifest` round-trips through `AgentManifest.model_validate(manifest.model_dump())` to confirm validation. `test_invalid_version_rejected_at_config_time` confirms the semver gate fires upstream in `JarvisConfig`. Both pass on turn 2.",
+        "notes": "Manifest is constructed via `AgentManifest(...)`, which runs pydantic validation (kebab-case `^[a-z][a-z0-9-]*$`, semver pattern, `Literal` trust_tier enum). Test `test_manifest_validates_as_agent_manifest` round-trips through `AgentManifest.model_validate(manifest.model_dump())` to confirm validation. `test_invalid_version_rejected_at_config_time` confirms the semver gate fires upstream in `JarvisConfig`. Both pass on turn 2."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`metadata` dict on manifest is JSON-serializable; \u226464KB encoded (validator-enforced by `nats_core.AgentManifest`).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Static `_METADATA = {'adapter_set': 'telegram,cli,dashboard,reachy', 'phase': 'v1'}` is `dict[str, str]` and serializes to ~70 bytes. Test `test_metadata_is_json_serializable_and_under_64kb` confirms `json.dumps(manifest.metadata).encode()` produces well under 1KB and under the 65536-byte AgentManifest validator limit. Test passes on turn 2.",
+        "notes": "Static `_METADATA = {'adapter_set': 'telegram,cli,dashboard,reachy', 'phase': 'v1'}` is `dict[str, str]` and serializes to ~70 bytes. Test `test_metadata_is_json_serializable_and_under_64kb` confirms `json.dumps(manifest.metadata).encode()` produces well under 1KB and under the 65536-byte AgentManifest validator limit. Test passes on turn 2."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`register_on_fleet` is idempotent \u2014 registering a second time replaces the prior entry, no exception.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Implementation delegates to `NATSKVManifestRegistry.register`, which performs a KV upsert (`InMemoryManifestRegistry` mirrors this with `dict[agent_id]`). Test `test_register_is_idempotent` registers v0.4.0 then v0.4.1 and asserts `len(registry.list_all()) == 1` with `version == '0.4.1'`. Test passes on turn 2.",
+        "notes": "Implementation delegates to `NATSKVManifestRegistry.register`, which performs a KV upsert (`InMemoryManifestRegistry` mirrors this with `dict[agent_id]`). Test `test_register_is_idempotent` registers v0.4.0 then v0.4.1 and asserts `len(registry.list_all()) == 1` with `version == '0.4.1'`. Test passes on turn 2."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`heartbeat_loop` cancels cleanly on `asyncio.CancelledError` (no traceback, INFO log line).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "`heartbeat_loop` wraps the `while True` in `try/except asyncio.CancelledError`, logs `fleet_heartbeat_cancelled` at INFO without `exc_info`, then re-raises so the asyncio task is recorded as cancelled. Test `test_heartbeat_cancels_cleanly_with_info_log` cancels the task, asserts CancelledError propagates to the caller, and uses `structlog.testing.capture_logs` to confirm the event fires at `log_level='info'` with no `exc_info` key. Test passes on turn 2.",
+        "notes": "`heartbeat_loop` wraps the `while True` in `try/except asyncio.CancelledError`, logs `fleet_heartbeat_cancelled` at INFO without `exc_info`, then re-raises so the asyncio task is recorded as cancelled. Test `test_heartbeat_cancels_cleanly_with_info_log` cancels the task, asserts CancelledError propagates to the caller, and uses `structlog.testing.capture_logs` to confirm the event fires at `log_level='info'` with no `exc_info` key. Test passes on turn 2."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`heartbeat_loop` survives a single failed publish (WARN log, next tick succeeds).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Per-tick `try/except Exception` catches transient failures, logs `fleet_heartbeat_failed` at WARN, and continues to the next `asyncio.sleep`. Test `test_heartbeat_survives_single_publish_failure` patches `registry.register` so attempt 1 raises and attempts \u22652 succeed; asserts the loop reached attempt 2 (so the failure did not kill the task) and the manifest is now stored. Test passes on turn 2.",
+        "notes": "Per-tick `try/except Exception` catches transient failures, logs `fleet_heartbeat_failed` at WARN, and continues to the next `asyncio.sleep`. Test `test_heartbeat_survives_single_publish_failure` patches `registry.register` so attempt 1 raises and attempts \u22652 succeed; asserts the loop reached attempt 2 (so the failure did not kill the task) and the manifest is now stored. Test passes on turn 2."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "`deregister_from_fleet` does not raise even if the registry has no entry for `agent_id`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Implementation wraps the `_resolve_registry` + `registry.deregister` calls in `try/except Exception` that logs WARN and returns. `InMemoryManifestRegistry.deregister` already silently no-ops on missing keys. Tests `test_deregister_silent_on_missing_entry` (empty registry) and `test_deregister_swallows_transport_errors` (resolver raises) both confirm no exception escapes. Both pass on turn 2.",
+        "notes": "Implementation wraps the `_resolve_registry` + `registry.deregister` calls in `try/except Exception` that logs WARN and returns. `InMemoryManifestRegistry.deregister` already silently no-ops on missing keys. Tests `test_deregister_silent_on_missing_entry` (empty registry) and `test_deregister_swallows_transport_errors` (resolver raises) both confirm no exception escapes. Both pass on turn 2."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "`tests/test_fleet_registration.py` covers: manifest shape, register-then-query, heartbeat fires at interval (use `freezegun` or `asyncio.sleep` mocking), heartbeat survives one publish failure, deregister removes the entry, deregister of missing entry is silent.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "All six scenarios are covered by named tests: TestBuildJarvisManifest::test_manifest_has_canonical_static_fields and ::test_manifest_carries_four_canonical_intents (manifest shape); TestRegisterOnFleet::test_register_then_query_returns_manifest (register-then-query); TestHeartbeatLoop::test_heartbeat_fires_at_interval (asyncio.sleep mocked via patch.object, asserts \u22653 sleeps at the configured interval); TestHeartbeatLoop::test_heartbeat_survives_single_publish_failure (one register raises, next succeeds); TestDeregisterFromFleet::test_deregister_removes_entry (registry.get returns None after deregister); TestDeregisterFromFleet::test_deregister_silent_on_missing_entry (deregister of empty registry does not raise). All 23 tests pass on turn 2.",
+        "notes": "All six scenarios are covered by named tests: TestBuildJarvisManifest::test_manifest_has_canonical_static_fields and ::test_manifest_carries_four_canonical_intents (manifest shape); TestRegisterOnFleet::test_register_then_query_returns_manifest (register-then-query); TestHeartbeatLoop::test_heartbeat_fires_at_interval (asyncio.sleep mocked via patch.object, asserts \u22653 sleeps at the configured interval); TestHeartbeatLoop::test_heartbeat_survives_single_publish_failure (one register raises, next succeeds); TestDeregisterFromFleet::test_deregister_removes_entry (registry.get returns None after deregister); TestDeregisterFromFleet::test_deregister_silent_on_missing_entry (deregister of empty registry does not raise). All 23 tests pass on turn 2."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "`uv run mypy src/jarvis/infrastructure/fleet_registration.py` strict-clean.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "`python -m mypy --strict src/jarvis/infrastructure/fleet_registration.py` re-run on turn 2 reports `Success: no issues found in 1 source file`. Module uses `from __future__ import annotations`, `typing.Any` for the duck-typed `client` parameter, explicit return type annotations on all functions, and no `# type: ignore` directives.",
+        "notes": "`python -m mypy --strict src/jarvis/infrastructure/fleet_registration.py` re-run on turn 2 reports `Success: no issues found in 1 source file`. Module uses `from __future__ import annotations`, `typing.Any` for the duck-typed `client` parameter, explicit return type annotations on all functions, and no `# type: ignore` directives."
+      },
+      {
+        "criterion_id": "AC-010",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "`python -m ruff check src/jarvis/infrastructure/fleet_registration.py tests/test_fleet_registration.py` re-run on turn 2 reports `All checks passed!`. `python -m ruff format --check` reports `2 files already formatted`. Combined-`with` block in the heartbeat-cancel test (SIM117) and import organization remain compliant.",
+        "notes": "`python -m ruff check src/jarvis/infrastructure/fleet_registration.py tests/test_fleet_registration.py` re-run on turn 2 reports `All checks passed!`. `python -m ruff format --check` reports `2 files already formatted`. Combined-`with` block in the heartbeat-cancel test (SIM117) and import organization remain compliant."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "must_fix",
+      "category": "bdd_failure",
+      "description": "BDD oracle: 1 scenario(s) failed during pytest-bdd execution. Implementation does not satisfy the Gherkin specification.",
+      "scenarios_failed": 1,
+      "scenarios_passed": 0,
+      "scenarios_pending": 0,
+      "feature_files": [
+        "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+      ],
+      "failure_examples": [
+        "pytest_runner_error \u2014 pytest_runner_error: exit=4; ERROR: not found: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/features/feat-jarvis-0"
+      ]
+    }
+  ],
+  "rationale": "BDD scenarios failed: 1 scenario(s) reported assertion failure during pytest-bdd execution.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1430/7892 tokens\n\n### \u2705 Similar Outcomes\n- RELATED_TO_TASK_REVIEW\n- MIGRATES_TO\n\n### \ud83c\udfa8 Relevant Patterns\n- CREATED_AT\n- CREATED_AT\n\n### \u26a0\ufe0f Warnings\n- PATH_NOT_FOUND_DUE_TO_INCORRECT_ID_TYPE\n- REQUIRES_USE_OF\n\n### \ud83c\udfad Role Constraints\n- IS_CREATED_FOR\n- PROJECT_INVOLVES\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_PROJECT_ID\n- HAS_STATE_RECOVERY_STRATEGY\n\n\n## Previous Turn Summary (Turn 1)\n**What was attempted**: Implementation attempt\n**Player decision**: feedback\n**Coach decision**: feedback\n**Coach feedback**: - Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)\n- BDD oracle: 1 scenario(s) failed during pytest-bdd execution. Implementation does not satisfy the Gherkin specification.\n\n**Acceptance Criteria Status**:\n  \u25cb AC-001: verified\n  \u25cb AC-002: verified\n  \u25cb AC-003: verified\n  \u25cb AC-004: verified\n  \u25cb AC-005: verified\n  \u25cb AC-006: verified\n  \u25cb AC-007: verified\n  \u25cb AC-008: verified\n  \u25cb AC-009: verified\n  \u25cb AC-010: verified",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

@@ -1,0 +1,7 @@
+{
+  "tests_run": 1884,
+  "tests_failed": 1,
+  "coverage_pct": 92.0,
+  "output_summary": "1883 passed, 1 failed (test_no_production_module_imports_submodules: capabilities_registry.py imports jarvis.tools.capabilities); 92% coverage",
+  "quality_gates_passed": false
+}

@@ -1,0 +1,114 @@
+{
+  "task_id": "TASK-J004-017",
+  "turn": 1,
+  "files_modified": [
+    "tasks/backlog/TASK-J004-014-fleet-and-capabilities-integration-tests.md",
+    "tasks/backlog/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md",
+    "tasks/backlog/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md",
+    "tasks/backlog/TASK-J004-017-dispatch-slot-release-scenario-outline.md",
+    "tasks/backlog/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md",
+    "tests/conftest.py"
+  ],
+  "files_created": [
+    ".claude/task-plans/TASK-J004-014-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-015-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-016-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-017-implementation-plan.md",
+    ".claude/task-plans/TASK-J004-018-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J004-013/checkpoints.json",
+    ".guardkit/autobuild/TASK-J004-014/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-015/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-016/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-017/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-017/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-017/turn_context.json",
+    ".guardkit/autobuild/TASK-J004-018/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J004-018/task_work_results.json",
+    ".guardkit/autobuild/TASK-J004-018/turn_context.json",
+    ".guardkit/bdd/TASK-J004-017_junit.xml",
+    ".guardkit/bdd/TASK-J004-018_junit.xml",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/.guardkit/autobuild/TASK-J004-017/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_dispatch_slot_release.py",
+    "coverage_phase4_TASK-J004-018.json",
+    "tasks/design_approved/TASK-J004-014-fleet-and-capabilities-integration-tests.md",
+    "tasks/design_approved/TASK-J004-015-dispatch-integration-tests-roundtrip-redirect-matrix.md",
+    "tasks/design_approved/TASK-J004-016-soft-fail-tests-nats-graphiti-partial.md",
+    "tasks/design_approved/TASK-J004-017-dispatch-slot-release-scenario-outline.md",
+    "tasks/design_approved/TASK-J004-018-lifecycle-shutdown-order-invariant-test.md",
+    "tests/test_dispatch_slot_release.py",
+    "tests/test_fleet_registration_integration.py",
+    "tests/test_graphiti_unavailable.py",
+    "tests/test_lifecycle_shutdown_order.py",
+    "tests/test_nats_unavailable.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J004-702C/tests/test_dispatch_slot_release.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "Scenario Outline regression at .feature line 352 \u2014 5-row slot-release invariant",
+    "DDR-020 semaphore \u2014 leak-protection across closed DispatchOutcome five-set",
+    "AC-001 through AC-005 of TASK-J004-017"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 26,
+  "sdk_max_turns": 150,
+  "sdk_ceiling_hit": false,
+  "tests_passed_count": 5,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "One parametrised test with 5 rows covering all five DispatchOutcome literals reachable from dispatch_by_capability.",
+      "status": "complete",
+      "evidence": "TestSlotReleasedOnEveryDispatchOutcome.test_slot_released_on_every_dispatch_outcome is a single @pytest.mark.parametrize test with exactly 5 rows: row1-success, row2-timeout, row3-specialist_error, row4-transport_unavailable, row5-unresolved. Each row has its own arrange callable (_arrange_success / _arrange_timeout / _arrange_specialist_error / _arrange_transport_unavailable / _arrange_unresolved) wired through a uniform body. Verified via `uv run pytest tests/test_dispatch_slot_release.py -v` collecting 5 items.",
+      "test_file": "tests/test_dispatch_slot_release.py",
+      "implementation_files": [
+        "tests/test_dispatch_slot_release.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Each row asserts the slot is released \u2014 in_flight invariant after dispatch.",
+      "status": "complete",
+      "evidence": "Every row pre-acquires one slot on a real DispatchSemaphore(cap=2) (asserted `semaphore.in_flight == 1` as a precondition), runs the dispatch, then re-asserts `semaphore.in_flight == 1` with a row-tagged failure message: 'slot leaked on <row> \u2014 in_flight=<n>, expected 1'. Sanity check confirmed the assertion fires when release() is patched to a no-op (in_flight stayed at 2). The semaphore is real (not mocked) so the assertion observes the live counter.",
+      "test_file": "tests/test_dispatch_slot_release.py",
+      "implementation_files": [
+        "tests/test_dispatch_slot_release.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "No row uses pytest.xfail or pytest.skip \u2014 all five must pass.",
+      "status": "complete",
+      "evidence": "The test file contains zero `pytest.xfail`, `pytest.skip`, `@pytest.mark.skip`, or `@pytest.mark.xfail` decorators / calls. All five parametrised rows pass on the first run: `5 passed in 1.02s`.",
+      "test_file": "tests/test_dispatch_slot_release.py",
+      "implementation_files": [
+        "tests/test_dispatch_slot_release.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "The test does NOT cover redirected or exhausted outcomes (those are owned by TASK-J004-015's redirect matrix); this test is specifically the slot-release invariant on the closed five-set.",
+      "status": "complete",
+      "evidence": "The parametrize ids are exactly ['row1-success','row2-timeout','row3-specialist_error','row4-transport_unavailable','row5-unresolved']. The module docstring and class docstring explicitly call out that 'redirected and exhausted are owned by TASK-J004-015 and intentionally not exercised here'. The single-specialist registry (`_solo_specialist_registry`) is chosen so timeout/specialist_error rows have no redirect candidate \u2014 the test pins slot-release on the closed five-set without claiming coverage on redirect behaviour.",
+      "test_file": "tests/test_dispatch_slot_release.py",
+      "implementation_files": [
+        "tests/test_dispatch_slot_release.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "uv run pytest tests/test_dispatch_slot_release.py -v green.",
+      "status": "complete",
+      "evidence": "Ran `uv run pytest tests/test_dispatch_slot_release.py -v` from the worktree root: collected 5 items, 5 passed in 1.02s, 0 failed, 0 skipped, 0 xfailed. Exit code 0.",
+      "test_file": "tests/test_dispatch_slot_release.py",
+      "implementation_files": [
+        "tests/test_dispatch_slot_release.py"
+      ]
+    }
+  ]
+}

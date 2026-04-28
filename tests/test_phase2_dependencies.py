@@ -140,24 +140,40 @@ class TestAC001Phase2DependenciesAdded:
 
 class TestAC002NatsPyNotDeclared:
     """AC-002: `nats-py` does not appear in [project].dependencies until
-    FEAT-JARVIS-004 (phase2-dispatch-foundations-scope §Scope Invariants ¶5)."""
+    FEAT-JARVIS-004 (phase2-dispatch-foundations-scope §Scope Invariants ¶5).
+
+    Phase 4 (FEAT-JARVIS-004 / TASK-J004-002) explicitly lifts the
+    optional-dependencies portion of this invariant: `nats-py` is now
+    declared under the `[nats]` extras group (and re-exported via the
+    `[providers]` umbrella) so the live transport is opt-in. The runtime
+    and dev/uv-sources portions of the invariant remain — `nats-py` is
+    still not a hard runtime dep, not a dev dep, and not pinned via
+    `[tool.uv.sources]`.
+    """
 
     def test_nats_py_not_in_runtime_dependencies(self) -> None:
         names = _runtime_dep_names()
         assert "nats-py" not in names, (
-            "nats-py must NOT appear in [project].dependencies in Phase 2 — "
-            "Phase 2 scope invariant. It enters the manifest in FEAT-JARVIS-004."
+            "nats-py must NOT appear in [project].dependencies — even after "
+            "FEAT-JARVIS-004 the live transport is opt-in via the [nats] "
+            "optional-extras group, not a hard runtime dep (DDR-021 — soft "
+            "fail when unavailable)."
         )
 
-    def test_nats_py_not_in_optional_dependencies(self) -> None:
-        """nats-py must not be smuggled in via an optional-extras group either."""
+    def test_nats_py_only_in_phase4_optional_groups(self) -> None:
+        """`nats-py` may appear ONLY in the Phase 4 `[nats]` and `[providers]`
+        optional-extras groups (TASK-J004-002). Any other group is forbidden.
+        """
         opt = _load_pyproject()["project"].get("optional-dependencies", {})
+        allowed_groups = {"nats", "providers"}
         for group, specs in opt.items():
             for spec in specs:
-                assert _dep_name(spec) != "nats-py", (
-                    f"nats-py found in [project.optional-dependencies].{group} — "
-                    "Phase 2 scope invariant forbids it as a direct dependency."
-                )
+                if _dep_name(spec) == "nats-py":
+                    assert group in allowed_groups, (
+                        f"nats-py found in [project.optional-dependencies].{group} — "
+                        f"only the {sorted(allowed_groups)!r} groups are permitted "
+                        f"per TASK-J004-002."
+                    )
 
     def test_nats_py_not_in_dev_group(self) -> None:
         """nats-py must not be in [dependency-groups].dev either."""

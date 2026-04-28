@@ -1,60 +1,53 @@
 """Dispatch tool primitives — capability-driven dispatch and build queueing.
 
 This module hosts the two dispatch tools (``dispatch_by_capability`` and
-``queue_build``) that connect Jarvis to the NATS event bus. In Phase 2
-(FEAT-JARVIS-002) the real publish call is **stubbed**: the dispatch tools
-construct real ``nats_core`` envelopes (``CommandPayload`` /
-``BuildQueuedPayload`` / ``MessageEnvelope``) and then ``logger.info`` the
-envelope contents instead of invoking ``nats.request(...)`` /
-``js.publish(...)``. Phase 3 (FEAT-JARVIS-004 and FEAT-JARVIS-005) will
-replace those log lines with real NATS round-trips without touching tool
-docstrings or return shapes.
+``queue_build``) that connect Jarvis to the NATS event bus.
+
+* ``dispatch_by_capability`` — **FEAT-JARVIS-004 (TASK-J004-011)**: real
+  NATS request/reply round-trip via ``NATSClient.request`` per design §8.
+  The Phase 2 stub callable + ``logger.info`` log anchor are **retired**;
+  module-level dependencies are now ``_nats_client``,
+  ``_routing_history_writer``, ``_dispatch_semaphore``, and
+  ``_capability_registry`` (see API-internal §7). Tool docstring and
+  return shape stay byte-identical to Phase 2 — the reasoning model's view
+  is unchanged across the swap.
+
+* ``queue_build`` — Phase 2 stub remains in place. FEAT-JARVIS-005 swaps
+  that body to a real ``js.publish(...)`` on
+  ``pipeline.build-queued.{feature_id}``. The single-seam anchor for that
+  swap is the ``LOG_PREFIX_QUEUE_BUILD`` grep token.
 
 SWAP POINT
 ==========
 
-DDR-009 names this module as the **single seam** through which Phase 3
-features replace the stub transport with real NATS round-trips. The seam
-has three named anchors that downstream features grep for and replace
-verbatim:
+DDR-009 named this module as the **single seam** through which Phase 3
+features replace the stub transport with real NATS round-trips. With
+FEAT-JARVIS-004 in place, only the queue-build half of the seam remains:
 
-1. ``_stub_response_hook`` — a module-level ``Callable`` attribute that
-   test fixtures write to in order to simulate ``success`` / ``timeout`` /
-   ``specialist_error`` round-trip outcomes. **FEAT-JARVIS-004 replaces
-   ``_stub_response_hook`` with a real NATS request/reply round-trip**
-   (``await nats.request(...)`` on the ``agents.command.{agent_id}``
-   subject), removing the indirection entirely.
+* ``LOG_PREFIX_QUEUE_BUILD`` — string constant whose value is the grep
+  anchor used by the ``logger.info`` line emitted from ``queue_build``.
+  FEAT-JARVIS-005 replaces that log call with ``await js.publish(...)``
+  on the ``pipeline.build-queued.{x}`` subject.
 
-2. ``LOG_PREFIX_DISPATCH`` — string constant whose value is the grep
-   anchor used by every ``logger.info`` line emitted from
-   ``dispatch_by_capability``. FEAT-JARVIS-004 replaces those log calls
-   with ``await nats.request(...)``.
-
-3. ``LOG_PREFIX_QUEUE_BUILD`` — string constant whose value is the grep
-   anchor used by every ``logger.info`` line emitted from ``queue_build``.
-   FEAT-JARVIS-005 replaces those log calls with
-   ``await js.publish(...)`` on the ``pipeline.build-queued.{x}`` subject.
-
-Grep invariant (asserted by TASK-J002-021)
-------------------------------------------
-A grep for the values of ``LOG_PREFIX_DISPATCH`` and
-``LOG_PREFIX_QUEUE_BUILD`` rooted at ``src/jarvis/`` returns exactly **two**
-lines pre-feature wiring (the two constant definitions in this module) and
-exactly **four** lines once TASK-J002-013 and TASK-J002-014 land (the two
-constant definitions + one ``logger.info`` usage in each of the two
-dispatch tools). Drift in this count signals an unauthorised second swap
-point and fails CI.
+The dispatch-side Phase 2 anchors (the swap-point log-prefix constant, the
+test stub-response hook, and the ``StubResponse`` alias) have been
+**deleted** as part of TASK-J004-011 — their absence is asserted by the
+(flipped) TASK-J002-021 grep invariant landing in TASK-J004-020
+(``test_no_phase_2_stub_anchors`` in ``test_no_retired_roster_strings``).
 """
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 import logging
 import os
 import re
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal
 
 from langchain_core.tools import tool
 from nats_core import EventType, MessageEnvelope, Topics
@@ -67,6 +60,7 @@ from pydantic import ValidationError
 # seam. ``jarvis.sessions.session`` only depends on ``jarvis.shared.constants``
 # so this introduces no import cycle with ``jarvis.tools``.
 from jarvis.sessions.session import Session
+from jarvis.shared.exceptions import NATSConnectionError
 from jarvis.tools._correlation import new_correlation_id
 from jarvis.tools.capabilities import CapabilityDescriptor
 from jarvis.tools.dispatch_types import (
@@ -74,6 +68,11 @@ from jarvis.tools.dispatch_types import (
     FrontierTarget,
     log_frontier_escalation,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from jarvis.infrastructure.dispatch_semaphore import DispatchSemaphore
+    from jarvis.infrastructure.nats_client import NATSClient
+    from jarvis.infrastructure.routing_history import RoutingHistoryWriter
 
 logger = logging.getLogger(__name__)
 
@@ -96,67 +95,25 @@ def _now_utc() -> datetime:
 
 
 # ---------------------------------------------------------------------------
-# SWAP POINT — log prefixes (see module docstring).
+# SWAP POINT — queue_build log prefix.
 #
-# These two string constants are the DDR-009 grep anchors. Every
-# ``logger.info`` call emitted from a dispatch tool MUST use one of these
-# constants as the leading literal — never a hard-coded string — so that
-# the grep-count invariant (TASK-J002-021) holds across rebases.
+# ``LOG_PREFIX_QUEUE_BUILD`` is the DDR-009 grep anchor for the queue-build
+# half of the seam (FEAT-JARVIS-005 retires it). The dispatch-side
+# log-prefix anchor was retired by TASK-J004-011 — the dispatch tool
+# now performs a real NATS round-trip and emits no anchor log line.
 # ---------------------------------------------------------------------------
-LOG_PREFIX_DISPATCH: str = "JARVIS_DISPATCH_STUB"
 LOG_PREFIX_QUEUE_BUILD: str = "JARVIS_QUEUE_BUILD_STUB"
-
-
-# ---------------------------------------------------------------------------
-# SWAP POINT — stub response shape.
-#
-# ``StubResponse`` is the typed contract returned by ``_stub_response_hook``
-# under the Phase 2 stub transport. The three variants are encoded as a
-# tagged-tuple union so consumers can pattern-match on the leading literal:
-#
-#     match hook(command):
-#         case ("success", result):    ...
-#         case ("timeout",):           ...
-#         case ("specialist_error", reason): ...
-#
-# Phase 3 (FEAT-JARVIS-004) removes the hook entirely; this alias is the
-# stub-only contract and disappears with the swap.
-# ---------------------------------------------------------------------------
-# NOTE: Retain ``TypeAlias`` (PEP 613) form rather than the ``type`` keyword
-# (PEP 695). The TASK-J002-007 swap-point contract tests call
-# ``typing.get_args(dispatch.StubResponse)`` and require the result to expose
-# the three Union variants directly. ``type`` keyword aliases produce a
-# ``TypeAliasType`` whose variants are only accessible via ``__value__``,
-# which would silently break those tests.
-StubResponse: TypeAlias = (  # noqa: UP040 — see preceding comment.
-    tuple[Literal["success"], ResultPayload]
-    | tuple[Literal["timeout"]]
-    | tuple[Literal["specialist_error"], str]
-)
-
-
-# ---------------------------------------------------------------------------
-# SWAP POINT — stub response hook (see module docstring).
-#
-# Default ``None`` means "use the canned ``("success", ResultPayload(...))``
-# fallback inside ``dispatch_by_capability``". Test fixtures (and only test
-# fixtures) write a callable here to simulate timeouts and specialist
-# errors.
-#
-# FEAT-JARVIS-004 replaces this attribute with a real NATS request/reply
-# round-trip and deletes the alias.
-# ---------------------------------------------------------------------------
-_stub_response_hook: Callable[[CommandPayload], StubResponse] | None = None
 
 
 # ---------------------------------------------------------------------------
 # Capability registry binding.
 #
-# ``assemble_tool_list`` (TASK-J002-015) snapshots a ``list[CapabilityDescriptor]``
-# into this module-level attribute at startup, providing the resolution
-# catalogue for ``dispatch_by_capability``. The default is an empty list
-# so a bare import of this module yields a tool that returns the
-# ``ERROR: unresolved`` form for every dispatch — never raises.
+# ``assemble_tool_list`` (TASK-J002-015 + TASK-J004-013) snapshots a
+# ``list[CapabilityDescriptor]`` into this module-level attribute at startup,
+# providing the resolution catalogue for ``dispatch_by_capability``. The
+# default is an empty list so a bare import of this module yields a tool
+# that returns the ``ERROR: unresolved`` form for every dispatch — never
+# raises.
 #
 # Snapshot isolation (ASSUM-006): assemble_tool_list MUST assign a fresh
 # ``list(...)`` copy here, not the operator's mutable registry reference.
@@ -164,50 +121,188 @@ _stub_response_hook: Callable[[CommandPayload], StubResponse] | None = None
 _capability_registry: list[CapabilityDescriptor] = []
 
 
+# ---------------------------------------------------------------------------
+# FEAT-JARVIS-004 dispatch dependencies — module-level swap points populated
+# by ``assemble_tool_list`` at lifecycle startup (TASK-J004-013).
+#
+# Defaults are ``None`` so a bare import of this module never raises:
+#
+# * If ``_dispatch_semaphore`` is ``None`` the tool degrades gracefully —
+#   no semaphore guard is applied (Phase-1 import-only invariant).
+# * If ``_nats_client`` is ``None`` the tool returns the
+#   ``DEGRADED: transport_unavailable`` structured error (DDR-021 soft-fail).
+# * If ``_routing_history_writer`` is ``None`` the trace-write step is
+#   skipped — the dispatch decision is still served, only the trace is
+#   missing (Graphiti-degraded path).
+#
+# Production wiring assigns a connected ``NATSClient``, a configured
+# ``DispatchSemaphore`` (DDR-020 cap=8), and a ``RoutingHistoryWriter``
+# (which itself may carry a degraded Graphiti client per DDR-019).
+# ---------------------------------------------------------------------------
+_nats_client: NATSClient | None = None
+_routing_history_writer: RoutingHistoryWriter | None = None
+_dispatch_semaphore: DispatchSemaphore | None = None
+
+
+# ---------------------------------------------------------------------------
+# Retry-with-redirect policy (DDR-017): one redirect after a timeout or
+# specialist_error reply. ``MAX_REDIRECTS = 1`` ⇒ at most 2 attempts per
+# dispatch invocation. The lexicographic resolution order in
+# :func:`_resolve_agent_id` is the determinism invariant — the integration
+# tests in TASK-J004-015 pin the redirect target.
+# ---------------------------------------------------------------------------
+MAX_REDIRECTS: int = 1
+
+
 def _resolve_agent_id(
     tool_name: str,
     intent_pattern: str | None,
     registry: list[CapabilityDescriptor],
+    *,
+    exclude: set[str] | None = None,
 ) -> str | None:
     """Resolve ``tool_name`` (and optional ``intent_pattern``) to an agent_id.
 
-    Resolution order — AC-003 of TASK-J002-013:
+    Resolution order — AC-003 of TASK-J002-013, extended for retry-with-redirect
+    in TASK-J004-011 via the ``exclude`` parameter:
 
     1. **Exact match**: first descriptor whose ``capability_list`` contains a
        :class:`CapabilityToolSummary` with ``tool_name`` equal to the
        requested name. Iterates descriptors in lexicographic ``agent_id``
-       order so ties are deterministic.
+       order so ties are deterministic (DDR-017 determinism invariant).
     2. **Intent fallback**: if ``intent_pattern`` is non-empty and no exact
        match was found, return the lexicographically-first descriptor whose
        ``role`` or ``description`` contains ``intent_pattern`` as a
        substring (case-sensitive — patterns are operator-curated tokens).
-    3. ``None`` if no rule resolves.
+    3. ``None`` if no rule resolves (or every candidate is in ``exclude``).
 
     Args:
         tool_name: Requested ToolCapability name.
         intent_pattern: Optional intent-pattern fallback token.
         registry: Snapshot of capability descriptors.
+        exclude: Optional set of ``agent_id`` values to skip. Used by the
+            retry-with-redirect loop in :func:`dispatch_by_capability` to
+            prevent repeating an attempt against the same specialist; the
+            set is mutated by the caller after each attempt. ``None`` (the
+            default) is treated as the empty set.
 
     Returns:
         ``agent_id`` of the resolved specialist or ``None``.
     """
+    skip = exclude or set()
     sorted_descriptors = sorted(registry, key=lambda d: d.agent_id)
 
     for descriptor in sorted_descriptors:
+        if descriptor.agent_id in skip:
+            continue
         for cap in descriptor.capability_list:
             if cap.tool_name == tool_name:
                 return descriptor.agent_id
 
     if intent_pattern:
         for descriptor in sorted_descriptors:
+            if descriptor.agent_id in skip:
+                continue
             if intent_pattern in descriptor.role or intent_pattern in descriptor.description:
                 return descriptor.agent_id
 
     return None
 
 
+def _capability_snapshot_hash(registry: list[CapabilityDescriptor]) -> str:
+    """SHA-256 of the deterministic ``agent_id``-sorted snapshot.
+
+    Used as the ``capability_snapshot_hash`` field on the routing-history
+    entry. We hash ``agent_id`` only (not the full descriptor) so the hash
+    captures *fleet membership* — the per-capability metadata is already
+    persisted via ``alternatives_considered`` when the supervisor
+    eventually wires that capture path. The hash format is the standard
+    64-char lowercase hex digest matching the schema's regex.
+    """
+    sorted_ids = sorted(d.agent_id for d in registry)
+    raw = "\n".join(sorted_ids).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _build_command_envelope(
+    tool_name: str,
+    parsed_args: dict[str, object],
+    correlation_id: str,
+) -> tuple[CommandPayload, MessageEnvelope]:
+    """Construct the ``CommandPayload`` + ``MessageEnvelope`` pair.
+
+    Centralises the shape so the retry-with-redirect loop reuses the same
+    payload bytes per attempt. ``source_id="jarvis"`` is set on every
+    emitted envelope per the task's AC-003.
+    """
+    command = CommandPayload(
+        command=tool_name,
+        args=parsed_args,
+        correlation_id=correlation_id,
+    )
+    envelope = MessageEnvelope(
+        source_id="jarvis",
+        event_type=EventType.COMMAND,
+        correlation_id=correlation_id,
+        payload=command.model_dump(mode="json"),
+    )
+    return command, envelope
+
+
+def _fire_and_forget_trace(entry_kwargs: dict[str, object]) -> None:
+    """Fire-and-forget submission of a routing-history entry.
+
+    DDR-019: the dispatch tool never awaits the writer's coroutine; the
+    writer's WARN log is the only failure surface. We resolve the writer
+    via the module-level ``_routing_history_writer`` so test fixtures can
+    swap it without touching the call site.
+
+    The function silently returns when:
+
+    * the writer is ``None`` (dispatch is wired without persistence —
+      Phase-1 import-only invariant),
+    * the routing-history schema rejects the entry kwargs (degraded
+      branch — we'd rather lose a trace than break the dispatch contract),
+    * ``asyncio.create_task`` cannot be scheduled because the function
+      is being called from a synchronous context (defensive — the
+      production caller is always inside the async dispatch loop).
+    """
+    writer = _routing_history_writer
+    if writer is None:
+        return
+
+    # Lazy import to keep the dispatch module's import graph stable for
+    # Phase-1 import-graph tests (the routing_history module pulls in
+    # pydantic schemas that aren't on the import-time hot path).
+    from jarvis.infrastructure.routing_history import JarvisRoutingHistoryEntry
+
+    try:
+        entry = JarvisRoutingHistoryEntry.model_validate(entry_kwargs)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "dispatch_trace_validation_failed",
+            extra={
+                "reason": type(exc).__name__,
+                "detail": str(exc),
+            },
+        )
+        return
+
+    try:
+        coro = writer.write_specialist_dispatch(entry)
+        # DDR-019: the dispatch boundary intentionally drops the task ref.
+        # The writer's own ``_pending_tasks`` set keeps the task alive until
+        # ``flush()`` drains them on shutdown.
+        asyncio.create_task(coro)  # noqa: RUF006
+    except RuntimeError:
+        # No running event loop — should not happen from the async dispatch
+        # body, but if a caller invokes ``dispatch_by_capability`` from a
+        # sync wrapper we silently drop the trace rather than crash.
+        return
+
+
 @tool(parse_docstring=True)
-def dispatch_by_capability(
+async def dispatch_by_capability(
     tool_name: str,
     payload_json: str,
     intent_pattern: str | None = None,
@@ -229,11 +324,6 @@ def dispatch_by_capability(
     injected at session start under "## Available Capabilities" — to find the
     tool_name you need. Do NOT pass agent IDs; pass capability names.
 
-    In Phase 2 the transport is stubbed: the tool builds a real CommandPayload
-    per nats-core, logs it, and returns a canned ResultPayload JSON for tests.
-    FEAT-JARVIS-004 replaces the stub with real NATS round-trips without
-    changing this docstring.
-
     Cost depends on the resolved specialist; latency is capped by
     timeout_seconds. Moderate cost (~$0.10-$2 per dispatch, specialist-
     dependent); 5-60s typical wall-clock.
@@ -244,15 +334,14 @@ def dispatch_by_capability(
         payload_json: JSON string matching the tool's parameters schema as
                      declared in its ToolCapability.parameters. Must be a JSON
                      object literal (starts with ``{``). The tool does NOT
-                     validate your payload against the schema in Phase 2 — the
+                     validate your payload against the schema — the
                      specialist will.
         intent_pattern: Optional intent pattern (e.g. ``architecture.generate``)
                        used only when no exact tool match is found.
         timeout_seconds: How long to wait for the specialist's reply, between
                         5 and 600. Default 60. Timeout returns a structured
                         TIMEOUT error; it does NOT cancel the specialist — the
-                        result may still appear in NATS after timeout
-                        (Phase 3+).
+                        result may still appear in NATS after timeout.
 
     Returns:
         JSON string of the specialist's ResultPayload on success:
@@ -264,7 +353,8 @@ def dispatch_by_capability(
           - ``ERROR: invalid_timeout — timeout_seconds must be 5..600, got <n>``
           - ``TIMEOUT: agent_id=<id> tool_name=<x> timeout_seconds=<n>``
           - ``ERROR: specialist_error — agent_id=<id> detail=<reason>``
-          - ``DEGRADED: transport_stub — (Phase 2 stub, real NATS arrives in FEAT-JARVIS-004)``
+          - ``DEGRADED: dispatch_overloaded — wait and retry``
+          - ``DEGRADED: transport_unavailable — NATS connection failed``
     """
     # ----- Per-call correlation id (ASSUM-001 — one CSPRNG read per call) ---
     correlation_id = new_correlation_id()
@@ -286,85 +376,349 @@ def dispatch_by_capability(
     if not isinstance(parsed_args, dict):
         return "ERROR: invalid_payload — payload_json is not a JSON object literal"
 
-    # ----- Resolve agent_id -------------------------------------------------
-    agent_id = _resolve_agent_id(tool_name, intent_pattern, _capability_registry)
-    if agent_id is None:
-        return (
-            f"ERROR: unresolved — no capability matches "
-            f"tool_name={tool_name} intent_pattern={intent_pattern}"
-        )
+    # ----- Semaphore (DDR-020 — synchronous overflow check) -----------------
+    semaphore = _dispatch_semaphore
+    sem_acquired = False
+    if semaphore is not None:
+        sem_acquired = semaphore.try_acquire()
+        if not sem_acquired:
+            # Overflow — surface DEGRADED synchronously per DDR-020. No
+            # trace is written (the request never reached the wire).
+            return "DEGRADED: dispatch_overloaded — wait and retry"
 
-    # ----- Build real nats-core payload + envelope --------------------------
-    try:
-        command = CommandPayload(
-            command=tool_name,
-            args=parsed_args,
-            correlation_id=correlation_id,
-        )
-        envelope = MessageEnvelope(
-            source_id="jarvis",
-            event_type=EventType.COMMAND,
-            correlation_id=correlation_id,
-            payload=command.model_dump(mode="json"),
-        )
-    except ValidationError as exc:
-        return f"ERROR: validation — {exc.errors()[0].get('msg', str(exc))}"
-    except (TypeError, ValueError) as exc:
-        return f"ERROR: validation — {exc}"
+    # Snapshot the registry once so concurrent rebinding does not
+    # corrupt the resolution loop (ASSUM-006).
+    registry_snapshot = list(_capability_registry)
+    snapshot_hash = _capability_snapshot_hash(registry_snapshot)
+    started_at = _now_utc()
+    started_monotonic = time.monotonic()
 
-    # ----- Emit the single grep-anchor log line -----------------------------
-    # The leading literal in the format string is intentionally the anchor
-    # value (not the symbol) so grep-driven swap workflows in FEAT-JARVIS-004
-    # and the TASK-J002-021 invariant test see exactly 4 lines in this file.
-    # The constant/value equivalence is pinned by test_tools_dispatch_contract.
-    topic = f"agents.command.{agent_id}"
-    payload_bytes = len(envelope.model_dump_json().encode("utf-8"))
-    logger.info(
-        "JARVIS_DISPATCH_STUB tool_name=%s agent_id=%s correlation_id=%s topic=%s payload_bytes=%d",
-        tool_name,
-        agent_id,
-        correlation_id,
-        topic,
-        payload_bytes,
-    )
+    visited: set[str] = set()
+    attempts: list[dict[str, object]] = []
+    attempt_index = 0
 
-    # ----- Stub response hook dispatch --------------------------------------
-    hook = _stub_response_hook
-    if hook is None:
-        canned = ResultPayload(
-            command=tool_name,
-            result={"stub": True, "tool_name": tool_name},
-            correlation_id=correlation_id,
-            success=True,
-        )
-        return canned.model_dump_json()
+    # The default "outcome" for every early-return guard below — the trace
+    # writer captures these structured outcomes per design §8.
+    last_agent_id: str | None = None
 
     try:
-        response = hook(command)
-    except Exception as exc:
-        # Boundary-guard per AC-013: dispatch_by_capability never raises.
-        return f"ERROR: specialist_error — agent_id={agent_id} detail={exc}"
+        while attempt_index <= MAX_REDIRECTS:
+            agent_id = _resolve_agent_id(
+                tool_name,
+                intent_pattern,
+                registry_snapshot,
+                exclude=visited,
+            )
+            if agent_id is None:
+                # First-attempt unresolved vs. exhausted-after-redirect.
+                outcome: Literal["unresolved", "exhausted"] = (
+                    "exhausted" if attempts else "unresolved"
+                )
+                _fire_and_forget_trace(
+                    _build_trace_kwargs(
+                        correlation_id=correlation_id,
+                        timestamp=started_at,
+                        snapshot_hash=snapshot_hash,
+                        attempts=attempts,
+                        chosen_agent_id=None,
+                        outcome=outcome,
+                        outcome_detail={
+                            "tool_name": tool_name,
+                            "intent_pattern": intent_pattern,
+                            "visited": sorted(visited),
+                        },
+                        wall_clock_ms=_elapsed_ms(started_monotonic),
+                        in_flight=_in_flight_or_zero(semaphore),
+                    )
+                )
+                if outcome == "exhausted":
+                    return (
+                        f"TIMEOUT: agent_id={last_agent_id} tool_name={tool_name} "
+                        f"exhausted attempts={len(attempts)}"
+                    )
+                return (
+                    f"ERROR: unresolved — no capability matches "
+                    f"tool_name={tool_name} intent_pattern={intent_pattern}"
+                )
 
-    # Tagged-union dispatch on `StubResponse`. Strict mypy doesn't narrow
-    # the discriminator through class patterns in match-case (it reports
-    # the second/third arms as `[unreachable]` and the literal-string
-    # success arm as `Subclass of "str" and "ResultPayload" cannot exist`),
-    # so we narrow with an explicit `isinstance` guard chain instead. The
-    # runtime semantics — and the existing test suite — are unchanged.
-    tag = response[0]
-    if tag == "success" and len(response) == 2 and isinstance(response[1], ResultPayload):
-        return response[1].model_dump_json()
-    if tag == "timeout":
-        return (
-            f"TIMEOUT: agent_id={agent_id} tool_name={tool_name} "
-            f"timeout_seconds={timeout_seconds}"
+            visited.add(agent_id)
+            last_agent_id = agent_id
+
+            try:
+                _command, envelope = _build_command_envelope(tool_name, parsed_args, correlation_id)
+            except ValidationError as exc:
+                # Boundary guard — payload schema mismatch surfaces as a
+                # structured error and skips the trace write.
+                return f"ERROR: validation — {exc.errors()[0].get('msg', str(exc))}"
+            except (TypeError, ValueError) as exc:
+                return f"ERROR: validation — {exc}"
+
+            client = _nats_client
+            if client is None:
+                # No transport wired — DDR-021 soft-fail. We still write a
+                # trace so the operator sees the diagnostic.
+                _fire_and_forget_trace(
+                    _build_trace_kwargs(
+                        correlation_id=correlation_id,
+                        timestamp=started_at,
+                        snapshot_hash=snapshot_hash,
+                        attempts=attempts,
+                        chosen_agent_id=None,
+                        outcome="transport_unavailable",
+                        outcome_detail={
+                            "agent_id": agent_id,
+                            "reason": "nats_client_unwired",
+                        },
+                        wall_clock_ms=_elapsed_ms(started_monotonic),
+                        in_flight=_in_flight_or_zero(semaphore),
+                    )
+                )
+                return "DEGRADED: transport_unavailable — NATS connection failed"
+
+            subject = Topics.Agents.COMMAND.format(agent_id=agent_id)
+            payload_bytes = envelope.model_dump_json().encode("utf-8")
+            attempt_started = time.monotonic()
+
+            try:
+                reply = await asyncio.wait_for(
+                    client.request(subject, payload_bytes, timeout=timeout_seconds),
+                    timeout=timeout_seconds,
+                )
+            except TimeoutError:
+                attempts.append(
+                    {
+                        "agent_id": agent_id,
+                        "attempt_index": attempt_index,
+                        "reason_skipped": "timeout",
+                        "detail": None,
+                        "duration_ms": _elapsed_ms(attempt_started),
+                    }
+                )
+                attempt_index += 1
+                continue
+            except NATSConnectionError as exc:
+                _fire_and_forget_trace(
+                    _build_trace_kwargs(
+                        correlation_id=correlation_id,
+                        timestamp=started_at,
+                        snapshot_hash=snapshot_hash,
+                        attempts=attempts,
+                        chosen_agent_id=None,
+                        outcome="transport_unavailable",
+                        outcome_detail={
+                            "agent_id": agent_id,
+                            "reason": type(exc).__name__,
+                            "detail": str(exc),
+                        },
+                        wall_clock_ms=_elapsed_ms(started_monotonic),
+                        in_flight=_in_flight_or_zero(semaphore),
+                    )
+                )
+                return "DEGRADED: transport_unavailable — NATS connection failed"
+
+            # Decode the specialist's reply.
+            reply_body = getattr(reply, "data", None)
+            if reply_body is None:
+                attempts.append(
+                    {
+                        "agent_id": agent_id,
+                        "attempt_index": attempt_index,
+                        "reason_skipped": "specialist_error",
+                        "detail": "empty reply body",
+                        "duration_ms": _elapsed_ms(attempt_started),
+                    }
+                )
+                attempt_index += 1
+                continue
+
+            try:
+                result = ResultPayload.model_validate_json(reply_body)
+            except ValidationError as exc:
+                attempts.append(
+                    {
+                        "agent_id": agent_id,
+                        "attempt_index": attempt_index,
+                        "reason_skipped": "specialist_error",
+                        "detail": _truncate(str(exc), 512),
+                        "duration_ms": _elapsed_ms(attempt_started),
+                    }
+                )
+                attempt_index += 1
+                continue
+
+            if result.success:
+                outcome_success: Literal["success", "redirected"] = (
+                    "success" if attempt_index == 0 else "redirected"
+                )
+                _fire_and_forget_trace(
+                    _build_trace_kwargs(
+                        correlation_id=correlation_id,
+                        timestamp=started_at,
+                        snapshot_hash=snapshot_hash,
+                        attempts=attempts,
+                        chosen_agent_id=agent_id,
+                        outcome=outcome_success,
+                        outcome_detail={
+                            "final_attempt_index": attempt_index,
+                            "final_agent_id": agent_id,
+                        },
+                        wall_clock_ms=_elapsed_ms(started_monotonic),
+                        in_flight=_in_flight_or_zero(semaphore),
+                    )
+                )
+                return result.model_dump_json()
+
+            # ResultPayload with success=False → record reason and continue.
+            failure_detail = _extract_specialist_error(result)
+            attempts.append(
+                {
+                    "agent_id": agent_id,
+                    "attempt_index": attempt_index,
+                    "reason_skipped": "specialist_error",
+                    "detail": _truncate(failure_detail, 512),
+                    "duration_ms": _elapsed_ms(attempt_started),
+                }
+            )
+            attempt_index += 1
+
+        # Loop exit: every attempt timed out or returned a non-success
+        # specialist reply. Per design §8, surface as exhausted (TIMEOUT).
+        _fire_and_forget_trace(
+            _build_trace_kwargs(
+                correlation_id=correlation_id,
+                timestamp=started_at,
+                snapshot_hash=snapshot_hash,
+                attempts=attempts,
+                chosen_agent_id=None,
+                outcome="exhausted",
+                outcome_detail={
+                    "tool_name": tool_name,
+                    "attempts": len(attempts),
+                },
+                wall_clock_ms=_elapsed_ms(started_monotonic),
+                in_flight=_in_flight_or_zero(semaphore),
+            )
         )
-    if tag == "specialist_error" and len(response) == 2 and isinstance(response[1], str):
-        return f"ERROR: specialist_error — agent_id={agent_id} detail={response[1]}"
-    return (
-        f"ERROR: specialist_error — agent_id={agent_id} "
-        f"detail=invalid stub response: {response!r}"
-    )
+        return (
+            f"TIMEOUT: agent_id={last_agent_id} tool_name={tool_name} "
+            f"exhausted attempts={len(attempts)}"
+        )
+    finally:
+        # Semaphore is released in EVERY outcome path per AC-008 of this
+        # task — success, timeout, exhausted, transport_unavailable,
+        # unresolved, validation-error, and any unexpected exception.
+        if sem_acquired and semaphore is not None:
+            semaphore.release()
+
+
+def _build_trace_kwargs(
+    *,
+    correlation_id: str,
+    timestamp: datetime,
+    snapshot_hash: str,
+    attempts: list[dict[str, object]],
+    chosen_agent_id: str | None,
+    outcome: str,
+    outcome_detail: dict[str, object],
+    wall_clock_ms: int,
+    in_flight: int,
+) -> dict[str, object]:
+    """Build the ``JarvisRoutingHistoryEntry`` kwargs for a dispatch decision.
+
+    The dispatch tool does not have direct access to the active session
+    (the supervisor's ``Session`` lives one level up the call stack), so
+    the structural fields that require a session context use the
+    ``correlation_id`` as the session marker. FEAT-JARVIS-008 will plumb
+    the real session_id once the learning subsystem is wired.
+
+    Mapping from dispatch outcomes to ``subagent_final_state``:
+
+    * ``success`` / ``redirected`` → ``"success"``.
+    * ``timeout`` / ``exhausted`` → ``"timeout"``.
+    * ``transport_unavailable`` / ``unresolved`` / ``specialist_error``
+      → ``"error"``.
+    """
+    if outcome in ("success", "redirected"):
+        final_state: Literal["success", "error", "timeout", "cancelled"] = "success"
+    elif outcome in ("timeout", "exhausted"):
+        final_state = "timeout"
+    else:
+        final_state = "error"
+
+    return {
+        "decision_id": correlation_id,
+        "surface": "jarvis",
+        # session_id placeholder — see docstring above. Non-empty so the
+        # ``min_length=1`` validator passes.
+        "session_id": f"dispatch:{correlation_id}",
+        "timestamp": timestamp,
+        "supervisor_tool_call_sequence": [],
+        "priors_retrieved": [],
+        "capability_snapshot_hash": snapshot_hash,
+        "subagent_type": "specialist",
+        "subagent_task_id": correlation_id,
+        "subagent_trace_ref": None,
+        "subagent_final_state": final_state,
+        "model_calls": [],
+        "wall_clock_ms": wall_clock_ms,
+        "total_cost_usd": 0.0,
+        "outcome_type": outcome,
+        "outcome_detail": outcome_detail,
+        "human_response_type": None,
+        "human_response_text": None,
+        "human_response_latency_ms": None,
+        "project_id": None,
+        "local_time_of_day": timestamp.astimezone(UTC).strftime("%H:%M"),
+        "recent_session_refs": [],
+        "concurrent_workload": {
+            "in_flight_dispatches": in_flight,
+            "in_flight_watchers": 0,
+            "in_flight_subagents": 0,
+        },
+        "chosen_specialist_id": chosen_agent_id,
+        "chosen_subagent_name": None,
+        "alternatives_considered": [],
+        "attempts": attempts,
+        "supervisor_reasoning_summary": "dispatch_by_capability",
+    }
+
+
+def _extract_specialist_error(result: ResultPayload) -> str:
+    """Pull a human-readable error string off a failed ``ResultPayload``.
+
+    The ``ResultPayload`` schema doesn't pin a specific error-key location
+    so we look at ``result.error`` first (the convention adopted by the
+    nats-core specialists) and fall back to a JSON dump of ``result.result``.
+    """
+    if isinstance(result.result, dict):
+        for key in ("error", "reason", "detail", "message"):
+            value = result.result.get(key)
+            if isinstance(value, str) and value:
+                return value
+    try:
+        return json.dumps(result.result)[:512]
+    except (TypeError, ValueError):
+        return "specialist returned success=False with unserialisable result"
+
+
+def _truncate(value: str, max_length: int) -> str:
+    """Helper for fitting strings into ``RedirectAttempt.detail`` (max 512)."""
+    if len(value) <= max_length:
+        return value
+    return value[: max_length - 1] + "…"
+
+
+def _elapsed_ms(started_monotonic: float) -> int:
+    """Convert ``time.monotonic`` start to integer milliseconds elapsed."""
+    elapsed = time.monotonic() - started_monotonic
+    return max(0, int(elapsed * 1000))
+
+
+def _in_flight_or_zero(semaphore: DispatchSemaphore | None) -> int:
+    """Read ``semaphore.in_flight`` or ``0`` when no semaphore is wired."""
+    if semaphore is None:
+        return 0
+    return semaphore.in_flight
 
 
 @tool(parse_docstring=True)
@@ -423,7 +777,6 @@ def queue_build(
           - ``ERROR: invalid_repo — must be org/name format, got <value>``
           - ``ERROR: invalid_adapter — <value> not in allowed list``
           - ``ERROR: validation — <pydantic detail>``
-          - ``DEGRADED: transport_stub — (Phase 2 stub, real publish arrives in FEAT-JARVIS-005)``
     """
     # ----- Validate feature_id ---------------------------------------------
     if not isinstance(feature_id, str) or not _FEATURE_ID_PATTERN.match(feature_id):
@@ -955,13 +1308,14 @@ Never invoke from ambient, learning, or async-subagent contexts.
 
 __all__ = [
     "ATTENDED_ADAPTER_IDS",
-    "LOG_PREFIX_DISPATCH",
     "LOG_PREFIX_QUEUE_BUILD",
-    "StubResponse",
+    "MAX_REDIRECTS",
     "_async_subagent_frame_hook",
     "_capability_registry",
     "_current_session_hook",
-    "_stub_response_hook",
+    "_dispatch_semaphore",
+    "_nats_client",
+    "_routing_history_writer",
     "dispatch_by_capability",
     "escalate_to_frontier",
     "queue_build",

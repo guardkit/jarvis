@@ -104,9 +104,14 @@ def reset_tool_state() -> Any:
     ``_capability_registry`` attributes; the snapshot/restore guard keeps
     Layer-3 tests from leaking state into siblings (mirrors the FEAT-J002
     test fixture in ``test_assemble_tool_list.py``).
+
+    FEAT-JARVIS-004 (TASK-J004-012) changed the capabilities-module's
+    ``_capability_registry`` swap-point type from ``list`` to
+    ``CapabilitiesRegistry | None``, so the snapshot is preserved as an
+    opaque object reference rather than a list copy.
     """
     saved_general = general_module._config
-    saved_caps = list(capabilities_module._capability_registry)
+    saved_caps = capabilities_module._capability_registry
     saved_dispatch = list(dispatch_module._capability_registry)
     yield
     general_module._config = saved_general

@@ -75,8 +75,10 @@ See [phase3-fleet-integration-scope.md §Do-Not-Change](../../research/ideas/pha
 | [DDR-020](decisions/DDR-020-concurrent-dispatch-cap-8.md) | Concurrent dispatch cap = **8** in-flight `dispatch_by_capability` + `queue_build` invocations per supervisor process, gated by an `asyncio.Semaphore`. Above the cap → `DEGRADED: dispatch_overloaded — wait and retry` per ADR-ARCH-021 | Stays under JA2's 10-Pattern-B-watcher ceiling so the two concurrency budgets don't compete. Surfaces backpressure quickly when a specialist wedges. |
 | [DDR-021](decisions/DDR-021-nats-unavailable-soft-fail.md) | NATS unavailable at startup → Jarvis starts; supervisor's NATS client is `None`; dispatch tools return `DEGRADED: transport_unavailable — NATS connection failed`; capability registry **falls back to the stub YAML** so `list_available_capabilities` still serves a non-empty list | Preserves the attended-conversation surface even when fleet is dead. Operator can still chat, ask Jarvis questions, and use frontier-escape — only outbound dispatch is dead. Aligns with FEAT-J003's voice-ack soft-fail posture (Layer 1 of "no silent failures"). |
 | [DDR-022](decisions/DDR-022-defer-llamaswap-live-reads-to-v15.md) | `LlamaSwapAdapter` `/running` + `/log` reads remain stubbed in FEAT-JARVIS-004; live HTTP probe deferred to v1.5 (new feature, separate scope) | Keeps Phase 3 scoped — NATS + Graphiti + first ADR-FLEET-001 writes is already medium-high complexity. ASSUM-LLAMASWAP-API (endpoint contract not formally specified by llama-swap project) is independent risk that warrants its own design pass. |
+| [DDR-023](decisions/DDR-023-trace-file-collision-warn-and-preserve.md) | Trace-file collision at `~/.jarvis/traces/{date}/{decision_id}.json` → `O_EXCL` atomic create-or-fail; original preserved, no overwrite; `WARN routing_history_write_failed reason=trace_file_exists`; Graphiti entity points at the pre-existing file. Dispatch outcome unaffected | Promotes ASSUM-009 (originally low-confidence operator-decidable policy) to a binding decision. Trace data is append-only-by-spirit per ADR-FLEET-001 "Do-not-reopen" — destroying prior records on UUID re-use is the wrong default. |
+| [DDR-024](decisions/DDR-024-degraded-specialists-eligible-v1.md) | Specialists with `manifest.status="degraded"` remain dispatch-eligible in v1; resolver applies no status filter; redirect-with-retry handles failures. `JarvisRoutingHistoryEntry` gains `chosen_specialist_status` + `RedirectAttempt.reported_status` so `jarvis.learning` (FEAT-J008) has the data to revisit the policy via append-only DDR | Promotes ASSUM-008 (originally medium-confidence) to a binding decision. Excluding day-1 prevents successful dispatches and permanently blocks the data signal needed to inform exclusion later. |
 
-DDR numbering continues from FEAT-JARVIS-003 (DDR-010..015). FEAT-JARVIS-004 uses DDR-016..022; next available after this design is DDR-023.
+DDR numbering continues from FEAT-JARVIS-003 (DDR-010..015). FEAT-JARVIS-004 uses DDR-016..024; next available after this design is DDR-025.
 
 ## 6. Component diagram
 
@@ -321,6 +323,7 @@ Proposed contracts checked against:
 
 - All **30 accepted ADRs** in [docs/architecture/decisions/](../../architecture/decisions/).
 - All **15 accepted DDRs** from FEAT-JARVIS-001..003 (DDR-001..009 + DDR-010..015).
+- The **9 DDRs** introduced by this design (DDR-016..024 — DDR-023 + DDR-024 promoted from ASSUM-009 + ASSUM-008 respectively).
 - Forge ADR-ARCH-015/016/017/031 and ADR-FLEET-001 — pattern source / inheritance, not dependency.
 
 **No contradictions detected.** Compatibility notes:
@@ -344,6 +347,9 @@ Proposed contracts checked against:
 - **DDR-009** (stub transport semantics) — *retired by this feature*. The `_stub_response_hook`, `LOG_PREFIX_DISPATCH`, and `LOG_PREFIX_QUEUE_BUILD` swap-point anchors disappear from `tools/dispatch.py`; the TASK-J002-021 grep invariant is updated/retired in the same commit. (FEAT-J005 retires the queue-build half.)
 - **DDR-014** (Layer 1+2+3 frontier gate) — F5/F6 plumbing strengthens; no layer is removed.
 - **DDR-015** (LlamaSwapAdapter stubbed) — preserved by DDR-022; live reads remain v1.5.
+- **DDR-018** (routing-history schema authoritative) — extended (not contradicted) by [DDR-023](decisions/DDR-023-trace-file-collision-warn-and-preserve.md) which pins the collision policy at the filesystem-offload boundary, and by [DDR-024](decisions/DDR-024-degraded-specialists-eligible-v1.md) which adds two append-only fields (`chosen_specialist_status`, `RedirectAttempt.reported_status`) per DDR-018's append-only-from-v1 contract.
+- **DDR-017** (retry-with-redirect policy) — load-bearing under [DDR-024](decisions/DDR-024-degraded-specialists-eligible-v1.md): degraded specialists rely on the redirect pathway to recover from failures; exclusion at resolution would short-circuit it. ASSUM-011 lexicographic determinism is preserved (DDR-024 adds no status-based ordering).
+- **ADR-FLEET-001 §"Do-not-reopen"** — actively honoured by [DDR-023](decisions/DDR-023-trace-file-collision-warn-and-preserve.md): trace-file collisions preserve the original rather than overwrite, so prior trace records cannot be silently destroyed.
 
 One **forward-compatibility note** the FEAT-J005 design must consume: the `routing_history_writer` is a **shared component** between FEAT-J004 and FEAT-J005. FEAT-J005's `queue_build` real-transport path writes to the same writer (`subagent_type="forge_build_queue"`, `subagent_task_id=correlation_id`); stage-complete events arriving on `pipeline.stage-complete.*` add edges to the original entry rather than overwriting. The `RoutingHistoryWriter` class must support both `write_specialist_dispatch(entry)` and `write_build_queue_dispatch(entry)` + `append_build_queue_event(correlation_id, event)` to honour this. Captured in the API-internal contract.
 
@@ -409,7 +415,9 @@ docs/design/FEAT-JARVIS-004/
     ├── DDR-019-graphiti-fire-and-forget-writes.md
     ├── DDR-020-concurrent-dispatch-cap-8.md
     ├── DDR-021-nats-unavailable-soft-fail.md
-    └── DDR-022-defer-llamaswap-live-reads-to-v15.md
+    ├── DDR-022-defer-llamaswap-live-reads-to-v15.md
+    ├── DDR-023-trace-file-collision-warn-and-preserve.md   ← promotes ASSUM-009
+    └── DDR-024-degraded-specialists-eligible-v1.md         ← promotes ASSUM-008
 ```
 
 ---

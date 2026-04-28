@@ -1,0 +1,7 @@
+{
+  "tests_run": 135,
+  "tests_failed": 0,
+  "coverage_pct": 87.5,
+  "output_summary": "pytest: 135 passed, 0 failed across capabilities registry + related suites; 88% line coverage on src/jarvis/infrastructure/capabilities_registry.py.",
+  "quality_gates_passed": true
+}

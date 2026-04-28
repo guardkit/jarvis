@@ -1,0 +1,147 @@
+{
+  "task_id": "TASK-J004-017",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "skipped",
+      "test_output_summary": "Independent test verification skipped (tests not required for testing tasks)",
+      "duration_seconds": 0.0
+    },
+    "requirements": {
+      "criteria_total": 5,
+      "criteria_met": 5,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "One parametrised test with 5 rows covering all five `DispatchOutcome` literals reachable from `dispatch_by_capability`.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TestSlotReleasedOnEveryDispatchOutcome.test_slot_released_on_every_dispatch_outcome is a single @pytest.mark.parametrize test with exactly 5 rows: row1-success, row2-timeout, row3-specialist_error, row4-transport_unavailable, row5-unresolved. Each row has its own arrange callable (_arrange_success / _arrange_timeout / _arrange_specialist_error / _arrange_transport_unavailable / _arrange_unresolved) wired through a uniform body. Verified via `uv run pytest tests/test_dispatch_slot_release.py -v` collecting 5 items.",
+      "notes": "TestSlotReleasedOnEveryDispatchOutcome.test_slot_released_on_every_dispatch_outcome is a single @pytest.mark.parametrize test with exactly 5 rows: row1-success, row2-timeout, row3-specialist_error, row4-transport_unavailable, row5-unresolved. Each row has its own arrange callable (_arrange_success / _arrange_timeout / _arrange_specialist_error / _arrange_transport_unavailable / _arrange_unresolved) wired through a uniform body. Verified via `uv run pytest tests/test_dispatch_slot_release.py -v` collecting 5 items."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Each row asserts the slot is released \u2014 `in_flight` invariant after dispatch.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Every row pre-acquires one slot on a real DispatchSemaphore(cap=2) (asserted `semaphore.in_flight == 1` as a precondition), runs the dispatch, then re-asserts `semaphore.in_flight == 1` with a row-tagged failure message: 'slot leaked on <row> \u2014 in_flight=<n>, expected 1'. Sanity check confirmed the assertion fires when release() is patched to a no-op (in_flight stayed at 2). The semaphore is real (not mocked) so the assertion observes the live counter.",
+      "notes": "Every row pre-acquires one slot on a real DispatchSemaphore(cap=2) (asserted `semaphore.in_flight == 1` as a precondition), runs the dispatch, then re-asserts `semaphore.in_flight == 1` with a row-tagged failure message: 'slot leaked on <row> \u2014 in_flight=<n>, expected 1'. Sanity check confirmed the assertion fires when release() is patched to a no-op (in_flight stayed at 2). The semaphore is real (not mocked) so the assertion observes the live counter."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "No row uses `pytest.xfail` or `pytest.skip` \u2014 all five must pass.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "The test file contains zero `pytest.xfail`, `pytest.skip`, `@pytest.mark.skip`, or `@pytest.mark.xfail` decorators / calls. All five parametrised rows pass on the first run: `5 passed in 1.02s`.",
+      "notes": "The test file contains zero `pytest.xfail`, `pytest.skip`, `@pytest.mark.skip`, or `@pytest.mark.xfail` decorators / calls. All five parametrised rows pass on the first run: `5 passed in 1.02s`."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "The test does NOT cover `redirected` or `exhausted` outcomes (those are owned by TASK-J004-015's redirect matrix); this test is specifically the slot-release invariant on the closed five-set.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "The parametrize ids are exactly ['row1-success','row2-timeout','row3-specialist_error','row4-transport_unavailable','row5-unresolved']. The module docstring and class docstring explicitly call out that 'redirected and exhausted are owned by TASK-J004-015 and intentionally not exercised here'. The single-specialist registry (`_solo_specialist_registry`) is chosen so timeout/specialist_error rows have no redirect candidate \u2014 the test pins slot-release on the closed five-set without claiming coverage on redirect behaviour.",
+      "notes": "The parametrize ids are exactly ['row1-success','row2-timeout','row3-specialist_error','row4-transport_unavailable','row5-unresolved']. The module docstring and class docstring explicitly call out that 'redirected and exhausted are owned by TASK-J004-015 and intentionally not exercised here'. The single-specialist registry (`_solo_specialist_registry`) is chosen so timeout/specialist_error rows have no redirect candidate \u2014 the test pins slot-release on the closed five-set without claiming coverage on redirect behaviour."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`uv run pytest tests/test_dispatch_slot_release.py -v` green.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `uv run pytest tests/test_dispatch_slot_release.py -v` from the worktree root: collected 5 items, 5 passed in 1.02s, 0 failed, 0 skipped, 0 xfailed. Exit code 0.",
+      "notes": "Ran `uv run pytest tests/test_dispatch_slot_release.py -v` from the worktree root: collected 5 items, 5 passed in 1.02s, 0 failed, 0 skipped, 0 xfailed. Exit code 0."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "One parametrised test with 5 rows covering all five `DispatchOutcome` literals reachable from `dispatch_by_capability`.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestSlotReleasedOnEveryDispatchOutcome.test_slot_released_on_every_dispatch_outcome is a single @pytest.mark.parametrize test with exactly 5 rows: row1-success, row2-timeout, row3-specialist_error, row4-transport_unavailable, row5-unresolved. Each row has its own arrange callable (_arrange_success / _arrange_timeout / _arrange_specialist_error / _arrange_transport_unavailable / _arrange_unresolved) wired through a uniform body. Verified via `uv run pytest tests/test_dispatch_slot_release.py -v` collecting 5 items.",
+        "notes": "TestSlotReleasedOnEveryDispatchOutcome.test_slot_released_on_every_dispatch_outcome is a single @pytest.mark.parametrize test with exactly 5 rows: row1-success, row2-timeout, row3-specialist_error, row4-transport_unavailable, row5-unresolved. Each row has its own arrange callable (_arrange_success / _arrange_timeout / _arrange_specialist_error / _arrange_transport_unavailable / _arrange_unresolved) wired through a uniform body. Verified via `uv run pytest tests/test_dispatch_slot_release.py -v` collecting 5 items."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Each row asserts the slot is released \u2014 `in_flight` invariant after dispatch.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Every row pre-acquires one slot on a real DispatchSemaphore(cap=2) (asserted `semaphore.in_flight == 1` as a precondition), runs the dispatch, then re-asserts `semaphore.in_flight == 1` with a row-tagged failure message: 'slot leaked on <row> \u2014 in_flight=<n>, expected 1'. Sanity check confirmed the assertion fires when release() is patched to a no-op (in_flight stayed at 2). The semaphore is real (not mocked) so the assertion observes the live counter.",
+        "notes": "Every row pre-acquires one slot on a real DispatchSemaphore(cap=2) (asserted `semaphore.in_flight == 1` as a precondition), runs the dispatch, then re-asserts `semaphore.in_flight == 1` with a row-tagged failure message: 'slot leaked on <row> \u2014 in_flight=<n>, expected 1'. Sanity check confirmed the assertion fires when release() is patched to a no-op (in_flight stayed at 2). The semaphore is real (not mocked) so the assertion observes the live counter."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "No row uses `pytest.xfail` or `pytest.skip` \u2014 all five must pass.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "The test file contains zero `pytest.xfail`, `pytest.skip`, `@pytest.mark.skip`, or `@pytest.mark.xfail` decorators / calls. All five parametrised rows pass on the first run: `5 passed in 1.02s`.",
+        "notes": "The test file contains zero `pytest.xfail`, `pytest.skip`, `@pytest.mark.skip`, or `@pytest.mark.xfail` decorators / calls. All five parametrised rows pass on the first run: `5 passed in 1.02s`."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "The test does NOT cover `redirected` or `exhausted` outcomes (those are owned by TASK-J004-015's redirect matrix); this test is specifically the slot-release invariant on the closed five-set.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "The parametrize ids are exactly ['row1-success','row2-timeout','row3-specialist_error','row4-transport_unavailable','row5-unresolved']. The module docstring and class docstring explicitly call out that 'redirected and exhausted are owned by TASK-J004-015 and intentionally not exercised here'. The single-specialist registry (`_solo_specialist_registry`) is chosen so timeout/specialist_error rows have no redirect candidate \u2014 the test pins slot-release on the closed five-set without claiming coverage on redirect behaviour.",
+        "notes": "The parametrize ids are exactly ['row1-success','row2-timeout','row3-specialist_error','row4-transport_unavailable','row5-unresolved']. The module docstring and class docstring explicitly call out that 'redirected and exhausted are owned by TASK-J004-015 and intentionally not exercised here'. The single-specialist registry (`_solo_specialist_registry`) is chosen so timeout/specialist_error rows have no redirect candidate \u2014 the test pins slot-release on the closed five-set without claiming coverage on redirect behaviour."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`uv run pytest tests/test_dispatch_slot_release.py -v` green.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `uv run pytest tests/test_dispatch_slot_release.py -v` from the worktree root: collected 5 items, 5 passed in 1.02s, 0 failed, 0 skipped, 0 xfailed. Exit code 0.",
+        "notes": "Ran `uv run pytest tests/test_dispatch_slot_release.py -v` from the worktree root: collected 5 items, 5 passed in 1.02s, 0 failed, 0 skipped, 0 xfailed. Exit code 0."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "bdd_pending",
+      "description": "BDD oracle: 5 scenario(s) reference step definitions that are not yet implemented. These do NOT block approval but should be implemented to make the scenarios runnable.",
+      "scenarios_pending": 5,
+      "feature_files": [
+        "features/feat-jarvis-004-fleet-registration-and-specialist-dispatch/feat-jarvis-004-fleet-registration-and-specialist-dispatch.feature"
+      ],
+      "pending_examples": [
+        "test_the_concurrent_dispatch_slot_is_released_on_every_dispatch_outcome[success] \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_the_concurrent_dispatch_slot_is_released_on_every_dispatch_outcome[timeout] \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_the_concurrent_dispatch_slot_is_released_on_every_dispatch_outcome[specialist error] \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_the_concurrent_dispatch_slot_is_released_on_every_dispatch_outcome[transport unavailable] \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames.",
+        "test_the_concurrent_dispatch_slot_is_released_on_every_dispatch_outcome[unresolved] \u2014 implement: All traceback entries are hidden. Pass `--full-trace` to see hidden and internal frames."
+      ]
+    }
+  ],
+  "rationale": "All quality gates passed. Tests not required for this task type. All acceptance criteria met. Architecture context: 328 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1252/5200 tokens\n\n### \u2705 Similar Outcomes\n- MIGRATES_TO\n- RELATED_TO_TASK_REVIEW\n\n### \ud83c\udfa8 Relevant Patterns\n- ASSIGNS_TASK_TO\n- HAS_PARAMETER\n\n### \u26a0\ufe0f Warnings\n- REQUIRES_USE_OF\n- HAS_ROOT_CAUSE\n\n### \ud83c\udfad Role Constraints\n- PROJECT_INVOLVES\n- PROJECT_INVOLVES\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- APPLIES_TO\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

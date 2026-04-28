@@ -59,16 +59,18 @@ assumptions:
   - id: "ASSUM-008"
     scenario: "A specialist reporting degraded status is still eligible for dispatch and the trace records the status"
     assumption: "Specialists with manifest status='degraded' remain dispatch-eligible in v1; redirect-with-retry handles their failures rather than excluding at resolution time. The routing history record captures the specialist's reported status at decision time"
-    confidence: medium
+    confidence: high
+    resolved_by: "DDR-024"
     basis: "AgentManifest enum permits 'degraded' but no DDR forbids dispatching to one. v1 lets the supervisor + redirect policy handle it; learning module (FEAT-J008) can suppress later via append-only DDR"
-    human_response: "confirmed"
+    human_response: "promoted to DDR-024 (degraded-specialists-eligible-v1) — binding decision; trace captures chosen_specialist_status + per-attempt reported_status"
 
   - id: "ASSUM-009"
     scenario: "Writing a trace file that already exists for the same decision is treated as a write failure"
     assumption: "If a per-decision trace file already exists at ~/.jarvis/traces/{date}/{decision_id}.json, the routing history writer treats the second offload attempt as a write failure: logs WARN routing_history_write_failed, preserves the original file, and does not overwrite"
-    confidence: low
+    confidence: high
+    resolved_by: "DDR-023"
     basis: "DDR-018 endorses 1:1 decision-id→file mapping; a collision implies a UUID re-use which is itself an error condition. Not explicitly stated in the design — this scenario surfaces an operator-decidable policy"
-    human_response: "confirmed (REVIEW REQUIRED — low confidence)"
+    human_response: "promoted to DDR-023 (trace-file-collision-warn-and-preserve) — binding decision; O_EXCL atomic create-or-fail, original preserved, WARN routing_history_write_failed reason=trace_file_exists"
 
   - id: "ASSUM-010"
     scenario: "Sensitive content in a trace record is redacted before persistence"
