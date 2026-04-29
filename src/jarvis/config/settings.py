@@ -144,6 +144,42 @@ class JarvisConfig(BaseSettings):
         ),
     )
 
+    # -- FEAT-JARVIS-005: pipeline + forge subscriber settings ---------------
+    # See docs/design/FEAT-JARVIS-005/design.md §7 for the authoritative
+    # field list. Declarative-only — TASK-J005-005 (`queue_build`),
+    # TASK-J005-003 (subscriber), and TASK-J005-008 (lifecycle) consume
+    # these values. No new module imports introduced by this task.
+
+    # JARVIS_PIPELINE_PUBLISH_TIMEOUT_SECONDS — per-publish timeout for the
+    # pipeline `queue_build` path. Default 5s per DDR-025.
+    pipeline_publish_timeout_seconds: int = Field(
+        default=5,
+        description=(
+            "Per-publish timeout (seconds) for the pipeline queue_build path. "
+            "DDR-025 — see docs/design/FEAT-JARVIS-005/design.md §7."
+        ),
+    )
+
+    # JARVIS_FORGE_NOTIFICATIONS_QUEUE_CAP — per-session bound on the CLI
+    # forge-notifications queue. Default 100 entries per DDR-030.
+    forge_notifications_queue_cap: int = Field(
+        default=100,
+        description=(
+            "Per-session cap for the CLI forge-notifications queue. "
+            "DDR-030 — see docs/design/FEAT-JARVIS-005/design.md §7."
+        ),
+    )
+
+    # JARVIS_FORGE_CORRELATION_MAP_CAP — bound on the LRU correlation map
+    # used by the forge-event subscriber. Default 1000 entries per DDR-028.
+    forge_correlation_map_cap: int = Field(
+        default=1000,
+        description=(
+            "Cap for the LRU correlation map in the forge-event subscriber. "
+            "DDR-028 — see docs/design/FEAT-JARVIS-005/design.md §7."
+        ),
+    )
+
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
         env_file=".env",

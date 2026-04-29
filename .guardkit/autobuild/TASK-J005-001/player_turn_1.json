@@ -1,0 +1,92 @@
+{
+  "task_id": "TASK-J005-001",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/config/settings.py"
+  ],
+  "files_created": [
+    "tests/test_config_feat_j005.py"
+  ],
+  "tests_written": [
+    "tests/test_config_feat_j005.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "12 new FEAT-J005 config tests pass; full config test suite (141 tests across test_config.py, test_config_settings.py, test_config_phase2.py, test_config_feat_j003.py, test_config_feat_j005.py) green. mypy strict on src/jarvis/config/settings.py: success. ruff check + ruff format: clean.",
+  "implementation_notes": "Added three declarative-only fields to JarvisConfig per FEAT-JARVIS-005 design.md \u00a77, mirroring the FEAT-J004 pydantic-settings pattern (TASK-J004-003): pipeline_publish_timeout_seconds: int = 5 (DDR-025), forge_notifications_queue_cap: int = 100 (DDR-030), forge_correlation_map_cap: int = 1000 (DDR-028). Each field is declared via pydantic.Field(default=..., description=...) where the description embeds the DDR anchor and a back-reference to docs/design/FEAT-JARVIS-005/design.md \u00a77. Env-var overrides flow through the existing SettingsConfigDict(env_prefix='JARVIS_') so JARVIS_PIPELINE_PUBLISH_TIMEOUT_SECONDS, JARVIS_FORGE_NOTIFICATIONS_QUEUE_CAP, and JARVIS_FORGE_CORRELATION_MAP_CAP resolve automatically (FEAT-J004 convention). No consumers were wired in this task \u2014 TASK-J005-005 (queue_build), TASK-J005-003 (subscriber), and TASK-J005-008 (lifecycle) will consume these. No new imports were introduced and no other module under src/jarvis references the new field names (asserted by AC-004 test which scans src/jarvis/**/*.py).",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] Three fields added to `JarvisConfig` with defaults exactly as above.",
+      "status": "complete",
+      "evidence": "Added pipeline_publish_timeout_seconds: int = 5, forge_notifications_queue_cap: int = 100, forge_correlation_map_cap: int = 1000 to JarvisConfig in src/jarvis/config/settings.py via pydantic.Field(default=...). Defaults match design.md \u00a77 exactly. Verified by TestAC001NewFieldsAndDefaults (4 tests).",
+      "test_file": "tests/test_config_feat_j005.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Field metadata includes the DDR anchor in the `description=`.",
+      "status": "complete",
+      "evidence": "Each new Field(...) carries description= text containing the DDR anchor: 'DDR-025' (pipeline_publish_timeout_seconds), 'DDR-030' (forge_notifications_queue_cap), 'DDR-028' (forge_correlation_map_cap). Verified by TestAC002FieldDescriptionsContainDDRAnchor by inspecting JarvisConfig.model_fields[<name>].description.",
+      "test_file": "tests/test_config_feat_j005.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Env-var overrides follow the FEAT-J004 convention (`JARVIS_<UPPER_SNAKE>`).",
+      "status": "complete",
+      "evidence": "New fields inherit the existing SettingsConfigDict(env_prefix='JARVIS_'), so JARVIS_PIPELINE_PUBLISH_TIMEOUT_SECONDS, JARVIS_FORGE_NOTIFICATIONS_QUEUE_CAP, and JARVIS_FORGE_CORRELATION_MAP_CAP map to the corresponding fields. Round-trip verified by TestAC003EnvVarOverrides (3 override tests + a defaults-when-unset regression test).",
+      "test_file": "tests/test_config_feat_j005.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] No other module imports the new fields in this commit.",
+      "status": "complete",
+      "evidence": "TestAC004NoOtherModuleConsumesNewFields scans every .py file under src/jarvis/ (excluding settings.py itself) and asserts none of the three new field names appear. Test passes \u2014 fields are declarative-only, awaiting TASK-J005-005 / TASK-J005-003 / TASK-J005-008 consumers.",
+      "test_file": "tests/test_config_feat_j005.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] `uv run mypy src/jarvis/config/settings.py` passes (strict mode).",
+      "status": "complete",
+      "evidence": "Ran `uv run mypy src/jarvis/config/settings.py` \u2014 output: 'Success: no issues found in 1 source file'. Strict mode is configured project-wide in pyproject.toml.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Ran `uv run ruff check src/jarvis/config/settings.py tests/test_config_feat_j005.py` \u2014 'All checks passed!'. Ran `uv run ruff format --check ...` \u2014 '2 files already formatted'.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/config/settings.py",
+        "tests/test_config_feat_j005.py"
+      ]
+    }
+  ],
+  "success": true
+}
