@@ -1,0 +1,291 @@
+{
+  "task_id": "TASK-J005-005",
+  "turn": 2,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_config_feat_j005.py tests/test_lifecycle_forge_subscriber_wiring.py tests/test_tools_dispatch.py tests/test_tools_dispatch_contract.py tests/test_tools_queue_build.py -v --tb=short",
+      "test_output_summary": "Result:\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/tests/test_lifecycle_forge_subscriber_wiring.py:67: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\ntests/test_lifecycle_forge_subscriber_wiring.py::TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound\ntests/test_lifecycle_forge_subscriber_wiring.py::TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction\ntests/test_lifecycle_forge_subscriber_wiring.py::TestStartupOrdering::test_start_after_fleet_register_before_session_manager\n======================= 85 passed, 10 warnings in 6.72s ========================",
+      "duration_seconds": 8.261611938476562
+    },
+    "requirements": {
+      "criteria_total": 15,
+      "criteria_met": 15,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`LOG_PREFIX_QUEUE_BUILD` is removed from `tools/dispatch.py`; the Phase 2",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Verified in turn 1; unchanged in turn 2. dispatch.LOG_PREFIX_QUEUE_BUILD attribute is absent (TestStubAnchorRetired), and the JARVIS_QUEUE_BUILD_STUB literal is absent from the module source.",
+      "notes": "Verified in turn 1; unchanged in turn 2. dispatch.LOG_PREFIX_QUEUE_BUILD attribute is absent (TestStubAnchorRetired), and the JARVIS_QUEUE_BUILD_STUB literal is absent from the module source."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`js.publish` is wrapped in `asyncio.wait_for(...,",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "queue_build calls await asyncio.wait_for(js.publish(subject, payload_bytes), timeout=timeout_seconds), where timeout_seconds is resolved via _resolve_publish_timeout() reading config.pipeline_publish_timeout_seconds. test_publish_uses_asyncio_wait_for_with_config_timeout asserts the wait_for timeout matches the config value.",
+      "notes": "queue_build calls await asyncio.wait_for(js.publish(subject, payload_bytes), timeout=timeout_seconds), where timeout_seconds is resolved via _resolve_publish_timeout() reading config.pipeline_publish_timeout_seconds. test_publish_uses_asyncio_wait_for_with_config_timeout asserts the wait_for timeout matches the config value."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Subject is constructed via `nats_core.Topics.Pipeline.BUILD_QUEUED.format(...)`;",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "subject = Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id) is the only subject construction. test_publish_called_once_with_canonical_subject asserts the subject equals the Topics-template value.",
+      "notes": "subject = Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id) is the only subject construction. test_publish_called_once_with_canonical_subject asserts the subject equals the Topics-template value."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Payload uses `nats_core.events.BuildQueuedPayload` verbatim \u2014 no Jarvis-",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "BuildQueuedPayload(...) is constructed with the spec fields. test_publish_called_once_with_canonical_subject decodes the published bytes back through BuildQueuedPayload.model_validate.",
+      "notes": "BuildQueuedPayload(...) is constructed with the spec fields. test_publish_called_once_with_canonical_subject decodes the published bytes back through BuildQueuedPayload.model_validate."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Envelope `source_id=\"jarvis\"` always; never read from the reasoning model's",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "MessageEnvelope is constructed with source_id='jarvis' as a literal. test_publish_called_once_with_canonical_subject asserts envelope.source_id == 'jarvis' on the published bytes.",
+      "notes": "MessageEnvelope is constructed with source_id='jarvis' as a literal. test_publish_called_once_with_canonical_subject asserts envelope.source_id == 'jarvis' on the published bytes."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`originating_adapter` resolved from `Session.adapter` when a session is",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_resolve_originating_adapter() projects Session.adapter through _SESSION_ADAPTER_TO_ORIGINATING ({cli->terminal, telegram->telegram, dashboard->dashboard, reachy->voice-reachy}); arg fallback only when no session. test_no_session_uses_arg_value, test_session_adapter_overrides_arg, test_register_correlation_uses_session_id cover both branches.",
+      "notes": "_resolve_originating_adapter() projects Session.adapter through _SESSION_ADAPTER_TO_ORIGINATING ({cli->terminal, telegram->telegram, dashboard->dashboard, reachy->voice-reachy}); arg fallback only when no session. test_no_session_uses_arg_value, test_session_adapter_overrides_arg, test_register_correlation_uses_session_id cover both branches."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "On PubAck timeout: returns `{\"status\": \"degraded\", \"reason\":",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "TimeoutError from asyncio.wait_for is caught and returns _queue_build_degraded_error('transport_unavailable', ...). test_timeout_returns_degraded_transport_unavailable asserts the JSON shape.",
+      "notes": "TimeoutError from asyncio.wait_for is caught and returns _queue_build_degraded_error('transport_unavailable', ...). test_timeout_returns_degraded_transport_unavailable asserts the JSON shape."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "On dispatch-semaphore saturation: returns `{\"status\": \"degraded\", \"reason\":",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "When _dispatch_semaphore.try_acquire() returns False, queue_build returns degraded JSON BEFORE any publish attempt. test_saturation_returns_degraded asserts the JSON and that publish was never called.",
+      "notes": "When _dispatch_semaphore.try_acquire() returns False, queue_build returns degraded JSON BEFORE any publish attempt. test_saturation_returns_degraded asserts the JSON and that publish was never called."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "On NATS unavailable (no `js`): returns `{\"status\": \"degraded\", \"reason\":",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "When _nats_client is None or client.js raises, queue_build returns degraded JSON. NATSConnectionError on publish is also caught. test_no_nats_client_returns_degraded and test_publish_nats_connection_error_degrades cover both branches.",
+      "notes": "When _nats_client is None or client.js raises, queue_build returns degraded JSON. NATSConnectionError on publish is also caught. test_no_nats_client_returns_degraded and test_publish_nats_connection_error_degrades cover both branches."
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "On invalid args (Group C #5 outline): returns",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_queue_build_validation_error renders {'status': 'validation_error', 'reason': ..., 'detail': ..., 'correlation_id': ..., 'feature_id': ...}. ValidationError, TypeError, ValueError are all caught at the boundary. TestValidationErrorShape covers invalid_feature_id/repo/adapter/validation.",
+      "notes": "_queue_build_validation_error renders {'status': 'validation_error', 'reason': ..., 'detail': ..., 'correlation_id': ..., 'feature_id': ...}. ValidationError, TypeError, ValueError are all caught at the boundary. TestValidationErrorShape covers invalid_feature_id/repo/adapter/validation."
+    },
+    {
+      "criterion_id": "AC-011",
+      "criterion_text": "`forge_subscriber.register_correlation(...)` called once on PubAck",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "After successful publish, queue_build calls _forge_subscriber.register_correlation(correlation_id, session_id, adapter, queued_at, feature_id). test_register_correlation_called_with_returned_correlation_id and test_register_correlation_uses_session_id assert call site, args, and correlation_id match.",
+      "notes": "After successful publish, queue_build calls _forge_subscriber.register_correlation(correlation_id, session_id, adapter, queued_at, feature_id). test_register_correlation_called_with_returned_correlation_id and test_register_correlation_uses_session_id assert call site, args, and correlation_id match."
+    },
+    {
+      "criterion_id": "AC-012",
+      "criterion_text": "`routing_history_writer.write_build_queue_dispatch(entry)` invoked",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_fire_and_forget_build_queue_trace builds JarvisRoutingHistoryEntry(subagent_type='forge_build_queue', subagent_task_id=correlation_id) and schedules writer.write_build_queue_dispatch(entry) via asyncio.create_task without awaiting. TestRoutingHistoryWriteOnSuccess validates the schedule.",
+      "notes": "_fire_and_forget_build_queue_trace builds JarvisRoutingHistoryEntry(subagent_type='forge_build_queue', subagent_task_id=correlation_id) and schedules writer.write_build_queue_dispatch(entry) via asyncio.create_task without awaiting. TestRoutingHistoryWriteOnSuccess validates the schedule."
+    },
+    {
+      "criterion_id": "AC-013",
+      "criterion_text": "Reasoning-model attempt to override `originating_adapter` is silently",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "_resolve_originating_adapter consults Session.adapter first; arg fallback only when no session. test_session_adapter_overrides_arg passes Session(adapter=Adapter.CLI) + arg='telegram' from the model \u2014 published payload carries 'terminal' (session-derived), confirming the silent override.",
+      "notes": "_resolve_originating_adapter consults Session.adapter first; arg fallback only when no session. test_session_adapter_overrides_arg passes Session(adapter=Adapter.CLI) + arg='telegram' from the model \u2014 published payload carries 'terminal' (session-derived), confirming the silent override."
+    },
+    {
+      "criterion_id": "AC-014",
+      "criterion_text": "`uv run mypy src/jarvis/tools/dispatch.py` passes (strict).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran 'uv run mypy --strict src/jarvis/tools/dispatch.py' \u2014 output: 'Success: no issues found in 1 source file'. The strict typing pass covers all new helpers (_resolve_originating_adapter, _resolve_publish_timeout, _queue_build_validation_error, _queue_build_degraded_error, _fire_and_forget_build_queue_trace) and the async queue_build body.",
+      "notes": "Ran 'uv run mypy --strict src/jarvis/tools/dispatch.py' \u2014 output: 'Success: no issues found in 1 source file'. The strict typing pass covers all new helpers (_resolve_originating_adapter, _resolve_publish_timeout, _queue_build_validation_error, _queue_build_degraded_error, _fire_and_forget_build_queue_trace) and the async queue_build body."
+    },
+    {
+      "criterion_id": "AC-015",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran 'uv run ruff check src/jarvis/tools/dispatch.py tests/test_tools_queue_build.py tests/test_tools_dispatch.py tests/test_tools_dispatch_contract.py' \u2014 output: 'All checks passed!' (0 errors, 0 warnings). Ran 'uv run ruff format --check' on the same files \u2014 output: '4 files already formatted'. The I001 import-sort issue from the initial test file write was auto-fixed via 'ruff check --fix' and 'ruff format'.",
+      "notes": "Ran 'uv run ruff check src/jarvis/tools/dispatch.py tests/test_tools_queue_build.py tests/test_tools_dispatch.py tests/test_tools_dispatch_contract.py' \u2014 output: 'All checks passed!' (0 errors, 0 warnings). Ran 'uv run ruff format --check' on the same files \u2014 output: '4 files already formatted'. The I001 import-sort issue from the initial test file write was auto-fixed via 'ruff check --fix' and 'ruff format'."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`LOG_PREFIX_QUEUE_BUILD` is removed from `tools/dispatch.py`; the Phase 2",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Verified in turn 1; unchanged in turn 2. dispatch.LOG_PREFIX_QUEUE_BUILD attribute is absent (TestStubAnchorRetired), and the JARVIS_QUEUE_BUILD_STUB literal is absent from the module source.",
+        "notes": "Verified in turn 1; unchanged in turn 2. dispatch.LOG_PREFIX_QUEUE_BUILD attribute is absent (TestStubAnchorRetired), and the JARVIS_QUEUE_BUILD_STUB literal is absent from the module source."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "`js.publish` is wrapped in `asyncio.wait_for(...,",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "queue_build calls await asyncio.wait_for(js.publish(subject, payload_bytes), timeout=timeout_seconds), where timeout_seconds is resolved via _resolve_publish_timeout() reading config.pipeline_publish_timeout_seconds. test_publish_uses_asyncio_wait_for_with_config_timeout asserts the wait_for timeout matches the config value.",
+        "notes": "queue_build calls await asyncio.wait_for(js.publish(subject, payload_bytes), timeout=timeout_seconds), where timeout_seconds is resolved via _resolve_publish_timeout() reading config.pipeline_publish_timeout_seconds. test_publish_uses_asyncio_wait_for_with_config_timeout asserts the wait_for timeout matches the config value."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Subject is constructed via `nats_core.Topics.Pipeline.BUILD_QUEUED.format(...)`;",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "subject = Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id) is the only subject construction. test_publish_called_once_with_canonical_subject asserts the subject equals the Topics-template value.",
+        "notes": "subject = Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id) is the only subject construction. test_publish_called_once_with_canonical_subject asserts the subject equals the Topics-template value."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Payload uses `nats_core.events.BuildQueuedPayload` verbatim \u2014 no Jarvis-",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "BuildQueuedPayload(...) is constructed with the spec fields. test_publish_called_once_with_canonical_subject decodes the published bytes back through BuildQueuedPayload.model_validate.",
+        "notes": "BuildQueuedPayload(...) is constructed with the spec fields. test_publish_called_once_with_canonical_subject decodes the published bytes back through BuildQueuedPayload.model_validate."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Envelope `source_id=\"jarvis\"` always; never read from the reasoning model's",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "MessageEnvelope is constructed with source_id='jarvis' as a literal. test_publish_called_once_with_canonical_subject asserts envelope.source_id == 'jarvis' on the published bytes.",
+        "notes": "MessageEnvelope is constructed with source_id='jarvis' as a literal. test_publish_called_once_with_canonical_subject asserts envelope.source_id == 'jarvis' on the published bytes."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`originating_adapter` resolved from `Session.adapter` when a session is",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_resolve_originating_adapter() projects Session.adapter through _SESSION_ADAPTER_TO_ORIGINATING ({cli->terminal, telegram->telegram, dashboard->dashboard, reachy->voice-reachy}); arg fallback only when no session. test_no_session_uses_arg_value, test_session_adapter_overrides_arg, test_register_correlation_uses_session_id cover both branches.",
+        "notes": "_resolve_originating_adapter() projects Session.adapter through _SESSION_ADAPTER_TO_ORIGINATING ({cli->terminal, telegram->telegram, dashboard->dashboard, reachy->voice-reachy}); arg fallback only when no session. test_no_session_uses_arg_value, test_session_adapter_overrides_arg, test_register_correlation_uses_session_id cover both branches."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "On PubAck timeout: returns `{\"status\": \"degraded\", \"reason\":",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TimeoutError from asyncio.wait_for is caught and returns _queue_build_degraded_error('transport_unavailable', ...). test_timeout_returns_degraded_transport_unavailable asserts the JSON shape.",
+        "notes": "TimeoutError from asyncio.wait_for is caught and returns _queue_build_degraded_error('transport_unavailable', ...). test_timeout_returns_degraded_transport_unavailable asserts the JSON shape."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "On dispatch-semaphore saturation: returns `{\"status\": \"degraded\", \"reason\":",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "When _dispatch_semaphore.try_acquire() returns False, queue_build returns degraded JSON BEFORE any publish attempt. test_saturation_returns_degraded asserts the JSON and that publish was never called.",
+        "notes": "When _dispatch_semaphore.try_acquire() returns False, queue_build returns degraded JSON BEFORE any publish attempt. test_saturation_returns_degraded asserts the JSON and that publish was never called."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "On NATS unavailable (no `js`): returns `{\"status\": \"degraded\", \"reason\":",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "When _nats_client is None or client.js raises, queue_build returns degraded JSON. NATSConnectionError on publish is also caught. test_no_nats_client_returns_degraded and test_publish_nats_connection_error_degrades cover both branches.",
+        "notes": "When _nats_client is None or client.js raises, queue_build returns degraded JSON. NATSConnectionError on publish is also caught. test_no_nats_client_returns_degraded and test_publish_nats_connection_error_degrades cover both branches."
+      },
+      {
+        "criterion_id": "AC-010",
+        "criterion_text": "On invalid args (Group C #5 outline): returns",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_queue_build_validation_error renders {'status': 'validation_error', 'reason': ..., 'detail': ..., 'correlation_id': ..., 'feature_id': ...}. ValidationError, TypeError, ValueError are all caught at the boundary. TestValidationErrorShape covers invalid_feature_id/repo/adapter/validation.",
+        "notes": "_queue_build_validation_error renders {'status': 'validation_error', 'reason': ..., 'detail': ..., 'correlation_id': ..., 'feature_id': ...}. ValidationError, TypeError, ValueError are all caught at the boundary. TestValidationErrorShape covers invalid_feature_id/repo/adapter/validation."
+      },
+      {
+        "criterion_id": "AC-011",
+        "criterion_text": "`forge_subscriber.register_correlation(...)` called once on PubAck",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "After successful publish, queue_build calls _forge_subscriber.register_correlation(correlation_id, session_id, adapter, queued_at, feature_id). test_register_correlation_called_with_returned_correlation_id and test_register_correlation_uses_session_id assert call site, args, and correlation_id match.",
+        "notes": "After successful publish, queue_build calls _forge_subscriber.register_correlation(correlation_id, session_id, adapter, queued_at, feature_id). test_register_correlation_called_with_returned_correlation_id and test_register_correlation_uses_session_id assert call site, args, and correlation_id match."
+      },
+      {
+        "criterion_id": "AC-012",
+        "criterion_text": "`routing_history_writer.write_build_queue_dispatch(entry)` invoked",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_fire_and_forget_build_queue_trace builds JarvisRoutingHistoryEntry(subagent_type='forge_build_queue', subagent_task_id=correlation_id) and schedules writer.write_build_queue_dispatch(entry) via asyncio.create_task without awaiting. TestRoutingHistoryWriteOnSuccess validates the schedule.",
+        "notes": "_fire_and_forget_build_queue_trace builds JarvisRoutingHistoryEntry(subagent_type='forge_build_queue', subagent_task_id=correlation_id) and schedules writer.write_build_queue_dispatch(entry) via asyncio.create_task without awaiting. TestRoutingHistoryWriteOnSuccess validates the schedule."
+      },
+      {
+        "criterion_id": "AC-013",
+        "criterion_text": "Reasoning-model attempt to override `originating_adapter` is silently",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "_resolve_originating_adapter consults Session.adapter first; arg fallback only when no session. test_session_adapter_overrides_arg passes Session(adapter=Adapter.CLI) + arg='telegram' from the model \u2014 published payload carries 'terminal' (session-derived), confirming the silent override.",
+        "notes": "_resolve_originating_adapter consults Session.adapter first; arg fallback only when no session. test_session_adapter_overrides_arg passes Session(adapter=Adapter.CLI) + arg='telegram' from the model \u2014 published payload carries 'terminal' (session-derived), confirming the silent override."
+      },
+      {
+        "criterion_id": "AC-014",
+        "criterion_text": "`uv run mypy src/jarvis/tools/dispatch.py` passes (strict).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran 'uv run mypy --strict src/jarvis/tools/dispatch.py' \u2014 output: 'Success: no issues found in 1 source file'. The strict typing pass covers all new helpers (_resolve_originating_adapter, _resolve_publish_timeout, _queue_build_validation_error, _queue_build_degraded_error, _fire_and_forget_build_queue_trace) and the async queue_build body.",
+        "notes": "Ran 'uv run mypy --strict src/jarvis/tools/dispatch.py' \u2014 output: 'Success: no issues found in 1 source file'. The strict typing pass covers all new helpers (_resolve_originating_adapter, _resolve_publish_timeout, _queue_build_validation_error, _queue_build_degraded_error, _fire_and_forget_build_queue_trace) and the async queue_build body."
+      },
+      {
+        "criterion_id": "AC-015",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran 'uv run ruff check src/jarvis/tools/dispatch.py tests/test_tools_queue_build.py tests/test_tools_dispatch.py tests/test_tools_dispatch_contract.py' \u2014 output: 'All checks passed!' (0 errors, 0 warnings). Ran 'uv run ruff format --check' on the same files \u2014 output: '4 files already formatted'. The I001 import-sort issue from the initial test file write was auto-fixed via 'ruff check --fix' and 'ruff format'.",
+        "notes": "Ran 'uv run ruff check src/jarvis/tools/dispatch.py tests/test_tools_queue_build.py tests/test_tools_dispatch.py tests/test_tools_dispatch_contract.py' \u2014 output: 'All checks passed!' (0 errors, 0 warnings). Ran 'uv run ruff format --check' on the same files \u2014 output: '4 files already formatted'. The I001 import-sort issue from the initial test file write was auto-fixed via 'ruff check --fix' and 'ruff format'."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 1363 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1378/7892 tokens\n\n### \u2705 Similar Outcomes\n- RELATED_TO_TASK_REVIEW\n- INVOLVES_QUALITY_CHECK\n\n### \ud83c\udfa8 Relevant Patterns\n- USES_TEMPLATE\n- USES_FUNCTION\n\n### \u26a0\ufe0f Warnings\n- CALLS\n- IS_IMPLEMENTED_AS\n\n### \ud83c\udfad Role Constraints\n- MONITORS_RESULTS_FROM\n- MONITOR_QUALITY_GATES_RESULTS_FROM_JSON\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- IS_INVOCATION_METHOD_FOR\n- BELONGS_TO_PROJECT\n\n\n## Previous Turn Summary (Turn 1)\n**What was attempted**: Implementation attempt\n**Player decision**: feedback\n**Coach decision**: feedback\n**Coach feedback**: - Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)\n- Not all acceptance criteria met:\n  \u2022 `uv run mypy src/jarvis/tools/dispatch.py` passes (strict).\n  \u2022 All modified files pass project-configured lint/format checks with zero\n\n**Acceptance Criteria Status**:\n  \u25cb AC-001: verified\n  \u25cb AC-002: verified\n  \u25cb AC-003: verified\n  \u25cb AC-004: verified\n  \u25cb AC-005: verified\n  \u25cb AC-006: verified\n  \u25cb AC-007: verified\n  \u25cb AC-008: verified\n  \u25cb AC-009: verified\n  \u25cb AC-010: verified\n  \u25cb AC-011: verified\n  \u25cb AC-012: verified\n  \u25cb AC-013: verified\n  \u2717 AC-014: rejected\n  \u2717 AC-015: rejected",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

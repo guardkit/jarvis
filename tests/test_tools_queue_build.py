@@ -45,7 +45,6 @@ from jarvis.shared.exceptions import NATSConnectionError
 from jarvis.tools import dispatch
 from jarvis.tools.dispatch import queue_build
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -244,15 +243,11 @@ class TestJetStreamPublishContract:
     ) -> None:
         captured: dict[str, Any] = {}
 
-        async def _capture_wait_for(
-            coro: Any, *, timeout: float | None = None
-        ) -> Any:
+        async def _capture_wait_for(coro: Any, *, timeout: float | None = None) -> Any:
             captured["timeout"] = timeout
             return await coro
 
-        monkeypatch.setattr(
-            dispatch.asyncio, "wait_for", _capture_wait_for
-        )
+        monkeypatch.setattr(dispatch.asyncio, "wait_for", _capture_wait_for)
         # config exposes pipeline_publish_timeout_seconds=5 from the fixture.
         result = _ainvoke(
             feature_id="FEAT-J002",

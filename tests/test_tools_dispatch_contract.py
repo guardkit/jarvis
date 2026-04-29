@@ -97,7 +97,5 @@ class TestAnchorsRetiredInSource:
         token = "JARVIS_QUEUE_BUILD" + "_STUB"
         result = self._grep(token)
         if result.returncode == 0:
-            pytest.fail(
-                "JARVIS_QUEUE_BUILD_STUB anchor must be retired — found:\n" + result.stdout
-            )
+            pytest.fail("JARVIS_QUEUE_BUILD_STUB anchor must be retired — found:\n" + result.stdout)
         assert result.returncode == 1

@@ -269,6 +269,6 @@ class TestSwapPointGrepInvariant:
 
     def test_queue_build_anchor_is_retired_zero_matches(self) -> None:
         lines = self._grep(_ANCHOR_QUEUE_BUILD)
-        assert lines == [], (
-            "JARVIS_QUEUE_BUILD_STUB anchor must be retired — found:\n" + "\n".join(lines)
+        assert lines == [], "JARVIS_QUEUE_BUILD_STUB anchor must be retired — found:\n" + "\n".join(
+            lines
         )
