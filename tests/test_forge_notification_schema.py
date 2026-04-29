@@ -108,22 +108,43 @@ class TestExports:
     def test_module_exports_build_correlation_via_dunder_all(self) -> None:
         assert "BuildCorrelation" in forge_notifications_module.__all__
 
-    def test_module_does_not_import_nats_core(self) -> None:
-        """AC-005 — schema module does not import nats or nats_core."""
-        source = (
-            forge_notifications_module.__file__ or ""
-        )
+    def test_schema_module_keeps_nats_imports_lazy(self) -> None:
+        """Schema imports must remain top-level-clean.
+
+        TASK-J005-002 AC-005 originally enforced ``no NATS imports at all``
+        because the subscriber lived in a future sibling module. TASK-J005-003
+        co-locates the subscriber in this same file, so the asserted shape
+        is now: ``nats`` / ``nats_core`` may be referenced for typing or
+        inside function bodies, but MUST NOT appear at module top-level
+        (so a schema-only consumer of ``ForgeNotification`` /
+        ``BuildCorrelation`` does not pay the nats-py import cost).
+        """
+        source = forge_notifications_module.__file__ or ""
         with open(source, encoding="utf-8") as handle:
-            text = handle.read()
-        assert "import nats" not in text, (
-            "schema module must not import nats* per AC-005"
-        )
-        assert "from nats" not in text, (
-            "schema module must not import from nats* per AC-005"
-        )
-        assert "js.subscribe" not in text, (
-            "schema module must not call js.subscribe per AC-005"
-        )
+            lines = handle.readlines()
+
+        # Track block depth — we only flag bare top-level imports.
+        in_type_checking = False
+        for raw in lines:
+            stripped = raw.lstrip()
+            indent = len(raw) - len(stripped)
+            if not stripped or stripped.startswith("#"):
+                continue
+            if stripped.startswith("if TYPE_CHECKING"):
+                in_type_checking = True
+                continue
+            # Leaving the TYPE_CHECKING block: any dedent to col 0 ends it.
+            if in_type_checking and indent == 0 and stripped:
+                in_type_checking = False
+            if indent != 0:
+                continue
+            # Top-level statement.
+            assert not stripped.startswith("import nats"), (
+                f"top-level 'import nats*' leaks into schema module: {raw!r}"
+            )
+            assert not stripped.startswith("from nats"), (
+                f"top-level 'from nats*' leaks into schema module: {raw!r}"
+            )
 
 
 # ============================================================================

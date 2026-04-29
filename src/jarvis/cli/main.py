@@ -180,6 +180,16 @@ async def _chat_loop() -> None:
     # 4. REPL loop — sequential turns (ASSUM-004)
     try:
         while True:
+            # TASK-J005-007 / DDR-030: drain & render any Forge notifications
+            # that arrived since the previous iteration BEFORE reading the next
+            # user line, so the rendered lines appear above the input cursor
+            # and never mid-turn (design.md §8 CLI render sequence). The drain
+            # is atomic (per TASK-J005-006 AC-003); SIGINT during the readline
+            # below leaves any *new* notifications safe in the queue for the
+            # next iteration. Empty list → no echo, no blank line.
+            for notification in session_manager.pending_notifications(session.session_id):
+                click.echo(notification.render_line())
+
             try:
                 line = await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
             except EOFError:

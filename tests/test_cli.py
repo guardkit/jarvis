@@ -9,10 +9,20 @@ Covers acceptance criteria for TASK-J001-008:
   AC-006: ``jarvis chat`` REPL — /exit, EOF, SIGINT, empty lines, provider errors.
   AC-007: REPL serialises turns (ASSUM-004).
   AC-008: Modified files pass lint/format checks.
+
+Also covers TASK-J005-007 — REPL between-prompts ForgeNotification render:
+  J005-007 AC-001: REPL drains ``pending_notifications`` once per iteration
+    before reading user input.
+  J005-007 AC-002: Each pending notification rendered via one
+    ``click.echo(notification.render_line())`` call, in FIFO order.
+  J005-007 AC-003: Notifications enqueued during a supervisor turn surface on
+    the next iteration, never mid-turn (Group D #2).
+  J005-007 AC-005: Empty queue → no output line emitted.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,6 +30,7 @@ import pytest
 from click.testing import CliRunner
 
 from jarvis.cli.main import main
+from jarvis.infrastructure.forge_notifications import ForgeNotification
 
 
 # ---------------------------------------------------------------------------
@@ -421,3 +432,192 @@ class TestReplSerialisation:
         # Replies appear in output before next prompt
         assert "reply to first" in result.output
         assert "reply to second" in result.output
+
+
+# ---------------------------------------------------------------------------
+# TASK-J005-007: REPL between-prompts ForgeNotification render
+# ---------------------------------------------------------------------------
+def _make_notification(idx: int = 0, *, status: str = "PASSED") -> ForgeNotification:
+    """Build a valid :class:`ForgeNotification` for CLI render tests.
+
+    Mirrors ``tests/test_session_notifications.py::_make_notification`` so the
+    same shape is exercised end-to-end. The fixed ``completed_at`` makes the
+    rendered ``[HH:MM]`` deterministic per local timezone — assertions that
+    check the literal shape rather than the time digits remain stable across
+    CI hosts.
+    """
+    return ForgeNotification(
+        correlation_id=f"corr-{idx:04d}",
+        feature_id="FEAT-JARVIS005",
+        stage_label=f"stage-{idx}",
+        status=status,  # type: ignore[arg-type]
+        target_kind="local_tool",
+        target_identifier="queue_build",
+        completed_at=datetime(2026, 4, 29, 15, 42, tzinfo=UTC),
+        duration_secs=1.5,
+    )
+
+
+class TestReplBetweenPromptsNotificationRender:
+    """TASK-J005-007 — drain + render queued notifications before each prompt.
+
+    The acceptance criteria reference design.md §8 and DDR-030: the REPL must
+    drain ``session_manager.pending_notifications(session_id)`` once per loop
+    iteration *before* reading the next user line, and emit one
+    ``click.echo(notification.render_line())`` per drained entry in FIFO order.
+    """
+
+    def _make_mock_state(self) -> MagicMock:
+        """Mock AppState whose session_manager exposes both invoke + drain.
+
+        The drain method is wired as a ``MagicMock`` (synchronous — it is *not*
+        awaited in the production REPL) so ``side_effect`` can return per-call
+        lists for multi-iteration scenarios.
+        """
+        state = MagicMock()
+        session = MagicMock()
+        session.session_id = "cli-notif-session"
+        state.session_manager = MagicMock()
+        state.session_manager.start_session.return_value = session
+        state.session_manager.invoke = AsyncMock(return_value="mock reply")
+        state.session_manager.pending_notifications = MagicMock(return_value=[])
+        return state
+
+    def test_three_queued_notifications_render_three_lines_before_prompt(self) -> None:
+        """J005-007 AC-001/AC-002 (Group A #5): three queued → three echo lines."""
+        state = self._make_mock_state()
+        notifs = [_make_notification(i) for i in range(3)]
+        # First iteration drains all three; subsequent iterations are empty.
+        state.session_manager.pending_notifications.side_effect = [notifs, [], []]
+        runner = CliRunner()
+        with (
+            patch.dict(
+                "os.environ",
+                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                clear=True,
+            ),
+            patch(
+                "jarvis.cli.main._create_app_state",
+                new=AsyncMock(return_value=state),
+            ),
+        ):
+            result = runner.invoke(main, ["chat"], input="/exit\n")
+        # All three render_line() outputs appear in CLI output, in FIFO order.
+        out = result.output
+        assert out.find("stage-0") < out.find("stage-1") < out.find("stage-2")
+        # One click.echo per notification — count occurrences of the unique
+        # feature_id substring (each render_line emits exactly one).
+        assert out.count("Forge FEAT-JARVIS005:") == 3
+
+    def test_pending_notifications_called_before_reading_input(self) -> None:
+        """J005-007 AC-001: drain happens before ``invoke`` and before EOF read."""
+        state = self._make_mock_state()
+        runner = CliRunner()
+        with (
+            patch.dict(
+                "os.environ",
+                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                clear=True,
+            ),
+            patch(
+                "jarvis.cli.main._create_app_state",
+                new=AsyncMock(return_value=state),
+            ),
+        ):
+            runner.invoke(main, ["chat"], input="/exit\n")
+        # Drained at least once (top of iteration before /exit was read).
+        assert state.session_manager.pending_notifications.called
+        # Called with the session_id from start_session.
+        state.session_manager.pending_notifications.assert_called_with("cli-notif-session")
+
+    def test_notification_enqueued_mid_turn_renders_next_iteration(self) -> None:
+        """J005-007 AC-003 (Group D #2): mid-turn enqueue → next iteration only."""
+        state = self._make_mock_state()
+        mid_turn_notif = _make_notification(42)
+
+        # Iteration sequence (drain calls):
+        # 1. before "hello" turn — empty
+        # 2. before "/exit" — drain the notification enqueued during the turn
+        state.session_manager.pending_notifications.side_effect = [
+            [],
+            [mid_turn_notif],
+        ]
+        # ``invoke`` returns plain reply — the notification is "enqueued during
+        # the supervisor turn" by virtue of the side_effect ordering above.
+        runner = CliRunner()
+        with (
+            patch.dict(
+                "os.environ",
+                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                clear=True,
+            ),
+            patch(
+                "jarvis.cli.main._create_app_state",
+                new=AsyncMock(return_value=state),
+            ),
+        ):
+            result = runner.invoke(main, ["chat"], input="hello\n/exit\n")
+        out = result.output
+        # The notification must appear AFTER the "mock reply" (proof it did not
+        # surface mid-turn), not before.
+        reply_idx = out.find("mock reply")
+        notif_idx = out.find("stage-42")
+        assert reply_idx >= 0
+        assert notif_idx > reply_idx
+
+    def test_empty_queue_emits_no_extra_output(self) -> None:
+        """J005-007 AC-005 (Group A #5 negative): empty drain → no blank line."""
+        state = self._make_mock_state()
+        # All drains return [].
+        state.session_manager.pending_notifications.return_value = []
+        runner = CliRunner()
+        with (
+            patch.dict(
+                "os.environ",
+                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                clear=True,
+            ),
+            patch(
+                "jarvis.cli.main._create_app_state",
+                new=AsyncMock(return_value=state),
+            ),
+        ):
+            result = runner.invoke(main, ["chat"], input="/exit\n")
+        # No "Forge " line and no spurious blank lines beyond the closing
+        # "session ended." banner.
+        assert "Forge " not in result.output
+        # The output should contain exactly the session-ended banner.
+        non_empty = [ln for ln in result.output.splitlines() if ln.strip()]
+        assert non_empty == ["session ended."]
+
+    def test_render_line_shape_matches_dm_forge_notification(self) -> None:
+        """J005-007 AC-002: render_line() shape matches DM-forge-notification §1.
+
+        Canonical example pinned per task Test Requirements bullet #4. The
+        local-time component is non-deterministic across CI host timezones,
+        so the assertion fixes the structural shape and the deterministic
+        non-time fields.
+        """
+        notif = _make_notification(7, status="FAILED")
+        state = self._make_mock_state()
+        state.session_manager.pending_notifications.side_effect = [[notif], []]
+        runner = CliRunner()
+        with (
+            patch.dict(
+                "os.environ",
+                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                clear=True,
+            ),
+            patch(
+                "jarvis.cli.main._create_app_state",
+                new=AsyncMock(return_value=state),
+            ),
+        ):
+            result = runner.invoke(main, ["chat"], input="/exit\n")
+        # The exact rendered_line emitted by ForgeNotification.render_line()
+        # must appear verbatim in CLI output (one click.echo per notif).
+        expected_line = notif.render_line()
+        assert expected_line in result.output
+        # Sanity: shape matches "[HH:MM] Forge FEAT-...: stage ... (STATUS)".
+        assert expected_line.startswith("[")
+        assert "] Forge FEAT-JARVIS005: stage stage-7 (FAILED)" in expected_line

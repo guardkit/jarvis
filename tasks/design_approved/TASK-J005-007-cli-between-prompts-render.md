@@ -1,40 +1,42 @@
 ---
-id: TASK-J005-007
-title: cli/main.py REPL between-prompts notification render
-task_type: feature
-parent_review: TASK-REV-3B8B
-feature_id: FEAT-J005-946D
-wave: 2
-implementation_mode: task-work
 complexity: 4
+consumer_context:
+- consumes: ForgeNotification.render_line
+  driver: pydantic
+  format_note: 'render_line() returns canonical [HH:MM] Forge {feature_id}: stage
+    {stage_label} ({status}) per DM-forge-notification §1'
+  framework: Pydantic v2 (frozen BaseModel)
+  task: TASK-J005-002
+- consumes: SessionManager.pending_notifications
+  driver: in-process
+  format_note: pending_notifications(session_id) drains + clears the per-session FIFO
+    atomically; called once at REPL top-of-loop, before reading the next prompt
+  framework: SessionManager
+  task: TASK-J005-006
+created: 2026-04-29 00:00:00+00:00
 dependencies:
-  - TASK-J005-006
-  - TASK-J005-002
+- TASK-J005-006
+- TASK-J005-002
+feature_id: FEAT-J005-946D
+id: TASK-J005-007
+implementation_mode: task-work
+parent_review: TASK-REV-3B8B
 priority: high
+status: design_approved
 tags:
-  - cli
-  - repl
-  - notifications
-  - DDR-030
-  - FEAT-JARVIS-005
-status: backlog
-created: 2026-04-29T00:00:00Z
-updated: 2026-04-29T00:00:00Z
+- cli
+- repl
+- notifications
+- DDR-030
+- FEAT-JARVIS-005
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-consumer_context:
-  - task: TASK-J005-002
-    consumes: ForgeNotification.render_line
-    framework: "Pydantic v2 (frozen BaseModel)"
-    driver: pydantic
-    format_note: "render_line() returns canonical [HH:MM] Forge {feature_id}: stage {stage_label} ({status}) per DM-forge-notification §1"
-  - task: TASK-J005-006
-    consumes: SessionManager.pending_notifications
-    framework: SessionManager
-    driver: in-process
-    format_note: "pending_notifications(session_id) drains + clears the per-session FIFO atomically; called once at REPL top-of-loop, before reading the next prompt"
+  status: pending
+title: cli/main.py REPL between-prompts notification render
+updated: 2026-04-29 00:00:00+00:00
+wave: 2
 ---
 
 # TASK-J005-007 — CLI between-prompts notification render

@@ -1,0 +1,168 @@
+{
+  "task_id": "TASK-J005-007",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_cli.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_cli.py::TestHealthValid::test_health_reports_supervisor_build_success\ntests/test_cli.py::TestHealthValid::test_health_reports_memory_store_ready\ntests/test_cli.py::TestHealthMissingKey::test_health_missing_openai_base_url_exits_one\ntests/test_cli.py::TestHealthMissingKey::test_health_missing_key_names_env_var\n======================== 27 passed, 6 warnings in 1.80s ========================",
+      "duration_seconds": 3.3852391242980957
+    },
+    "requirements": {
+      "criteria_total": 7,
+      "criteria_met": 7,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "REPL loop calls `session_manager.pending_notifications(session_id)` once",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added a `for notification in session_manager.pending_notifications(session.session_id)` drain at the very top of the `while True:` REPL body in `_chat_loop`, before the `run_in_executor(..., sys.stdin.readline)` call. Verified by tests/test_cli.py::TestReplBetweenPromptsNotificationRender::test_pending_notifications_called_before_reading_input which asserts pending_notifications.assert_called_with(session_id).",
+      "notes": "Added a `for notification in session_manager.pending_notifications(session.session_id)` drain at the very top of the `while True:` REPL body in `_chat_loop`, before the `run_in_executor(..., sys.stdin.readline)` call. Verified by tests/test_cli.py::TestReplBetweenPromptsNotificationRender::test_pending_notifications_called_before_reading_input which asserts pending_notifications.assert_called_with(session_id)."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Each pending notification rendered via one `click.echo(notification.render_line())`",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Loop body emits exactly `click.echo(notification.render_line())` per drained item. FIFO is preserved because pending_notifications() returns the deque snapshot in arrival order (per TASK-J005-006 AC-003). Verified by test_three_queued_notifications_render_three_lines_before_prompt (asserts substring positions stage-0 < stage-1 < stage-2 and exactly 3 'Forge FEAT-JARVIS005:' occurrences) and test_render_line_shape_matches_dm_forge_notification (asserts render_line() output appears verbatim).",
+      "notes": "Loop body emits exactly `click.echo(notification.render_line())` per drained item. FIFO is preserved because pending_notifications() returns the deque snapshot in arrival order (per TASK-J005-006 AC-003). Verified by test_three_queued_notifications_render_three_lines_before_prompt (asserts substring positions stage-0 < stage-1 < stage-2 and exactly 3 'Forge FEAT-JARVIS005:' occurrences) and test_render_line_shape_matches_dm_forge_notification (asserts render_line() output appears verbatim)."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Notifications enqueued during a supervisor turn surface on the next",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Drain is positioned at the top of each loop iteration BEFORE readline and BEFORE invoke. Notifications enqueued during invoke() are buffered by SessionManager's per-session FIFO and surface only when the next iteration begins. Verified by test_notification_enqueued_mid_turn_renders_next_iteration which side_effects [[], [mid_turn_notif]] across two drains and asserts the notification line appears AFTER 'mock reply' in the output (proving it did not surface mid-turn).",
+      "notes": "Drain is positioned at the top of each loop iteration BEFORE readline and BEFORE invoke. Notifications enqueued during invoke() are buffered by SessionManager's per-session FIFO and surface only when the next iteration begins. Verified by test_notification_enqueued_mid_turn_renders_next_iteration which side_effects [[], [mid_turn_notif]] across two drains and asserts the notification line appears AFTER 'mock reply' in the output (proving it did not surface mid-turn)."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "SIGINT during `click.prompt` leaves any not-yet-rendered notifications in",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Drain happens BEFORE the readline call; pending_notifications() atomically snapshots+clears the FIFO (per TASK-J005-006 AC-003). Notifications that arrive during readline remain in the queue (not yet drained) \u2014 the existing SIGINT handler installed at line 178 calls end_session(); but if a SIGINT during a future iteration's readline causes a clean exit path back to the loop top, the next drain will surface them. The KeyboardInterrupt path on `invoke()` (existing code) does end_session and exits with 130 \u2014 there is no point at which queued-but-not-yet-drained notifications are dropped without being either drained or carried by end_session's queue cleanup. The atomic drain + pre-read positioning satisfies the no-loss contract.",
+      "notes": "Drain happens BEFORE the readline call; pending_notifications() atomically snapshots+clears the FIFO (per TASK-J005-006 AC-003). Notifications that arrive during readline remain in the queue (not yet drained) \u2014 the existing SIGINT handler installed at line 178 calls end_session(); but if a SIGINT during a future iteration's readline causes a clean exit path back to the loop top, the next drain will surface them. The KeyboardInterrupt path on `invoke()` (existing code) does end_session and exits with 130 \u2014 there is no point at which queued-but-not-yet-drained notifications are dropped without being either drained or carried by end_session's queue cleanup. The atomic drain + pre-read positioning satisfies the no-loss contract."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Empty queue \u2192 no output, no spurious blank lines.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Empty list iteration is a no-op \u2014 no click.echo is called when pending_notifications() returns []. Verified by test_empty_queue_emits_no_extra_output which asserts (a) 'Forge ' substring is absent and (b) the only non-empty output line is 'session ended.'.",
+      "notes": "Empty list iteration is a no-op \u2014 no click.echo is called when pending_notifications() returns []. Verified by test_empty_queue_emits_no_extra_output which asserts (a) 'Forge ' substring is absent and (b) the only non-empty output line is 'session ended.'."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`uv run mypy src/jarvis/cli/main.py` passes (strict).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `python -m mypy src/jarvis/cli/main.py` \u2192 'Success: no issues found in 1 source file'. The new loop body uses fully-typed identifiers (notification iterates a list[ForgeNotification] returned by SessionManager.pending_notifications which is annotated -> list[ForgeNotification]).",
+      "notes": "Ran `python -m mypy src/jarvis/cli/main.py` \u2192 'Success: no issues found in 1 source file'. The new loop body uses fully-typed identifiers (notification iterates a list[ForgeNotification] returned by SessionManager.pending_notifications which is annotated -> list[ForgeNotification])."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `python -m ruff check src/jarvis/cli/main.py tests/test_cli.py` \u2192 'All checks passed!'. Ran `python -m ruff format` on both files which applied minor whitespace adjustments; subsequent `ruff check` re-run is clean.",
+      "notes": "Ran `python -m ruff check src/jarvis/cli/main.py tests/test_cli.py` \u2192 'All checks passed!'. Ran `python -m ruff format` on both files which applied minor whitespace adjustments; subsequent `ruff check` re-run is clean."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "REPL loop calls `session_manager.pending_notifications(session_id)` once",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added a `for notification in session_manager.pending_notifications(session.session_id)` drain at the very top of the `while True:` REPL body in `_chat_loop`, before the `run_in_executor(..., sys.stdin.readline)` call. Verified by tests/test_cli.py::TestReplBetweenPromptsNotificationRender::test_pending_notifications_called_before_reading_input which asserts pending_notifications.assert_called_with(session_id).",
+        "notes": "Added a `for notification in session_manager.pending_notifications(session.session_id)` drain at the very top of the `while True:` REPL body in `_chat_loop`, before the `run_in_executor(..., sys.stdin.readline)` call. Verified by tests/test_cli.py::TestReplBetweenPromptsNotificationRender::test_pending_notifications_called_before_reading_input which asserts pending_notifications.assert_called_with(session_id)."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Each pending notification rendered via one `click.echo(notification.render_line())`",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Loop body emits exactly `click.echo(notification.render_line())` per drained item. FIFO is preserved because pending_notifications() returns the deque snapshot in arrival order (per TASK-J005-006 AC-003). Verified by test_three_queued_notifications_render_three_lines_before_prompt (asserts substring positions stage-0 < stage-1 < stage-2 and exactly 3 'Forge FEAT-JARVIS005:' occurrences) and test_render_line_shape_matches_dm_forge_notification (asserts render_line() output appears verbatim).",
+        "notes": "Loop body emits exactly `click.echo(notification.render_line())` per drained item. FIFO is preserved because pending_notifications() returns the deque snapshot in arrival order (per TASK-J005-006 AC-003). Verified by test_three_queued_notifications_render_three_lines_before_prompt (asserts substring positions stage-0 < stage-1 < stage-2 and exactly 3 'Forge FEAT-JARVIS005:' occurrences) and test_render_line_shape_matches_dm_forge_notification (asserts render_line() output appears verbatim)."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Notifications enqueued during a supervisor turn surface on the next",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Drain is positioned at the top of each loop iteration BEFORE readline and BEFORE invoke. Notifications enqueued during invoke() are buffered by SessionManager's per-session FIFO and surface only when the next iteration begins. Verified by test_notification_enqueued_mid_turn_renders_next_iteration which side_effects [[], [mid_turn_notif]] across two drains and asserts the notification line appears AFTER 'mock reply' in the output (proving it did not surface mid-turn).",
+        "notes": "Drain is positioned at the top of each loop iteration BEFORE readline and BEFORE invoke. Notifications enqueued during invoke() are buffered by SessionManager's per-session FIFO and surface only when the next iteration begins. Verified by test_notification_enqueued_mid_turn_renders_next_iteration which side_effects [[], [mid_turn_notif]] across two drains and asserts the notification line appears AFTER 'mock reply' in the output (proving it did not surface mid-turn)."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "SIGINT during `click.prompt` leaves any not-yet-rendered notifications in",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Drain happens BEFORE the readline call; pending_notifications() atomically snapshots+clears the FIFO (per TASK-J005-006 AC-003). Notifications that arrive during readline remain in the queue (not yet drained) \u2014 the existing SIGINT handler installed at line 178 calls end_session(); but if a SIGINT during a future iteration's readline causes a clean exit path back to the loop top, the next drain will surface them. The KeyboardInterrupt path on `invoke()` (existing code) does end_session and exits with 130 \u2014 there is no point at which queued-but-not-yet-drained notifications are dropped without being either drained or carried by end_session's queue cleanup. The atomic drain + pre-read positioning satisfies the no-loss contract.",
+        "notes": "Drain happens BEFORE the readline call; pending_notifications() atomically snapshots+clears the FIFO (per TASK-J005-006 AC-003). Notifications that arrive during readline remain in the queue (not yet drained) \u2014 the existing SIGINT handler installed at line 178 calls end_session(); but if a SIGINT during a future iteration's readline causes a clean exit path back to the loop top, the next drain will surface them. The KeyboardInterrupt path on `invoke()` (existing code) does end_session and exits with 130 \u2014 there is no point at which queued-but-not-yet-drained notifications are dropped without being either drained or carried by end_session's queue cleanup. The atomic drain + pre-read positioning satisfies the no-loss contract."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Empty queue \u2192 no output, no spurious blank lines.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Empty list iteration is a no-op \u2014 no click.echo is called when pending_notifications() returns []. Verified by test_empty_queue_emits_no_extra_output which asserts (a) 'Forge ' substring is absent and (b) the only non-empty output line is 'session ended.'.",
+        "notes": "Empty list iteration is a no-op \u2014 no click.echo is called when pending_notifications() returns []. Verified by test_empty_queue_emits_no_extra_output which asserts (a) 'Forge ' substring is absent and (b) the only non-empty output line is 'session ended.'."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`uv run mypy src/jarvis/cli/main.py` passes (strict).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `python -m mypy src/jarvis/cli/main.py` \u2192 'Success: no issues found in 1 source file'. The new loop body uses fully-typed identifiers (notification iterates a list[ForgeNotification] returned by SessionManager.pending_notifications which is annotated -> list[ForgeNotification]).",
+        "notes": "Ran `python -m mypy src/jarvis/cli/main.py` \u2192 'Success: no issues found in 1 source file'. The new loop body uses fully-typed identifiers (notification iterates a list[ForgeNotification] returned by SessionManager.pending_notifications which is annotated -> list[ForgeNotification])."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `python -m ruff check src/jarvis/cli/main.py tests/test_cli.py` \u2192 'All checks passed!'. Ran `python -m ruff format` on both files which applied minor whitespace adjustments; subsequent `ruff check` re-run is clean.",
+        "notes": "Ran `python -m ruff check src/jarvis/cli/main.py tests/test_cli.py` \u2192 'All checks passed!'. Ran `python -m ruff format` on both files which applied minor whitespace adjustments; subsequent `ruff check` re-run is clean."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 383 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1236/5200 tokens\n\n### \u2705 Similar Outcomes\n- RESOLVES_TO_SUPVISOR_MODULE\n- HAS_NO_MODULE_LEVEL_GRAPH_SYMBOL\n\n### \ud83c\udfa8 Relevant Patterns\n- BELONGS_TO_CATEGORY\n- IS_USED_IN\n\n### \u26a0\ufe0f Warnings\n- RELATED_PROJECT\n- HAS_ROOT_CAUSE\n\n### \ud83c\udfad Role Constraints\n- MONITORS_RESULTS_FROM\n- MONITOR_QUALITY_GATES_RESULTS_FROM_JSON\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- APPLIES_TO\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

@@ -1,48 +1,52 @@
 ---
-id: TASK-J005-003
-title: ForgeNotificationsSubscriber + correlation map + in-process router
-task_type: feature
-parent_review: TASK-REV-3B8B
-feature_id: FEAT-J005-946D
-wave: 2
-implementation_mode: task-work
 complexity: 7
+consumer_context:
+- consumes: ForgeNotification + BuildCorrelation models
+  driver: pydantic
+  format_note: 'frozen=True; ForgeNotification.render_line() emits canonical [HH:MM]
+    Forge {feature_id}: stage {stage_label} ({status})'
+  framework: Pydantic v2 (frozen BaseModel)
+  task: TASK-J005-002
+- consumes: append_build_queue_event
+  driver: graphiti-core
+  format_note: Subscriber calls writer.append_build_queue_event(correlation_id, payload)
+    on each matched StageCompletePayload; edge_type='stage_complete', body=JSON-encoded
+    payload, parent entry frozen=True (DDR-029, DDR-018)
+  framework: RoutingHistoryWriter
+  task: TASK-J005-004
+- consumes: SessionManager.enqueue_notification
+  driver: in-process
+  format_note: Subscriber calls session_manager.enqueue_notification(session_id, ForgeNotification)
+    for each correlation-matched event; binding is late via subscriber.bind_session_manager()
+  framework: SessionManager
+  task: TASK-J005-006
+created: 2026-04-29 00:00:00+00:00
 dependencies:
-  - TASK-J005-002
-  - TASK-J005-004
-  - TASK-J005-006
+- TASK-J005-002
+- TASK-J005-004
+- TASK-J005-006
+feature_id: FEAT-J005-946D
+id: TASK-J005-003
+implementation_mode: task-work
+parent_review: TASK-REV-3B8B
 priority: high
+status: design_approved
 tags:
-  - forge-notifications
-  - jetstream
-  - subscriber
-  - DDR-026
-  - DDR-027
-  - DDR-028
-  - FEAT-JARVIS-005
-status: backlog
-created: 2026-04-29T00:00:00Z
-updated: 2026-04-29T00:00:00Z
+- forge-notifications
+- jetstream
+- subscriber
+- DDR-026
+- DDR-027
+- DDR-028
+- FEAT-JARVIS-005
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-consumer_context:
-  - task: TASK-J005-002
-    consumes: ForgeNotification + BuildCorrelation models
-    framework: "Pydantic v2 (frozen BaseModel)"
-    driver: pydantic
-    format_note: "frozen=True; ForgeNotification.render_line() emits canonical [HH:MM] Forge {feature_id}: stage {stage_label} ({status})"
-  - task: TASK-J005-004
-    consumes: append_build_queue_event
-    framework: "RoutingHistoryWriter"
-    driver: graphiti-core
-    format_note: "Subscriber calls writer.append_build_queue_event(correlation_id, payload) on each matched StageCompletePayload; edge_type='stage_complete', body=JSON-encoded payload, parent entry frozen=True (DDR-029, DDR-018)"
-  - task: TASK-J005-006
-    consumes: SessionManager.enqueue_notification
-    framework: SessionManager
-    driver: in-process
-    format_note: "Subscriber calls session_manager.enqueue_notification(session_id, ForgeNotification) for each correlation-matched event; binding is late via subscriber.bind_session_manager()"
+  status: pending
+title: ForgeNotificationsSubscriber + correlation map + in-process router
+updated: 2026-04-29 00:00:00+00:00
+wave: 2
 ---
 
 # TASK-J005-003 — ForgeNotificationsSubscriber

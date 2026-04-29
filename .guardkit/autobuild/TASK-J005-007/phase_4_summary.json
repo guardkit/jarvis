@@ -1,0 +1,7 @@
+{
+  "tests_run": 2091,
+  "tests_failed": 2,
+  "coverage_pct": 92.0,
+  "output_summary": "2089 passed, 2 failed (test_assemble_tool_list AC005, test_forge_notification_schema nats-import); overall coverage 92%; cli/main.py 76%, forge_notifications.py 91%",
+  "quality_gates_passed": false
+}
