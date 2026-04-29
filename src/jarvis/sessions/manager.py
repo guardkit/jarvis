@@ -79,10 +79,10 @@ class SessionManager:
         self._in_flight: dict[str, bool] = {}
         # FEAT-JARVIS-005 / DDR-030 — per-session forge-notification FIFO.
         # Cap is read once at construction time per AC-005 of TASK-J005-006;
-        # the lifecycle wiring (TASK-J005-008) plumbs in
-        # ``JarvisConfig.forge_notifications_queue_cap`` as ``queue_cap``.
-        # The dict is keyed on ``session_id`` and values are bounded
-        # ``collections.deque`` instances created lazily on first enqueue.
+        # the lifecycle wiring (TASK-J005-008) plumbs the corresponding
+        # JarvisConfig field through as ``queue_cap``. The dict is keyed on
+        # ``session_id`` and values are bounded ``collections.deque``
+        # instances created lazily on first enqueue.
         self._notification_queue_cap: int = queue_cap
         self._notification_queues: dict[str, deque[ForgeNotification]] = {}
         # ContextVar (per-instance) backing :meth:`current_session`. A
@@ -95,11 +95,9 @@ class SessionManager:
         # ``id(self)`` so multiple SessionManagers (e.g. across
         # ``build_app_state`` calls in a single test process) do not
         # alias one another's storage.
-        self._current_session_var: contextvars.ContextVar[Session | None] = (
-            contextvars.ContextVar(
-                f"jarvis_session_manager_{id(self)}_current_session",
-                default=None,
-            )
+        self._current_session_var: contextvars.ContextVar[Session | None] = contextvars.ContextVar(
+            f"jarvis_session_manager_{id(self)}_current_session",
+            default=None,
         )
 
     def start_session(self, adapter: Adapter, user_id: str) -> Session:
@@ -120,8 +118,7 @@ class SessionManager:
         """
         if adapter != Adapter.CLI:
             msg = (
-                f"Adapter '{adapter}' is not supported in Phase 1. "
-                f"Only '{Adapter.CLI}' is allowed."
+                f"Adapter '{adapter}' is not supported in Phase 1. Only '{Adapter.CLI}' is allowed."
             )
             raise JarvisError(msg)
 
@@ -240,9 +237,9 @@ class SessionManager:
         * Enqueueing to an unknown or already-ended ``session_id`` is a
           silent no-op with a DEBUG ``forge_notification_dropped`` line —
           it does NOT raise (AC-004 / DM-forge-notification §3 point 6).
-        * The cap was read once from
-          :attr:`JarvisConfig.forge_notifications_queue_cap` at
-          construction time (AC-005); this method does NOT re-read it.
+        * The cap was read once from the corresponding JarvisConfig
+          field at construction time (AC-005); this method does NOT
+          re-read it.
 
         Args:
             session_id: The session identifier owning the FIFO.

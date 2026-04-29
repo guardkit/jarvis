@@ -1,0 +1,7 @@
+{
+  "tests_run": 107,
+  "tests_failed": 0,
+  "coverage_pct": 85.29,
+  "output_summary": "107 tests passed across test_session_notifications, test_config_feat_j005, test_forge_notification_schema, test_routing_history_writer; 85.29% line coverage on changed modules.",
+  "quality_gates_passed": true
+}

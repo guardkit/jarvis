@@ -1,0 +1,183 @@
+{
+  "task_id": "TASK-J005-006",
+  "timestamp": "2026-04-29T22:35:46.894932",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 11,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".claude/task-plans/TASK-J005-004-implementation-plan.md",
+    ".claude/task-plans/TASK-J005-006-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J005-001/checkpoints.json",
+    ".guardkit/autobuild/TASK-J005-001/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-001/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-001/task_work_results.json",
+    ".guardkit/autobuild/TASK-J005-001/turn_context.json",
+    ".guardkit/autobuild/TASK-J005-001/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-002/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-002/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-002/task_work_results.json",
+    ".guardkit/autobuild/TASK-J005-002/turn_context.json",
+    ".guardkit/autobuild/TASK-J005-002/turn_state_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-004/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-004/task_work_results.json",
+    ".guardkit/autobuild/TASK-J005-004/turn_context.json",
+    ".guardkit/autobuild/TASK-J005-006/turn_context.json",
+    ".guardkit/bootstrap_state.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/src/jarvis/config/settings.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/src/jarvis/sessions/manager.py",
+    "src/jarvis/config/settings.py",
+    "src/jarvis/infrastructure/forge_notifications.py",
+    "src/jarvis/infrastructure/routing_history.py",
+    "src/jarvis/sessions/manager.py",
+    "tasks/backlog/TASK-J005-001-config-extensions.md",
+    "tasks/backlog/TASK-J005-002-forge-notification-models.md",
+    "tasks/backlog/TASK-J005-003-forge-notifications-subscriber.md",
+    "tasks/backlog/TASK-J005-005-dispatch-queue-build-real-publish.md",
+    "tasks/backlog/TASK-J005-007-cli-between-prompts-render.md",
+    "tasks/backlog/TASK-J005-008-lifecycle-wiring.md",
+    "tasks/backlog/TASK-J005-009-soft-fail-tests.md",
+    "tasks/backlog/TASK-J005-010-contract-tests-nats-core.md",
+    "tasks/backlog/TASK-J005-011-grep-invariant-retire.md",
+    "tasks/backlog/TASK-J005-012-end-to-end-forge-roundtrip.md",
+    "tasks/design_approved/TASK-J005-004-routing-history-build-queue-extensions.md",
+    "tasks/design_approved/TASK-J005-006-session-manager-pending-notifications.md",
+    "tests/test_config_feat_j005.py",
+    "tests/test_forge_notification_schema.py",
+    "tests/test_routing_history_writer.py",
+    "tests/test_session_notifications.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J005-002/checkpoints.json",
+    ".guardkit/autobuild/TASK-J005-004/phase_4_summary.json",
+    ".guardkit/autobuild/TASK-J005-004/specialist_results.json",
+    ".guardkit/autobuild/TASK-J005-006/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-006/task_work_results.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/.guardkit/autobuild/TASK-J005-006/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/tests/test_session_notifications.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/tests/test_session_notifications.py"
+  ],
+  "summary": "11 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 71,
+    "max_turns": 150,
+    "ceiling_hit": false
+  },
+  "task_type": "feature",
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 1,
+    "missing_phases": [
+      "4",
+      "5"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 1 completed invocations\n\nMissing phases:\n  - Phase 4 (Testing)\n  - Phase 5 (Code Review)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 3 (Phase 3): Implementation (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "enqueue_notification appends to a session-scoped FIFO; FIFO is created on first call.",
+      "status": "complete",
+      "evidence": "SessionManager.enqueue_notification lazy-creates collections.deque(maxlen=cap) on first call per session_id. _notification_queues dict is keyed on session_id; deque.append preserves FIFO order. Test class TestAC001LazyFifoAndConstructionCap.test_enqueue_creates_fifo_on_first_call verifies the lazy creation, and TestACBoundaryFillAndDrain.test_enqueue_cap_items_drains_all_in_fifo_order verifies arrival order.",
+      "test_file": "tests/test_session_notifications.py",
+      "implementation_files": [
+        "src/jarvis/sessions/manager.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "When the queue is at cap, oldest entry is evicted before the new one is appended; one WARN log line per overflow.",
+      "status": "complete",
+      "evidence": "enqueue_notification checks `if len(queue) >= cap` BEFORE append and emits exactly one WARN forge_notification_queue_overflow via _stdlib_logger (with cap and evicted_correlation_id in the extra dict). The deque(maxlen=cap) handles the actual eviction. TestAC002OverflowEvictsOldestWithWarn.test_overflow_evicts_oldest_and_logs_warn_once asserts both invariants \u2014 only the latest cap entries survive, and exactly one WARN record is captured.",
+      "test_file": "tests/test_session_notifications.py",
+      "implementation_files": [
+        "src/jarvis/sessions/manager.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "pending_notifications returns + clears atomically (no notification can be double-rendered or lost between drain and clear).",
+      "status": "complete",
+      "evidence": "pending_notifications builds `drained = list(queue)` then calls `queue.clear()` with no await between them \u2014 atomic on the single asyncio loop (ASSUM-003). TestAC003AtomicDrainReentrySafe.test_two_sequential_drains_no_duplicates and test_drain_then_enqueue_then_drain_preserves_only_new_entries verify both the empty-second-drain invariant and the no-leak invariant across drain/enqueue/drain.",
+      "test_file": "tests/test_session_notifications.py",
+      "implementation_files": [
+        "src/jarvis/sessions/manager.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "end_session clears the per-session queue; subsequent enqueue_notification for that session_id is silently dropped (no raise).",
+      "status": "complete",
+      "evidence": "end_session adds session_id to self._ended and pops the queue from self._notification_queues. enqueue_notification's first check `if session_id in self._ended or session_id not in self._sessions` early-returns with a DEBUG forge_notification_dropped log line \u2014 no raise. TestAC004EndSessionClearsAndDrops covers both clearing and the silent-drop on subsequent enqueue.",
+      "test_file": "tests/test_session_notifications.py",
+      "implementation_files": [
+        "src/jarvis/sessions/manager.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Cap value is read once from JarvisConfig.forge_notifications_queue_cap at construction time, not per-call.",
+      "status": "complete",
+      "evidence": "SessionManager.__init__ accepts queue_cap (defaults to 100) and snapshots it as self._notification_queue_cap. enqueue_notification reads `cap = self._notification_queue_cap` once per call but the value is the construction-time snapshot \u2014 JarvisConfig is never re-read. The lifecycle wiring (TASK-J005-008) will pass config.forge_notifications_queue_cap as queue_cap. TestAC001LazyFifoAndConstructionCap.test_construction_reads_cap_once asserts the snapshot attribute exists and that 5 enqueues with cap=3 yield only the latest 3.",
+      "test_file": "tests/test_session_notifications.py",
+      "implementation_files": [
+        "src/jarvis/sessions/manager.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "uv run mypy src/jarvis/sessions/manager.py passes (strict).",
+      "status": "complete",
+      "evidence": "Verified locally \u2014 `uv run mypy src/jarvis/sessions/manager.py` reports `Success: no issues found in 1 source file`. ForgeNotification is imported under TYPE_CHECKING with a doc comment explaining the circular-import avoidance; annotations are evaluated lazily under `from __future__ import annotations`.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/sessions/manager.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Verified locally \u2014 `uv run ruff check src/jarvis/sessions/manager.py tests/test_session_notifications.py` reports `All checks passed!` and `uv run ruff format --check` confirms both files are formatted. ruff format was applied to manager.py to satisfy the line-length wrap on the long import-comment block.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/sessions/manager.py",
+        "tests/test_session_notifications.py"
+      ]
+    }
+  ]
+}

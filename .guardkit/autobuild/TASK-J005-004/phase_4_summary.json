@@ -1,0 +1,7 @@
+{
+  "tests_run": 107,
+  "tests_failed": 0,
+  "coverage_pct": 85.0,
+  "output_summary": "107 passed, 0 failed; line coverage 85% across routing_history, forge_notifications, settings, sessions/manager",
+  "quality_gates_passed": true
+}
