@@ -11,7 +11,9 @@ This module belongs to the sessions package (Group D) per ADR-ARCH-006.
 from __future__ import annotations
 
 import contextvars
+import logging
 import uuid
+from collections import deque
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +28,29 @@ if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
     from langgraph.store.base import BaseStore
 
+    # ``ForgeNotification`` is imported under TYPE_CHECKING to avoid a
+    # circular import at module load time. The chain that fails when
+    # imported eagerly is:
+    #
+    #     manager → infrastructure.forge_notifications → infrastructure.__init__
+    #     → infrastructure.lifecycle → sessions.manager (partial).
+    #
+    # Annotations are evaluated lazily under ``from __future__ import
+    # annotations`` (already imported above), so the string-only reference
+    # below is sufficient for static type-checking; the runtime body of
+    # ``enqueue_notification`` only accesses
+    # :attr:`ForgeNotification.correlation_id`, which is duck-typed.
+    from jarvis.infrastructure.forge_notifications import ForgeNotification
+
 logger = structlog.get_logger(__name__)
+
+# Standard-library logger used for the FEAT-JARVIS-005 queue overflow WARN
+# (DDR-030). The structlog ``logger`` above is unconfigured by default in the
+# unit-test process — relying on it would make ``forge_notification_queue_overflow``
+# undetectable via pytest's ``caplog`` fixture. Routing this single WARN through
+# the stdlib logger keeps it asserted in tests AND visible in production
+# (configured logging propagates to the same root handler).
+_stdlib_logger = logging.getLogger(__name__)
 
 
 class SessionManager:
@@ -45,12 +69,22 @@ class SessionManager:
         self,
         supervisor: CompiledStateGraph[Any, Any, Any, Any],
         store: BaseStore,
+        *,
+        queue_cap: int = 100,
     ) -> None:
         self._supervisor = supervisor
         self._store = store
         self._sessions: dict[str, Session] = {}
         self._ended: set[str] = set()
         self._in_flight: dict[str, bool] = {}
+        # FEAT-JARVIS-005 / DDR-030 — per-session forge-notification FIFO.
+        # Cap is read once at construction time per AC-005 of TASK-J005-006;
+        # the lifecycle wiring (TASK-J005-008) plumbs in
+        # ``JarvisConfig.forge_notifications_queue_cap`` as ``queue_cap``.
+        # The dict is keyed on ``session_id`` and values are bounded
+        # ``collections.deque`` instances created lazily on first enqueue.
+        self._notification_queue_cap: int = queue_cap
+        self._notification_queues: dict[str, deque[ForgeNotification]] = {}
         # ContextVar (per-instance) backing :meth:`current_session`. A
         # ContextVar is required rather than a plain attribute because the
         # supervisor invocation is awaited and multiple sessions can be
@@ -160,6 +194,11 @@ class SessionManager:
 
         Emits a ``session_ended`` structured log event exactly once per session.
 
+        Per TASK-J005-006 AC-004 / DM-forge-notification §3, this also clears
+        the per-session forge-notification FIFO and discards any future
+        :meth:`enqueue_notification` calls for ``session_id`` (silently —
+        they become no-ops with a DEBUG ``forge_notification_dropped`` line).
+
         Args:
             session_id: The session identifier to end.
         """
@@ -169,11 +208,113 @@ class SessionManager:
         self._ended.add(session_id)
         # Remove from in-flight tracking
         self._in_flight.pop(session_id, None)
+        # Drop the per-session FIFO so future ``pending_notifications`` calls
+        # return ``[]`` and any in-flight notification objects can be
+        # garbage-collected promptly.
+        self._notification_queues.pop(session_id, None)
 
         logger.info(
             "session_ended",
             session_id=session_id,
         )
+
+    # ------------------------------------------------------------------
+    # FEAT-JARVIS-005 / TASK-J005-006 — pending notification queue
+    # ------------------------------------------------------------------
+
+    def enqueue_notification(
+        self,
+        session_id: str,
+        notification: ForgeNotification,
+    ) -> None:
+        """Append a :class:`ForgeNotification` to ``session_id``'s FIFO.
+
+        Per TASK-J005-006 acceptance criteria:
+
+        * The FIFO is created lazily on the first enqueue for a given
+          ``session_id`` (AC-001).
+        * When the queue is at cap, the oldest entry is evicted before
+          the new one is appended; exactly one WARN
+          ``forge_notification_queue_overflow`` log line is emitted per
+          overflow (AC-002).
+        * Enqueueing to an unknown or already-ended ``session_id`` is a
+          silent no-op with a DEBUG ``forge_notification_dropped`` line —
+          it does NOT raise (AC-004 / DM-forge-notification §3 point 6).
+        * The cap was read once from
+          :attr:`JarvisConfig.forge_notifications_queue_cap` at
+          construction time (AC-005); this method does NOT re-read it.
+
+        Args:
+            session_id: The session identifier owning the FIFO.
+            notification: The :class:`ForgeNotification` to enqueue.
+        """
+        # Idempotent on missing/ended sessions — DM-forge-notification §3 #6.
+        if session_id in self._ended or session_id not in self._sessions:
+            logger.debug(
+                "forge_notification_dropped",
+                session_id=session_id,
+                reason="unknown_or_ended_session",
+                correlation_id=notification.correlation_id,
+            )
+            return
+
+        cap = self._notification_queue_cap
+        queue = self._notification_queues.get(session_id)
+        if queue is None:
+            # Lazy-create. ``maxlen=cap`` makes ``deque.append`` evict the
+            # oldest entry automatically when the queue is full — the manual
+            # length check below is purely to surface the overflow as a WARN
+            # log line; the eviction itself is a property of ``maxlen``.
+            queue = deque(maxlen=cap)
+            self._notification_queues[session_id] = queue
+
+        if len(queue) >= cap:
+            # ``deque(maxlen=cap).append(x)`` will silently drop the oldest
+            # entry; emit one WARN per overflow so operators can spot a
+            # session that is producing notifications faster than the CLI
+            # render loop drains them (DDR-030).
+            _stdlib_logger.warning(
+                "forge_notification_queue_overflow",
+                extra={
+                    "session_id": session_id,
+                    "cap": cap,
+                    "evicted_correlation_id": queue[0].correlation_id,
+                },
+            )
+
+        queue.append(notification)
+
+    def pending_notifications(self, session_id: str) -> list[ForgeNotification]:
+        """Drain ``session_id``'s FIFO — return entries in arrival order, then clear.
+
+        Atomic per AC-003 / ASSUM-003: the return + clear pair runs without
+        an intermediate ``await`` so the single asyncio loop guarantees no
+        notification is double-rendered or lost between drain and clear.
+        Re-entry-safe — a second sequential drain returns ``[]``.
+
+        For unknown ``session_id`` (no enqueue ever made; or session was
+        already ended), returns ``[]`` per DM-forge-notification §3 point 6.
+
+        Args:
+            session_id: The session whose pending notifications to drain.
+
+        Returns:
+            The notifications enqueued since the last drain, in FIFO order.
+            Empty list if the session has no pending notifications, the
+            session_id is unknown, or the session has been ended.
+        """
+        queue = self._notification_queues.get(session_id)
+        if queue is None:
+            return []
+
+        # Atomic drain — list() snapshots the current contents before
+        # ``clear()`` empties the deque. Both operations execute without an
+        # ``await`` boundary, so a concurrent ``enqueue_notification`` from
+        # the subscriber lands either fully before this snapshot or fully
+        # after the clear; never in-between (ASSUM-003 single-loop).
+        drained = list(queue)
+        queue.clear()
+        return drained
 
     async def invoke(self, session: Session, user_input: str) -> str:
         """Send user input through the supervisor for this session.

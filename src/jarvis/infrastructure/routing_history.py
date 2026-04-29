@@ -527,6 +527,12 @@ class RoutingHistoryWriter:
         self._config = config
         self._graphiti_unavailable_warned: bool = False
         self._pending_tasks: set[asyncio.Task[Any]] = set()
+        # DDR-029 §50 / DDR-018 — per-correlation monotonic edge counter.
+        # Populated by ``write_build_queue_dispatch`` (registers correlation
+        # at seq=0) and incremented by ``append_build_queue_event`` after
+        # each successful submission. Membership in this dict is the
+        # writer's "is this correlation known?" check.
+        self._correlation_edge_seq: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Public writer surface — API-internal.md §4
@@ -569,38 +575,143 @@ class RoutingHistoryWriter:
     async def write_build_queue_dispatch(
         self, entry: JarvisRoutingHistoryEntry
     ) -> None:
-        """Reserved-but-no-op in FEAT-JARVIS-004.
+        """Persist a ``subagent_type='forge_build_queue'`` routing-history entry.
 
-        FEAT-JARVIS-005 fills in the body
-        (``subagent_type='forge_build_queue'``); landing the signature
-        here keeps the writer forward-compatible without faking work.
+        Mirrors :meth:`write_specialist_dispatch` (DDR-018 + DDR-019);
+        the only difference is the ``subagent_type`` discriminator.
+        Side-effect ordering:
+
+        1. Redact human-shaped fields per ADR-ARCH-029 (delegated to
+           :meth:`_write_entry`).
+        2. JSON-encode ``supervisor_tool_call_sequence`` +
+           ``subagent_trace_ref`` and offload above 16KB.
+        3. Register ``entry.subagent_task_id`` in the per-correlation
+           edge-seq map at seq=0 so subsequent
+           :meth:`append_build_queue_event` calls can find it.
+        4. Submit Graphiti ``add_episode`` via :func:`asyncio.create_task`
+           (fire-and-forget — caller used ``asyncio.create_task`` at the
+           ``queue_build`` boundary; this method awaits the *submission*).
+        5. Failures log ``WARN routing_history_write_failed
+           reason=<err>`` per DDR-019 and are swallowed — the writer
+           never raises.
         """
-        logger.debug(
-            "routing_history_build_queue_dispatch_noop",
-            extra={
-                "decision_id": entry.decision_id,
-                "note": "FEAT-J005 not yet implemented",
-            },
-        )
+        if self._graphiti_client is None:
+            self._warn_graphiti_unavailable_once()
+            return
+
+        # Register the correlation BEFORE submitting so that a
+        # stage-complete event racing the dispatch entry can still find
+        # the parent. setdefault preserves an existing seq counter when
+        # the same entry is replayed.
+        self._correlation_edge_seq.setdefault(entry.subagent_task_id, 0)
+
+        try:
+            await self._write_entry(entry)
+        except Exception as exc:  # DDR-019: fire-and-forget — never raise
+            logger.warning(
+                "routing_history_write_failed",
+                extra={"reason": type(exc).__name__, "detail": str(exc)},
+            )
 
     async def append_build_queue_event(
         self, correlation_id: str, event: dict[str, Any]
     ) -> None:
-        """Reserved-but-no-op in FEAT-JARVIS-004.
+        """Append a ``stage_complete`` Graphiti edge for ``correlation_id``.
 
-        FEAT-JARVIS-005 fills in the body — stage-complete events
-        arriving on ``pipeline.stage-complete.*`` will land as edges,
-        preserving the ``frozen=True`` invariant on
-        :class:`JarvisRoutingHistoryEntry`.
+        DDR-029: each ``pipeline.stage-complete.*`` event lands as one
+        append-only Graphiti edge against the originating
+        :class:`JarvisRoutingHistoryEntry`. The entry stays
+        ``frozen=True`` per DDR-018 — never mutated, never overwritten.
+        Multiple events for the same ``correlation_id`` produce
+        multiple distinct edges (one per call), each with a monotonic
+        ``seq`` suffix so Graphiti entity names don't collide.
+
+        Side-effect ordering:
+
+        1. If the writer was constructed with ``graphiti_client=None``
+           (DDR-019 startup soft-fail), emit the once-per-instance
+           ``graphiti_unavailable`` WARN and return.
+        2. If ``correlation_id`` is unknown (no
+           :meth:`write_build_queue_dispatch` ever registered it — e.g.
+           the correlation was evicted from DDR-028's bounded map),
+           log ``WARN routing_history_append_failed
+           reason=unknown_correlation`` and return.
+        3. Redact ``event`` via the same recursive processor used by
+           :meth:`write_specialist_dispatch` (ADR-ARCH-029); operates
+           on a deep copy so the caller's dict is never mutated.
+        4. Submit Graphiti ``add_episode`` with
+           ``source_description='jarvis-routing-history-edge'`` and
+           ``name='stage_complete:{correlation_id}:{seq}'`` — see
+           DDR-029 §4 for the naming convention.
+        5. Increment the per-correlation seq after successful
+           submission scheduling.
+        6. Any failure logs ``WARN routing_history_append_failed
+           reason=<err>`` (DDR-019) and is swallowed.
         """
-        logger.debug(
-            "routing_history_append_build_queue_event_noop",
-            extra={
-                "correlation_id": correlation_id,
-                "event_keys": sorted(event.keys()),
-                "note": "FEAT-J005 not yet implemented",
-            },
-        )
+        if self._graphiti_client is None:
+            self._warn_graphiti_unavailable_once()
+            return
+
+        if correlation_id not in self._correlation_edge_seq:
+            # The correlation was never registered (or was evicted from
+            # the DDR-028 bounded map). Drop silently with a WARN so the
+            # subscriber doesn't hang on a missing parent entry.
+            logger.warning(
+                "routing_history_append_failed",
+                extra={
+                    "reason": "unknown_correlation",
+                    "correlation_id": correlation_id,
+                },
+            )
+            return
+
+        try:
+            # Redact-on-copy. The caller's dict (and the original
+            # StageCompletePayload it came from) stays untouched.
+            redacted_event = _redact_recursive(event)
+
+            seq = self._correlation_edge_seq[correlation_id]
+            edge_name = f"stage_complete:{correlation_id}:{seq}"
+
+            # Pull a reference_time when the payload carries one. Both
+            # the FEAT-J005 StageCompletePayload contract and the
+            # ForgeNotification shape use ``completed_at``; we accept
+            # either an ISO-8601 str or a ``datetime`` object.
+            reference_time: datetime | None = None
+            completed_at = redacted_event.get("completed_at")
+            if isinstance(completed_at, datetime):
+                reference_time = completed_at
+            elif isinstance(completed_at, str):
+                with contextlib.suppress(ValueError):
+                    reference_time = datetime.fromisoformat(completed_at)
+
+            assert self._graphiti_client is not None  # checked above
+            episode_body = json.dumps(
+                redacted_event, sort_keys=True, default=str
+            )
+            coro = self._graphiti_client.add_episode(
+                name=edge_name,
+                episode_body=episode_body,
+                source_description="jarvis-routing-history-edge",
+                reference_time=reference_time,
+            )
+            task = asyncio.create_task(coro)
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
+
+            # Increment AFTER the submission task is scheduled so a
+            # raised exception leaves the seq untouched (the next call
+            # retries with the same seq, which is what we want).
+            self._correlation_edge_seq[correlation_id] = seq + 1
+        except Exception as exc:  # DDR-019: WARN-only, never raise
+            logger.warning(
+                "routing_history_append_failed",
+                extra={
+                    "reason": type(exc).__name__,
+                    "detail": str(exc),
+                    "correlation_id": correlation_id,
+                },
+            )
 
     async def flush(self, *, timeout: float = 5.0) -> None:
         """Drain in-flight submission tasks; bounded by ``timeout``.
