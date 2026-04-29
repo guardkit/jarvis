@@ -5,9 +5,10 @@ falkordb_host: whitestocks
 falkordb_port: 6379
 timeout: 30.0
 max_concurrent_episodes: 3
-chunk_extraction_concurrency: 4llm_provider: vllm
+chunk_extraction_concurrency: 4
+llm_provider: vllm
 llm_base_url: http://promaxgb10-41b1:9000/v1
-llm_model: neuralmagic/Qwen2.5-14B-Instruct-FP8-dynamic
+llm_model: qwen-graphiti
 # --- Fallback: MacBook Pro M2 Max (Ollama, Q4_K_M) — uncomment if GB10 offline ---
 #llm_provider: ollama
 #llm_base_url: http://richards-macbook-pro.tailebf801.ts.net:8000/v1
@@ -15,7 +16,7 @@ llm_model: neuralmagic/Qwen2.5-14B-Instruct-FP8-dynamic
 llm_max_tokens: 4096
 embedding_provider: vllm
 embedding_base_url: http://promaxgb10-41b1:9000/v1
-embedding_model: nomic-embed-text-v1.5
+embedding_model: nomic-embed
 group_ids:
 - product_knowledge
 - command_workflows
