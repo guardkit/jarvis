@@ -1,27 +1,25 @@
 """Unit tests for the surviving stub-path tools + swap-point grep invariant.
 
 Originally the consolidated suite for ``jarvis.tools.dispatch`` (Phase 2 /
-TASK-J002-021). TASK-J004-011 retires the dispatch-side stub anchor; the
-queue_build half remains until FEAT-JARVIS-005 swaps it.
+TASK-J002-021). TASK-J004-011 retired the dispatch-side stub anchor;
+TASK-J005-005 retires the queue_build half by swapping the stub for a
+real JetStream publish — both anchors are now absent from the source tree.
 
-Test class layout (post-TASK-J004-011):
+Test class layout (post-TASK-J005-005):
 
-- :class:`TestQueueBuildHappyPath` — happy path returns a JSON ack.
+- :class:`TestQueueBuildHappyPath` — happy path returns a JSON ack when
+  no transport is wired (degraded JSON shape per ADR-ARCH-021).
 - :class:`TestQueueBuildFeatureIdTable` — feature_id accept/reject table.
 - :class:`TestQueueBuildRepoTable` — repo accept/reject table.
 - :class:`TestQueueBuildAdapterTable` — originating_adapter allow-list.
 - :class:`TestQueueBuildRealBuildQueuedPayload` — isinstance check on the
   reconstructed payload.
-- :class:`TestQueueBuildLogFormat` — exact log format assertion for the
-  surviving queue_build log anchor.
-- :class:`TestSwapPointGrepInvariant` — post-TASK-J004-011 invariant: only
-  the queue_build anchor remains in ``src/jarvis/`` (2 anchored lines).
+- :class:`TestSwapPointGrepInvariant` — both anchors retired in source.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 import re
 import subprocess
 from pathlib import Path
@@ -41,8 +39,10 @@ _ANCHOR_QUEUE_BUILD = "JARVIS_QUEUE_BUILD" + "_STUB"
 
 
 def _invoke_queue_build(**kwargs: Any) -> str:
-    """Invoke the @tool-wrapped ``queue_build`` and return the string result."""
-    return dispatch.queue_build.invoke(kwargs)
+    """Invoke the @tool-wrapped ``queue_build`` (async) and return the result."""
+    import asyncio
+
+    return asyncio.run(dispatch.queue_build.ainvoke(kwargs))
 
 
 def _project_root() -> Path:
@@ -51,12 +51,33 @@ def _project_root() -> Path:
 
 
 # ===========================================================================
+# Pytest fixture: a connected NATSClient mock so the happy-path tests can
+# observe a successful publish without standing up an in-process broker.
+# ===========================================================================
+@pytest.fixture()
+def wired_nats() -> Any:
+    """Wire a mock NATSClient with a successful ``js.publish`` AsyncMock."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    saved = dispatch._nats_client
+    nats_client = MagicMock()
+    js = MagicMock()
+    js.publish = AsyncMock(return_value=MagicMock(seq=1))
+    nats_client.js = js
+    dispatch._nats_client = nats_client
+    try:
+        yield nats_client
+    finally:
+        dispatch._nats_client = saved
+
+
+# ===========================================================================
 # queue_build — happy path
 # ===========================================================================
 class TestQueueBuildHappyPath:
-    """A valid feature_id + repo + adapter returns a JSON ack."""
+    """A valid feature_id + repo + adapter returns a JSON ack on success."""
 
-    def test_happy_path_returns_queue_build_ack(self) -> None:
+    def test_happy_path_returns_queue_build_ack(self, wired_nats: Any) -> None:
         result = _invoke_queue_build(
             feature_id="FEAT-J002",
             feature_yaml_path="features/feat-j002/spec.yaml",
@@ -79,14 +100,14 @@ class TestQueueBuildFeatureIdTable:
         "good",
         ["FEAT-AB1", "FEAT-J002", "FEAT-JARVIS002"],
     )
-    def test_valid_feature_ids_accepted(self, good: str) -> None:
+    def test_valid_feature_ids_accepted(self, good: str, wired_nats: Any) -> None:
         result = _invoke_queue_build(
             feature_id=good,
             feature_yaml_path="features/feat.yaml",
             repo="guardkit/jarvis",
         )
-        assert not result.startswith("ERROR"), result
         ack = json.loads(result)
+        assert ack["status"] == "queued", result
         assert ack["feature_id"] == good
 
     @pytest.mark.parametrize(
@@ -104,9 +125,10 @@ class TestQueueBuildFeatureIdTable:
             feature_yaml_path="features/feat.yaml",
             repo="guardkit/jarvis",
         )
-        assert result.startswith("ERROR: invalid_feature_id"), result
-        assert "must match FEAT-XXX pattern" in result
-        assert f"got {bad}" in result
+        parsed = json.loads(result)
+        assert parsed["status"] == "validation_error", result
+        assert parsed["reason"] == "invalid_feature_id"
+        assert "must match FEAT-XXX pattern" in parsed["detail"]
 
 
 # ===========================================================================
@@ -116,13 +138,14 @@ class TestQueueBuildRepoTable:
     """Boundary table for ``repo`` (^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$)."""
 
     @pytest.mark.parametrize("good", ["guardkit/jarvis", "appmilla/forge"])
-    def test_valid_repos_accepted(self, good: str) -> None:
+    def test_valid_repos_accepted(self, good: str, wired_nats: Any) -> None:
         result = _invoke_queue_build(
             feature_id="FEAT-J002",
             feature_yaml_path="features/feat.yaml",
             repo=good,
         )
-        assert not result.startswith("ERROR"), result
+        parsed = json.loads(result)
+        assert parsed["status"] == "queued", result
 
     @pytest.mark.parametrize(
         "bad",
@@ -137,8 +160,10 @@ class TestQueueBuildRepoTable:
             feature_yaml_path="features/feat.yaml",
             repo=bad,
         )
-        assert result.startswith("ERROR: invalid_repo"), result
-        assert "must be org/name format" in result
+        parsed = json.loads(result)
+        assert parsed["status"] == "validation_error", result
+        assert parsed["reason"] == "invalid_repo"
+        assert "must be org/name format" in parsed["detail"]
 
 
 # ===========================================================================
@@ -151,14 +176,15 @@ class TestQueueBuildAdapterTable:
         "good",
         ["terminal", "telegram", "dashboard", "voice-reachy"],
     )
-    def test_each_allowed_adapter_accepted(self, good: str) -> None:
+    def test_each_allowed_adapter_accepted(self, good: str, wired_nats: Any) -> None:
         result = _invoke_queue_build(
             feature_id="FEAT-J002",
             feature_yaml_path="features/feat.yaml",
             repo="guardkit/jarvis",
             originating_adapter=good,
         )
-        assert not result.startswith("ERROR"), result
+        parsed = json.loads(result)
+        assert parsed["status"] == "queued", result
 
     @pytest.mark.parametrize(
         "bad",
@@ -171,17 +197,19 @@ class TestQueueBuildAdapterTable:
             repo="guardkit/jarvis",
             originating_adapter=bad,
         )
-        assert result.startswith("ERROR: invalid_adapter"), result
-        assert f"{bad} not in allowed list" in result
+        parsed = json.loads(result)
+        assert parsed["status"] == "validation_error", result
+        assert parsed["reason"] == "invalid_adapter"
+        assert "not in allowed list" in parsed["detail"]
 
 
 # ===========================================================================
 # queue_build — real BuildQueuedPayload instance (isinstance check)
 # ===========================================================================
 class TestQueueBuildRealBuildQueuedPayload:
-    """The tool constructs a real ``BuildQueuedPayload`` (not a dict) before logging."""
+    """The tool constructs a real ``BuildQueuedPayload`` (not a dict)."""
 
-    def test_payload_is_real_build_queued_payload_instance(self) -> None:
+    def test_payload_is_real_build_queued_payload_instance(self, wired_nats: Any) -> None:
         result = _invoke_queue_build(
             feature_id="FEAT-J002",
             feature_yaml_path="features/feat-j002/spec.yaml",
@@ -216,56 +244,10 @@ class TestQueueBuildRealBuildQueuedPayload:
 
 
 # ===========================================================================
-# queue_build — exact log format assertion
-# ===========================================================================
-class TestQueueBuildLogFormat:
-    """The queue_build log line MUST match the documented format:
-
-    ``JARVIS_QUEUE_BUILD_STUB feature_id=<x> repo=<y> correlation_id=<z>
-    topic=pipeline.build-queued.<x> payload_bytes=<n>``
-    """
-
-    LOG_RE = re.compile(
-        rf"^{_ANCHOR_QUEUE_BUILD} "
-        r"feature_id=(?P<feature_id>\S+) "
-        r"repo=(?P<repo>\S+) "
-        r"correlation_id=(?P<cid>\S+) "
-        r"topic=pipeline\.build-queued\.(?P<feature_id_topic>\S+) "
-        r"payload_bytes=(?P<n>\d+)$"
-    )
-
-    def test_log_format_matches_documented_pattern(self, caplog: pytest.LogCaptureFixture) -> None:
-        with caplog.at_level(logging.INFO, logger="jarvis.tools.dispatch"):
-            _invoke_queue_build(
-                feature_id="FEAT-J002",
-                feature_yaml_path="features/feat.yaml",
-                repo="guardkit/jarvis",
-                correlation_id="trace-1",
-            )
-        records = [r for r in caplog.records if r.name == "jarvis.tools.dispatch"]
-        assert len(records) == 1
-        msg = records[0].getMessage()
-        m = self.LOG_RE.match(msg)
-        assert m is not None, f"Log line did not match pattern:\n{msg}"
-        assert m.group("feature_id") == "FEAT-J002"
-        assert m.group("feature_id_topic") == "FEAT-J002"
-        assert m.group("repo") == "guardkit/jarvis"
-        assert m.group("cid") == "trace-1"
-        assert int(m.group("n")) > 0
-
-
-# ===========================================================================
-# Swap-point grep invariant — post-TASK-J004-011 retirement
+# Swap-point grep invariant — post-TASK-J004-011 + TASK-J005-005 retirement
 # ===========================================================================
 class TestSwapPointGrepInvariant:
-    """Post-TASK-J004-011 invariant.
-
-    ``grep -rn JARVIS_DISPATCH_STUB src/jarvis/`` MUST return zero matches —
-    the dispatch swap point is retired. ``grep -rn JARVIS_QUEUE_BUILD_STUB
-    src/jarvis/`` MUST return exactly two matches in
-    ``src/jarvis/tools/dispatch.py``: the constant definition and the
-    ``logger.info`` usage in ``queue_build``.
-    """
+    """Both the dispatch and queue_build Phase-2 grep anchors are retired."""
 
     @staticmethod
     def _grep(pattern: str) -> list[str]:
@@ -285,20 +267,8 @@ class TestSwapPointGrepInvariant:
             lines
         )
 
-    def test_queue_build_anchor_count_is_two(self) -> None:
+    def test_queue_build_anchor_is_retired_zero_matches(self) -> None:
         lines = self._grep(_ANCHOR_QUEUE_BUILD)
-        dispatch_lines = [ln for ln in lines if "tools/dispatch.py" in ln]
-        assert len(dispatch_lines) == 2, (
-            "Expected exactly 2 JARVIS_QUEUE_BUILD_STUB lines (constant + "
-            f"logger.info usage). Found {len(dispatch_lines)}:\n" + "\n".join(dispatch_lines)
+        assert lines == [], (
+            "JARVIS_QUEUE_BUILD_STUB anchor must be retired — found:\n" + "\n".join(lines)
         )
-
-    def test_queue_build_anchor_value_matches_constant(self) -> None:
-        assert dispatch.LOG_PREFIX_QUEUE_BUILD == _ANCHOR_QUEUE_BUILD
-
-    def test_queue_build_anchor_lines_are_constant_and_usage(self) -> None:
-        lines = self._grep(_ANCHOR_QUEUE_BUILD)
-        const_lines = [ln for ln in lines if "LOG_PREFIX_QUEUE_BUILD: str =" in ln]
-        usage_lines = [ln for ln in lines if "LOG_PREFIX_" not in ln and "feature_id=%s" in ln]
-        assert len(const_lines) == 1, const_lines
-        assert len(usage_lines) == 1, usage_lines

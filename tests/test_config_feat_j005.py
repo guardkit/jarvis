@@ -15,7 +15,7 @@ Covers acceptance criteria:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import get_type_hints
+from typing import ClassVar, get_type_hints
 from unittest.mock import patch
 
 from jarvis.config.settings import JarvisConfig
@@ -116,18 +116,39 @@ class TestAC003EnvVarOverrides:
 
 
 # ---------------------------------------------------------------------------
-# AC-004: No other module imports the new fields in this commit.
+# AC-004: Only the design-approved consumers reference the new fields.
+#
+# The original TASK-J005-001 invariant required the fields to remain
+# *declarative-only* in that commit. As TASK-J005-005 (queue_build real
+# publish) and TASK-J005-008 (lifecycle wiring for the forge subscriber)
+# land, the invariant flips to a *closed allow-list*: each new field has
+# exactly one design-approved consumer module beyond ``settings.py``. Any
+# reference outside that allow-list is still an offender.
 # ---------------------------------------------------------------------------
 class TestAC004NoOtherModuleConsumesNewFields:
-    """No module under ``src/jarvis`` (besides settings.py) references the new fields."""
+    """Only the design-approved consumer modules reference the new fields."""
 
-    NEW_FIELD_NAMES = (
-        "pipeline_publish_timeout_seconds",
-        "forge_notifications_queue_cap",
-        "forge_correlation_map_cap",
-    )
+    # Field name → set of relative file paths (under ``src/jarvis``) that
+    # are allowed to reference the field after the FEAT-J005 wiring tasks
+    # land. ``settings.py`` is always allowed and is filtered separately.
+    ALLOWED_CONSUMERS: ClassVar[dict[str, set[str]]] = {
+        # TASK-J005-005 — queue_build wraps ``js.publish`` in
+        # ``asyncio.wait_for(..., timeout=config.pipeline_publish_timeout_seconds)``.
+        "pipeline_publish_timeout_seconds": {
+            "tools/dispatch.py",
+        },
+        # TASK-J005-008 — lifecycle constructs ``ForgeNotificationsSubscriber``
+        # with ``queue_cap=config.forge_notifications_queue_cap`` and
+        # ``correlation_cap=config.forge_correlation_map_cap``.
+        "forge_notifications_queue_cap": {
+            "infrastructure/lifecycle.py",
+        },
+        "forge_correlation_map_cap": {
+            "infrastructure/lifecycle.py",
+        },
+    }
 
-    def test_only_settings_py_references_new_fields(self) -> None:
+    def test_only_design_approved_consumers_reference_new_fields(self) -> None:
         src_root = Path(__file__).resolve().parent.parent / "src" / "jarvis"
         settings_path = (src_root / "config" / "settings.py").resolve()
 
@@ -135,12 +156,13 @@ class TestAC004NoOtherModuleConsumesNewFields:
         for py_file in src_root.rglob("*.py"):
             if py_file.resolve() == settings_path:
                 continue
+            relative = py_file.resolve().relative_to(src_root).as_posix()
             text = py_file.read_text(encoding="utf-8")
-            for name in self.NEW_FIELD_NAMES:
-                if name in text:
+            for name, allowed_paths in self.ALLOWED_CONSUMERS.items():
+                if name in text and relative not in allowed_paths:
                     offenders.append((py_file, name))
 
         assert not offenders, (
-            "FEAT-J005 fields must remain declarative-only in this commit; "
-            f"unexpected references found: {offenders}"
+            "FEAT-J005 fields may only be consumed by the design-approved "
+            f"modules; unexpected references found: {offenders}"
         )

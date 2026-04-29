@@ -83,6 +83,7 @@ from jarvis.infrastructure.fleet_registration import (
     heartbeat_loop,
     register_on_fleet,
 )
+from jarvis.infrastructure.forge_notifications import ForgeNotificationsSubscriber
 from jarvis.infrastructure.logging import configure
 from jarvis.infrastructure.nats_client import NATSClient
 from jarvis.infrastructure.routing_history import (
@@ -306,6 +307,13 @@ class AppState:
             :class:`CapabilitiesRegistry` (live KV-watch or stub YAML)
             backing the supervisor's capability prompt block at runtime.
             ``shutdown`` calls ``close()`` to detach the watcher.
+        forge_subscriber: The
+            :class:`ForgeNotificationsSubscriber` started over
+            ``pipeline.stage-complete.>`` for in-process routing of Forge
+            stage-complete events back to the originating session FIFO
+            (FEAT-JARVIS-005 / TASK-J005-008). ``None`` when NATS soft-
+            failed at startup — ``shutdown`` skips the ``stop()`` step in
+            that case.
     """
 
     config: JarvisConfig
@@ -319,6 +327,7 @@ class AppState:
     routing_history_writer: RoutingHistoryWriter | None = None
     fleet_heartbeat_task: asyncio.Task[None] | None = None
     capabilities_registry: CapabilitiesRegistry | None = None
+    forge_subscriber: ForgeNotificationsSubscriber | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +637,39 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         cap=config.dispatch_concurrent_cap,
     )
 
+    # 7c. FEAT-JARVIS-005 (TASK-J005-008) — start the Forge stage-complete
+    # subscriber over ``pipeline.stage-complete.>``. The subscriber is
+    # constructed only when NATS is up (DDR-021 soft-fail keeps the
+    # supervisor alive on NATS-down) and started AFTER fleet registration
+    # has either succeeded or fallen through, BEFORE the session manager is
+    # constructed. ``bind_session_manager(...)`` happens later — once the
+    # session manager exists — per design.md §8.
+    forge_subscriber: ForgeNotificationsSubscriber | None = None
+    if nats_client is not None:
+        forge_subscriber = ForgeNotificationsSubscriber(
+            nats_client=nats_client,
+            routing_history_writer=routing_history_writer,
+            queue_cap=config.forge_notifications_queue_cap,
+            correlation_cap=config.forge_correlation_map_cap,
+        )
+        try:
+            await forge_subscriber.start()
+        except Exception as exc:
+            # DDR-021-style soft-fail at the subscriber boundary — a flaky
+            # JetStream consumer must not block the supervisor process.
+            log.warning(
+                "jarvis_forge_subscriber_start_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            forge_subscriber = None
+        else:
+            log.info(
+                "jarvis_forge_subscriber_started",
+                queue_cap=config.forge_notifications_queue_cap,
+                correlation_cap=config.forge_correlation_map_cap,
+            )
+
     # 8. Assemble the attended tool list (10 tools: FEAT-J002 baseline
     # plus ``escalate_to_frontier``).  The ``include_frontier=True``
     # flag is the default but we pass it explicitly here so the
@@ -650,6 +692,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         nats_client=nats_client,
         routing_history_writer=routing_history_writer,
         dispatch_semaphore=dispatch_semaphore,
+        forge_subscriber=forge_subscriber,
     )
     log.info(
         "jarvis_tool_list_attended_assembled",
@@ -667,6 +710,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         nats_client=nats_client,
         routing_history_writer=routing_history_writer,
         dispatch_semaphore=dispatch_semaphore,
+        forge_subscriber=forge_subscriber,
     )
     log.info(
         "jarvis_tool_list_ambient_assembled",
@@ -689,6 +733,17 @@ async def build_app_state(config: JarvisConfig) -> AppState:
 
     # 11. Wire the session manager so AppState is fully populated on return.
     session_manager = SessionManager(supervisor=supervisor, store=store)
+
+    # 11a. FEAT-JARVIS-005 (TASK-J005-008) — late-bind the session manager
+    # into the forge subscriber. The two are constructed in strict order
+    # (subscriber first, session manager second) so the subscriber can hold
+    # a back-reference and route stage-complete events into the per-session
+    # FIFO without a circular dependency at construction time. A second
+    # bind raises ``RuntimeError`` per the subscriber contract — that is
+    # safe here because ``build_app_state`` only binds once.
+    if forge_subscriber is not None:
+        forge_subscriber.bind_session_manager(session_manager)
+        log.info("jarvis_forge_subscriber_bound_session_manager")
 
     # 11b. Arm DDR-014 Layer 2 — the executor assertion of the
     # constitutional ``escalate_to_frontier`` gate. Until these hooks are
@@ -731,6 +786,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         routing_history_writer=routing_history_writer,
         fleet_heartbeat_task=fleet_heartbeat_task,
         capabilities_registry=capabilities_registry,
+        forge_subscriber=forge_subscriber,
     )
 
     log.info(
@@ -756,16 +812,18 @@ async def shutdown(state: AppState) -> None:
     failed step is logged at WARN and shutdown continues — no step is
     skipped because of an earlier failure (TASK-J004-018 invariant).
 
-    Sequence (per FEAT-JARVIS-004 design §8 wiring sequence):
+    Sequence (per FEAT-JARVIS-004 / FEAT-JARVIS-005 design §8 wiring):
 
         1. Cancel ``fleet_heartbeat_task`` (if running).
-        2. ``await deregister_from_fleet(nats_client, "jarvis")``.
-        3. ``await capabilities_registry.close()``.
-        4. ``await routing_history_writer.flush(timeout=5.0)``.
-        5. ``await nats_client.drain(timeout=5.0)``.
-        6. ``await graphiti_client.aclose()``.
-        7. Disarm Layer-2 hooks (kept from FEAT-J003 F1 fix).
-        8. ``state.store.close()``.
+        2. ``await state.forge_subscriber.stop()`` (FEAT-JARVIS-005 — bounded
+           at 5s; idempotent on double-shutdown; skipped when ``None``).
+        3. ``await deregister_from_fleet(nats_client, "jarvis")``.
+        4. ``await capabilities_registry.close()``.
+        5. ``await routing_history_writer.flush(timeout=5.0)``.
+        6. ``await nats_client.drain(timeout=5.0)``.
+        7. ``await graphiti_client.aclose()``.
+        8. Disarm Layer-2 hooks + dispatch deps + forge subscriber ref.
+        9. ``state.store.close()``.
 
     Args:
         state: The :class:`AppState` to tear down.
@@ -788,6 +846,23 @@ async def shutdown(state: AppState) -> None:
         except Exception as exc:
             log.warning(
                 "jarvis_heartbeat_cancel_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 1b. FEAT-JARVIS-005 (TASK-J005-008) — stop the Forge stage-complete
+    # subscriber BEFORE the fleet deregister so any in-flight stage event
+    # has a chance to drain through the message handler before the broker
+    # connection is torn down. ``ForgeNotificationsSubscriber.stop()`` is
+    # itself bounded at 5s via ``asyncio.wait_for`` and never raises out
+    # (ASSUM-011 / Group D #14); the wrapper here is a defensive belt-and-
+    # braces against future evolutions of the contract.
+    if state.forge_subscriber is not None:
+        try:
+            await state.forge_subscriber.stop()
+        except Exception as exc:
+            log.warning(
+                "jarvis_forge_subscriber_stop_warning",
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
@@ -877,6 +952,9 @@ async def shutdown(state: AppState) -> None:
         _dispatch._nats_client = None
         _dispatch._routing_history_writer = None
         _dispatch._dispatch_semaphore = None
+        # FEAT-JARVIS-005 (TASK-J005-008) — also disarm the forge subscriber
+        # so a re-entrant ``build_app_state`` does not see a stale reference.
+        _dispatch._forge_subscriber = None
     except Exception as exc:
         log.warning(
             "jarvis_layer2_disarm_warning",

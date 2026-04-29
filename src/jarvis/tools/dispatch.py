@@ -12,28 +12,25 @@ This module hosts the two dispatch tools (``dispatch_by_capability`` and
   return shape stay byte-identical to Phase 2 — the reasoning model's view
   is unchanged across the swap.
 
-* ``queue_build`` — Phase 2 stub remains in place. FEAT-JARVIS-005 swaps
-  that body to a real ``js.publish(...)`` on
-  ``pipeline.build-queued.{feature_id}``. The single-seam anchor for that
-  swap is the ``LOG_PREFIX_QUEUE_BUILD`` grep token.
+* ``queue_build`` — **FEAT-JARVIS-005 (TASK-J005-005)**: real JetStream
+  publish on ``pipeline.build-queued.{feature_id}`` per ADR-SP-014
+  Pattern A and design.md §8. The Phase 2 stub callable +
+  ``logger.info`` log anchor + ``LOG_PREFIX_QUEUE_BUILD`` grep token are
+  **retired**; module-level dependencies for this tool are
+  ``_nats_client``, ``_routing_history_writer``, ``_dispatch_semaphore``,
+  ``_forge_subscriber`` and ``_jarvis_config`` (see API-internal §7).
 
-SWAP POINT
-==========
+The Phase 2 anchors on both halves of the seam have been retired:
 
-DDR-009 named this module as the **single seam** through which Phase 3
-features replace the stub transport with real NATS round-trips. With
-FEAT-JARVIS-004 in place, only the queue-build half of the seam remains:
+* The dispatch-side Phase 2 anchors (the swap-point log-prefix constant,
+  the test stub-response hook, and the ``StubResponse`` alias) were
+  removed by TASK-J004-011.
+* The queue-build-side Phase 2 anchor (``LOG_PREFIX_QUEUE_BUILD`` and
+  the associated ``logger.info`` line) was removed by TASK-J005-005.
 
-* ``LOG_PREFIX_QUEUE_BUILD`` — string constant whose value is the grep
-  anchor used by the ``logger.info`` line emitted from ``queue_build``.
-  FEAT-JARVIS-005 replaces that log call with ``await js.publish(...)``
-  on the ``pipeline.build-queued.{x}`` subject.
-
-The dispatch-side Phase 2 anchors (the swap-point log-prefix constant, the
-test stub-response hook, and the ``StubResponse`` alias) have been
-**deleted** as part of TASK-J004-011 — their absence is asserted by the
-(flipped) TASK-J002-021 grep invariant landing in TASK-J004-020
-(``test_no_phase_2_stub_anchors`` in ``test_no_retired_roster_strings``).
+Their absence is asserted by the (flipped) TASK-J002-021 grep invariant
+landing in TASK-J004-020 / TASK-J005-011 (``test_no_phase_2_stub_anchors``
+in ``test_no_retired_roster_strings``).
 """
 
 from __future__ import annotations
@@ -70,7 +67,9 @@ from jarvis.tools.dispatch_types import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
+    from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.dispatch_semaphore import DispatchSemaphore
+    from jarvis.infrastructure.forge_notifications import ForgeNotificationsSubscriber
     from jarvis.infrastructure.nats_client import NATSClient
     from jarvis.infrastructure.routing_history import RoutingHistoryWriter
 
@@ -95,14 +94,36 @@ def _now_utc() -> datetime:
 
 
 # ---------------------------------------------------------------------------
-# SWAP POINT — queue_build log prefix.
+# Phase-2 swap-point anchor retirement.
 #
-# ``LOG_PREFIX_QUEUE_BUILD`` is the DDR-009 grep anchor for the queue-build
-# half of the seam (FEAT-JARVIS-005 retires it). The dispatch-side
-# log-prefix anchor was retired by TASK-J004-011 — the dispatch tool
-# now performs a real NATS round-trip and emits no anchor log line.
+# ``LOG_PREFIX_QUEUE_BUILD`` (the DDR-009 grep token used by the Phase 2
+# ``queue_build`` stub) was retired by TASK-J005-005 — the tool now
+# performs a real ``js.publish(...)`` round-trip and emits no anchor log
+# line. The dispatch-side anchor was retired by TASK-J004-011.
 # ---------------------------------------------------------------------------
-LOG_PREFIX_QUEUE_BUILD: str = "JARVIS_QUEUE_BUILD_STUB"
+
+
+# ---------------------------------------------------------------------------
+# DDR-031 — Session.adapter → BuildQueuedPayload.OriginatingAdapter map.
+#
+# The Session.adapter StrEnum (``cli`` / ``telegram`` / ``dashboard`` /
+# ``reachy``) and the nats-core OriginatingAdapter Literal
+# (``terminal`` / ``telegram`` / ``dashboard`` / ``voice-reachy`` /
+# ``slack`` / ``cli-wrapper``) overlap but do not align by string. The
+# closed mapping below is consumed by :func:`_resolve_originating_adapter`
+# to project a Session into the wire-side adapter id at queue time per
+# DDR-031.
+# ---------------------------------------------------------------------------
+_SESSION_ADAPTER_TO_ORIGINATING: dict[str, str] = {
+    "cli": "terminal",
+    "telegram": "telegram",
+    "dashboard": "dashboard",
+    "reachy": "voice-reachy",
+}
+
+
+# Default per-publish timeout when no JarvisConfig is wired (DDR-025).
+_DEFAULT_PIPELINE_PUBLISH_TIMEOUT_SECONDS: int = 5
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +163,30 @@ _capability_registry: list[CapabilityDescriptor] = []
 _nats_client: NATSClient | None = None
 _routing_history_writer: RoutingHistoryWriter | None = None
 _dispatch_semaphore: DispatchSemaphore | None = None
+
+# ---------------------------------------------------------------------------
+# FEAT-JARVIS-005 (TASK-J005-008) — forge subscriber dependency.
+#
+# Snapshotted by ``assemble_tool_list`` at lifecycle startup so the
+# ``queue_build`` tool body (TASK-J005-005) can call
+# ``register_correlation`` immediately after a successful
+# ``js.publish(...)`` PubAck. ``None`` means the subscriber was not wired
+# (NATS soft-fail — DDR-021); the dispatch tool degrades by skipping the
+# correlation register step rather than raising.
+# ---------------------------------------------------------------------------
+_forge_subscriber: ForgeNotificationsSubscriber | None = None
+
+
+# ---------------------------------------------------------------------------
+# FEAT-JARVIS-005 (TASK-J005-005 / TASK-J005-008) — JarvisConfig snapshot.
+#
+# ``queue_build`` reads ``pipeline_publish_timeout_seconds`` (DDR-025) from
+# this module-level handle. ``None`` is the Phase-1 import-only default;
+# :func:`_resolve_publish_timeout` falls back to
+# :data:`_DEFAULT_PIPELINE_PUBLISH_TIMEOUT_SECONDS` so a bare import never
+# raises.
+# ---------------------------------------------------------------------------
+_jarvis_config: JarvisConfig | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -721,8 +766,193 @@ def _in_flight_or_zero(semaphore: DispatchSemaphore | None) -> int:
     return semaphore.in_flight
 
 
+# ---------------------------------------------------------------------------
+# queue_build helpers — DDR-031 adapter resolution + ADR-ARCH-021 structured
+# error renderers + DDR-029 fire-and-forget routing-history hook.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_originating_adapter(arg_value: str | None) -> str | None:
+    """Return the wire-side ``OriginatingAdapter`` for the active session.
+
+    Implements DDR-031: when a :class:`Session` is currently driving a
+    supervisor turn, its ``Session.adapter`` is projected through
+    :data:`_SESSION_ADAPTER_TO_ORIGINATING` and that value is authoritative
+    — the reasoning model's ``originating_adapter`` argument is silently
+    ignored (Group D #4 security scenario). When no session is active the
+    argument is used as a fallback after validating it against the
+    :class:`nats_core.events.OriginatingAdapter` literal members.
+
+    Returns ``None`` when neither path yields a valid adapter id.
+    """
+    session = _resolve_current_session()
+    if session is not None:
+        adapter_value = getattr(session, "adapter", None)
+        if adapter_value is not None:
+            mapped = _SESSION_ADAPTER_TO_ORIGINATING.get(str(adapter_value))
+            if mapped is not None:
+                return mapped
+    if isinstance(arg_value, str) and arg_value in _ALLOWED_ADAPTERS:
+        return arg_value
+    return None
+
+
+def _resolve_publish_timeout() -> int:
+    """Return ``pipeline_publish_timeout_seconds`` from the wired config.
+
+    Falls back to :data:`_DEFAULT_PIPELINE_PUBLISH_TIMEOUT_SECONDS` when no
+    :class:`JarvisConfig` is wired (Phase-1 import-only invariant) or the
+    field cannot be coerced to a positive ``int``. Never raises.
+    """
+    config = _jarvis_config
+    if config is None:
+        return _DEFAULT_PIPELINE_PUBLISH_TIMEOUT_SECONDS
+    value = getattr(config, "pipeline_publish_timeout_seconds", None)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return _DEFAULT_PIPELINE_PUBLISH_TIMEOUT_SECONDS
+
+
+def _queue_build_validation_error(
+    reason: str,
+    detail: str,
+    *,
+    correlation_id: str,
+    feature_id: str,
+) -> str:
+    """Render a ``status='validation_error'`` JSON string per ADR-ARCH-021."""
+    return json.dumps(
+        {
+            "status": "validation_error",
+            "reason": reason,
+            "detail": detail,
+            "correlation_id": correlation_id,
+            "feature_id": feature_id,
+        }
+    )
+
+
+def _queue_build_degraded_error(
+    reason: str,
+    detail: str,
+    *,
+    correlation_id: str,
+    feature_id: str,
+) -> str:
+    """Render a ``status='degraded'`` JSON string per ADR-ARCH-021."""
+    return json.dumps(
+        {
+            "status": "degraded",
+            "reason": reason,
+            "detail": detail,
+            "correlation_id": correlation_id,
+            "feature_id": feature_id,
+        }
+    )
+
+
+def _fire_and_forget_build_queue_trace(
+    *,
+    correlation_id: str,
+    session_id: str | None,
+    timestamp: datetime,
+    feature_id: str,
+    adapter: str,
+    subject: str,
+    in_flight: int,
+) -> None:
+    """Submit a ``forge_build_queue`` routing-history entry fire-and-forget.
+
+    DDR-019 / DDR-029: ``queue_build`` schedules the writer's coroutine via
+    :func:`asyncio.create_task` and drops the task reference. The writer's
+    ``_pending_tasks`` set keeps the task alive until ``flush()`` drains it
+    on shutdown.
+
+    Silently returns when the writer is unwired, the schema rejects the
+    synthesised entry, or no event loop is running — we'd rather lose a
+    trace than break the dispatch contract.
+    """
+    writer = _routing_history_writer
+    if writer is None:
+        return
+
+    # Lazy import keeps the dispatch import graph stable for Phase-1
+    # import-graph tests (the routing_history module pulls in pydantic
+    # schemas that aren't on the import-time hot path).
+    from jarvis.infrastructure.routing_history import JarvisRoutingHistoryEntry
+
+    snapshot_hash = _capability_snapshot_hash([])
+
+    session_marker = (
+        session_id
+        if isinstance(session_id, str) and session_id
+        else f"queue_build:{correlation_id}"
+    )
+
+    entry_kwargs: dict[str, object] = {
+        "decision_id": correlation_id,
+        "surface": "jarvis",
+        "session_id": session_marker,
+        "timestamp": timestamp,
+        "supervisor_tool_call_sequence": [],
+        "priors_retrieved": [],
+        "capability_snapshot_hash": snapshot_hash,
+        "subagent_type": "forge_build_queue",
+        "subagent_task_id": correlation_id,
+        "subagent_trace_ref": None,
+        "subagent_final_state": "success",
+        "model_calls": [],
+        "wall_clock_ms": 0,
+        "total_cost_usd": 0.0,
+        "outcome_type": "success",
+        "outcome_detail": {
+            "feature_id": feature_id,
+            "adapter": adapter,
+            "subject": subject,
+        },
+        "human_response_type": None,
+        "human_response_text": None,
+        "human_response_latency_ms": None,
+        "project_id": None,
+        "local_time_of_day": timestamp.astimezone(UTC).strftime("%H:%M"),
+        "recent_session_refs": [],
+        "concurrent_workload": {
+            "in_flight_dispatches": in_flight,
+            "in_flight_watchers": 0,
+            "in_flight_subagents": 0,
+        },
+        "chosen_specialist_id": None,
+        "chosen_subagent_name": None,
+        "alternatives_considered": [],
+        "attempts": [],
+        "supervisor_reasoning_summary": "queue_build",
+    }
+
+    try:
+        entry = JarvisRoutingHistoryEntry.model_validate(entry_kwargs)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "queue_build_trace_validation_failed",
+            extra={
+                "reason": type(exc).__name__,
+                "detail": str(exc),
+                "correlation_id": correlation_id,
+            },
+        )
+        return
+
+    try:
+        coro = writer.write_build_queue_dispatch(entry)
+        # DDR-019: drop the task reference; writer keeps it alive.
+        asyncio.create_task(coro)  # noqa: RUF006
+    except RuntimeError:
+        # No running event loop (sync-context call) — silently drop the
+        # trace rather than raise out of the dispatch boundary.
+        return
+
+
 @tool(parse_docstring=True)
-def queue_build(
+async def queue_build(
     feature_id: str,
     feature_yaml_path: str,
     repo: str,
@@ -740,15 +970,9 @@ def queue_build(
     user asks you to plan, route to the architect or product-owner specialist
     via dispatch_by_capability instead.
 
-    In Phase 2 the transport is stubbed: the tool builds a real
-    BuildQueuedPayload per nats-core, logs it, and returns a canned ACK.
-    FEAT-JARVIS-005 replaces the stub with a real
-    pipeline.build-queued.{feature_id} JetStream publish without changing this
-    docstring.
-
-    Fire-and-forget. Near-zero publish latency when real; Forge may take hours
-    to complete the build — you will receive pipeline.* progress events via
-    notifications in FEAT-JARVIS-005. Do not await completion.
+    Fire-and-forget. Near-zero publish latency under healthy transport;
+    Forge may take hours to complete the build — you will receive
+    pipeline.* progress events via notifications. Do not await completion.
 
     Args:
         feature_id: FEAT-XXX identifier matching ``^FEAT-[A-Z0-9]{3,12}$``.
@@ -757,11 +981,14 @@ def queue_build(
         repo: GitHub org/repo, e.g. ``guardkit/jarvis`` or ``appmilla/forge``.
               Must match ``^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$``.
         branch: Base branch to branch from. Default ``main``.
-        originating_adapter: Which Jarvis adapter the human used. One of
-                            ``terminal``, ``voice-reachy``, ``telegram``,
-                            ``slack``, ``dashboard``, ``cli-wrapper``.
-                            Default ``terminal`` (CLI). ``triggered_by`` is
-                            always set to ``jarvis`` by this tool.
+        originating_adapter: Fallback adapter label used only when no Session
+                            is active (DDR-031). When a Session is active,
+                            its ``Session.adapter`` is authoritative and the
+                            reasoning model's argument is silently ignored.
+                            One of ``terminal``, ``voice-reachy``,
+                            ``telegram``, ``slack``, ``dashboard``,
+                            ``cli-wrapper``. Default ``terminal``.
+                            ``triggered_by`` is always set to ``jarvis``.
         correlation_id: Stable ID for tracing. Auto-generated if omitted.
         parent_request_id: The Jarvis dispatch message ID that spawned this
                           build, for progress-event correlation. Optional.
@@ -772,84 +999,245 @@ def queue_build(
              "queued_at": ISO8601,
              "publish_target": "pipeline.build-queued.{feature_id}",
              "status": "queued"}``
-        OR a structured error:
-          - ``ERROR: invalid_feature_id — must match FEAT-XXX pattern, got <value>``
-          - ``ERROR: invalid_repo — must be org/name format, got <value>``
-          - ``ERROR: invalid_adapter — <value> not in allowed list``
-          - ``ERROR: validation — <pydantic detail>``
+        OR a structured error per ADR-ARCH-021 (always JSON, never raises):
+          - ``{"status": "validation_error", "reason": "invalid_feature_id", ...}``
+          - ``{"status": "validation_error", "reason": "invalid_repo", ...}``
+          - ``{"status": "validation_error", "reason": "invalid_adapter", ...}``
+          - ``{"status": "validation_error", "reason": "validation", ...}``
+          - ``{"status": "degraded", "reason": "transport_unavailable", ...}``
+          - ``{"status": "degraded", "reason": "dispatch_capacity_saturated", ...}``
     """
+    # ----- Resolve correlation id once so every error path carries it -------
+    resolved_correlation_id = correlation_id or new_correlation_id()
+    requested_at = _now_utc()
+
     # ----- Validate feature_id ---------------------------------------------
     if not isinstance(feature_id, str) or not _FEATURE_ID_PATTERN.match(feature_id):
-        return f"ERROR: invalid_feature_id — must match FEAT-XXX pattern, got {feature_id}"
+        return _queue_build_validation_error(
+            "invalid_feature_id",
+            f"must match FEAT-XXX pattern, got {feature_id!r}",
+            correlation_id=resolved_correlation_id,
+            feature_id=feature_id if isinstance(feature_id, str) else "",
+        )
 
     # ----- Validate repo ----------------------------------------------------
     if not isinstance(repo, str) or not _REPO_PATTERN.match(repo):
-        return f"ERROR: invalid_repo — must be org/name format, got {repo}"
+        return _queue_build_validation_error(
+            "invalid_repo",
+            f"must be org/name format, got {repo!r}",
+            correlation_id=resolved_correlation_id,
+            feature_id=feature_id,
+        )
 
-    # ----- Validate originating_adapter ------------------------------------
-    if originating_adapter not in _ALLOWED_ADAPTERS:
-        return f"ERROR: invalid_adapter — {originating_adapter} not in allowed list"
+    # ----- Resolve originating adapter (DDR-031) ----------------------------
+    # Session.adapter (when present) authoritatively overrides any value
+    # the reasoning model passed; the arg is fallback-only when no session
+    # is active. Group D #4 security scenario.
+    resolved_adapter = _resolve_originating_adapter(originating_adapter)
+    if resolved_adapter is None:
+        return _queue_build_validation_error(
+            "invalid_adapter",
+            f"{originating_adapter!r} not in allowed list",
+            correlation_id=resolved_correlation_id,
+            feature_id=feature_id,
+        )
 
-    # ----- Build real nats-core payload + envelope ------------------------
-    resolved_correlation_id = correlation_id or new_correlation_id()
-    requested_at = _now_utc()
-    queued_at = requested_at  # Phase 2: stub publishes immediately.
+    # ----- Acquire dispatch_semaphore (DDR-020 reuse) ----------------------
+    semaphore = _dispatch_semaphore
+    sem_acquired = False
+    if semaphore is not None:
+        sem_acquired = semaphore.try_acquire()
+        if not sem_acquired:
+            return _queue_build_degraded_error(
+                "dispatch_capacity_saturated",
+                "queue_build dispatch slot saturated; wait and retry",
+                correlation_id=resolved_correlation_id,
+                feature_id=feature_id,
+            )
 
     try:
-        payload = BuildQueuedPayload(
+        # ----- Resolve session metadata for parent_request_id fallback ----
+        session = _resolve_current_session()
+        resolved_parent_request_id = parent_request_id
+        if resolved_parent_request_id is None and session is not None:
+            metadata = getattr(session, "metadata", None) or {}
+            session_parent = metadata.get("parent_request_id")
+            if isinstance(session_parent, str) and session_parent:
+                resolved_parent_request_id = session_parent
+
+        queued_at = _now_utc()
+
+        # ----- Build real nats-core payload + envelope -------------------
+        try:
+            payload = BuildQueuedPayload(
+                feature_id=feature_id,
+                repo=repo,
+                branch=branch,
+                feature_yaml_path=feature_yaml_path,
+                triggered_by="jarvis",
+                originating_adapter=resolved_adapter,  # type: ignore[arg-type]
+                correlation_id=resolved_correlation_id,
+                parent_request_id=resolved_parent_request_id,
+                requested_at=requested_at,
+                queued_at=queued_at,
+            )
+            envelope = MessageEnvelope(
+                source_id="jarvis",
+                event_type=EventType.BUILD_QUEUED,
+                correlation_id=resolved_correlation_id,
+                payload=payload.model_dump(mode="json"),
+            )
+        except ValidationError as exc:
+            detail = exc.errors()[0].get("msg", str(exc))
+            return _queue_build_validation_error(
+                "validation",
+                str(detail),
+                correlation_id=resolved_correlation_id,
+                feature_id=feature_id,
+            )
+        except (TypeError, ValueError) as exc:
+            return _queue_build_validation_error(
+                "validation",
+                str(exc),
+                correlation_id=resolved_correlation_id,
+                feature_id=feature_id,
+            )
+
+        # ----- Subject from canonical Topics template --------------------
+        subject = Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id)
+        payload_bytes = envelope.model_dump_json().encode("utf-8")
+
+        # ----- Resolve transport — degrade when NATS not wired -----------
+        client = _nats_client
+        if client is None:
+            return _queue_build_degraded_error(
+                "transport_unavailable",
+                "NATS connection unavailable",
+                correlation_id=resolved_correlation_id,
+                feature_id=feature_id,
+            )
+
+        try:
+            js = client.js
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "queue_build_jetstream_unavailable",
+                extra={
+                    "reason": type(exc).__name__,
+                    "detail": str(exc),
+                    "correlation_id": resolved_correlation_id,
+                },
+            )
+            return _queue_build_degraded_error(
+                "transport_unavailable",
+                f"JetStream context unavailable: {type(exc).__name__}",
+                correlation_id=resolved_correlation_id,
+                feature_id=feature_id,
+            )
+
+        # ----- Real JetStream publish with bounded timeout (DDR-025) -----
+        timeout_seconds = _resolve_publish_timeout()
+        try:
+            await asyncio.wait_for(
+                js.publish(subject, payload_bytes),
+                timeout=timeout_seconds,
+            )
+        except TimeoutError:
+            logger.warning(
+                "queue_build_publish_timeout",
+                extra={
+                    "feature_id": feature_id,
+                    "correlation_id": resolved_correlation_id,
+                    "timeout_seconds": timeout_seconds,
+                    "subject": subject,
+                },
+            )
+            return _queue_build_degraded_error(
+                "transport_unavailable",
+                f"PubAck timeout after {timeout_seconds}s",
+                correlation_id=resolved_correlation_id,
+                feature_id=feature_id,
+            )
+        except NATSConnectionError as exc:
+            logger.warning(
+                "queue_build_publish_failed",
+                extra={
+                    "feature_id": feature_id,
+                    "correlation_id": resolved_correlation_id,
+                    "reason": type(exc).__name__,
+                    "detail": str(exc),
+                },
+            )
+            return _queue_build_degraded_error(
+                "transport_unavailable",
+                f"NATS publish failed: {exc}",
+                correlation_id=resolved_correlation_id,
+                feature_id=feature_id,
+            )
+        except Exception as exc:
+            # Boundary guard per ADR-ARCH-021: queue_build never raises.
+            logger.warning(
+                "queue_build_publish_failed",
+                extra={
+                    "feature_id": feature_id,
+                    "correlation_id": resolved_correlation_id,
+                    "reason": type(exc).__name__,
+                    "detail": str(exc),
+                },
+            )
+            return _queue_build_degraded_error(
+                "transport_unavailable",
+                f"NATS publish failed: {type(exc).__name__}",
+                correlation_id=resolved_correlation_id,
+                feature_id=feature_id,
+            )
+
+        # ----- Register correlation with the forge subscriber ------------
+        # DDR-028: bounded LRU map; idempotent re-register is overwrite.
+        session_id = session.session_id if session is not None else None
+        subscriber = _forge_subscriber
+        if subscriber is not None:
+            try:
+                subscriber.register_correlation(
+                    resolved_correlation_id,
+                    session_id,
+                    resolved_adapter,
+                    queued_at,
+                    feature_id,
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning(
+                    "queue_build_register_correlation_failed",
+                    extra={
+                        "reason": type(exc).__name__,
+                        "detail": str(exc),
+                        "correlation_id": resolved_correlation_id,
+                    },
+                )
+
+        # ----- Fire-and-forget routing-history write (DDR-019/DDR-029) ---
+        _fire_and_forget_build_queue_trace(
+            correlation_id=resolved_correlation_id,
+            session_id=session_id,
+            timestamp=queued_at,
             feature_id=feature_id,
-            repo=repo,
-            branch=branch,
-            feature_yaml_path=feature_yaml_path,
-            triggered_by="jarvis",
-            originating_adapter=originating_adapter,  # type: ignore[arg-type]
-            correlation_id=resolved_correlation_id,
-            parent_request_id=parent_request_id,
-            requested_at=requested_at,
-            queued_at=queued_at,
+            adapter=resolved_adapter,
+            subject=subject,
+            in_flight=_in_flight_or_zero(semaphore),
         )
-        envelope = MessageEnvelope(
-            source_id="jarvis",
-            event_type=EventType.BUILD_QUEUED,
-            correlation_id=resolved_correlation_id,
-            payload=payload.model_dump(mode="json"),
-        )
-    except ValidationError as exc:
-        return f"ERROR: validation — {exc.errors()[0].get('msg', str(exc))}"
-    except (TypeError, ValueError) as exc:
-        return f"ERROR: validation — {exc}"
 
-    # ----- Subject from canonical Topics template -------------------------
-    subject = Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id)
-    payload_bytes = len(envelope.model_dump_json().encode("utf-8"))
-
-    # ----- SWAP POINT — exactly one logger.info per call ------------------
-    #
-    # FEAT-JARVIS-005 replaces this single line with:
-    #   await js.publish(
-    #       subject=Topics.Pipeline.BUILD_QUEUED.format(feature_id=feature_id),
-    #       payload=envelope.model_dump_json().encode(),
-    #   )
-    # Tool docstring and return shape stay identical. The leading literal is
-    # the anchor value so the TASK-J002-021 grep invariant pins this line.
-    logger.info(
-        "JARVIS_QUEUE_BUILD_STUB feature_id=%s repo=%s correlation_id=%s topic=%s payload_bytes=%d",
-        feature_id,
-        repo,
-        resolved_correlation_id,
-        subject,
-        payload_bytes,
-    )
-
-    # ----- QueueBuildAck JSON ---------------------------------------------
-    ack = {
-        "feature_id": feature_id,
-        "correlation_id": resolved_correlation_id,
-        "queued_at": queued_at.isoformat(),
-        "publish_target": subject,
-        "status": "queued",
-    }
-    return json.dumps(ack)
+        # ----- QueueBuildAck JSON ----------------------------------------
+        ack = {
+            "feature_id": feature_id,
+            "correlation_id": resolved_correlation_id,
+            "queued_at": queued_at.isoformat(),
+            "publish_target": subject,
+            "status": "queued",
+        }
+        return json.dumps(ack)
+    finally:
+        if sem_acquired and semaphore is not None:
+            semaphore.release()
 
 
 # ---------------------------------------------------------------------------
@@ -1308,12 +1696,13 @@ Never invoke from ambient, learning, or async-subagent contexts.
 
 __all__ = [
     "ATTENDED_ADAPTER_IDS",
-    "LOG_PREFIX_QUEUE_BUILD",
     "MAX_REDIRECTS",
     "_async_subagent_frame_hook",
     "_capability_registry",
     "_current_session_hook",
     "_dispatch_semaphore",
+    "_forge_subscriber",
+    "_jarvis_config",
     "_nats_client",
     "_routing_history_writer",
     "dispatch_by_capability",

@@ -1,47 +1,50 @@
 ---
-id: TASK-J005-005
-title: tools/dispatch.py queue_build real JetStream publish
-task_type: feature
-parent_review: TASK-REV-3B8B
-feature_id: FEAT-J005-946D
-wave: 3
-implementation_mode: task-work
 complexity: 7
+consumer_context:
+- consumes: pipeline_publish_timeout_seconds
+  driver: pydantic-settings
+  format_note: int seconds; passed to asyncio.wait_for around js.publish; default
+    5
+  framework: JarvisConfig
+  task: TASK-J005-001
+- consumes: ForgeNotificationsSubscriber.register_correlation
+  driver: in-process
+  format_note: register_correlation(correlation_id, session_id, adapter, queued_at,
+    feature_id) — populates LRU map (DDR-028)
+  framework: ForgeNotificationsSubscriber
+  task: TASK-J005-003
+- consumes: RoutingHistoryWriter.write_build_queue_dispatch
+  driver: graphiti-core
+  format_note: Fire-and-forget write of JarvisRoutingHistoryEntry with subagent_type='forge_build_queue',
+    subagent_task_id=correlation_id
+  framework: RoutingHistoryWriter
+  task: TASK-J005-004
+created: 2026-04-29 00:00:00+00:00
 dependencies:
-  - TASK-J005-001
-  - TASK-J005-003
-  - TASK-J005-004
+- TASK-J005-001
+- TASK-J005-003
+- TASK-J005-004
+feature_id: FEAT-J005-946D
+id: TASK-J005-005
+implementation_mode: task-work
+parent_review: TASK-REV-3B8B
 priority: high
+status: design_approved
 tags:
-  - dispatch
-  - queue-build
-  - jetstream
-  - DDR-025
-  - DDR-031
-  - FEAT-JARVIS-005
-status: backlog
-created: 2026-04-29T00:00:00Z
-updated: 2026-04-29T00:00:00Z
+- dispatch
+- queue-build
+- jetstream
+- DDR-025
+- DDR-031
+- FEAT-JARVIS-005
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-consumer_context:
-  - task: TASK-J005-001
-    consumes: pipeline_publish_timeout_seconds
-    framework: JarvisConfig
-    driver: pydantic-settings
-    format_note: "int seconds; passed to asyncio.wait_for around js.publish; default 5"
-  - task: TASK-J005-003
-    consumes: ForgeNotificationsSubscriber.register_correlation
-    framework: ForgeNotificationsSubscriber
-    driver: in-process
-    format_note: "register_correlation(correlation_id, session_id, adapter, queued_at, feature_id) — populates LRU map (DDR-028)"
-  - task: TASK-J005-004
-    consumes: RoutingHistoryWriter.write_build_queue_dispatch
-    framework: RoutingHistoryWriter
-    driver: graphiti-core
-    format_note: "Fire-and-forget write of JarvisRoutingHistoryEntry with subagent_type='forge_build_queue', subagent_task_id=correlation_id"
+  status: pending
+title: tools/dispatch.py queue_build real JetStream publish
+updated: 2026-04-29 00:00:00+00:00
+wave: 3
 ---
 
 # TASK-J005-005 — `queue_build` real JetStream publish

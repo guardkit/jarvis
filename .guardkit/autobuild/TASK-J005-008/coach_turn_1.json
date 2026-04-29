@@ -1,0 +1,216 @@
+{
+  "task_id": "TASK-J005-008",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_config_feat_j005.py tests/test_lifecycle_forge_subscriber_wiring.py tests/test_tools_dispatch.py tests/test_tools_dispatch_contract.py -v --tb=short",
+      "test_output_summary": "Result:\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/tests/test_lifecycle_forge_subscriber_wiring.py:67: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\ntests/test_lifecycle_forge_subscriber_wiring.py::TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound\ntests/test_lifecycle_forge_subscriber_wiring.py::TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction\ntests/test_lifecycle_forge_subscriber_wiring.py::TestStartupOrdering::test_start_after_fleet_register_before_session_manager\n======================= 57 passed, 10 warnings in 1.84s ========================",
+      "duration_seconds": 3.3839850425720215
+    },
+    "requirements": {
+      "criteria_total": 10,
+      "criteria_met": 10,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`build_app_state` constructs `ForgeNotificationsSubscriber` only when",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs the subscriber only inside `if nats_client is not None:` (step 7c, after heartbeat task creation). When nats_client is None the local forge_subscriber stays None and is passed verbatim into AppState. Verified by tests TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound and TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction.",
+      "notes": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs the subscriber only inside `if nats_client is not None:` (step 7c, after heartbeat task creation). When nats_client is None the local forge_subscriber stays None and is passed verbatim into AppState. Verified by tests TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound and TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "`subscriber.start()` is called once, AFTER fleet registration succeeds,",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "build_app_state runs register_on_fleet (or its soft-fail) and creates the heartbeat task in step 7b; step 7c then awaits forge_subscriber.start() before SessionManager(...) is constructed in step 11. Verified by TestStartupOrdering::test_start_after_fleet_register_before_session_manager which patches register_on_fleet, SessionManager and ForgeNotificationsSubscriber and asserts the recorded order is register \u2192 start \u2192 session_manager \u2192 bind.",
+      "notes": "build_app_state runs register_on_fleet (or its soft-fail) and creates the heartbeat task in step 7b; step 7c then awaits forge_subscriber.start() before SessionManager(...) is constructed in step 11. Verified by TestStartupOrdering::test_start_after_fleet_register_before_session_manager which patches register_on_fleet, SessionManager and ForgeNotificationsSubscriber and asserts the recorded order is register \u2192 start \u2192 session_manager \u2192 bind."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`subscriber.bind_session_manager(session_manager)` is called once, AFTER",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Step 11a in build_app_state calls forge_subscriber.bind_session_manager(session_manager) immediately after SessionManager(...) and before AppState construction at step 12. Verified by TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound (assert_called_once_with(state.session_manager)) and TestStartupOrdering::test_start_after_fleet_register_before_session_manager.",
+      "notes": "Step 11a in build_app_state calls forge_subscriber.bind_session_manager(session_manager) immediately after SessionManager(...) and before AppState construction at step 12. Verified by TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound (assert_called_once_with(state.session_manager)) and TestStartupOrdering::test_start_after_fleet_register_before_session_manager."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`assemble_tool_list` accepts `forge_subscriber=None | Subscriber` and",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "src/jarvis/tools/__init__.py adds the forge_subscriber kwarg to assemble_tool_list and snapshots it onto _dispatch._forge_subscriber. src/jarvis/tools/dispatch.py declares the new module attribute (default None) and exports it via __all__. Lifecycle threads forge_subscriber into both attended and ambient assemble_tool_list calls. Verified by TestAssembleToolListForgeSubscriberKwarg (kwarg_propagates / default_kwarg_clears / ambient_call_also_propagates).",
+      "notes": "src/jarvis/tools/__init__.py adds the forge_subscriber kwarg to assemble_tool_list and snapshots it onto _dispatch._forge_subscriber. src/jarvis/tools/dispatch.py declares the new module attribute (default None) and exports it via __all__. Lifecycle threads forge_subscriber into both attended and ambient assemble_tool_list calls. Verified by TestAssembleToolListForgeSubscriberKwarg (kwarg_propagates / default_kwarg_clears / ambient_call_also_propagates)."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "`AppState` dataclass / Pydantic model has a `forge_subscriber:",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "AppState in src/jarvis/infrastructure/lifecycle.py declares `forge_subscriber: ForgeNotificationsSubscriber | None = None` alongside the other optional infrastructure fields, with a docstring entry. Verified by TestAppStateForgeSubscriberField::test_forge_subscriber_field_present and ::test_forge_subscriber_default_is_none.",
+      "notes": "AppState in src/jarvis/infrastructure/lifecycle.py declares `forge_subscriber: ForgeNotificationsSubscriber | None = None` alongside the other optional infrastructure fields, with a docstring entry. Verified by TestAppStateForgeSubscriberField::test_forge_subscriber_field_present and ::test_forge_subscriber_default_is_none."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`shutdown` calls `state.forge_subscriber.stop()` if non-None, BEFORE",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "shutdown in src/jarvis/infrastructure/lifecycle.py inserts step 1b (await state.forge_subscriber.stop()) between the heartbeat-cancel block and the deregister_from_fleet block, guarded by `if state.forge_subscriber is not None`. The exception handler logs a WARN without aborting downstream steps. Verified by TestShutdownForgeSubscriberOrderAndIdempotency::test_subscriber_stop_called_before_deregister which asserts idx['forge.stop'] < idx['fleet.deregister']. The skip-when-None branch is covered by ::test_shutdown_skips_subscriber_when_none.",
+      "notes": "shutdown in src/jarvis/infrastructure/lifecycle.py inserts step 1b (await state.forge_subscriber.stop()) between the heartbeat-cancel block and the deregister_from_fleet block, guarded by `if state.forge_subscriber is not None`. The exception handler logs a WARN without aborting downstream steps. Verified by TestShutdownForgeSubscriberOrderAndIdempotency::test_subscriber_stop_called_before_deregister which asserts idx['forge.stop'] < idx['fleet.deregister']. The skip-when-None branch is covered by ::test_shutdown_skips_subscriber_when_none."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "`subscriber.stop()` is idempotent on double-shutdown (test) and returns",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "ForgeNotificationsSubscriber.stop() (already shipped by TASK-J005-003) wraps unsubscribe in asyncio.wait_for(timeout=self._stop_timeout) (default 5.0s) and gates on self._started, making the second call a no-op. The lifecycle wrapper additionally catches any escaping exception. Verified by TestShutdownForgeSubscriberOrderAndIdempotency::test_double_shutdown_is_idempotent which calls shutdown(state) twice without raising, and ::test_shutdown_continues_when_subscriber_stop_raises which proves the WARN+continue contract.",
+      "notes": "ForgeNotificationsSubscriber.stop() (already shipped by TASK-J005-003) wraps unsubscribe in asyncio.wait_for(timeout=self._stop_timeout) (default 5.0s) and gates on self._started, making the second call a no-op. The lifecycle wrapper additionally catches any escaping exception. Verified by TestShutdownForgeSubscriberOrderAndIdempotency::test_double_shutdown_is_idempotent which calls shutdown(state) twice without raising, and ::test_shutdown_continues_when_subscriber_stop_raises which proves the WARN+continue contract."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "On `nats_client is None` (NATS-down path), the subscriber is never",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Lifecycle skips subscriber construction in the NATS-None branch and assemble_tool_list passes forge_subscriber=None to dispatch's module attribute (existing TASK-J004 wiring already returns DEGRADED transport_unavailable when _nats_client is None \u2014 TASK-J005-005 will add the same gate to queue_build). Verified by TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction (assert_not_called + state.forge_subscriber is None + state.session_manager is not None).",
+      "notes": "Lifecycle skips subscriber construction in the NATS-None branch and assemble_tool_list passes forge_subscriber=None to dispatch's module attribute (existing TASK-J004 wiring already returns DEGRADED transport_unavailable when _nats_client is None \u2014 TASK-J005-005 will add the same gate to queue_build). Verified by TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction (assert_not_called + state.forge_subscriber is None + state.session_manager is not None)."
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "`uv run mypy src/jarvis/infrastructure/lifecycle.py` passes (strict).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `uv run mypy src/jarvis/infrastructure/lifecycle.py` and it returned `Success: no issues found in 1 source file`.",
+      "notes": "Ran `uv run mypy src/jarvis/infrastructure/lifecycle.py` and it returned `Success: no issues found in 1 source file`."
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Ran `uv run ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py tests/test_lifecycle_forge_subscriber_wiring.py tests/test_config_feat_j005.py` \u2192 `All checks passed!`. Fixed an SIM105 warning in the new test file by switching the heartbeat-task cleanup to contextlib.suppress and a RUF012 warning in the updated config_feat_j005 test by annotating ALLOWED_CONSUMERS with ClassVar.",
+      "notes": "Ran `uv run ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py tests/test_lifecycle_forge_subscriber_wiring.py tests/test_config_feat_j005.py` \u2192 `All checks passed!`. Fixed an SIM105 warning in the new test file by switching the heartbeat-task cleanup to contextlib.suppress and a RUF012 warning in the updated config_feat_j005 test by annotating ALLOWED_CONSUMERS with ClassVar."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`build_app_state` constructs `ForgeNotificationsSubscriber` only when",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs the subscriber only inside `if nats_client is not None:` (step 7c, after heartbeat task creation). When nats_client is None the local forge_subscriber stays None and is passed verbatim into AppState. Verified by tests TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound and TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction.",
+        "notes": "build_app_state in src/jarvis/infrastructure/lifecycle.py constructs the subscriber only inside `if nats_client is not None:` (step 7c, after heartbeat task creation). When nats_client is None the local forge_subscriber stays None and is passed verbatim into AppState. Verified by tests TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound and TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "`subscriber.start()` is called once, AFTER fleet registration succeeds,",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "build_app_state runs register_on_fleet (or its soft-fail) and creates the heartbeat task in step 7b; step 7c then awaits forge_subscriber.start() before SessionManager(...) is constructed in step 11. Verified by TestStartupOrdering::test_start_after_fleet_register_before_session_manager which patches register_on_fleet, SessionManager and ForgeNotificationsSubscriber and asserts the recorded order is register \u2192 start \u2192 session_manager \u2192 bind.",
+        "notes": "build_app_state runs register_on_fleet (or its soft-fail) and creates the heartbeat task in step 7b; step 7c then awaits forge_subscriber.start() before SessionManager(...) is constructed in step 11. Verified by TestStartupOrdering::test_start_after_fleet_register_before_session_manager which patches register_on_fleet, SessionManager and ForgeNotificationsSubscriber and asserts the recorded order is register \u2192 start \u2192 session_manager \u2192 bind."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`subscriber.bind_session_manager(session_manager)` is called once, AFTER",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Step 11a in build_app_state calls forge_subscriber.bind_session_manager(session_manager) immediately after SessionManager(...) and before AppState construction at step 12. Verified by TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound (assert_called_once_with(state.session_manager)) and TestStartupOrdering::test_start_after_fleet_register_before_session_manager.",
+        "notes": "Step 11a in build_app_state calls forge_subscriber.bind_session_manager(session_manager) immediately after SessionManager(...) and before AppState construction at step 12. Verified by TestBuildAppStateForgeSubscriberHappyPath::test_subscriber_constructed_started_and_bound (assert_called_once_with(state.session_manager)) and TestStartupOrdering::test_start_after_fleet_register_before_session_manager."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`assemble_tool_list` accepts `forge_subscriber=None | Subscriber` and",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "src/jarvis/tools/__init__.py adds the forge_subscriber kwarg to assemble_tool_list and snapshots it onto _dispatch._forge_subscriber. src/jarvis/tools/dispatch.py declares the new module attribute (default None) and exports it via __all__. Lifecycle threads forge_subscriber into both attended and ambient assemble_tool_list calls. Verified by TestAssembleToolListForgeSubscriberKwarg (kwarg_propagates / default_kwarg_clears / ambient_call_also_propagates).",
+        "notes": "src/jarvis/tools/__init__.py adds the forge_subscriber kwarg to assemble_tool_list and snapshots it onto _dispatch._forge_subscriber. src/jarvis/tools/dispatch.py declares the new module attribute (default None) and exports it via __all__. Lifecycle threads forge_subscriber into both attended and ambient assemble_tool_list calls. Verified by TestAssembleToolListForgeSubscriberKwarg (kwarg_propagates / default_kwarg_clears / ambient_call_also_propagates)."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`AppState` dataclass / Pydantic model has a `forge_subscriber:",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "AppState in src/jarvis/infrastructure/lifecycle.py declares `forge_subscriber: ForgeNotificationsSubscriber | None = None` alongside the other optional infrastructure fields, with a docstring entry. Verified by TestAppStateForgeSubscriberField::test_forge_subscriber_field_present and ::test_forge_subscriber_default_is_none.",
+        "notes": "AppState in src/jarvis/infrastructure/lifecycle.py declares `forge_subscriber: ForgeNotificationsSubscriber | None = None` alongside the other optional infrastructure fields, with a docstring entry. Verified by TestAppStateForgeSubscriberField::test_forge_subscriber_field_present and ::test_forge_subscriber_default_is_none."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`shutdown` calls `state.forge_subscriber.stop()` if non-None, BEFORE",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "shutdown in src/jarvis/infrastructure/lifecycle.py inserts step 1b (await state.forge_subscriber.stop()) between the heartbeat-cancel block and the deregister_from_fleet block, guarded by `if state.forge_subscriber is not None`. The exception handler logs a WARN without aborting downstream steps. Verified by TestShutdownForgeSubscriberOrderAndIdempotency::test_subscriber_stop_called_before_deregister which asserts idx['forge.stop'] < idx['fleet.deregister']. The skip-when-None branch is covered by ::test_shutdown_skips_subscriber_when_none.",
+        "notes": "shutdown in src/jarvis/infrastructure/lifecycle.py inserts step 1b (await state.forge_subscriber.stop()) between the heartbeat-cancel block and the deregister_from_fleet block, guarded by `if state.forge_subscriber is not None`. The exception handler logs a WARN without aborting downstream steps. Verified by TestShutdownForgeSubscriberOrderAndIdempotency::test_subscriber_stop_called_before_deregister which asserts idx['forge.stop'] < idx['fleet.deregister']. The skip-when-None branch is covered by ::test_shutdown_skips_subscriber_when_none."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "`subscriber.stop()` is idempotent on double-shutdown (test) and returns",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "ForgeNotificationsSubscriber.stop() (already shipped by TASK-J005-003) wraps unsubscribe in asyncio.wait_for(timeout=self._stop_timeout) (default 5.0s) and gates on self._started, making the second call a no-op. The lifecycle wrapper additionally catches any escaping exception. Verified by TestShutdownForgeSubscriberOrderAndIdempotency::test_double_shutdown_is_idempotent which calls shutdown(state) twice without raising, and ::test_shutdown_continues_when_subscriber_stop_raises which proves the WARN+continue contract.",
+        "notes": "ForgeNotificationsSubscriber.stop() (already shipped by TASK-J005-003) wraps unsubscribe in asyncio.wait_for(timeout=self._stop_timeout) (default 5.0s) and gates on self._started, making the second call a no-op. The lifecycle wrapper additionally catches any escaping exception. Verified by TestShutdownForgeSubscriberOrderAndIdempotency::test_double_shutdown_is_idempotent which calls shutdown(state) twice without raising, and ::test_shutdown_continues_when_subscriber_stop_raises which proves the WARN+continue contract."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "On `nats_client is None` (NATS-down path), the subscriber is never",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Lifecycle skips subscriber construction in the NATS-None branch and assemble_tool_list passes forge_subscriber=None to dispatch's module attribute (existing TASK-J004 wiring already returns DEGRADED transport_unavailable when _nats_client is None \u2014 TASK-J005-005 will add the same gate to queue_build). Verified by TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction (assert_not_called + state.forge_subscriber is None + state.session_manager is not None).",
+        "notes": "Lifecycle skips subscriber construction in the NATS-None branch and assemble_tool_list passes forge_subscriber=None to dispatch's module attribute (existing TASK-J004 wiring already returns DEGRADED transport_unavailable when _nats_client is None \u2014 TASK-J005-005 will add the same gate to queue_build). Verified by TestBuildAppStateForgeSubscriberNatsDown::test_nats_none_skips_subscriber_construction (assert_not_called + state.forge_subscriber is None + state.session_manager is not None)."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "`uv run mypy src/jarvis/infrastructure/lifecycle.py` passes (strict).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `uv run mypy src/jarvis/infrastructure/lifecycle.py` and it returned `Success: no issues found in 1 source file`.",
+        "notes": "Ran `uv run mypy src/jarvis/infrastructure/lifecycle.py` and it returned `Success: no issues found in 1 source file`."
+      },
+      {
+        "criterion_id": "AC-010",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran `uv run ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py tests/test_lifecycle_forge_subscriber_wiring.py tests/test_config_feat_j005.py` \u2192 `All checks passed!`. Fixed an SIM105 warning in the new test file by switching the heartbeat-task cleanup to contextlib.suppress and a RUF012 warning in the updated config_feat_j005 test by annotating ALLOWED_CONSUMERS with ClassVar.",
+        "notes": "Ran `uv run ruff check src/jarvis/infrastructure/lifecycle.py src/jarvis/tools/__init__.py tests/test_lifecycle_forge_subscriber_wiring.py tests/test_config_feat_j005.py` \u2192 `All checks passed!`. Fixed an SIM105 warning in the new test file by switching the heartbeat-task cleanup to contextlib.suppress and a RUF012 warning in the updated config_feat_j005 test by annotating ALLOWED_CONSUMERS with ClassVar."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 371 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1257/5200 tokens\n\n### \u2705 Similar Outcomes\n- FIXES_ISSUE_IN\n- HAS_SYMBOL_RESOLUTION_CHECK\n\n### \ud83c\udfa8 Relevant Patterns\n- CREATED_AT\n- USES_FUNCTION\n\n### \u26a0\ufe0f Warnings\n- REQUIRES_USE_OF\n- FIX_ADDRESS_INCORRECT_PATH_CONSTRUCTION\n\n### \ud83c\udfad Role Constraints\n- DELEGATES_TO\n- MONITORS_RESULTS_FROM\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- IS_INVOCATION_METHOD_FOR\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

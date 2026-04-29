@@ -60,6 +60,7 @@ from jarvis.tools.types import CalendarEvent, DispatchError, WebResult
 if TYPE_CHECKING:
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.dispatch_semaphore import DispatchSemaphore
+    from jarvis.infrastructure.forge_notifications import ForgeNotificationsSubscriber
     from jarvis.infrastructure.nats_client import NATSClient
     from jarvis.infrastructure.routing_history import RoutingHistoryWriter
 
@@ -101,6 +102,7 @@ def assemble_tool_list(
     nats_client: NATSClient | None = None,
     routing_history_writer: RoutingHistoryWriter | None = None,
     dispatch_semaphore: DispatchSemaphore | None = None,
+    forge_subscriber: ForgeNotificationsSubscriber | None = None,
 ) -> list[BaseTool]:
     """Wire and return the Jarvis tool list in stable alphabetical order.
 
@@ -177,6 +179,14 @@ def assemble_tool_list(
             :class:`~jarvis.infrastructure.dispatch_semaphore.DispatchSemaphore`
             used to bound concurrent dispatch calls (DDR-020). ``None``
             disables the cap (Phase-1 import-only invariant).
+        forge_subscriber: The
+            :class:`~jarvis.infrastructure.forge_notifications.ForgeNotificationsSubscriber`
+            that maintains the in-memory correlation map. Snapshotted into
+            ``jarvis.tools.dispatch._forge_subscriber`` so
+            :func:`queue_build` can call ``register_correlation`` after a
+            successful PubAck. ``None`` keeps the dispatch tool in the
+            NATS-down degraded mode — the correlation step is skipped
+            rather than raising.
 
     Returns:
         A fresh ``list[BaseTool]`` in stable alphabetical order:
@@ -216,6 +226,13 @@ def assemble_tool_list(
     _dispatch._nats_client = nats_client
     _dispatch._routing_history_writer = routing_history_writer
     _dispatch._dispatch_semaphore = dispatch_semaphore
+
+    # FEAT-JARVIS-005 (TASK-J005-008) — snapshot the forge subscriber so
+    # the ``queue_build`` tool body can call ``register_correlation`` after a
+    # successful ``js.publish(...)`` PubAck. ``None`` is honoured (NATS-down
+    # path — DDR-021): the dispatch tool then skips the correlation step
+    # rather than raising.
+    _dispatch._forge_subscriber = forge_subscriber
 
     # Stable alphabetical ordering — the test suite and the supervisor
     # wiring rely on this being deterministic. A literal list (rather

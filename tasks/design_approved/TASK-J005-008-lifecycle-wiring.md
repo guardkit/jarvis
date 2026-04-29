@@ -1,46 +1,47 @@
 ---
-id: TASK-J005-008
-title: lifecycle.py wiring — start/bind/stop subscriber
-task_type: feature
-parent_review: TASK-REV-3B8B
-feature_id: FEAT-J005-946D
-wave: 3
-implementation_mode: task-work
 complexity: 6
+consumer_context:
+- consumes: forge_notifications_queue_cap, forge_correlation_map_cap
+  driver: pydantic-settings
+  format_note: Both ints with defaults 100 and 1000; passed to ForgeNotificationsSubscriber.__init__
+  framework: JarvisConfig
+  task: TASK-J005-001
+- consumes: ForgeNotificationsSubscriber
+  driver: in-process
+  format_note: start() / bind_session_manager() / stop(); start AFTER fleet registration;
+    stop BEFORE NATS drain (5s bound)
+  framework: ForgeNotificationsSubscriber
+  task: TASK-J005-003
+- consumes: SessionManager (target of bind_session_manager)
+  driver: in-process
+  format_note: Late-bind session_manager into subscriber after both are constructed
+  framework: SessionManager
+  task: TASK-J005-006
+created: 2026-04-29 00:00:00+00:00
 dependencies:
-  - TASK-J005-001
-  - TASK-J005-003
-  - TASK-J005-004
-  - TASK-J005-006
+- TASK-J005-001
+- TASK-J005-003
+- TASK-J005-004
+- TASK-J005-006
+feature_id: FEAT-J005-946D
+id: TASK-J005-008
+implementation_mode: task-work
+parent_review: TASK-REV-3B8B
 priority: high
+status: design_approved
 tags:
-  - lifecycle
-  - wiring
-  - shutdown
-  - FEAT-JARVIS-005
-status: backlog
-created: 2026-04-29T00:00:00Z
-updated: 2026-04-29T00:00:00Z
+- lifecycle
+- wiring
+- shutdown
+- FEAT-JARVIS-005
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-consumer_context:
-  - task: TASK-J005-001
-    consumes: forge_notifications_queue_cap, forge_correlation_map_cap
-    framework: JarvisConfig
-    driver: pydantic-settings
-    format_note: "Both ints with defaults 100 and 1000; passed to ForgeNotificationsSubscriber.__init__"
-  - task: TASK-J005-003
-    consumes: ForgeNotificationsSubscriber
-    framework: ForgeNotificationsSubscriber
-    driver: in-process
-    format_note: "start() / bind_session_manager() / stop(); start AFTER fleet registration; stop BEFORE NATS drain (5s bound)"
-  - task: TASK-J005-006
-    consumes: SessionManager (target of bind_session_manager)
-    framework: SessionManager
-    driver: in-process
-    format_note: "Late-bind session_manager into subscriber after both are constructed"
+  status: pending
+title: lifecycle.py wiring — start/bind/stop subscriber
+updated: 2026-04-29 00:00:00+00:00
+wave: 3
 ---
 
 # TASK-J005-008 — Lifecycle wiring for subscriber
