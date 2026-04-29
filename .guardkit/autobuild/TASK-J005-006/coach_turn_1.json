@@ -1,0 +1,168 @@
+{
+  "task_id": "TASK-J005-006",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "pytest tests/test_config_feat_j005.py tests/test_forge_notification_schema.py tests/test_routing_history_writer.py tests/test_session_notifications.py -v --tb=short",
+      "test_output_summary": "Result:\ntests/test_routing_history_writer.py:857\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/tests/test_routing_history_writer.py:857: PytestUnknownMarkWarning: Unknown pytest.mark.seam - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\ntests/test_routing_history_writer.py:858\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/tests/test_routing_history_writer.py:858: PytestUnknownMarkWarning: Unknown pytest.mark.integration_contract - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html\n======================= 107 passed, 3 warnings in 2.41s ========================",
+      "duration_seconds": 3.889979839324951
+    },
+    "requirements": {
+      "criteria_total": 7,
+      "criteria_met": 7,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "`enqueue_notification` appends to a session-scoped FIFO; FIFO is created on",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "SessionManager.enqueue_notification lazy-creates collections.deque(maxlen=cap) on first call per session_id. _notification_queues dict is keyed on session_id; deque.append preserves FIFO order. Test class TestAC001LazyFifoAndConstructionCap.test_enqueue_creates_fifo_on_first_call verifies the lazy creation, and TestACBoundaryFillAndDrain.test_enqueue_cap_items_drains_all_in_fifo_order verifies arrival order.",
+      "notes": "SessionManager.enqueue_notification lazy-creates collections.deque(maxlen=cap) on first call per session_id. _notification_queues dict is keyed on session_id; deque.append preserves FIFO order. Test class TestAC001LazyFifoAndConstructionCap.test_enqueue_creates_fifo_on_first_call verifies the lazy creation, and TestACBoundaryFillAndDrain.test_enqueue_cap_items_drains_all_in_fifo_order verifies arrival order."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "When the queue is at cap, oldest entry is evicted before the new one is",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "enqueue_notification checks `if len(queue) >= cap` BEFORE append and emits exactly one WARN forge_notification_queue_overflow via _stdlib_logger (with cap and evicted_correlation_id in the extra dict). The deque(maxlen=cap) handles the actual eviction. TestAC002OverflowEvictsOldestWithWarn.test_overflow_evicts_oldest_and_logs_warn_once asserts both invariants \u2014 only the latest cap entries survive, and exactly one WARN record is captured.",
+      "notes": "enqueue_notification checks `if len(queue) >= cap` BEFORE append and emits exactly one WARN forge_notification_queue_overflow via _stdlib_logger (with cap and evicted_correlation_id in the extra dict). The deque(maxlen=cap) handles the actual eviction. TestAC002OverflowEvictsOldestWithWarn.test_overflow_evicts_oldest_and_logs_warn_once asserts both invariants \u2014 only the latest cap entries survive, and exactly one WARN record is captured."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "`pending_notifications` returns + clears atomically (no notification can be",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "pending_notifications builds `drained = list(queue)` then calls `queue.clear()` with no await between them \u2014 atomic on the single asyncio loop (ASSUM-003). TestAC003AtomicDrainReentrySafe.test_two_sequential_drains_no_duplicates and test_drain_then_enqueue_then_drain_preserves_only_new_entries verify both the empty-second-drain invariant and the no-leak invariant across drain/enqueue/drain.",
+      "notes": "pending_notifications builds `drained = list(queue)` then calls `queue.clear()` with no await between them \u2014 atomic on the single asyncio loop (ASSUM-003). TestAC003AtomicDrainReentrySafe.test_two_sequential_drains_no_duplicates and test_drain_then_enqueue_then_drain_preserves_only_new_entries verify both the empty-second-drain invariant and the no-leak invariant across drain/enqueue/drain."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "`end_session` clears the per-session queue; subsequent",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "end_session adds session_id to self._ended and pops the queue from self._notification_queues. enqueue_notification's first check `if session_id in self._ended or session_id not in self._sessions` early-returns with a DEBUG forge_notification_dropped log line \u2014 no raise. TestAC004EndSessionClearsAndDrops covers both clearing and the silent-drop on subsequent enqueue.",
+      "notes": "end_session adds session_id to self._ended and pops the queue from self._notification_queues. enqueue_notification's first check `if session_id in self._ended or session_id not in self._sessions` early-returns with a DEBUG forge_notification_dropped log line \u2014 no raise. TestAC004EndSessionClearsAndDrops covers both clearing and the silent-drop on subsequent enqueue."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Cap value is read once from `JarvisConfig.forge_notifications_queue_cap` at",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "SessionManager.__init__ accepts queue_cap (defaults to 100) and snapshots it as self._notification_queue_cap. enqueue_notification reads `cap = self._notification_queue_cap` once per call but the value is the construction-time snapshot \u2014 JarvisConfig is never re-read. The lifecycle wiring (TASK-J005-008) will pass config.forge_notifications_queue_cap as queue_cap. TestAC001LazyFifoAndConstructionCap.test_construction_reads_cap_once asserts the snapshot attribute exists and that 5 enqueues with cap=3 yield only the latest 3.",
+      "notes": "SessionManager.__init__ accepts queue_cap (defaults to 100) and snapshots it as self._notification_queue_cap. enqueue_notification reads `cap = self._notification_queue_cap` once per call but the value is the construction-time snapshot \u2014 JarvisConfig is never re-read. The lifecycle wiring (TASK-J005-008) will pass config.forge_notifications_queue_cap as queue_cap. TestAC001LazyFifoAndConstructionCap.test_construction_reads_cap_once asserts the snapshot attribute exists and that 5 enqueues with cap=3 yield only the latest 3."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "`uv run mypy src/jarvis/sessions/manager.py` passes (strict).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Verified locally \u2014 `uv run mypy src/jarvis/sessions/manager.py` reports `Success: no issues found in 1 source file`. ForgeNotification is imported under TYPE_CHECKING with a doc comment explaining the circular-import avoidance; annotations are evaluated lazily under `from __future__ import annotations`.",
+      "notes": "Verified locally \u2014 `uv run mypy src/jarvis/sessions/manager.py` reports `Success: no issues found in 1 source file`. ForgeNotification is imported under TYPE_CHECKING with a doc comment explaining the circular-import avoidance; annotations are evaluated lazily under `from __future__ import annotations`."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Verified locally \u2014 `uv run ruff check src/jarvis/sessions/manager.py tests/test_session_notifications.py` reports `All checks passed!` and `uv run ruff format --check` confirms both files are formatted. ruff format was applied to manager.py to satisfy the line-length wrap on the long import-comment block.",
+      "notes": "Verified locally \u2014 `uv run ruff check src/jarvis/sessions/manager.py tests/test_session_notifications.py` reports `All checks passed!` and `uv run ruff format --check` confirms both files are formatted. ruff format was applied to manager.py to satisfy the line-length wrap on the long import-comment block."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`enqueue_notification` appends to a session-scoped FIFO; FIFO is created on",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "SessionManager.enqueue_notification lazy-creates collections.deque(maxlen=cap) on first call per session_id. _notification_queues dict is keyed on session_id; deque.append preserves FIFO order. Test class TestAC001LazyFifoAndConstructionCap.test_enqueue_creates_fifo_on_first_call verifies the lazy creation, and TestACBoundaryFillAndDrain.test_enqueue_cap_items_drains_all_in_fifo_order verifies arrival order.",
+        "notes": "SessionManager.enqueue_notification lazy-creates collections.deque(maxlen=cap) on first call per session_id. _notification_queues dict is keyed on session_id; deque.append preserves FIFO order. Test class TestAC001LazyFifoAndConstructionCap.test_enqueue_creates_fifo_on_first_call verifies the lazy creation, and TestACBoundaryFillAndDrain.test_enqueue_cap_items_drains_all_in_fifo_order verifies arrival order."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "When the queue is at cap, oldest entry is evicted before the new one is",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "enqueue_notification checks `if len(queue) >= cap` BEFORE append and emits exactly one WARN forge_notification_queue_overflow via _stdlib_logger (with cap and evicted_correlation_id in the extra dict). The deque(maxlen=cap) handles the actual eviction. TestAC002OverflowEvictsOldestWithWarn.test_overflow_evicts_oldest_and_logs_warn_once asserts both invariants \u2014 only the latest cap entries survive, and exactly one WARN record is captured.",
+        "notes": "enqueue_notification checks `if len(queue) >= cap` BEFORE append and emits exactly one WARN forge_notification_queue_overflow via _stdlib_logger (with cap and evicted_correlation_id in the extra dict). The deque(maxlen=cap) handles the actual eviction. TestAC002OverflowEvictsOldestWithWarn.test_overflow_evicts_oldest_and_logs_warn_once asserts both invariants \u2014 only the latest cap entries survive, and exactly one WARN record is captured."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "`pending_notifications` returns + clears atomically (no notification can be",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "pending_notifications builds `drained = list(queue)` then calls `queue.clear()` with no await between them \u2014 atomic on the single asyncio loop (ASSUM-003). TestAC003AtomicDrainReentrySafe.test_two_sequential_drains_no_duplicates and test_drain_then_enqueue_then_drain_preserves_only_new_entries verify both the empty-second-drain invariant and the no-leak invariant across drain/enqueue/drain.",
+        "notes": "pending_notifications builds `drained = list(queue)` then calls `queue.clear()` with no await between them \u2014 atomic on the single asyncio loop (ASSUM-003). TestAC003AtomicDrainReentrySafe.test_two_sequential_drains_no_duplicates and test_drain_then_enqueue_then_drain_preserves_only_new_entries verify both the empty-second-drain invariant and the no-leak invariant across drain/enqueue/drain."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "`end_session` clears the per-session queue; subsequent",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "end_session adds session_id to self._ended and pops the queue from self._notification_queues. enqueue_notification's first check `if session_id in self._ended or session_id not in self._sessions` early-returns with a DEBUG forge_notification_dropped log line \u2014 no raise. TestAC004EndSessionClearsAndDrops covers both clearing and the silent-drop on subsequent enqueue.",
+        "notes": "end_session adds session_id to self._ended and pops the queue from self._notification_queues. enqueue_notification's first check `if session_id in self._ended or session_id not in self._sessions` early-returns with a DEBUG forge_notification_dropped log line \u2014 no raise. TestAC004EndSessionClearsAndDrops covers both clearing and the silent-drop on subsequent enqueue."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Cap value is read once from `JarvisConfig.forge_notifications_queue_cap` at",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "SessionManager.__init__ accepts queue_cap (defaults to 100) and snapshots it as self._notification_queue_cap. enqueue_notification reads `cap = self._notification_queue_cap` once per call but the value is the construction-time snapshot \u2014 JarvisConfig is never re-read. The lifecycle wiring (TASK-J005-008) will pass config.forge_notifications_queue_cap as queue_cap. TestAC001LazyFifoAndConstructionCap.test_construction_reads_cap_once asserts the snapshot attribute exists and that 5 enqueues with cap=3 yield only the latest 3.",
+        "notes": "SessionManager.__init__ accepts queue_cap (defaults to 100) and snapshots it as self._notification_queue_cap. enqueue_notification reads `cap = self._notification_queue_cap` once per call but the value is the construction-time snapshot \u2014 JarvisConfig is never re-read. The lifecycle wiring (TASK-J005-008) will pass config.forge_notifications_queue_cap as queue_cap. TestAC001LazyFifoAndConstructionCap.test_construction_reads_cap_once asserts the snapshot attribute exists and that 5 enqueues with cap=3 yield only the latest 3."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "`uv run mypy src/jarvis/sessions/manager.py` passes (strict).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Verified locally \u2014 `uv run mypy src/jarvis/sessions/manager.py` reports `Success: no issues found in 1 source file`. ForgeNotification is imported under TYPE_CHECKING with a doc comment explaining the circular-import avoidance; annotations are evaluated lazily under `from __future__ import annotations`.",
+        "notes": "Verified locally \u2014 `uv run mypy src/jarvis/sessions/manager.py` reports `Success: no issues found in 1 source file`. ForgeNotification is imported under TYPE_CHECKING with a doc comment explaining the circular-import avoidance; annotations are evaluated lazily under `from __future__ import annotations`."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Verified locally \u2014 `uv run ruff check src/jarvis/sessions/manager.py tests/test_session_notifications.py` reports `All checks passed!` and `uv run ruff format --check` confirms both files are formatted. ruff format was applied to manager.py to satisfy the line-length wrap on the long import-comment block.",
+        "notes": "Verified locally \u2014 `uv run ruff check src/jarvis/sessions/manager.py tests/test_session_notifications.py` reports `All checks passed!` and `uv run ruff format --check` confirms both files are formatted. ruff format was applied to manager.py to satisfy the line-length wrap on the long import-comment block."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "consider",
+      "category": "seam_test_recommendation",
+      "description": "No seam tests detected for cross-boundary feature. Consider adding seam/contract/boundary tests to validate technology boundary interactions. This is a recommendation, not a blocking gate."
+    }
+  ],
+  "rationale": "All quality gates passed. Independent verification confirmed. All acceptance criteria met. Architecture context: 374 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1289/5200 tokens\n\n### \u2705 Similar Outcomes\n- FIXES_ISSUE_IN\n- RESOLVES_TO_SUPVISOR_MODULE\n\n### \ud83c\udfa8 Relevant Patterns\n- ASSIGNS_TASK_TO\n- SOURCE_PATTERN\n\n### \u26a0\ufe0f Warnings\n- USES_ENDPOINT\n- REPLACES\n\n### \ud83c\udfad Role Constraints\n- MONITORS_RESULTS_FROM\n- MONITOR_QUALITY_GATES_RESULTS_FROM_JSON\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_STATE_RECOVERY_STRATEGY\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}
