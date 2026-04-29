@@ -1,0 +1,7 @@
+{
+  "tests_run": 2073,
+  "tests_failed": 3,
+  "coverage_pct": 92.0,
+  "output_summary": "pytest: 2070 passed, 3 pre-existing unrelated failures (capabilities_registry, calendar docstring, graphiti import); 28/28 new queue_build tests pass; dispatch.py coverage 92%.",
+  "quality_gates_passed": false
+}
