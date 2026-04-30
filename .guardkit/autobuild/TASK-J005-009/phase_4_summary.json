@@ -1,0 +1,7 @@
+{
+  "tests_run": 2102,
+  "tests_failed": 2,
+  "coverage_pct": 92.0,
+  "output_summary": "pytest: 2100 passed, 2 failed (pre-existing in test_assemble_tool_list.py + test_get_calendar_events.py); new test_jarvis_005_soft_fail.py 10/10 pass; coverage 92%.",
+  "quality_gates_passed": false
+}
