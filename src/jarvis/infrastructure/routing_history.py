@@ -1,31 +1,50 @@
 """Routing-history wire schema and writer for ``jarvis_routing_history`` entries.
 
-TASK-J004-004 landed the declarative-only Pydantic schema (the helper types,
-``RedirectAttempt`` and ``JarvisRoutingHistoryEntry``).
-TASK-J004-010 appends the persistence-side :class:`RoutingHistoryWriter`,
-extending this module's ``__all__`` rather than redefining it.
+This module is the persistence boundary between the Jarvis supervisor's
+in-memory dispatch decisions and the durable, queryable Graphiti knowledge
+graph. It exposes a frozen Pydantic schema (:class:`JarvisRoutingHistoryEntry`
+and its helper types) describing the wire shape of every routing-history
+record, plus :class:`RoutingHistoryWriter` which redacts human-shaped fields
+at the write boundary, optionally offloads oversized inline trace payloads
+to the local trace store, and submits the entry as a fire-and-forget
+Graphiti ``add_episode`` call.
 
-Authoritative for v1+ per
-[DDR-018](../../../docs/design/FEAT-JARVIS-004/decisions/DDR-018-routing-history-schema-authoritative.md).
-Future field additions are append-only via ADR-FLEET-00X — never overwrite or
-rename existing fields. Renames or type changes require a ``schema_version``
-marker at the change point (see DM-routing-history.md §6).
+Origin
+------
+Authored under **FEAT-JARVIS-004** (Phase 3 — Fleet Integration), Group A.2.
+The schema was promoted to authoritative status for v1+ per DDR-018, and the
+write path was constrained to fire-and-forget semantics per DDR-019 so a
+degraded Graphiti instance never propagates back into the dispatch hot path.
 
-References
-----------
-* :doc:`docs/design/FEAT-JARVIS-004/models/DM-routing-history.md` — authoritative
-  field definitions, regex patterns, and Literal members.
-* `ADR-FLEET-001 — Trace-Richness by Default
-  <../../../forge/docs/research/ideas/ADR-FLEET-001-trace-richness.md>`_
-  — base schema this module extends with Jarvis-specific fields.
-* `ADR-ARCH-029 — Redaction at write boundary
-  <../../../docs/design/decisions/ADR-ARCH-029-redaction-boundary.md>`_ —
-  redaction is applied inside :meth:`RoutingHistoryWriter.write_specialist_dispatch`,
-  *not* inside Pydantic validators here.
-* `DDR-019 — Routing-history writer is fire-and-forget
-  <../../../docs/design/FEAT-JARVIS-004/decisions/DDR-019-routing-history-fire-and-forget.md>`_.
-* `DDR-023 — Trace-file collision policy
-  <../../../docs/design/FEAT-JARVIS-004/decisions/DDR-023-trace-file-collision.md>`_.
+Design references
+-----------------
+All paths below resolve to files in this repository and are verified to be
+readable as part of the docstring contract.
+
+* :doc:`docs/design/FEAT-JARVIS-004/design.md` — feature-level design doc
+  describing the dispatch + routing-history pipeline this module implements.
+* :doc:`docs/design/FEAT-JARVIS-004/models/DM-routing-history.md` —
+  authoritative field definitions, regex patterns, and Literal members for
+  the entry schema. See §6 for the schema-evolution rules.
+* `DDR-018 — JarvisRoutingHistoryEntry schema authoritative
+  <../../../docs/design/FEAT-JARVIS-004/decisions/DDR-018-routing-history-schema-authoritative.md>`_
+  — additions are append-only; renames or type changes require a
+  ``schema_version`` marker at the change point.
+* `DDR-019 — Per-dispatch fire-and-forget Graphiti writes; WARN on failure
+  <../../../docs/design/FEAT-JARVIS-004/decisions/DDR-019-graphiti-fire-and-forget-writes.md>`_
+  — failures log ``WARN routing_history_write_failed reason=<err>`` and
+  never raise; the supervisor stays up when Graphiti is degraded.
+* `DDR-023 — Trace-file collision policy: WARN + preserve original
+  <../../../docs/design/FEAT-JARVIS-004/decisions/DDR-023-trace-file-collision-warn-and-preserve.md>`_
+  — pre-existing trace files at the same path are preserved (no overwrite);
+  the Graphiti write is also skipped for that record because the entity
+  needs a :class:`TraceRef` the writer cannot construct without on-disk
+  content.
+* `ADR-ARCH-029 — Personal-use compliance posture
+  <../../../docs/architecture/decisions/ADR-ARCH-029-personal-use-compliance-posture.md>`_
+  — informs the redaction stance: redaction runs at the **write boundary**
+  inside :meth:`RoutingHistoryWriter.write_specialist_dispatch`, *not*
+  inside Pydantic validators on the frozen entry.
 """
 
 from __future__ import annotations
@@ -457,7 +476,7 @@ class JarvisRoutingHistoryEntry(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# §5 — RoutingHistoryWriter (TASK-J004-010 — DDR-018 + DDR-019 + DDR-023)
+# §5 — RoutingHistoryWriter (DDR-018 + DDR-019 + DDR-023)
 # ---------------------------------------------------------------------------
 
 # Filesystem-offload threshold (DDR-018 / ADR-FLEET-001 §"Large traces").

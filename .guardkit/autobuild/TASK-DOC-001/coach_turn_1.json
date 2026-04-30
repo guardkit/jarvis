@@ -1,0 +1,166 @@
+{
+  "task_id": "TASK-DOC-001",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "skipped",
+      "test_output_summary": "Independent test verification skipped (tests not required for documentation tasks)",
+      "duration_seconds": 0.0
+    },
+    "requirements": {
+      "criteria_total": 8,
+      "criteria_met": 8,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "First paragraph of the module docstring describes the module's purpose",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "First paragraph (lines 3-7 of the module docstring) reads `This module is the single canonical seam between Jarvis and the nats-py client library...` and explicitly describes the module's purpose: owning connect/request-reply/drain semantics and isolating nats-py version churn. test_ac001_first_paragraph_describes_purpose asserts the first paragraph mentions `nats` and one of `wrapper`/`connection`/`lifecycle`.",
+      "notes": "First paragraph (lines 3-7 of the module docstring) reads `This module is the single canonical seam between Jarvis and the nats-py client library...` and explicitly describes the module's purpose: owning connect/request-reply/drain semantics and isolating nats-py version churn. test_ac001_first_paragraph_describes_purpose asserts the first paragraph mentions `nats` and one of `wrapper`/`connection`/`lifecycle`."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Docstring references `FEAT-JARVIS-004` as origin (Group A.2 row).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Docstring line 9 reads `Origin: FEAT-JARVIS-004 (Group A.2 row).` and the References section also cites the FEAT-JARVIS-004 contracts/decisions paths. test_ac002_references_feat_jarvis_004 asserts the substring `FEAT-JARVIS-004` is present.",
+      "notes": "Docstring line 9 reads `Origin: FEAT-JARVIS-004 (Group A.2 row).` and the References section also cites the FEAT-JARVIS-004 contracts/decisions paths. test_ac002_references_feat_jarvis_004 asserts the substring `FEAT-JARVIS-004` is present."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Docstring cites at least one DDR identifier resolving under",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Docstring cites `DDR-021` in the soft-fail bullet (line 12) and again in the References section. test_ac003_cites_at_least_one_ddr asserts at least one match for `DDR-\\d{3}`.",
+      "notes": "Docstring cites `DDR-021` in the soft-fail bullet (line 12) and again in the References section. test_ac003_cites_at_least_one_ddr asserts at least one match for `DDR-\\d{3}`."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Docstring references the design doc at",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "References section cites `docs/design/FEAT-JARVIS-004/contracts/API-internal.md` and `docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md`. test_ac004_references_design_doc extracts every `docs/...md` path and asserts at least one contains `FEAT-JARVIS-004`.",
+      "notes": "References section cites `docs/design/FEAT-JARVIS-004/contracts/API-internal.md` and `docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md`. test_ac004_references_design_doc extracts every `docs/...md` path and asserts at least one contains `FEAT-JARVIS-004`."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Each cited design-doc / DDR file exists on disk and is readable",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Corrected the ADR-ARCH-020 path from the non-existent `docs/design/decisions/ADR-ARCH-020.md` to the real `docs/architecture/decisions/ADR-ARCH-020-trace-richness-by-default.md`. Verified all three cited paths exist via `ls -la`. test_ac005_cited_files_exist_and_are_readable resolves every cited `docs/*.md` path against REPO_ROOT and asserts is_file() plus a successful read.",
+      "notes": "Corrected the ADR-ARCH-020 path from the non-existent `docs/design/decisions/ADR-ARCH-020.md` to the real `docs/architecture/decisions/ADR-ARCH-020-trace-richness-by-default.md`. Verified all three cited paths exist via `ls -la`. test_ac005_cited_files_exist_and_are_readable resolves every cited `docs/*.md` path against REPO_ROOT and asserts is_file() plus a successful read."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Polished docstring contains **no** token matching `TASK-J\\d{3}-\\d{3}`",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Removed the `TASK-J004-006` token from line 3 of the original docstring; the polished docstring no longer mentions any TASK identifier. test_ac006_no_task_token_in_docstring asserts `re.search(r\"TASK-J\\d{3}-\\d{3}\", MODULE_DOCSTRING)` returns None.",
+      "notes": "Removed the `TASK-J004-006` token from line 3 of the original docstring; the polished docstring no longer mentions any TASK identifier. test_ac006_no_task_token_in_docstring asserts `re.search(r\"TASK-J\\d{3}-\\d{3}\", MODULE_DOCSTRING)` returns None."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Docstring line count is \u2265 20 and \u2264 250 (Group B.2, ASSUM-001/002).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Polished module docstring is 43 lines (well within [20, 250]). test_ac007_docstring_line_count_in_range asserts `20 <= len(docstring.splitlines()) <= 250`.",
+      "notes": "Polished module docstring is 43 lines (well within [20, 250]). test_ac007_docstring_line_count_in_range asserts `20 <= len(docstring.splitlines()) <= 250`."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "No executable Python statement is modified (Group C.2).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Edit operation replaced only the module docstring (lines 1-37 in the original); from line 38 (the blank line) onward \u2014 `from __future__ import annotations`, the `_nats_connect = nats.connect` seam, the NATSClient class body, and the four module-level `_on_*` callbacks \u2014 bytes are unchanged. Verified by running the existing tests/test_nats_client.py (19 tests) and tests/test_nats_unavailable.py (5 tests), all 24 passing. test_ac008_executable_surface_intact additionally asserts every public symbol and the `_nats_connect` seam are still present and callable.",
+      "notes": "Edit operation replaced only the module docstring (lines 1-37 in the original); from line 38 (the blank line) onward \u2014 `from __future__ import annotations`, the `_nats_connect = nats.connect` seam, the NATSClient class body, and the four module-level `_on_*` callbacks \u2014 bytes are unchanged. Verified by running the existing tests/test_nats_client.py (19 tests) and tests/test_nats_unavailable.py (5 tests), all 24 passing. test_ac008_executable_surface_intact additionally asserts every public symbol and the `_nats_connect` seam are still present and callable."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "First paragraph of the module docstring describes the module's purpose",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "First paragraph (lines 3-7 of the module docstring) reads `This module is the single canonical seam between Jarvis and the nats-py client library...` and explicitly describes the module's purpose: owning connect/request-reply/drain semantics and isolating nats-py version churn. test_ac001_first_paragraph_describes_purpose asserts the first paragraph mentions `nats` and one of `wrapper`/`connection`/`lifecycle`.",
+        "notes": "First paragraph (lines 3-7 of the module docstring) reads `This module is the single canonical seam between Jarvis and the nats-py client library...` and explicitly describes the module's purpose: owning connect/request-reply/drain semantics and isolating nats-py version churn. test_ac001_first_paragraph_describes_purpose asserts the first paragraph mentions `nats` and one of `wrapper`/`connection`/`lifecycle`."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Docstring references `FEAT-JARVIS-004` as origin (Group A.2 row).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Docstring line 9 reads `Origin: FEAT-JARVIS-004 (Group A.2 row).` and the References section also cites the FEAT-JARVIS-004 contracts/decisions paths. test_ac002_references_feat_jarvis_004 asserts the substring `FEAT-JARVIS-004` is present.",
+        "notes": "Docstring line 9 reads `Origin: FEAT-JARVIS-004 (Group A.2 row).` and the References section also cites the FEAT-JARVIS-004 contracts/decisions paths. test_ac002_references_feat_jarvis_004 asserts the substring `FEAT-JARVIS-004` is present."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Docstring cites at least one DDR identifier resolving under",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Docstring cites `DDR-021` in the soft-fail bullet (line 12) and again in the References section. test_ac003_cites_at_least_one_ddr asserts at least one match for `DDR-\\d{3}`.",
+        "notes": "Docstring cites `DDR-021` in the soft-fail bullet (line 12) and again in the References section. test_ac003_cites_at_least_one_ddr asserts at least one match for `DDR-\\d{3}`."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Docstring references the design doc at",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "References section cites `docs/design/FEAT-JARVIS-004/contracts/API-internal.md` and `docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md`. test_ac004_references_design_doc extracts every `docs/...md` path and asserts at least one contains `FEAT-JARVIS-004`.",
+        "notes": "References section cites `docs/design/FEAT-JARVIS-004/contracts/API-internal.md` and `docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md`. test_ac004_references_design_doc extracts every `docs/...md` path and asserts at least one contains `FEAT-JARVIS-004`."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Each cited design-doc / DDR file exists on disk and is readable",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Corrected the ADR-ARCH-020 path from the non-existent `docs/design/decisions/ADR-ARCH-020.md` to the real `docs/architecture/decisions/ADR-ARCH-020-trace-richness-by-default.md`. Verified all three cited paths exist via `ls -la`. test_ac005_cited_files_exist_and_are_readable resolves every cited `docs/*.md` path against REPO_ROOT and asserts is_file() plus a successful read.",
+        "notes": "Corrected the ADR-ARCH-020 path from the non-existent `docs/design/decisions/ADR-ARCH-020.md` to the real `docs/architecture/decisions/ADR-ARCH-020-trace-richness-by-default.md`. Verified all three cited paths exist via `ls -la`. test_ac005_cited_files_exist_and_are_readable resolves every cited `docs/*.md` path against REPO_ROOT and asserts is_file() plus a successful read."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Polished docstring contains **no** token matching `TASK-J\\d{3}-\\d{3}`",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Removed the `TASK-J004-006` token from line 3 of the original docstring; the polished docstring no longer mentions any TASK identifier. test_ac006_no_task_token_in_docstring asserts `re.search(r\"TASK-J\\d{3}-\\d{3}\", MODULE_DOCSTRING)` returns None.",
+        "notes": "Removed the `TASK-J004-006` token from line 3 of the original docstring; the polished docstring no longer mentions any TASK identifier. test_ac006_no_task_token_in_docstring asserts `re.search(r\"TASK-J\\d{3}-\\d{3}\", MODULE_DOCSTRING)` returns None."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Docstring line count is \u2265 20 and \u2264 250 (Group B.2, ASSUM-001/002).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Polished module docstring is 43 lines (well within [20, 250]). test_ac007_docstring_line_count_in_range asserts `20 <= len(docstring.splitlines()) <= 250`.",
+        "notes": "Polished module docstring is 43 lines (well within [20, 250]). test_ac007_docstring_line_count_in_range asserts `20 <= len(docstring.splitlines()) <= 250`."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "No executable Python statement is modified (Group C.2).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Edit operation replaced only the module docstring (lines 1-37 in the original); from line 38 (the blank line) onward \u2014 `from __future__ import annotations`, the `_nats_connect = nats.connect` seam, the NATSClient class body, and the four module-level `_on_*` callbacks \u2014 bytes are unchanged. Verified by running the existing tests/test_nats_client.py (19 tests) and tests/test_nats_unavailable.py (5 tests), all 24 passing. test_ac008_executable_surface_intact additionally asserts every public symbol and the `_nats_connect` seam are still present and callable.",
+        "notes": "Edit operation replaced only the module docstring (lines 1-37 in the original); from line 38 (the blank line) onward \u2014 `from __future__ import annotations`, the `_nats_connect = nats.connect` seam, the NATSClient class body, and the four module-level `_on_*` callbacks \u2014 bytes are unchanged. Verified by running the existing tests/test_nats_client.py (19 tests) and tests/test_nats_unavailable.py (5 tests), all 24 passing. test_ac008_executable_surface_intact additionally asserts every public symbol and the `_nats_connect` seam are still present and callable."
+      }
+    ]
+  },
+  "issues": [],
+  "rationale": "All quality gates passed. Tests not required for this task type. All acceptance criteria met. Architecture context: 388 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1436/5200 tokens\n\n### \u2705 Similar Outcomes\n- THROWS_EXCEPTION\n- THREADS_PROTOTYPE_OBJECT\n\n### \ud83c\udfa8 Relevant Patterns\n- IS_PARAM_TYPE_OF\n- USES_FUNCTION\n\n### \u26a0\ufe0f Warnings\n- REQUIRES_USE_OF\n- HAS_INCORRECT_PATH_REFERENCE\n\n### \ud83c\udfad Role Constraints\n- MONITORS_RESULTS_FROM\n- MUST_READ_TASK_WORK_RESULTS\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_ENTITY_TYPE\n- HAS_PROJECT_ID\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

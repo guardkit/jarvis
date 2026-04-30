@@ -1,28 +1,46 @@
-"""Forge stage-complete notification schema + subscriber.
+"""Forge stage-complete notification schema and subscriber.
 
-TASK-J005-002 landed the Pydantic v2 declarative schema for the in-process
-Forge stage-complete notification surface (``ForgeNotification`` and
-``BuildCorrelation``).
+This module owns the in-process Forge stage-complete notification surface
+for Jarvis. It declares two Pydantic v2 models — :class:`ForgeNotification`
+(the projection of ``nats_core.events.StageCompletePayload`` onto Jarvis's
+adapter-rendering layer) and :class:`BuildCorrelation` (one element of the
+in-memory correlation map) — and the
+:class:`ForgeNotificationsSubscriber` that routes deliveries from
+``pipeline.stage-complete.>`` to the originating session's pending
+notifications FIFO. Together they realise the cross-adapter rendering
+contract that downstream features (CLI today; Telegram and the live
+dashboard tomorrow) consume verbatim.
 
-TASK-J005-003 (this revision) appends the subscriber, the in-memory LRU
-correlation map, and the in-process router from
-``pipeline.stage-complete.>`` to per-session pending notifications, per
-design.md §8 and DDR-026 / DDR-027 / DDR-028 / DDR-030.
+Origin
+------
+Group A.2 of FEAT-JARVIS-005 — the Forge stage-complete notification
+pipeline. This module is the in-process landing zone; the canonical NATS
+wire shape lives in ``nats_core.events.StageCompletePayload`` and is
+imported lazily from the subscriber so schema-only consumers do not pay
+the ``nats-py`` import cost.
 
 References
 ----------
-* :doc:`docs/design/FEAT-JARVIS-005/models/DM-forge-notification.md` —
+* Design document:
+  ``docs/design/FEAT-JARVIS-005/design.md`` (§8 — stage-complete
+  routing, drop policy, and shutdown ordering).
+* Data model:
+  ``docs/design/FEAT-JARVIS-005/models/DM-forge-notification.md`` —
   authoritative field definitions, regex patterns, ``Literal`` members,
   and the ``render_line()`` shape contract.
-* `DDR-030 — CLI notifications between prompts
-  <../../../docs/design/FEAT-JARVIS-005/decisions/DDR-030-cli-notifications-between-prompts.md>`_
-  — the canonical render shape consumed by ``cli/main.py`` (TASK-J005-007).
-* `DDR-027 — Correlation map is in-memory, lost on restart
-  <../../../docs/design/FEAT-JARVIS-005/decisions/DDR-027-correlation-map-in-memory.md>`_.
-* `DDR-028 — Correlation map LRU cap
-  <../../../docs/design/FEAT-JARVIS-005/decisions/DDR-028-correlation-map-lru-cap.md>`_.
-* `DDR-031 — Adapter resolution at queue time
-  <../../../docs/design/FEAT-JARVIS-005/decisions/DDR-031-adapter-at-queue-time.md>`_.
+* ``docs/design/FEAT-JARVIS-005/decisions/DDR-026-forge-notifications-module-location.md``
+  — why this surface lives under ``jarvis.infrastructure``.
+* ``docs/design/FEAT-JARVIS-005/decisions/DDR-027-stage-complete-ephemeral-deliver-new.md``
+  — ephemeral push consumer with ``deliver_policy=NEW``; no replay on
+  restart.
+* ``docs/design/FEAT-JARVIS-005/decisions/DDR-028-correlation-map-in-memory-bounded.md``
+  — bounded LRU correlation map; oldest-first eviction at capacity.
+* ``docs/design/FEAT-JARVIS-005/decisions/DDR-029-stage-complete-as-append-only-edges.md``
+  — fire-and-forget routing-history edge per matched event.
+* ``docs/design/FEAT-JARVIS-005/decisions/DDR-030-cli-notifications-between-prompts.md``
+  — canonical render shape consumed by the CLI.
+* ``docs/design/FEAT-JARVIS-005/decisions/DDR-031-originating-adapter-from-session.md``
+  — adapter resolution captured at queue time for diagnostics.
 
 Notes
 -----
@@ -30,12 +48,13 @@ Notes
   future enrichment (e.g. adding a ``coach_score`` quintile bucket) is a
   new optional field plus an updated ``render_line()`` body, not an
   in-place edit.
-* ``extra="ignore"`` lets future fields land non-breakingly when
-  FEAT-J006 promotes ``ForgeNotification`` to a real wire payload on
-  ``jarvis.notification.{adapter}``.
-* This module deliberately imports nothing from ``nats_core`` /
-  ``nats`` — the projection from ``StageCompletePayload`` lands in
-  TASK-J005-003 alongside the subscriber.
+* ``extra="ignore"`` lets future fields land non-breakingly when a
+  follow-up feature promotes ``ForgeNotification`` to a real wire payload
+  on ``jarvis.notification.{adapter}``.
+* The schema declarations do not import ``nats_core`` / ``nats`` at
+  module top level; the subscriber lazy-loads those modules so unit
+  tests that only exercise the Pydantic models stay free of the
+  JetStream import chain.
 """
 
 from __future__ import annotations
@@ -76,8 +95,7 @@ class ForgeNotification(BaseModel):
     The canonical NATS wire shape is ``nats_core.events.StageCompletePayload``;
     ``ForgeNotification`` is the projection of that payload onto Jarvis's
     adapter-rendering layer (DM-forge-notification §1). The projection
-    itself (``from_stage_complete``) lands with the subscriber in
-    TASK-J005-003 — this task is schema-only.
+    itself is performed inside the subscriber's message handler.
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
@@ -179,9 +197,6 @@ class BuildCorrelation(BaseModel):
     Stored in ``ForgeNotificationsSubscriber._correlations`` (DDR-028 —
     LRU bounded at ``correlation_cap``, default 1000). Lost on Jarvis
     restart per DDR-027.
-
-    The subscriber + correlation-map land in TASK-J005-003; this task
-    only ships the schema.
     """
 
     model_config = ConfigDict(extra="ignore", frozen=True)
@@ -218,7 +233,7 @@ class BuildCorrelation(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# §3 — ForgeNotificationsSubscriber (TASK-J005-003)
+# §3 — ForgeNotificationsSubscriber
 # ---------------------------------------------------------------------------
 
 # Subscribe wildcard derived lazily from the canonical
@@ -424,7 +439,7 @@ class ForgeNotificationsSubscriber:
             )
 
     # ------------------------------------------------------------------
-    # Late binding (TASK-J005-008 lifecycle wiring)
+    # Late binding (lifecycle wiring)
     # ------------------------------------------------------------------
 
     def bind_session_manager(self, session_manager: SessionManager) -> None:
@@ -459,8 +474,8 @@ class ForgeNotificationsSubscriber:
     ) -> None:
         """Insert a correlation into the LRU map; evict oldest at cap.
 
-        Entry point used by :func:`jarvis.tools.queue_build` (TASK-J005-005)
-        once the BUILD_QUEUED publish has been accepted. Re-registering the
+        Entry point used by :func:`jarvis.tools.queue_build` once the
+        BUILD_QUEUED publish has been accepted. Re-registering the
         same ``correlation_id`` is silently overwritten (idempotent register —
         per DDR-028 §Consequences).
 

@@ -35,8 +35,8 @@ References
   authoritative class signatures.
 * :doc:`docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md`
   — the soft-fail invariant the stub fallback satisfies.
-* :doc:`docs/design/decisions/ADR-ARCH-017.md` — live KV-watch + cache
-  pattern inherited from Forge.
+* :doc:`docs/architecture/decisions/ADR-ARCH-017-static-skill-declaration-v1.md`
+  — live KV-watch + cache pattern inherited from Forge.
 """
 
 from __future__ import annotations
@@ -171,9 +171,9 @@ def _manifest_to_descriptor(manifest: AgentManifest) -> CapabilityDescriptor:
 # ---------------------------------------------------------------------------
 # Resolver helpers — module-level so tests can monkeypatch them in place
 # (mirrors the project-conventional ``fleet_registration._resolve_registry``
-# pattern from TASK-J004-007).  Production code uses these directly; unit
-# tests substitute fakes that return mock NATSKVManifestRegistry / watcher
-# objects so the Live path is exercisable without an in-process broker.
+# pattern).  Production code uses these directly; unit tests substitute
+# fakes that return mock NATSKVManifestRegistry / watcher objects so the
+# Live path is exercisable without an in-process broker.
 # ---------------------------------------------------------------------------
 
 
@@ -306,7 +306,7 @@ class LiveCapabilitiesRegistry:
             client: A connected :class:`jarvis.infrastructure.NATSClient`
                 (or a raw ``nats.aio.Client``).  The signature names the
                 wrapper to satisfy the FEAT-JARVIS-004 NATS_CLIENT_API
-                seam contract — see TASK-J004-006.
+                seam contract.
             cache_ttl_seconds: Cache window for :meth:`refresh`; default
                 30s per ADR-ARCH-017.
 

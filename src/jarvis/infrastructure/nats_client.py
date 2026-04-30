@@ -1,7 +1,13 @@
 """Async wrapper around ``nats-py`` providing connection lifecycle.
 
-TASK-J004-006 / FEAT-JARVIS-004. The wrapper is intentionally thin — its
-job is to:
+This module is the single canonical seam between Jarvis and the
+``nats-py`` client library. It exposes :class:`NATSClient`, a thin
+async wrapper that owns connect, request/reply, and drain semantics
+for every other module in the codebase, so version churn and error-
+hierarchy quirks of the upstream client never leak past this file.
+
+Origin: FEAT-JARVIS-004 (Group A.2 row). The wrapper is intentionally
+thin — its job is to:
 
 1. Surface the **DDR-021 soft-fail invariant** at the connect boundary:
    :meth:`NATSClient.connect` returns ``None`` on connect failure
@@ -28,12 +34,12 @@ contract).
 
 References
 ----------
-* :doc:`docs/design/FEAT-JARVIS-004/contracts/API-internal.md` §1 —
-  authoritative class signature.
-* :doc:`docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md`
-  — soft-fail invariant on connect failure.
-* :doc:`docs/design/decisions/ADR-ARCH-020.md` — structured-logging
-  contract for transport events.
+* ``docs/design/FEAT-JARVIS-004/contracts/API-internal.md`` §1 —
+  authoritative class signature for the FEAT-JARVIS-004 design doc.
+* ``docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md``
+  — DDR-021 soft-fail invariant on connect failure.
+* ``docs/architecture/decisions/ADR-ARCH-020-trace-richness-by-default.md``
+  — structured-logging / trace-richness contract for transport events.
 """
 
 from __future__ import annotations
