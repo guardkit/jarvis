@@ -1,27 +1,75 @@
-"""Fleet registration, heartbeat, and deregistration.
+"""Fleet registration, heartbeat, and deregistration for the Jarvis agent.
 
-Public surface (per FEAT-JARVIS-004 API-internal §2):
+This module owns Jarvis's lifecycle as a NATS fleet citizen: it builds
+the :class:`AgentManifest` advertised on the ``agent-registry`` KV
+bucket, performs the initial register on startup, runs a background
+heartbeat loop that keeps the entry fresh by re-registering on a fixed
+cadence, and removes the entry on clean shutdown.  Every operation is
+idempotent so retries and double-registration are safe.
+
+Origin
+------
+
+Introduced as part of **FEAT-JARVIS-004 — NATS Fleet Registration &
+Specialist Dispatch (real transport)**.  The full feature design lives
+at ``docs/design/FEAT-JARVIS-004/design.md`` and the public Python
+contract for this module is fixed by
+``docs/design/FEAT-JARVIS-004/contracts/API-internal.md`` §2.
+
+Public surface
+--------------
 
 - :func:`build_jarvis_manifest` — pure manifest factory.
-- :func:`register_on_fleet` — idempotent KV register (raises
-  :class:`NATSConnectionError` on transport failure).
+- :func:`register_on_fleet` — idempotent KV register; raises
+  :class:`NATSConnectionError` on transport failure.
 - :func:`heartbeat_loop` — periodic re-register; survives transient
   failures; cancellation is the normal shutdown path.
 - :func:`deregister_from_fleet` — idempotent shutdown; never raises.
 
-The "every NATS subject string MUST come from ``nats_core.Topics``" rule
-in `ADR-SP-016 <../../../docs/architecture/decisions/ADR-SP-016-nats-topic-singular-source.md>`_
-is satisfied by routing all I/O through
-:class:`nats_core.NATSKVManifestRegistry` rather than synthesising
-``"fleet.register"`` / ``"fleet.heartbeat..."`` literals here — the
-registry hits the ``agent-registry`` KV bucket directly so this module
-never composes a subject string at all.
+Architectural anchors
+---------------------
+
+- ``docs/architecture/decisions/ADR-ARCH-004-jarvis-registers-on-fleet-register.md``
+  pins the requirement that Jarvis publishes itself on the symmetric
+  fleet contract — this module is the implementation of that ADR.
+- ``docs/architecture/decisions/ADR-ARCH-016-six-consumer-surfaces-nats-only-transport.md``
+  fixes NATS as the only transport between fleet members; every I/O
+  here flows through that bus.
+- ``docs/architecture/decisions/ADR-ARCH-026-no-horizontal-scaling.md``
+  underpins the single-instance ``max_concurrent=1`` choice on the
+  manifest.
+
+Design decisions
+----------------
+
+The soft-fail behaviour of :func:`register_on_fleet` and
+:func:`heartbeat_loop` follows
+``docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md``:
+NATS unavailable at startup must not block Jarvis from starting, and a
+transient broker hiccup during the heartbeat loop must not kill the
+loop.  :class:`NATSConnectionError` is the typed signal the lifecycle
+layer catches to convert a register failure into a startup ``WARN``.
+
+NATS topic discipline
+---------------------
+
+Every NATS subject Jarvis emits comes from ``nats_core.Topics`` rather
+than literal strings — this module never composes a subject directly.
+All KV traffic (register, heartbeat, deregister) is routed through
+:class:`nats_core.NATSKVManifestRegistry` against the ``agent-registry``
+bucket, so the surrounding code never has to spell ``"fleet.register"``
+or ``"fleet.heartbeat..."`` at all.
+
+Client duck-typing
+------------------
 
 The ``client`` parameter is duck-typed: it accepts either a raw
-``nats.aio.client.Client``, the planned local ``jarvis.NATSClient``
-wrapper (which exposes the underlying connection on ``.client``), or any
-object with a ``jetstream()`` method.  This keeps the module wirable
-ahead of TASK-J004-006 landing the local NATSClient wrapper.
+``nats.aio.client.Client``, the local ``jarvis.NATSClient`` wrapper
+(which exposes the underlying connection on ``.client``), or any object
+with a ``jetstream()`` method.  Tests substitute a stub registry by
+patching :func:`_resolve_registry` directly, keeping the production
+path stable while letting unit tests run without an in-process NATS
+broker.
 """
 
 from __future__ import annotations
@@ -140,10 +188,10 @@ def build_jarvis_manifest(config: JarvisConfig) -> AgentManifest:
 async def _resolve_registry(client: Any) -> NATSKVManifestRegistry:
     """Build a :class:`NATSKVManifestRegistry` bound to *client*.
 
-    The local ``jarvis.NATSClient`` wrapper (planned in TASK-J004-006)
-    exposes the raw ``nats.aio.client.Client`` on a ``.client``
-    attribute; raw NATS clients are passed straight through.  Anything
-    with a ``jetstream()`` method satisfies the duck-typed contract that
+    The local ``jarvis.NATSClient`` wrapper exposes the raw
+    ``nats.aio.client.Client`` on a ``.client`` attribute; raw NATS
+    clients are passed straight through.  Anything with a
+    ``jetstream()`` method satisfies the duck-typed contract that
     :meth:`NATSKVManifestRegistry.create` requires.
 
     Tests substitute a stub registry by patching this helper directly
