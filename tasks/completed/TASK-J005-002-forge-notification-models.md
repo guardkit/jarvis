@@ -14,9 +14,9 @@ tags:
   - schema
   - forge-notifications
   - FEAT-JARVIS-005
-status: backlog
+status: completed
 created: 2026-04-29T00:00:00Z
-updated: 2026-04-29T00:00:00Z
+updated: 2026-04-30T11:10:33Z
 test_results:
   status: pending
   coverage: null

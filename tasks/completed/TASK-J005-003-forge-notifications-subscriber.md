@@ -30,7 +30,7 @@ id: TASK-J005-003
 implementation_mode: task-work
 parent_review: TASK-REV-3B8B
 priority: high
-status: design_approved
+status: completed
 tags:
 - forge-notifications
 - jetstream
@@ -45,7 +45,7 @@ test_results:
   last_run: null
   status: pending
 title: ForgeNotificationsSubscriber + correlation map + in-process router
-updated: 2026-04-29 00:00:00+00:00
+updated: 2026-04-30T11:10:33Z
 wave: 2
 ---
 

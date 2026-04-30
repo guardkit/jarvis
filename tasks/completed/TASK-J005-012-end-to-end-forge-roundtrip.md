@@ -9,7 +9,7 @@ id: TASK-J005-012
 implementation_mode: task-work
 parent_review: TASK-REV-3B8B
 priority: high
-status: design_approved
+status: completed
 tags:
 - tests
 - end-to-end
@@ -23,7 +23,7 @@ test_results:
   last_run: null
   status: pending
 title: End-to-end Forge round-trip (soft-prereq, GB10 gated)
-updated: 2026-04-29 00:00:00+00:00
+updated: 2026-04-30T11:10:33Z
 wave: 5
 ---
 

@@ -7,7 +7,7 @@ id: TASK-J005-006
 implementation_mode: task-work
 parent_review: TASK-REV-3B8B
 priority: high
-status: design_approved
+status: completed
 tags:
 - sessions
 - notifications
@@ -19,7 +19,7 @@ test_results:
   last_run: null
   status: pending
 title: SessionManager pending_notifications + per-session FIFO queue
-updated: 2026-04-29 00:00:00+00:00
+updated: 2026-04-30T11:10:33Z
 wave: 1
 ---
 

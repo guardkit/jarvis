@@ -28,7 +28,7 @@ id: TASK-J005-008
 implementation_mode: task-work
 parent_review: TASK-REV-3B8B
 priority: high
-status: design_approved
+status: completed
 tags:
 - lifecycle
 - wiring
@@ -40,7 +40,7 @@ test_results:
   last_run: null
   status: pending
 title: lifecycle.py wiring — start/bind/stop subscriber
-updated: 2026-04-29 00:00:00+00:00
+updated: 2026-04-30T11:10:33Z
 wave: 3
 ---
 

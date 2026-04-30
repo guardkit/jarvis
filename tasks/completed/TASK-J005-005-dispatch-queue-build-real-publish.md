@@ -29,7 +29,7 @@ id: TASK-J005-005
 implementation_mode: task-work
 parent_review: TASK-REV-3B8B
 priority: high
-status: design_approved
+status: completed
 tags:
 - dispatch
 - queue-build
@@ -43,7 +43,7 @@ test_results:
   last_run: null
   status: pending
 title: tools/dispatch.py queue_build real JetStream publish
-updated: 2026-04-29 00:00:00+00:00
+updated: 2026-04-30T11:10:33Z
 wave: 3
 ---
 

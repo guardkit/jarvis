@@ -22,7 +22,7 @@ id: TASK-J005-007
 implementation_mode: task-work
 parent_review: TASK-REV-3B8B
 priority: high
-status: design_approved
+status: completed
 tags:
 - cli
 - repl
@@ -35,7 +35,7 @@ test_results:
   last_run: null
   status: pending
 title: cli/main.py REPL between-prompts notification render
-updated: 2026-04-29 00:00:00+00:00
+updated: 2026-04-30T11:10:33Z
 wave: 2
 ---
 

@@ -9,7 +9,7 @@ id: TASK-J005-009
 implementation_mode: task-work
 parent_review: TASK-REV-3B8B
 priority: high
-status: design_approved
+status: completed
 tags:
 - tests
 - soft-fail
@@ -22,7 +22,7 @@ test_results:
   last_run: null
   status: pending
 title: Soft-fail tests — NATS down, Graphiti down, subscriber stop bounded
-updated: 2026-04-29 00:00:00+00:00
+updated: 2026-04-30T11:10:33Z
 wave: 4
 ---
 
