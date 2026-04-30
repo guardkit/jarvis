@@ -203,10 +203,16 @@ class TestAC004ReadmeQuickstart:
         assert README.exists(), "README.md must exist at project root"
 
     def test_readme_has_quickstart_heading(self) -> None:
-        """README.md contains a '## Quickstart' heading."""
+        """README.md contains a '## Quickstart' or '## Quick Start' heading.
+
+        TASK-DOC-006 mandates the heading ``## Quick Start`` (with a space);
+        this regex accepts either spelling per TASK-DOC-006 Implementation
+        Notes (relaxed-regex branch).
+        """
         content = README.read_text()
-        assert re.search(r"^## Quickstart", content, re.MULTILINE), (
-            "README.md must contain a '## Quickstart' section heading"
+        assert re.search(r"^## Quick ?[Ss]tart", content, re.MULTILINE), (
+            "README.md must contain a '## Quickstart' or '## Quick Start' "
+            "section heading"
         )
 
     @pytest.mark.parametrize(
@@ -227,7 +233,7 @@ class TestAC004ReadmeQuickstart:
         content = README.read_text()
         # Extract the Quickstart section (from heading to next ## heading or end)
         match = re.search(
-            r"## Quickstart\n(.+?)(?=\n## |\Z)",
+            r"## Quick ?[Ss]tart\n(.+?)(?=\n## |\Z)",
             content,
             re.DOTALL,
         )
@@ -241,7 +247,7 @@ class TestAC004ReadmeQuickstart:
         """Quickstart section includes virtual environment setup."""
         content = README.read_text()
         match = re.search(
-            r"## Quickstart\n(.+?)(?=\n## |\Z)",
+            r"## Quick ?[Ss]tart\n(.+?)(?=\n## |\Z)",
             content,
             re.DOTALL,
         )
@@ -255,7 +261,7 @@ class TestAC004ReadmeQuickstart:
         """Quickstart section instructs user to copy .env.example to .env."""
         content = README.read_text()
         match = re.search(
-            r"## Quickstart\n(.+?)(?=\n## |\Z)",
+            r"## Quick ?[Ss]tart\n(.+?)(?=\n## |\Z)",
             content,
             re.DOTALL,
         )

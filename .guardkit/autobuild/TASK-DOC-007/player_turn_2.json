@@ -1,24 +1,6 @@
 {
   "task_id": "TASK-DOC-007",
-  "timestamp": "2026-04-30T20:35:21.044714",
-  "completed": true,
-  "success": true,
-  "implementation_mode": "direct",
-  "phases": {
-    "phase_3": {
-      "detected": true,
-      "completed": true
-    }
-  },
-  "quality_gates": {
-    "tests_passing": true,
-    "tests_passed": 0,
-    "tests_failed": 0,
-    "coverage": null,
-    "coverage_met": true,
-    "quality_gates_relaxed": true,
-    "all_passed": true
-  },
+  "turn": 2,
   "files_modified": [
     "tests/test_developer_surface.py"
   ],
@@ -26,6 +8,14 @@
     ".guardkit/autobuild/TASK-DOC-007/player_turn_2.json"
   ],
   "tests_written": [],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "uv run pytest tests/: 2171 passed, 1 skipped, 270 warnings in 57.15s (0 failed). Coverage TOTAL = 92% (175 miss / 2157 stmts). uv run mypy src/jarvis/: Success: no issues found in 45 source files. The 6 prior failures in tests/test_developer_surface.py::TestAC004ReadmeQuickstart are now green after relaxing the heading regex from '^## Quickstart' (no space) to '^## Quick ?[Ss]tart' (optional space, either case for 'S'), per the alternative branch authorised by TASK-DOC-006 Implementation Notes.",
+  "implementation_notes": "Coach feedback on Turn 1 rejected AC-005 (pytest baseline) because the gate cannot mark itself green while 6 tests fail, regardless of root cause. Turn 2 applies the minimal pre-authorised fix.\n\nAction: relaxed four regex patterns in tests/test_developer_surface.py::TestAC004ReadmeQuickstart from '^## Quickstart' / '## Quickstart\\n' to '^## Quick ?[Ss]tart' / '## Quick ?[Ss]tart\\n' so they match either the original '## Quickstart' heading or TASK-DOC-006's renamed '## Quick Start' heading. This is exactly the alternative TASK-DOC-006 Implementation Notes pre-authorised when it noted: 'Either rename to \"## Quick Start\" or keep \"## Quickstart\" and let the test grep on the more permissive \"^## Quick ?[Ss]tart\" pattern.' TASK-DOC-006 chose the rename branch but never applied the test-side relaxation; this turn closes that gap so the gate can pass.\n\nBoundary preserved: the only file modified is tests/test_developer_surface.py. NO src/jarvis/ source file is touched, so AC-001 (tool-docstring invariant) and AC-002 (no executable src/jarvis code modified) remain intact from turn 1. mypy delta unchanged (still 0). Coverage unchanged (still 92% TOTAL). The five infrastructure modules' docstring-only diff vs main is unchanged. langgraph dev probe results from turn 1 still valid \u2014 no graph or factory code was touched.\n\nAll eight acceptance criteria now PASS: AC-001 verified by AST docstring-map equality with main:src/jarvis/tools/{general,capabilities,dispatch}.py; AC-002 verified by AST docstring-strip equivalence on the 5 modified infrastructure files; AC-003 verified by uv run python -c 'import jarvis.infrastructure.<each>' succeeding; AC-004 verified by uv run langgraph dev --no-browser registering both graphs (jarvis 0.298s + jarvis_reasoner 0.382s, app start 1.965s, clean SIGINT) \u2014 turn-1 evidence still valid since no graph code changed; AC-005 NOW VERIFIED at 2171 passed / 1 skipped / 0 failed; AC-006 verified at 92% TOTAL line coverage; AC-007 verified by uv run mypy src/jarvis/ returning 'Success: no issues found in 45 source files'; AC-008 verified by grep -rnE 'TASK-J[0-9]{3}-[0-9]{3}' returning no matches over the 5 in-scope infrastructure files.",
+  "concerns": [
+    "Coverage TOTAL margin is exactly zero (92% floor met at 92.0%). A regression of 0.05% would breach. Worth a Phase-3-close note that the gate is single-tile.",
+    "The test-regex relaxation is a Wave-1 follow-on style fix applied inside the Wave-2 gate task. Strictly speaking, the cleanest workflow would have been a TASK-DOC-006-FIX-001 separate task \u2014 but the change is one-line, pre-authorised verbatim by TASK-DOC-006 Implementation Notes, and bringing it into TASK-DOC-007 unblocks the Phase-3 close gate without spawning a third wave. Verifier should confirm this scoping decision is acceptable; otherwise revert and file the follow-up task."
+  ],
   "requirements_addressed": [
     "AC-001 tool-docstring invariant (general.py, capabilities.py, dispatch.py byte-identical docstrings vs main; unchanged from turn 1)",
     "AC-002 no executable src/jarvis code modified (turn-2 edit is in tests/, not src/jarvis/; the 5 modified infrastructure files remain docstring-only diffs vs main)",
@@ -36,17 +26,8 @@
     "AC-007 mypy delta = 0 (HEAD: Success, no issues found in 45 source files)",
     "AC-008 TASK-Jxxx markers cleared from 5 in-scope infrastructure files"
   ],
-  "requirements_met": [
-    "AC-001 tool-docstring invariant (general.py, capabilities.py, dispatch.py byte-identical docstrings vs main; unchanged from turn 1)",
-    "AC-002 no executable src/jarvis code modified (turn-2 edit is in tests/, not src/jarvis/; the 5 modified infrastructure files remain docstring-only diffs vs main)",
-    "AC-003 five infrastructure modules importable",
-    "AC-004 langgraph dev boots both graphs cleanly (turn-1 probe evidence still valid; no graph code changed in turn 2)",
-    "AC-005 pytest baseline preserved: 2171 passed / 1 skipped / 0 failed (FIXED in turn 2)",
-    "AC-006 line coverage TOTAL = 92% (>= 92% floor)",
-    "AC-007 mypy delta = 0 (HEAD: Success, no issues found in 45 source files)",
-    "AC-008 TASK-Jxxx markers cleared from 5 in-scope infrastructure files"
-  ],
-  "summary": "Direct mode implementation completed successfully",
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
   "completion_promises": [
     {
       "criterion_id": "AC-001",
@@ -146,5 +127,6 @@
         "src/jarvis/infrastructure/forge_notifications.py"
       ]
     }
-  ]
+  ],
+  "success": true
 }
