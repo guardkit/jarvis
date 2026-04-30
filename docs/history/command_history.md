@@ -1686,6 +1686,403 @@ Next steps
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J004-702C --verbose --max-turns 30
 
 
+/feature-spec "Build Queue Dispatch to Forge: queue_build publishes BuildQueuedPayload to pipeline.build-queued.{feature_id} per ADR-SP-014 Pattern A; Jarvis subscribes to pipeline.stage-complete.> via ephemeral push consumer (deliver_policy=NEW); ForgeNotificationsSubscriber routes correlation-matched events to per-session CLI rendering between prompts; routing-history writer emits append-only stage_complete edges on the originating JarvisRoutingHistoryEntry" \
+  --context docs/design/FEAT-JARVIS-005/design.md \
+  --context docs/design/FEAT-JARVIS-005/contracts/API-tools.md \
+  --context docs/design/FEAT-JARVIS-005/contracts/API-internal.md \
+  --context docs/design/FEAT-JARVIS-005/contracts/API-events.md \
+  --context docs/design/FEAT-JARVIS-005/models/DM-forge-notification.md \
+  --context docs/design/FEAT-JARVIS-005/diagrams/forge-feedback-l3.md \
+  --context docs/design/FEAT-JARVIS-005/decisions/DDR-025-queue-build-real-transport.md \
+  --context docs/design/FEAT-JARVIS-005/decisions/DDR-026-forge-notifications-module-location.md \
+  --context docs/design/FEAT-JARVIS-005/decisions/DDR-027-stage-complete-ephemeral-deliver-new.md \
+  --context docs/design/FEAT-JARVIS-005/decisions/DDR-028-correlation-map-in-memory-bounded.md \
+  --context docs/design/FEAT-JARVIS-005/decisions/DDR-029-stage-complete-as-append-only-edges.md \
+  --context docs/design/FEAT-JARVIS-005/decisions/DDR-030-cli-notifications-between-prompts.md \
+  --context docs/design/FEAT-JARVIS-005/decisions/DDR-031-originating-adapter-from-session.md \
+  --context docs/design/FEAT-JARVIS-004/design.md \
+  --context docs/design/FEAT-JARVIS-004/contracts/API-internal.md \
+  --context docs/design/FEAT-JARVIS-004/contracts/API-events.md \
+  --context docs/design/FEAT-JARVIS-004/models/DM-routing-history.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-018-routing-history-schema-authoritative.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-019-graphiti-fire-and-forget-writes.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-020-concurrent-dispatch-cap-8.md \
+  --context docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md \
+  --context docs/architecture/ARCHITECTURE.md \
+  --context docs/research/ideas/phase3-fleet-integration-scope.md \
+  --context docs/research/ideas/phase3-build-plan.md \
+  --context ../forge/docs/design/contracts/API-nats-pipeline-events.md \
+  --context ../forge/docs/research/forge-pipeline-architecture.md \
+  --context ../forge/docs/research/ideas/ADR-FLEET-001-trace-richness.md \
+  --context ../nats-core/src/nats_core/events/_pipeline.py \
+  --context ../nats-core/src/nats_core/events/__init__.py \
+  --context ../nats-core/src/nats_core/topics.py \
+  --context src/jarvis/tools/dispatch.py \
+  --context src/jarvis/infrastructure/nats_client.py \
+  --context src/jarvis/infrastructure/routing_history.py \
+  --context src/jarvis/infrastructure/lifecycle.py \
+  --context src/jarvis/sessions/manager.py \
+  --context src/jarvis/cli/main.py \
+  --context .guardkit/context-manifest.yaml
+
+
+FEATURE SPEC COMPLETE: Build Queue Dispatch to Forge (FEAT-JARVIS-005)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Files written:
+
+features/feat-jarvis-005-build-queue-dispatch-to-forge/feat-jarvis-005-build-queue-dispatch-to-forge.feature
+features/feat-jarvis-005-build-queue-dispatch-to-forge/feat-jarvis-005-build-queue-dispatch-to-forge_assumptions.yaml
+features/feat-jarvis-005-build-queue-dispatch-to-forge/feat-jarvis-005-build-queue-dispatch-to-forge_summary.md
+Scenarios: 32 total (1 Outline → 34 effective example rows)
+
+@key-example: 6 · @boundary: 6 · @negative: 9 · @edge-case: 14
+@smoke: 4 · @security: 3 · @concurrency: 2 · @integration: 2 · @regression: 0
+Assumptions: 11 total — all confidence=high, anchored in DDR-025/027/028/029/030/031, DDR-019/020/021 inherited, plus API-events §3, API-internal §1/§7, and DM-forge-notification §1.
+
+Review required: No — no low-confidence assumptions.
+
+Deferred: None — all four groups accepted in full; Phase 4 expansion (8 scenarios) included in full.
+
+Next steps:
+
+Review: features/feat-jarvis-005-build-queue-dispatch-to-forge/feat-jarvis-005-build-queue-dispatch-to-forge.feature
+Pass to feature-plan:
+
+/feature-plan "FEAT-JARVIS-005 — Build Queue Dispatch to Forge" \
+  --context features/feat-jarvis-005-build-queue-dispatch-to-forge/feat-jarvis-005-build-queue-dispatch-to-forge_summary.md
+
+
+/feature-plan "FEAT-JARVIS-005 — Build Queue Dispatch to Forge" \
+  --context features/feat-jarvis-005-build-queue-dispatch-to-forge/feat-jarvis-005-build-queue-dispatch-to-forge_summary.md
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEATURE PLANNING COMPLETE — FEAT-J005-946D
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Review task: TASK-REV-3B8B
+
+Feature file: .guardkit/features/FEAT-J005-946D.yaml — 12 tasks, 5 waves, 0 unverifiable ACs, 0 intra-wave dep violations
+
+Generated artefacts in tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/:
+
+README.md
+IMPLEMENTATION-GUIDE.md — data flow + sequence + dep graph + §4 (7 contracts)
+12 task files with task_type, parent_review, feature_id, consumer_context (where applicable), seam tests, and lint-compliance ACs
+Wave structure (auto-detected from dependencies):
+
+Wave 1 (4×): TASK-J005-001 config, 002 models, 004 routing-history extensions, 006 session-manager queue
+Wave 2 (2×): 003 subscriber, 007 CLI render
+Wave 3 (2×): 005 queue_build publish, 008 lifecycle wiring
+Wave 4 (3×): 009 soft-fail, 010 contract tests, 011 grep retire — merge gate
+Wave 5 (1×, soft-prereq): 012 E2E Forge round-trip — Phase 3 close evidence on GB10
+BDD linker: 32/32 scenarios tagged with @task: (avg confidence 0.87). Distribution skews to behaviour-bearing tasks (003: 11, 005: 9), with 004/006/007 at 3 each, 008/009 at 1–2. Declarative + pure-test tasks (001, 002, 010, 011, 012) have no scenarios — expected.
+
+Next steps:
+
+/feature-build FEAT-J005-946D for autonomous AutoBuild execution, or
+/task-work TASK-J005-001 (and 002, 004, 006 in parallel) to start Wave 1 manually.
+
+
+ 
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J005-946D --verbose
+
+
+INFO:guardkit.orchestrator.autobuild:Phase 4 (Finalize): Preserving worktree for FEAT-J005-946D
+
+                                                            AutoBuild Summary (APPROVED)
+╭────────┬───────────────────────────┬──────────────┬───────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Turn   │ Phase                     │ Status       │ Summary                                                                                       │
+├────────┼───────────────────────────┼──────────────┼───────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 1      │ Player Implementation     │ ✓ success    │ 5 files created, 24 modified, 3 tests (passing)                                               │
+│ 1      │ Coach Validation          │ ⚠ feedback   │ Feedback: - Advisory (non-blocking): task-work produced a report with 2 of 3 expected agen... │
+│ 2      │ Player Implementation     │ ✓ success    │ 4 files created, 28 modified, 0 tests (passing)                                               │
+│ 2      │ Coach Validation          │ ✓ success    │ Coach approved - ready for human review                                                       │
+╰────────┴───────────────────────────┴──────────────┴───────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Status: APPROVED                                                                                                                                    │
+│                                                                                                                                                     │
+│ Coach approved implementation after 2 turn(s).                                                                                                      │
+│ Worktree preserved at: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees                                                  │
+│ Review and merge manually when ready.                                                                                                               │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+INFO:guardkit.orchestrator.progress:Summary rendered: approved after 2 turns
+INFO:guardkit.orchestrator.autobuild:Worktree preserved at /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D for human review. Decision: approved
+INFO:guardkit.orchestrator.autobuild:Orchestration complete: TASK-J005-005, decision=approved, turns=2
+    ✓ TASK-J005-005: approved (2 turns)
+
+  [2026-04-29T22:53:52.155Z] Wave 3 ✗ FAILED: 1 passed, 1 failed
+
+  Task                   Status        Turns   Decision
+ ───────────────────────────────────────────────────────────
+  TASK-J005-005          TIMEOUT           -   timeout
+  TASK-J005-008          SUCCESS           1   approved
+
+INFO:guardkit.cli.display:[2026-04-29T22:53:52.155Z] Wave 3 complete: passed=1, failed=1
+⚠ Stopping execution (stop_on_failure=True)
+INFO:guardkit.orchestrator.feature_orchestrator:Phase 3 (Finalize): Updating feature FEAT-J005-946D
+
+════════════════════════════════════════════════════════════
+FEATURE RESULT: FAILED
+════════════════════════════════════════════════════════════
+
+Feature: FEAT-J005-946D - FEAT-JARVIS-005 — Build Queue Dispatch to Forge
+Status: FAILED
+Tasks: 7/12 completed (1 failed)
+Total Turns: 7
+Duration: 90m 16s
+
+                                  Wave Summary
+╭────────┬──────────┬────────────┬──────────┬──────────┬──────────┬─────────────╮
+│  Wave  │  Tasks   │   Status   │  Passed  │  Failed  │  Turns   │  Recovered  │
+├────────┼──────────┼────────────┼──────────┼──────────┼──────────┼─────────────┤
+│   1    │    4     │   ✓ PASS   │    4     │    -     │    4     │      -      │
+│   2    │    2     │   ✓ PASS   │    2     │    -     │    2     │      -      │
+│   3    │    2     │   ✗ FAIL   │    1     │    1     │    1     │      -      │
+╰────────┴──────────┴────────────┴──────────┴──────────┴──────────┴─────────────╯
+
+Execution Quality:
+  Clean executions: 8/8 (100%)
+
+SDK Turn Ceiling:
+  Invocations: 5
+  Ceiling hits: 0/5 (0%)
+
+                                  Task Details
+╭──────────────────────┬────────────┬──────────┬─────────────────┬──────────────╮
+│ Task                 │ Status     │  Turns   │ Decision        │  SDK Turns   │
+├──────────────────────┼────────────┼──────────┼─────────────────┼──────────────┤
+│ TASK-J005-001        │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-J005-002        │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-J005-004        │ SUCCESS    │    1     │ approved        │      34      │
+│ TASK-J005-006        │ SUCCESS    │    1     │ approved        │      71      │
+│ TASK-J005-003        │ SUCCESS    │    1     │ approved        │      52      │
+│ TASK-J005-007        │ SUCCESS    │    1     │ approved        │      26      │
+│ TASK-J005-005        │ TIMEOUT    │    -     │ timeout         │      -       │
+│ TASK-J005-008        │ SUCCESS    │    1     │ approved        │      80      │
+╰──────────────────────┴────────────┴──────────┴─────────────────┴──────────────╯
+
+Worktree: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D
+Branch: autobuild/FEAT-J005-946D
+
+Next Steps:
+  1. Review failed tasks: cd /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D
+  2. Check status: guardkit autobuild status FEAT-J005-946D
+  3. Resume: guardkit autobuild feature FEAT-J005-946D --resume
+INFO:guardkit.cli.display:Final summary rendered: FEAT-J005-946D - failed
+INFO:guardkit.orchestrator.review_summary:Review summary written to /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/autobuild/FEAT-J005-946D/review-summary.md
+✓ Review summary: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/autobuild/FEAT-J005-946D/review-summary.md
+INFO:guardkit.orchestrator.feature_orchestrator:Feature orchestration complete: FEAT-J005-946D, status=failed, completed=7/12
+
+
+
+
+
+
+
+/task-create please create a review task to analyse the timeout failure of autobuild feature FEAT-J005-946D in /Users/richardwoollcott/Projects/appmilla_github/jarvis/docs/history/autobuild-FEAT-J005-946D-timeout-history.md
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Review task created: TASK-REV-E73C
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Task Details
+
+Title: Analyse AutoBuild FEAT-J005-946D timeout failure (TASK-J005-005)
+Type: review
+Priority: high
+Tags: autobuild, timeout, investigation, jarvis, feat-jarvis-005, guardkit-orchestrator
+Context loaded: timeout history transcript (1904 lines), feature YAML, TASK-J005-005 task file, AutoBuild review summary
+📁 File: tasks/backlog/TASK-REV-E73C-analyse-autobuild-feat-j005-946d-timeout-failure.md
+
+🔍 What this review will tackle — captured as acceptance criteria so they're scoped before analysis begins:
+
+Identify and rank root causes (Player turn 2 code-reviewer 360s+ runtime, Coach SDK→subprocess fallback, Graphiti RecursionError noise, task_timeout vs sdk_timeout interaction, stop_on_failure cascade)
+Characterise the race condition: feature orchestrator marks TIMEOUT at 22:53:52.004 while per-task orchestrator marks APPROVED at 22:53:52.072 — same task, 68 ms apart
+Review the specialist:code-reviewer hot-path for TASK-J005-005 (complexity 7, 15 ACs)
+Review the Coach-side SDK fallback path (SDK exit-code-1 → subprocess succeeded twice)
+Recommend resume vs targeted re-run vs full re-run (worktree preserved, 7 tasks clean)
+Recommend a concrete config change for task_timeout / sdk_timeout / stop_on_failure
+Next steps:
+
+Review (recommended): /task-review TASK-REV-E73C --mode=decision --depth=standard — runs the analysis and presents A/R/I/C decision checkpoint
+Track progress: /task-status TASK-REV-E73C
+Or re-run with broader context: /task-review TASK-REV-E73C --depth=comprehensive if the analysis surfaces deeper architectural questions about the orchestrator timeout model
+
+
+/task-review TASK-REV-E73C 
+
+
+═══════════════════════════════════════════════════════════════════════════
+REVIEW v2 COMPLETE: TASK-REV-E73C — code & worktree-validated
+═══════════════════════════════════════════════════════════════════════════
+
+Report: .claude/reviews/TASK-REV-E73C-review-report.md (with C4 + sequence diagrams)
+
+What changed from v1:
+
+  ✓ Race mechanism PROVEN at code level — asyncio.to_thread cannot
+    hard-cancel; thread runs to completion. Confirmed by checkpoint
+    commit 0069a0d wall-clock = exact second of timeout fire.
+
+  ✓ Discovered the per-task grace mechanism (TASK-ABFIX-004 at
+    autobuild.py:2192-2202) ALREADY EXISTS and DID FIRE — it's why
+    per-task frontmatter says decision=approve. The missing piece is
+    the symmetric mechanism at the FEATURE level. v1 assumed neither
+    existed, which understated the team's existing work on this race.
+
+  ✓ Discovered LATENT BUG at autobuild.py:2880-2909 — `remaining_budget`
+    passed to _cap_specialist_timeout() is not refreshed between Phase 4
+    and Phase 5 invocations, so Phase 5's cap doesn't reflect Phase 4's
+    consumption. Didn't bite TASK-005 (390+390 = balanced) but could.
+
+  ✓ Coach SDK 7/7 failures root cause: Jarvis has NO .guardkit/config.yaml.
+    coach_test_execution defaults to "sdk" at autobuild.py:4986. Verified
+    by listing .guardkit/. One config file fixes it.
+
+  ✓ TASK-005 IS in the worktree. git grep confirms js.publish +
+    pipeline_publish_timeout_seconds + pipeline.build-queued.{feature_id}
+    all present at src/jarvis/tools/dispatch.py:{16, 801, 1142}. Branch
+    autobuild/FEAT-J005-946D is 9 commits ahead of main, 101 files
+    changed, 11853 insertions.
+
+═══════════════════════════════════════════════════════════════════════════
+RECOMMENDATION (rev 2 — risk-tiered for demo crunch)
+═══════════════════════════════════════════════════════════════════════════
+
+Tier 0 — fix now, zero/minimal regression risk:
+  1. Create .guardkit/config.yaml:
+       autobuild:
+         coach:
+           test_execution: subprocess
+  2. Manually flip TASK-J005-005 status: completed in
+     .guardkit/features/FEAT-J005-946D.yaml (Coach approved it; verified)
+  3. Resume with elevated floor (zero code change — env var already
+     supported at feature_orchestrator.py:585):
+       GUARDKIT_AUTOBUILD_TASK_TIMEOUT_FLOOR=4500 \
+         guardkit autobuild feature FEAT-J005-946D --resume
+
+Tier 1 — fix this week (small code changes, well-bounded):
+  T1.1  Per-task task_timeout override in frontmatter for complexity≥7
+        task-work (symmetric to existing autobuild.sdk_timeout)
+  T1.2  Refresh remaining_budget between Phase 4 and Phase 5 specialists
+        — the latent bug discovered in this review (~10 lines, autobuild.py
+        :2880-2909)
+
+Tier 2 — fix when demo is shipped (architectural):
+  T2.1  Feature-level late-approval reconciliation (read coach_turn_*.json
+        after TimeoutError) — the missing counterpart to TASK-ABFIX-004,
+        ~30 lines in feature_orchestrator.py:2137-2167
+  T2.2  Graphiti edge_fulltext_search circuit breaker (~5 lines)
+  T2.3  File issue: claude-agent-sdk 0.1.66 _bundled/claude pytest
+        exit-code-1
+
+═══════════════════════════════════════════════════════════════════════════
+DECISION CHECKPOINT
+═══════════════════════════════════════════════════════════════════════════
+
+  [A]ccept   Approve v2 findings; proceed with Tier 0 (config + YAML +
+             env-var resume) yourself. I'll not touch source code.
+
+  [I]mplement  Spawn implementation tasks. With your "fix issues as we find
+             them" preference, the natural slate is:
+               • IMP-1 Tier 0: create .guardkit/config.yaml +
+                              corrected-resume helper script
+               • IMP-2 Tier 1.1: per-task task_timeout frontmatter override
+                                 (symmetric to sdk_timeout, low risk)
+               • IMP-3 Tier 1.2: refresh remaining_budget between Phase 4
+                                 and Phase 5 (the latent bug — needs a test)
+               • IMP-4 Tier 2.1: feature-level late-approval reconciliation
+                                 (after demo)
+               • IMP-5 Tier 2.2: Graphiti circuit breaker (anytime, trivial)
+             Triggers Context-B implementation-preferences questions.
+
+  [R]evise   Go even deeper. Possible targets:
+             • Reproduce the SDK pytest exit-code-1 in isolation
+             • Read invoke_test_orchestrator/invoke_code_reviewer to
+               confirm the actual specialist runtime distribution
+             • Audit other features for the same shared-worktree
+               checkpoint sweep (TASK-008's commit ate TASK-005's code)
+
+  [C]ancel   Discard.
+
+Your choice [A/I/R/C]:
+My lean: [I]mplement — your guidance says fix-as-we-find, and Tier 0 (config file + resume) plus Tier 1.1 (frontmatter override) are genuinely low-risk and unblock you while the demo is still ahead. Tier 1.2 (the latent specialist-cap bug) is the sort of thing that's easier to fix while the context is fresh than to stumble onto again. T2.1 / T2.3 can wait until after the demo without losing anything.
+
+[I]mplement - for the fix for .guardkit/config.yaml we can look at other repos such as forge, specialis-agent, guardkit etc to cross-reference the content if required
+
+
+
+[I]mplement - for the fix for .guardkit/config.yaml we can look at other repos such as forge, specialis-agent, guardkit etc to cross-reference the content if required
+
+
+
+
+richardwoollcott@Richards-MBP jarvis % GUARDKIT_AUTOBUILD_TASK_TIMEOUT_FLOOR=4500 \
+  guardkit autobuild feature FEAT-J005-946D --resume --verbose
+
+
+════════════════════════════════════════════════════════════
+FEATURE RESULT: SUCCESS
+════════════════════════════════════════════════════════════
+
+Feature: FEAT-J005-946D - FEAT-JARVIS-005 — Build Queue Dispatch to Forge
+Status: COMPLETED
+Tasks: 12/12 completed
+Total Turns: 13
+Duration: 36m 19s
+
+                                  Wave Summary
+╭────────┬──────────┬────────────┬──────────┬──────────┬──────────┬─────────────╮
+│  Wave  │  Tasks   │   Status   │  Passed  │  Failed  │  Turns   │  Recovered  │
+├────────┼──────────┼────────────┼──────────┼──────────┼──────────┼─────────────┤
+│   1    │    4     │   ✓ PASS   │    4     │    -     │    4     │      -      │
+│   2    │    2     │   ✓ PASS   │    2     │    -     │    2     │      -      │
+│   3    │    2     │   ✓ PASS   │    2     │    -     │    3     │      -      │
+│   4    │    3     │   ✓ PASS   │    3     │    -     │    3     │      -      │
+│   5    │    1     │   ✓ PASS   │    1     │    -     │    1     │      -      │
+╰────────┴──────────┴────────────┴──────────┴──────────┴──────────┴─────────────╯
+
+Execution Quality:
+  Clean executions: 12/12 (100%)
+
+SDK Turn Ceiling:
+  Invocations: 3
+  Ceiling hits: 0/3 (0%)
+
+                                  Task Details
+╭──────────────────────┬────────────┬──────────┬─────────────────┬──────────────╮
+│ Task                 │ Status     │  Turns   │ Decision        │  SDK Turns   │
+├──────────────────────┼────────────┼──────────┼─────────────────┼──────────────┤
+│ TASK-J005-001        │ SKIPPED    │    1     │ already_comple… │      -       │
+│ TASK-J005-002        │ SKIPPED    │    1     │ already_comple… │      -       │
+│ TASK-J005-004        │ SKIPPED    │    1     │ already_comple… │      -       │
+│ TASK-J005-006        │ SKIPPED    │    1     │ already_comple… │      -       │
+│ TASK-J005-003        │ SKIPPED    │    1     │ already_comple… │      -       │
+│ TASK-J005-007        │ SKIPPED    │    1     │ already_comple… │      -       │
+│ TASK-J005-005        │ SKIPPED    │    2     │ already_comple… │      -       │
+│ TASK-J005-008        │ SKIPPED    │    1     │ already_comple… │      -       │
+│ TASK-J005-009        │ SUCCESS    │    1     │ approved        │      41      │
+│ TASK-J005-010        │ SUCCESS    │    1     │ approved        │      53      │
+│ TASK-J005-011        │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-J005-012        │ SUCCESS    │    1     │ approved        │      53      │
+╰──────────────────────┴────────────┴──────────┴─────────────────┴──────────────╯
+
+Worktree: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D
+Branch: autobuild/FEAT-J005-946D
+
+Next Steps:
+  1. Review: cd /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D
+  2. Diff: git diff main
+  3. Merge: git checkout main && git merge autobuild/FEAT-J005-946D
+  4. Cleanup: guardkit worktree cleanup FEAT-J005-946D
+INFO:guardkit.cli.display:Final summary rendered: FEAT-J005-946D - completed
+INFO:guardkit.orchestrator.review_summary:Review summary written to /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/autobuild/FEAT-J005-946D/review-summary.md
+✓ Review summary: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/autobuild/FEAT-J005-946D/review-summary.md
+INFO:guardkit.orchestrator.feature_orchestrator:Feature orchestration complete: FEAT-J005-946D, status=completed, completed=12/12
 
 
 
@@ -1695,16 +2092,8 @@ GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J004-702C --verbose --m
 
 
 
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003-FIX --verbose
 
 
 
-
-
-
-
-
-GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003-FIX --verbose --max-turns 30
-
-
-
-GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-001 --verbose --max-turns 30
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-001 --verbose

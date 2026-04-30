@@ -1,0 +1,18 @@
+# GuardKit local config for Jarvis.
+#
+# Schema: read by guardkit.orchestrator.autobuild.AutoBuildOrchestrator
+# ._load_coach_config (autobuild.py:5095). Coach section keys consumed at
+# autobuild.py:4986–4987.
+#
+# Why test_execution: subprocess
+#   FEAT-J005-946D run-1 (2026-04-29) saw the SDK pytest path fail with
+#   exit-code-1 on 7/7 invocations and fall back to subprocess every time
+#   (transcript lines 347, 495, 618, 706, 1077, 1518, 1794). The
+#   subprocess path always succeeded in 3–8 s. Until the SDK path is
+#   debugged on this host (claude-agent-sdk 0.1.66 + bundled CLI), pin
+#   Coach to subprocess to eliminate the 10–15 s/turn fallback overhead
+#   and the spurious ERROR log noise. See TASK-REV-E73C review report
+#   .claude/reviews/TASK-REV-E73C-review-report.md (Tier 0).
+autobuild:
+  coach:
+    test_execution: subprocess

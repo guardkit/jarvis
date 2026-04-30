@@ -6,13 +6,16 @@ falkordb_port: 6379
 timeout: 30.0
 max_concurrent_episodes: 3
 chunk_extraction_concurrency: 4
-llm_provider: vllm
-llm_base_url: http://promaxgb10-41b1:9000/v1
-llm_model: qwen-graphiti
-# --- Fallback: MacBook Pro M2 Max (Ollama, Q4_K_M) — uncomment if GB10 offline ---
-#llm_provider: ollama
-#llm_base_url: http://richards-macbook-pro.tailebf801.ts.net:8000/v1
-#llm_model: qwen2.5:14b-instruct-q4_K_M
+# --- Primary: GB10 vLLM via llama-swap. Commented out 2026-04-29: contended
+#     with agentic-dataset-factory architect fine-tuning run; restore once the
+#     fine-tuning window closes.
+#llm_provider: vllm
+#llm_base_url: http://promaxgb10-41b1:9000/v1
+#llm_model: qwen-graphiti
+# --- Fallback: MacBook Pro M2 Max (Ollama, Q4_K_M) — active during GB10 contention ---
+llm_provider: ollama
+llm_base_url: http://localhost:11434/v1
+llm_model: qwen2.5:14b-instruct-q4_K_M
 llm_max_tokens: 4096
 embedding_provider: vllm
 embedding_base_url: http://promaxgb10-41b1:9000/v1

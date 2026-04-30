@@ -1,0 +1,268 @@
+id: FEAT-J005-946D
+name: "FEAT-JARVIS-005 \u2014 Build Queue Dispatch to Forge"
+description: "Closes the Jarvis \u2192 Forge loop. queue_build swaps to real js.publish\
+  \ on pipeline.build-queued.{feature_id} (DDR-025); subscribe to pipeline.stage-complete.>\
+  \ with ephemeral push consumer (DDR-027); route correlation-matched events to per-session\
+  \ CLI queue (DDR-026/030); append-only Graphiti edges on routing-history entry (DDR-029);\
+  \ originating_adapter from Session.adapter (DDR-031). 32 BDD scenarios; 12 tasks;\
+  \ 5 waves; soft-prereq Wave 5 E2E gated on GB10."
+created: '2026-04-29T21:58:36.342072'
+status: completed
+complexity: 8
+estimated_tasks: 12
+tasks:
+- id: TASK-J005-001
+  name: Config extensions
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-001-config-extensions.md
+  complexity: 2
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-29T22:23:35.855040'
+  completed_at: '2026-04-29T22:41:01.448931'
+- id: TASK-J005-002
+  name: Forge notification models
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-002-forge-notification-models.md
+  complexity: 3
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-29T22:23:35.859560'
+  completed_at: '2026-04-29T22:41:01.453940'
+- id: TASK-J005-003
+  name: Forge notifications subscriber
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-003-forge-notifications-subscriber.md
+  complexity: 7
+  dependencies:
+  - TASK-J005-002
+  - TASK-J005-004
+  - TASK-J005-006
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 170
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-29T22:41:01.481789'
+  completed_at: '2026-04-29T23:03:51.948979'
+- id: TASK-J005-004
+  name: Routing history build queue extensions
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-004-routing-history-build-queue-extensions.md
+  complexity: 6
+  dependencies: []
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 113
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-29T22:23:35.863929'
+  completed_at: '2026-04-29T22:41:01.458662'
+- id: TASK-J005-005
+  name: Dispatch queue build real publish
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-005-dispatch-queue-build-real-publish.md
+  complexity: 7
+  dependencies:
+  - TASK-J005-001
+  - TASK-J005-003
+  - TASK-J005-004
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 170
+  requires_infrastructure: []
+  result:
+    total_turns: 2
+    final_decision: approved
+    error: null
+  turns_completed: 2
+  current_turn: 2
+  started_at: '2026-04-29T23:03:51.974238'
+  completed_at: '2026-04-29T23:53:52.072000'
+- id: TASK-J005-006
+  name: Session manager pending notifications
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-006-session-manager-pending-notifications.md
+  complexity: 4
+  dependencies: []
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 50
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-29T22:23:35.868407'
+  completed_at: '2026-04-29T22:41:01.463519'
+- id: TASK-J005-007
+  name: CLI between prompts render
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-007-cli-between-prompts-render.md
+  complexity: 4
+  dependencies:
+  - TASK-J005-002
+  - TASK-J005-006
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 50
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-29T22:41:01.486480'
+  completed_at: '2026-04-29T23:03:51.954698'
+- id: TASK-J005-008
+  name: Lifecycle wiring
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-008-lifecycle-wiring.md
+  complexity: 6
+  dependencies:
+  - TASK-J005-001
+  - TASK-J005-003
+  - TASK-J005-004
+  - TASK-J005-006
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 113
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-29T23:03:51.979282'
+  completed_at: '2026-04-29T23:53:52.011655'
+- id: TASK-J005-009
+  name: Soft fail tests
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-009-soft-fail-tests.md
+  complexity: 5
+  dependencies:
+  - TASK-J005-005
+  - TASK-J005-008
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 75
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T10:48:06.658394'
+  completed_at: '2026-04-30T11:09:18.932976'
+- id: TASK-J005-010
+  name: Contract tests nats core
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-010-contract-tests-nats-core.md
+  complexity: 4
+  dependencies:
+  - TASK-J005-005
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 50
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T10:48:06.664366'
+  completed_at: '2026-04-30T11:09:18.938410'
+- id: TASK-J005-011
+  name: Grep invariant retire
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-011-grep-invariant-retire.md
+  complexity: 2
+  dependencies:
+  - TASK-J005-005
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T10:48:06.670328'
+  completed_at: '2026-04-30T11:09:18.943891'
+- id: TASK-J005-012
+  name: End to end Forge roundtrip
+  file_path: tasks/backlog/feat-jarvis-005-build-queue-dispatch-to-forge/TASK-J005-012-end-to-end-forge-roundtrip.md
+  complexity: 8
+  dependencies:
+  - TASK-J005-008
+  - TASK-J005-010
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 256
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T11:09:18.964020'
+  completed_at: '2026-04-30T11:24:25.963466'
+orchestration:
+  parallel_groups:
+  - - TASK-J005-001
+    - TASK-J005-002
+    - TASK-J005-004
+    - TASK-J005-006
+  - - TASK-J005-003
+    - TASK-J005-007
+  - - TASK-J005-005
+    - TASK-J005-008
+  - - TASK-J005-009
+    - TASK-J005-010
+    - TASK-J005-011
+  - - TASK-J005-012
+  estimated_duration_minutes: 1124
+  recommended_parallel: 4
+execution:
+  started_at: '2026-04-29T22:23:35.817697'
+  completed_at: '2026-04-30T11:24:25.975847'
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D
+  total_turns: 13
+  tasks_completed: 12
+  tasks_failed: 0
+  current_wave: 5
+  completed_waves:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  last_updated: '2026-04-30T11:24:25.969290'
+  archived_at: null
+  archived_to: null
