@@ -8,26 +8,63 @@ wave: 2
 implementation_mode: direct
 complexity: 3
 dependencies:
-  - TASK-DOC-001
-  - TASK-DOC-002
-  - TASK-DOC-003
-  - TASK-DOC-004
-  - TASK-DOC-005
-  - TASK-DOC-006
+- TASK-DOC-001
+- TASK-DOC-002
+- TASK-DOC-003
+- TASK-DOC-004
+- TASK-DOC-005
+- TASK-DOC-006
 priority: high
 tags:
-  - testing
-  - regression
-  - invariant
-  - feat-jarvis-internal-001
-  - phase-3-close
-status: backlog
-created: 2026-04-30T00:00:00Z
-updated: 2026-04-30T00:00:00Z
+- testing
+- regression
+- invariant
+- feat-jarvis-internal-001
+- phase-3-close
+status: completed
+created: 2026-04-30 00:00:00+00:00
+updated: 2026-04-30 00:00:00+00:00
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 2
+  max_turns: 5
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-43DE
+  base_branch: main
+  started_at: '2026-04-30T20:19:27.818896'
+  last_updated: '2026-04-30T20:35:22.281710'
+  turns:
+  - turn: 1
+    decision: feedback
+    feedback: "- Not all acceptance criteria met:\n  \u2022 pytest baseline preserved**:\
+      \ `uv run pytest tests/` returns"
+    timestamp: '2026-04-30T20:19:27.818896'
+    player_summary: "TASK-DOC-007 is a verification-only gate task \u2014 the test\
+      \ surface is the task. No executable code, docstring, or README edits were performed\
+      \ (those are wave-1 tasks per the explicit Out-of-scope list). The eight acceptance\
+      \ criteria were each validated by replaying the canonical commands in the task's\
+      \ Test Requirements section: AC-001 tool-docstring invariant verified by AST-extracting\
+      \ docstrings from main:src/jarvis/tools/{general,capabilities,dispatch}.py and\
+      \ HEAD copies \u2014 JSON-encoded function-"
+    player_success: true
+    coach_success: true
+  - turn: 2
+    decision: approve
+    feedback: null
+    timestamp: '2026-04-30T20:29:39.460986'
+    player_summary: 'Coach feedback on Turn 1 rejected AC-005 (pytest baseline) because
+      the gate cannot mark itself green while 6 tests fail, regardless of root cause.
+      Turn 2 applies the minimal pre-authorised fix.
+
+
+      Action: relaxed four regex patterns in tests/test_developer_surface.py::TestAC004ReadmeQuickstart
+      from ''^## Quickstart'' / ''## Quickstart\n'' to ''^## Quick ?[Ss]tart'' / ''##
+      Quick ?[Ss]tart\n'' so they match either the original ''## Quickstart'' heading
+      or TASK-DOC-006''s renamed ''## Quick Start'' heading. This '
+    player_success: true
+    coach_success: true
 ---
 
 # TASK-DOC-007 — FEAT-J004/J005 invariant + full Phase-3 regression gate

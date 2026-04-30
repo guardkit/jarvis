@@ -1,0 +1,160 @@
+id: FEAT-43DE
+name: FEAT-JARVIS-INTERNAL-001 Documentation Foundation
+description: Polish 5 FEAT-J004/J005 infrastructure module docstrings + rewrite repo-root
+  README to Phase-3-close state. Documentation-only feature feeding Step 14 of the
+  Phase 3 build plan (end-to-end Forge round-trip).
+created: '2026-04-30T18:03:48.137253'
+status: completed
+complexity: 4
+estimated_tasks: 7
+tasks:
+- id: TASK-DOC-001
+  name: nats_client.py docstring polish
+  file_path: tasks/backlog/feat-jarvis-internal-001-documentation-foundation/TASK-DOC-001-nats-client-docstring-polish.md
+  complexity: 2
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T20:13:45.398549'
+  completed_at: '2026-04-30T20:19:27.779252'
+- id: TASK-DOC-002
+  name: fleet_registration.py docstring polish
+  file_path: tasks/backlog/feat-jarvis-internal-001-documentation-foundation/TASK-DOC-002-fleet-registration-docstring-polish.md
+  complexity: 2
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T20:13:45.402126'
+  completed_at: '2026-04-30T20:19:27.782845'
+- id: TASK-DOC-003
+  name: capabilities_registry.py docstring polish
+  file_path: tasks/backlog/feat-jarvis-internal-001-documentation-foundation/TASK-DOC-003-capabilities-registry-docstring-polish.md
+  complexity: 3
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T20:13:45.405305'
+  completed_at: '2026-04-30T20:19:27.785951'
+- id: TASK-DOC-004
+  name: routing_history.py docstring polish
+  file_path: tasks/backlog/feat-jarvis-internal-001-documentation-foundation/TASK-DOC-004-routing-history-docstring-polish.md
+  complexity: 2
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T20:13:45.408458'
+  completed_at: '2026-04-30T20:19:27.789050'
+- id: TASK-DOC-005
+  name: forge_notifications.py docstring polish
+  file_path: tasks/backlog/feat-jarvis-internal-001-documentation-foundation/TASK-DOC-005-forge-notifications-docstring-polish.md
+  complexity: 3
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T20:13:45.411875'
+  completed_at: '2026-04-30T20:19:27.792173'
+- id: TASK-DOC-006
+  name: README.md Phase-3-close rewrite
+  file_path: tasks/backlog/feat-jarvis-internal-001-documentation-foundation/TASK-DOC-006-readme-rewrite.md
+  complexity: 3
+  dependencies: []
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-04-30T20:13:45.415293'
+  completed_at: '2026-04-30T20:19:27.795361'
+- id: TASK-DOC-007
+  name: FEAT-J004/J005 invariant + full Phase-3 regression gate
+  file_path: tasks/backlog/feat-jarvis-internal-001-documentation-foundation/TASK-DOC-007-invariant-and-regression-gate.md
+  complexity: 3
+  dependencies:
+  - TASK-DOC-001
+  - TASK-DOC-002
+  - TASK-DOC-003
+  - TASK-DOC-004
+  - TASK-DOC-005
+  - TASK-DOC-006
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 2
+    final_decision: approved
+    error: null
+  turns_completed: 2
+  current_turn: 0
+  started_at: '2026-04-30T20:19:27.809826'
+  completed_at: '2026-04-30T20:35:22.284620'
+orchestration:
+  parallel_groups:
+  - - TASK-DOC-001
+    - TASK-DOC-002
+    - TASK-DOC-003
+    - TASK-DOC-004
+    - TASK-DOC-005
+    - TASK-DOC-006
+  - - TASK-DOC-007
+  estimated_duration_minutes: 198
+  recommended_parallel: 4
+execution:
+  started_at: '2026-04-30T20:13:45.379573'
+  completed_at: '2026-04-30T20:35:22.292807'
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-43DE
+  total_turns: 8
+  tasks_completed: 7
+  tasks_failed: 0
+  current_wave: 2
+  completed_waves:
+  - 1
+  - 2
+  last_updated: '2026-04-30T20:35:22.288600'
+  archived_at: null
+  archived_to: null
