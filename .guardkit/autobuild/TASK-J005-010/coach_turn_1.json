@@ -1,0 +1,179 @@
+{
+  "task_id": "TASK-J005-010",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "skipped",
+      "test_output_summary": "Independent test verification skipped (tests not required for testing tasks)",
+      "duration_seconds": 0.0
+    },
+    "requirements": {
+      "criteria_total": 8,
+      "criteria_met": 8,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Test: `BuildQueuedPayload` constructs from a known-good dict; `model_dump()`",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added TestBuildQueuedPayloadContract with 3 tests in tests/test_contract_nats_core.py: (1) constructs_from_known_good_dict \u2014 validates payload from _good_build_queued_dict; (2) model_dump_round_trip_preserves_all_fields \u2014 round-trips via both model_dump() (Python dict) and model_dump_json()/model_validate_json() (bit-stable bytes); (3) adapter_required_for_jarvis_validator_raises \u2014 asserts pydantic ValidationError surfaces the validator's exact message when triggered_by='jarvis' and originating_adapter=None.",
+      "notes": "Added TestBuildQueuedPayloadContract with 3 tests in tests/test_contract_nats_core.py: (1) constructs_from_known_good_dict \u2014 validates payload from _good_build_queued_dict; (2) model_dump_round_trip_preserves_all_fields \u2014 round-trips via both model_dump() (Python dict) and model_dump_json()/model_validate_json() (bit-stable bytes); (3) adapter_required_for_jarvis_validator_raises \u2014 asserts pydantic ValidationError surfaces the validator's exact message when triggered_by='jarvis' and originating_adapter=None."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Test: `StageCompletePayload` constructs from a known-good dict; round-",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added TestStageCompletePayloadContract with 2 tests: (1) constructs_from_known_good_dict \u2014 validates payload (PASSED stage, target_kind=subagent, gate_mode=AUTO_APPROVE) from _good_stage_complete_dict; (2) json_round_trip_is_bit_stable \u2014 encoded = original.model_dump_json(); decoded = StageCompletePayload.model_validate_json(encoded); asserts decoded == original AND decoded.model_dump_json() == encoded (byte-stable re-serialization, no field-order drift).",
+      "notes": "Added TestStageCompletePayloadContract with 2 tests: (1) constructs_from_known_good_dict \u2014 validates payload (PASSED stage, target_kind=subagent, gate_mode=AUTO_APPROVE) from _good_stage_complete_dict; (2) json_round_trip_is_bit_stable \u2014 encoded = original.model_dump_json(); decoded = StageCompletePayload.model_validate_json(encoded); asserts decoded == original AND decoded.model_dump_json() == encoded (byte-stable re-serialization, no field-order drift)."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Test: `nats_core.Topics.Pipeline.BUILD_QUEUED.format(feature_id=\"X\")`",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added TestTopicsPipelineFormatters.test_build_queued_format_produces_singular_subject \u2014 directly asserts Topics.Pipeline.BUILD_QUEUED.format(feature_id='X') == 'pipeline.build-queued.X', with an error message that names ADR-SP-016 if the singular convention is broken.",
+      "notes": "Added TestTopicsPipelineFormatters.test_build_queued_format_produces_singular_subject \u2014 directly asserts Topics.Pipeline.BUILD_QUEUED.format(feature_id='X') == 'pipeline.build-queued.X', with an error message that names ADR-SP-016 if the singular convention is broken."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Test: `nats_core.Topics.Pipeline.STAGE_COMPLETE` template, with the",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added TestTopicsPipelineFormatters.test_stage_complete_wildcard_matches_known_subject \u2014 derives the wildcard via Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'), asserts derivation == 'pipeline.stage-complete.>', then runs a NATS subject matcher (_nats_subject_matches helper, supports * + trailing >) against the worked example 'pipeline.stage-complete.FEAT-J005.plan-complete', the simpler 3-token form, and a sibling subject (negative case).",
+      "notes": "Added TestTopicsPipelineFormatters.test_stage_complete_wildcard_matches_known_subject \u2014 derives the wildcard via Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'), asserts derivation == 'pipeline.stage-complete.>', then runs a NATS subject matcher (_nats_subject_matches helper, supports * + trailing >) against the worked example 'pipeline.stage-complete.FEAT-J005.plan-complete', the simpler 3-token form, and a sibling subject (negative case)."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Test: `MessageEnvelope(source_id=\"jarvis\", payload=...)` round-trips",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added TestMessageEnvelopeSourceIdRoundTrip.test_jarvis_envelope_round_trips_via_json \u2014 constructs MessageEnvelope wrapping a real BuildQueuedPayload with source_id='jarvis', encodes via model_dump_json, decodes via model_validate_json, and asserts source_id, event_type, correlation_id and the rebuilt BuildQueuedPayload all survive the round trip.",
+      "notes": "Added TestMessageEnvelopeSourceIdRoundTrip.test_jarvis_envelope_round_trips_via_json \u2014 constructs MessageEnvelope wrapping a real BuildQueuedPayload with source_id='jarvis', encodes via model_dump_json, decodes via model_validate_json, and asserts source_id, event_type, correlation_id and the rebuilt BuildQueuedPayload all survive the round trip."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Test: Subscriber drops a message with `envelope.source_id=\"malicious\"` \u2014",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added TestSubscriberDropsMaliciousSourceId.test_malicious_source_id_drops_message_and_logs_warn \u2014 instantiates the real ForgeNotificationsSubscriber with mocked NATS client / writer / SessionManager, builds a real MessageEnvelope with source_id='malicious' wrapping a real StageCompletePayload, patches forge_notifications.logger.warning to capture structlog calls, awaits subscriber._handle_message(msg), asserts session_manager.enqueue_notification not called, writer.append_build_queue_event not called, and the canonical WARN event 'forge_notification_dropped_unknown_source' was emitted carrying source_id='malicious'.",
+      "notes": "Added TestSubscriberDropsMaliciousSourceId.test_malicious_source_id_drops_message_and_logs_warn \u2014 instantiates the real ForgeNotificationsSubscriber with mocked NATS client / writer / SessionManager, builds a real MessageEnvelope with source_id='malicious' wrapping a real StageCompletePayload, patches forge_notifications.logger.warning to capture structlog calls, awaits subscriber._handle_message(msg), asserts session_manager.enqueue_notification not called, writer.append_build_queue_event not called, and the canonical WARN event 'forge_notification_dropped_unknown_source' was emitted carrying source_id='malicious'."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Grep test: hard-coded `\"pipeline.build-queued.\"` or `\"pipeline.stage-",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Extended _FORBIDDEN_SUBJECT_LITERALS in tests/test_contract_nats_core.py to add 'pipeline.build-queued.' and 'pipeline.stage-complete.' \u2014 the existing parametrized TestNoHardcodedSubjectLiteralsInSrc.test_no_hardcoded_subject_literals_in_src now covers both new literals (passing). To keep the grep green I refactored the subscriber's hard-coded subject in src/jarvis/infrastructure/forge_notifications.py: the literal _STAGE_COMPLETE_SUBJECT = \"pipeline.stage-complete.>\" is replaced with a lazy _get_stage_complete_subject() that derives the wildcard from Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'). The lazy import preserves the schema-import-isolation invariant in test_forge_notification_schema.py (no top-level 'from nats*' allowed) while making subjects flow from the canonical Topics registry.",
+      "notes": "Extended _FORBIDDEN_SUBJECT_LITERALS in tests/test_contract_nats_core.py to add 'pipeline.build-queued.' and 'pipeline.stage-complete.' \u2014 the existing parametrized TestNoHardcodedSubjectLiteralsInSrc.test_no_hardcoded_subject_literals_in_src now covers both new literals (passing). To keep the grep green I refactored the subscriber's hard-coded subject in src/jarvis/infrastructure/forge_notifications.py: the literal _STAGE_COMPLETE_SUBJECT = \"pipeline.stage-complete.>\" is replaced with a lazy _get_stage_complete_subject() that derives the wildcard from Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'). The lazy import preserves the schema-import-isolation invariant in test_forge_notification_schema.py (no top-level 'from nats*' allowed) while making subjects flow from the canonical Topics registry."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "`uv run pytest tests/test_contract_nats_core.py -v` passes.",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "python -m pytest tests/test_contract_nats_core.py -v \u2192 25 passed, 1 warning in 2.23s. Full suite (minus 2 pre-existing unrelated failures in tests/test_assemble_tool_list.py::TestAC005NoSubmoduleImports and tests/test_get_calendar_events.py::TestAC002DocstringAndAnnotation, both confirmed via git stash to predate this turn) is green: 2071 passed.",
+      "notes": "python -m pytest tests/test_contract_nats_core.py -v \u2192 25 passed, 1 warning in 2.23s. Full suite (minus 2 pre-existing unrelated failures in tests/test_assemble_tool_list.py::TestAC005NoSubmoduleImports and tests/test_get_calendar_events.py::TestAC002DocstringAndAnnotation, both confirmed via git stash to predate this turn) is green: 2071 passed."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "Test: `BuildQueuedPayload` constructs from a known-good dict; `model_dump()`",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added TestBuildQueuedPayloadContract with 3 tests in tests/test_contract_nats_core.py: (1) constructs_from_known_good_dict \u2014 validates payload from _good_build_queued_dict; (2) model_dump_round_trip_preserves_all_fields \u2014 round-trips via both model_dump() (Python dict) and model_dump_json()/model_validate_json() (bit-stable bytes); (3) adapter_required_for_jarvis_validator_raises \u2014 asserts pydantic ValidationError surfaces the validator's exact message when triggered_by='jarvis' and originating_adapter=None.",
+        "notes": "Added TestBuildQueuedPayloadContract with 3 tests in tests/test_contract_nats_core.py: (1) constructs_from_known_good_dict \u2014 validates payload from _good_build_queued_dict; (2) model_dump_round_trip_preserves_all_fields \u2014 round-trips via both model_dump() (Python dict) and model_dump_json()/model_validate_json() (bit-stable bytes); (3) adapter_required_for_jarvis_validator_raises \u2014 asserts pydantic ValidationError surfaces the validator's exact message when triggered_by='jarvis' and originating_adapter=None."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Test: `StageCompletePayload` constructs from a known-good dict; round-",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added TestStageCompletePayloadContract with 2 tests: (1) constructs_from_known_good_dict \u2014 validates payload (PASSED stage, target_kind=subagent, gate_mode=AUTO_APPROVE) from _good_stage_complete_dict; (2) json_round_trip_is_bit_stable \u2014 encoded = original.model_dump_json(); decoded = StageCompletePayload.model_validate_json(encoded); asserts decoded == original AND decoded.model_dump_json() == encoded (byte-stable re-serialization, no field-order drift).",
+        "notes": "Added TestStageCompletePayloadContract with 2 tests: (1) constructs_from_known_good_dict \u2014 validates payload (PASSED stage, target_kind=subagent, gate_mode=AUTO_APPROVE) from _good_stage_complete_dict; (2) json_round_trip_is_bit_stable \u2014 encoded = original.model_dump_json(); decoded = StageCompletePayload.model_validate_json(encoded); asserts decoded == original AND decoded.model_dump_json() == encoded (byte-stable re-serialization, no field-order drift)."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Test: `nats_core.Topics.Pipeline.BUILD_QUEUED.format(feature_id=\"X\")`",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added TestTopicsPipelineFormatters.test_build_queued_format_produces_singular_subject \u2014 directly asserts Topics.Pipeline.BUILD_QUEUED.format(feature_id='X') == 'pipeline.build-queued.X', with an error message that names ADR-SP-016 if the singular convention is broken.",
+        "notes": "Added TestTopicsPipelineFormatters.test_build_queued_format_produces_singular_subject \u2014 directly asserts Topics.Pipeline.BUILD_QUEUED.format(feature_id='X') == 'pipeline.build-queued.X', with an error message that names ADR-SP-016 if the singular convention is broken."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Test: `nats_core.Topics.Pipeline.STAGE_COMPLETE` template, with the",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added TestTopicsPipelineFormatters.test_stage_complete_wildcard_matches_known_subject \u2014 derives the wildcard via Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'), asserts derivation == 'pipeline.stage-complete.>', then runs a NATS subject matcher (_nats_subject_matches helper, supports * + trailing >) against the worked example 'pipeline.stage-complete.FEAT-J005.plan-complete', the simpler 3-token form, and a sibling subject (negative case).",
+        "notes": "Added TestTopicsPipelineFormatters.test_stage_complete_wildcard_matches_known_subject \u2014 derives the wildcard via Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'), asserts derivation == 'pipeline.stage-complete.>', then runs a NATS subject matcher (_nats_subject_matches helper, supports * + trailing >) against the worked example 'pipeline.stage-complete.FEAT-J005.plan-complete', the simpler 3-token form, and a sibling subject (negative case)."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Test: `MessageEnvelope(source_id=\"jarvis\", payload=...)` round-trips",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added TestMessageEnvelopeSourceIdRoundTrip.test_jarvis_envelope_round_trips_via_json \u2014 constructs MessageEnvelope wrapping a real BuildQueuedPayload with source_id='jarvis', encodes via model_dump_json, decodes via model_validate_json, and asserts source_id, event_type, correlation_id and the rebuilt BuildQueuedPayload all survive the round trip.",
+        "notes": "Added TestMessageEnvelopeSourceIdRoundTrip.test_jarvis_envelope_round_trips_via_json \u2014 constructs MessageEnvelope wrapping a real BuildQueuedPayload with source_id='jarvis', encodes via model_dump_json, decodes via model_validate_json, and asserts source_id, event_type, correlation_id and the rebuilt BuildQueuedPayload all survive the round trip."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Test: Subscriber drops a message with `envelope.source_id=\"malicious\"` \u2014",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added TestSubscriberDropsMaliciousSourceId.test_malicious_source_id_drops_message_and_logs_warn \u2014 instantiates the real ForgeNotificationsSubscriber with mocked NATS client / writer / SessionManager, builds a real MessageEnvelope with source_id='malicious' wrapping a real StageCompletePayload, patches forge_notifications.logger.warning to capture structlog calls, awaits subscriber._handle_message(msg), asserts session_manager.enqueue_notification not called, writer.append_build_queue_event not called, and the canonical WARN event 'forge_notification_dropped_unknown_source' was emitted carrying source_id='malicious'.",
+        "notes": "Added TestSubscriberDropsMaliciousSourceId.test_malicious_source_id_drops_message_and_logs_warn \u2014 instantiates the real ForgeNotificationsSubscriber with mocked NATS client / writer / SessionManager, builds a real MessageEnvelope with source_id='malicious' wrapping a real StageCompletePayload, patches forge_notifications.logger.warning to capture structlog calls, awaits subscriber._handle_message(msg), asserts session_manager.enqueue_notification not called, writer.append_build_queue_event not called, and the canonical WARN event 'forge_notification_dropped_unknown_source' was emitted carrying source_id='malicious'."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Grep test: hard-coded `\"pipeline.build-queued.\"` or `\"pipeline.stage-",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Extended _FORBIDDEN_SUBJECT_LITERALS in tests/test_contract_nats_core.py to add 'pipeline.build-queued.' and 'pipeline.stage-complete.' \u2014 the existing parametrized TestNoHardcodedSubjectLiteralsInSrc.test_no_hardcoded_subject_literals_in_src now covers both new literals (passing). To keep the grep green I refactored the subscriber's hard-coded subject in src/jarvis/infrastructure/forge_notifications.py: the literal _STAGE_COMPLETE_SUBJECT = \"pipeline.stage-complete.>\" is replaced with a lazy _get_stage_complete_subject() that derives the wildcard from Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'). The lazy import preserves the schema-import-isolation invariant in test_forge_notification_schema.py (no top-level 'from nats*' allowed) while making subjects flow from the canonical Topics registry.",
+        "notes": "Extended _FORBIDDEN_SUBJECT_LITERALS in tests/test_contract_nats_core.py to add 'pipeline.build-queued.' and 'pipeline.stage-complete.' \u2014 the existing parametrized TestNoHardcodedSubjectLiteralsInSrc.test_no_hardcoded_subject_literals_in_src now covers both new literals (passing). To keep the grep green I refactored the subscriber's hard-coded subject in src/jarvis/infrastructure/forge_notifications.py: the literal _STAGE_COMPLETE_SUBJECT = \"pipeline.stage-complete.>\" is replaced with a lazy _get_stage_complete_subject() that derives the wildcard from Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'). The lazy import preserves the schema-import-isolation invariant in test_forge_notification_schema.py (no top-level 'from nats*' allowed) while making subjects flow from the canonical Topics registry."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "`uv run pytest tests/test_contract_nats_core.py -v` passes.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "python -m pytest tests/test_contract_nats_core.py -v \u2192 25 passed, 1 warning in 2.23s. Full suite (minus 2 pre-existing unrelated failures in tests/test_assemble_tool_list.py::TestAC005NoSubmoduleImports and tests/test_get_calendar_events.py::TestAC002DocstringAndAnnotation, both confirmed via git stash to predate this turn) is green: 2071 passed.",
+        "notes": "python -m pytest tests/test_contract_nats_core.py -v \u2192 25 passed, 1 warning in 2.23s. Full suite (minus 2 pre-existing unrelated failures in tests/test_assemble_tool_list.py::TestAC005NoSubmoduleImports and tests/test_get_calendar_events.py::TestAC002DocstringAndAnnotation, both confirmed via git stash to predate this turn) is green: 2071 passed."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    }
+  ],
+  "rationale": "All quality gates passed. Tests not required for this task type. All acceptance criteria met. Architecture context: 367 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1383/5200 tokens\n\n### \u2705 Similar Outcomes\n- USES_LIBRARY\n- MIGRATES_TO\n\n### \ud83c\udfa8 Relevant Patterns\n- USES_FUNCTION\n- EXAMPLE_CONTAINS\n\n### \u26a0\ufe0f Warnings\n- HAS_INCORRECT_PATH_REFERENCE\n- PATH_NOT_FOUND_DUE_TO_INCORRECT_ID_TYPE\n\n### \ud83c\udfad Role Constraints\n- HAS_ROLE_MUST_DO\n- MONITORS_RESULTS_FROM\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- HAS_ENTITY_TYPE\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}

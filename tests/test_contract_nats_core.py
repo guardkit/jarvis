@@ -567,3 +567,323 @@ class TestBuildQueuedPayloadEmittedMatchesNatsCore:
         assert decoded.triggered_by == "jarvis"
         assert decoded.originating_adapter == "terminal"
         assert decoded.correlation_id == payload.correlation_id
+
+
+# ===========================================================================
+# TASK-J005-010 — FEAT-JARVIS-005 cross-repo contract gate
+# ===========================================================================
+#
+# The block below verifies the wire-level contract between Jarvis and Forge
+# for FEAT-JARVIS-005: BuildQueuedPayload (publish), StageCompletePayload
+# (subscribe), the Topics formatters that produce both subjects, and the
+# MessageEnvelope.source_id round-trip / drop semantics. Tests run against
+# the actual ``nats_core`` package import (no mocks of nats_core types) so a
+# payload-shape change in nats_core trips this suite first.
+# ===========================================================================
+
+
+def _good_build_queued_dict() -> dict[str, Any]:
+    """Return a known-good ``BuildQueuedPayload`` input dict (jarvis trigger)."""
+    from datetime import UTC, datetime
+
+    iso = datetime(2026, 4, 30, 15, 0, 0, tzinfo=UTC).isoformat()
+    return {
+        "feature_id": "FEAT-J005",
+        "repo": "guardkit/jarvis",
+        "branch": "main",
+        "feature_yaml_path": "features/feat.yaml",
+        "triggered_by": "jarvis",
+        "originating_adapter": "terminal",
+        "originating_user": "rich",
+        "correlation_id": "00000000-0000-4000-8000-00000000aaaa",
+        "parent_request_id": None,
+        "requested_at": iso,
+        "queued_at": iso,
+    }
+
+
+def _good_stage_complete_dict() -> dict[str, Any]:
+    """Return a known-good ``StageCompletePayload`` input dict."""
+    from datetime import UTC, datetime
+
+    return {
+        "feature_id": "FEAT-J005",
+        "build_id": "build-001",
+        "stage_label": "plan-complete",
+        "target_kind": "subagent",
+        "target_identifier": "architect",
+        "status": "PASSED",
+        "gate_mode": "AUTO_APPROVE",
+        "coach_score": 0.92,
+        "duration_secs": 12.5,
+        "completed_at": datetime(2026, 4, 30, 15, 42, 0, tzinfo=UTC).isoformat(),
+        "correlation_id": "00000000-0000-4000-8000-00000000bbbb",
+    }
+
+
+# ---------------------------------------------------------------------------
+# AC-001 — BuildQueuedPayload contract
+# ---------------------------------------------------------------------------
+
+
+class TestBuildQueuedPayloadContract:
+    """AC-001 — publish-direction payload validates + round-trips + validator."""
+
+    def test_constructs_from_known_good_dict(self) -> None:
+        """BuildQueuedPayload accepts the canonical jarvis-triggered shape."""
+        payload = BuildQueuedPayload(**_good_build_queued_dict())
+
+        assert payload.feature_id == "FEAT-J005"
+        assert payload.triggered_by == "jarvis"
+        assert payload.originating_adapter == "terminal"
+        assert payload.correlation_id == "00000000-0000-4000-8000-00000000aaaa"
+
+    def test_model_dump_round_trip_preserves_all_fields(self) -> None:
+        """``model_dump()`` → constructor reproduces every field bit-stably."""
+        original = BuildQueuedPayload(**_good_build_queued_dict())
+
+        # Round-trip via model_dump (Python objects, not JSON).
+        rebuilt = BuildQueuedPayload(**original.model_dump())
+        assert rebuilt == original, (
+            "BuildQueuedPayload model_dump round-trip diverged: "
+            f"original={original.model_dump()} rebuilt={rebuilt.model_dump()}"
+        )
+
+        # And via model_dump_json for bit-stability across the wire.
+        encoded = original.model_dump_json()
+        decoded = BuildQueuedPayload.model_validate_json(encoded)
+        assert decoded == original
+        # Re-encoding must be byte-identical (deterministic field order).
+        assert decoded.model_dump_json() == encoded
+
+    def test_adapter_required_for_jarvis_validator_raises(self) -> None:
+        """``_adapter_required_for_jarvis`` rejects jarvis-trigger w/ no adapter."""
+        bad = _good_build_queued_dict()
+        bad["originating_adapter"] = None
+
+        with pytest.raises(ValidationError) as excinfo:
+            BuildQueuedPayload(**bad)
+
+        # The ValueError raised inside the validator carries this message —
+        # pydantic surfaces it under the ``msg`` of the resulting error tuple.
+        assert "originating_adapter is required when triggered_by == 'jarvis'" in str(
+            excinfo.value
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC-002 — StageCompletePayload contract
+# ---------------------------------------------------------------------------
+
+
+class TestStageCompletePayloadContract:
+    """AC-002 — subscribe-direction payload validates + JSON round-trips."""
+
+    def test_constructs_from_known_good_dict(self) -> None:
+        """StageCompletePayload accepts the canonical Forge-published shape."""
+        payload = StageCompletePayload(**_good_stage_complete_dict())
+
+        assert payload.feature_id == "FEAT-J005"
+        assert payload.stage_label == "plan-complete"
+        assert payload.status == "PASSED"
+        assert payload.target_kind == "subagent"
+        assert payload.duration_secs == 12.5
+
+    def test_json_round_trip_is_bit_stable(self) -> None:
+        """``model_dump_json`` → ``model_validate_json`` is byte-stable."""
+        original = StageCompletePayload(**_good_stage_complete_dict())
+
+        encoded = original.model_dump_json()
+        decoded = StageCompletePayload.model_validate_json(encoded)
+
+        assert decoded == original
+        # Re-serialising the decoded instance produces the same bytes —
+        # i.e. there is no field ordering / coercion drift across the wire.
+        assert decoded.model_dump_json() == encoded
+
+
+# ---------------------------------------------------------------------------
+# AC-003 / AC-004 — Topics formatters and subscribe wildcard
+# ---------------------------------------------------------------------------
+
+
+def _nats_subject_matches(pattern: str, subject: str) -> bool:
+    """Minimal NATS subject matcher supporting ``*`` and trailing ``>``.
+
+    * ``*`` matches exactly one token.
+    * ``>`` matches one or more tokens; only valid as the final token.
+    """
+    pat_tokens = pattern.split(".")
+    sub_tokens = subject.split(".")
+
+    if pat_tokens and pat_tokens[-1] == ">":
+        head = pat_tokens[:-1]
+        if len(sub_tokens) <= len(head):
+            return False
+        for p, s in zip(head, sub_tokens, strict=False):
+            if p != "*" and p != s:
+                return False
+        return True
+
+    if len(pat_tokens) != len(sub_tokens):
+        return False
+    for p, s in zip(pat_tokens, sub_tokens, strict=True):
+        if p != "*" and p != s:
+            return False
+    return True
+
+
+class TestTopicsPipelineFormatters:
+    """AC-003 / AC-004 — Topics.Pipeline subjects match design contract."""
+
+    def test_build_queued_format_produces_singular_subject(self) -> None:
+        """``Topics.Pipeline.BUILD_QUEUED.format(feature_id="X")`` yields the
+        ADR-SP-016 singular form ``pipeline.build-queued.X``."""
+        produced = Topics.Pipeline.BUILD_QUEUED.format(feature_id="X")
+        assert produced == "pipeline.build-queued.X", (
+            "ADR-SP-016 singular convention broken: BUILD_QUEUED format "
+            f"produced {produced!r}"
+        )
+
+    def test_stage_complete_wildcard_matches_known_subject(self) -> None:
+        """``STAGE_COMPLETE`` template + ``>`` wildcard matches a real
+        stage-complete subject (``pipeline.stage-complete.X.plan-complete``)."""
+        # Derive the wildcard subscribe pattern from the Topics template by
+        # substituting NATS '>' for the {feature_id} placeholder. This is
+        # the same derivation the subscriber uses (see
+        # jarvis.infrastructure.forge_notifications._STAGE_COMPLETE_SUBJECT).
+        pattern = Topics.Pipeline.STAGE_COMPLETE.format(feature_id=">")
+        assert pattern == "pipeline.stage-complete.>", (
+            "Subscribe wildcard derivation broke: "
+            f"got {pattern!r} from {Topics.Pipeline.STAGE_COMPLETE!r}"
+        )
+
+        # The pattern must match the worked example from the task description.
+        assert _nats_subject_matches(
+            pattern, "pipeline.stage-complete.FEAT-J005.plan-complete"
+        )
+        # Defensive: it must also match the simpler 3-token form (single
+        # feature_id) since Forge may publish either depending on its v.
+        assert _nats_subject_matches(pattern, "pipeline.stage-complete.FEAT-J005")
+        # And it must NOT match a sibling subject family.
+        assert not _nats_subject_matches(
+            pattern, "pipeline.build-queued.FEAT-J005"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC-005 — MessageEnvelope source_id round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestMessageEnvelopeSourceIdRoundTrip:
+    """AC-005 — ``source_id="jarvis"`` envelope survives a JSON round-trip."""
+
+    def test_jarvis_envelope_round_trips_via_json(self) -> None:
+        """``MessageEnvelope(source_id="jarvis", payload=...)`` is bit-stable."""
+        payload = BuildQueuedPayload(**_good_build_queued_dict())
+        envelope = MessageEnvelope(
+            source_id="jarvis",
+            event_type=EventType.BUILD_QUEUED,
+            correlation_id=str(payload.correlation_id),
+            payload=payload.model_dump(mode="json"),
+        )
+
+        encoded = envelope.model_dump_json()
+        decoded = MessageEnvelope.model_validate_json(encoded)
+
+        # source_id must survive end-to-end (this is the API-events §5
+        # invariant that the cross-repo gate is here to enforce).
+        assert decoded.source_id == "jarvis"
+        assert decoded.event_type == EventType.BUILD_QUEUED
+        assert decoded.correlation_id == envelope.correlation_id
+        # Payload contents preserved — round-trip into BuildQueuedPayload.
+        rebuilt = BuildQueuedPayload.model_validate(decoded.payload)
+        assert rebuilt == payload
+
+
+# ---------------------------------------------------------------------------
+# AC-006 — Subscriber drops envelope with malicious source_id
+# ---------------------------------------------------------------------------
+
+
+class TestSubscriberDropsMaliciousSourceId:
+    """AC-006 — ``ForgeNotificationsSubscriber`` drops non-forge source_ids."""
+
+    async def test_malicious_source_id_drops_message_and_logs_warn(
+        self,
+    ) -> None:
+        """Group C #1: envelope with ``source_id="malicious"`` is dropped.
+
+        The subscriber must:
+        1. Not enqueue any notification on the bound session manager.
+        2. Not fire the routing-history edge.
+        3. Emit a structured WARN ``forge_notification_dropped_unknown_source``
+           carrying the offending source_id.
+        """
+        # Late imports — this test exercises the real subscriber path.
+        from jarvis.infrastructure import forge_notifications as fn_module
+        from jarvis.infrastructure.forge_notifications import (
+            ForgeNotificationsSubscriber,
+        )
+
+        nats_client = MagicMock()
+        nats_client.js = MagicMock()
+        writer = MagicMock()
+        writer.append_build_queue_event = AsyncMock()
+
+        subscriber = ForgeNotificationsSubscriber(
+            nats_client=nats_client,
+            routing_history_writer=writer,
+        )
+        session_manager = MagicMock()
+        session_manager.enqueue_notification = MagicMock()
+        subscriber.bind_session_manager(session_manager)
+
+        # Build a real MessageEnvelope with a forged source_id and feed it
+        # through the subscriber's message handler as raw JSON bytes.
+        payload = StageCompletePayload(**_good_stage_complete_dict())
+        envelope = MessageEnvelope(
+            source_id="malicious",
+            event_type=EventType.STAGE_COMPLETE,
+            correlation_id=payload.correlation_id,
+            payload=payload.model_dump(mode="json"),
+        )
+        msg = MagicMock()
+        msg.data = envelope.model_dump_json().encode("utf-8")
+        msg.subject = Topics.Pipeline.STAGE_COMPLETE.format(
+            feature_id=payload.feature_id
+        )
+        msg.ack = AsyncMock()
+
+        # The module's structlog logger routes through whatever the project
+        # configures (stdout in dev). Patch ``logger.warning`` directly to
+        # assert the structured event name + source_id without depending on
+        # the stdlib logging plumbing.
+        warn_calls: list[tuple[str, dict[str, Any]]] = []
+        original_warning = fn_module.logger.warning
+
+        def _capture_warning(event: str, **kwargs: Any) -> None:
+            warn_calls.append((event, kwargs))
+            original_warning(event, **kwargs)
+
+        fn_module.logger.warning = _capture_warning  # type: ignore[assignment]
+        try:
+            await subscriber._handle_message(msg)
+        finally:
+            fn_module.logger.warning = original_warning  # type: ignore[assignment]
+
+        # No notification was enqueued — security invariant held.
+        session_manager.enqueue_notification.assert_not_called()
+        # Routing-history writer was not invoked either — drop is total.
+        writer.append_build_queue_event.assert_not_called()
+
+        # And the canonical WARN was emitted with the rogue source_id.
+        assert any(
+            event == "forge_notification_dropped_unknown_source"
+            and kwargs.get("source_id") == "malicious"
+            for event, kwargs in warn_calls
+        ), (
+            "Expected forge_notification_dropped_unknown_source WARN with "
+            f"source_id='malicious'; got: {warn_calls}"
+        )

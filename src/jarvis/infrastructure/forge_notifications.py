@@ -221,16 +221,15 @@ class BuildCorrelation(BaseModel):
 # §3 — ForgeNotificationsSubscriber (TASK-J005-003)
 # ---------------------------------------------------------------------------
 
-# Subscribe wildcard derived from the canonical
+# Subscribe wildcard derived lazily from the canonical
 # ``nats_core.Topics.Pipeline.STAGE_COMPLETE`` template
 # (``pipeline.stage-complete.{feature_id}``) by substituting the NATS ``>``
-# wildcard for ``{feature_id}``. The cross-repo contract test in
-# ``tests/test_contract_nats_core.py`` (TASK-J005-010 AC-007) forbids
-# hard-coded subject literals in ``src/jarvis/`` — every subject must come
-# from ``nats_core.Topics``.
-from nats_core import Topics as _Topics
-
-_STAGE_COMPLETE_SUBJECT = _Topics.Pipeline.STAGE_COMPLETE.format(feature_id=">")
+# wildcard for ``{feature_id}``. The derivation is wrapped in
+# :func:`_get_stage_complete_subject` rather than evaluated at import time
+# so this module continues to satisfy the schema-import-isolation invariant
+# checked by ``tests/test_forge_notification_schema.py`` while still
+# pulling the canonical subject from :class:`nats_core.Topics` (cross-repo
+# contract test ``tests/test_contract_nats_core.py`` AC-007).
 
 # DDR-027: ephemeral push consumer with deliver_policy=NEW. We avoid a top-
 # level import of the nats.js.api so the schema-only import of this module
@@ -258,6 +257,24 @@ def _get_deliver_policy_new() -> Any:
     from nats.js.api import DeliverPolicy
 
     return DeliverPolicy.NEW
+
+
+def _get_stage_complete_subject() -> str:
+    """Lazy-derive the subscribe wildcard from ``nats_core.Topics``.
+
+    Returns the wildcard subject Jarvis subscribes to for stage-complete
+    events: ``pipeline.stage-complete.>`` derived from
+    ``Topics.Pipeline.STAGE_COMPLETE`` (``pipeline.stage-complete.{feature_id}``)
+    by substituting NATS ``>`` for the ``{feature_id}`` placeholder.
+
+    Imported lazily — same rationale as :func:`_get_deliver_policy_new`,
+    plus the schema-import-isolation invariant in
+    ``tests/test_forge_notification_schema.py`` forbids top-level
+    ``from nats_core`` / ``from nats`` statements in this module.
+    """
+    from nats_core import Topics
+
+    return Topics.Pipeline.STAGE_COMPLETE.format(feature_id=">")
 
 
 class ForgeNotificationsSubscriber:
@@ -357,9 +374,10 @@ class ForgeNotificationsSubscriber:
 
         js: JetStreamContext = self._nats_client.js
         deliver_policy_new = _get_deliver_policy_new()
+        stage_complete_subject = _get_stage_complete_subject()
 
         self._subscription = await js.subscribe(
-            _STAGE_COMPLETE_SUBJECT,
+            stage_complete_subject,
             cb=self._on_message,
             ordered_consumer=False,
             deliver_policy=deliver_policy_new,
@@ -367,7 +385,7 @@ class ForgeNotificationsSubscriber:
         self._started = True
         logger.info(
             "forge_notifications_subscribed",
-            subject=_STAGE_COMPLETE_SUBJECT,
+            subject=stage_complete_subject,
             correlation_cap=self._correlation_cap,
         )
 

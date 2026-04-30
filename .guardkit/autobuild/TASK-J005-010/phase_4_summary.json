@@ -1,0 +1,7 @@
+{
+  "tests_run": 42,
+  "tests_failed": 0,
+  "coverage_pct": 61.0,
+  "output_summary": "42 passed, 0 failed across test_contract_nats_core.py, test_phase2_stubs_retired.py, test_jarvis_005_soft_fail.py; 61% line coverage on forge_notifications + dispatch.",
+  "quality_gates_passed": true
+}

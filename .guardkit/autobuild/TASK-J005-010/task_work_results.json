@@ -1,0 +1,186 @@
+{
+  "task_id": "TASK-J005-010",
+  "timestamp": "2026-04-30T10:57:58.489061",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation",
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 25,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": true
+  },
+  "files_modified": [
+    ".claude/task-plans/TASK-J005-009-implementation-plan.md",
+    ".claude/task-plans/TASK-J005-010-implementation-plan.md",
+    ".guardkit/autobuild/TASK-J005-005/checkpoints.json",
+    ".guardkit/autobuild/TASK-J005-009/turn_context.json",
+    ".guardkit/autobuild/TASK-J005-010/turn_context.json",
+    ".guardkit/autobuild/TASK-J005-011/coach_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-011/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-011/task_work_results.json",
+    ".guardkit/autobuild/TASK-J005-011/turn_context.json",
+    ".guardkit/autobuild/TASK-J005-011/turn_state_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/src/jarvis/infrastructure/forge_notifications.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/tests/test_contract_nats_core.py",
+    "src/jarvis/infrastructure/forge_notifications.py",
+    "src/jarvis/tools/dispatch.py",
+    "tasks/design_approved/TASK-J005-009-soft-fail-tests.md",
+    "tasks/design_approved/TASK-J005-010-contract-tests-nats-core.md",
+    "tests/test_contract_nats_core.py",
+    "tests/test_phase2_stubs_retired.py"
+  ],
+  "files_created": [
+    ".guardkit/autobuild/TASK-J005-009/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-009/task_work_results.json",
+    ".guardkit/autobuild/TASK-J005-010/player_turn_1.json",
+    ".guardkit/autobuild/TASK-J005-010/task_work_results.json",
+    ".guardkit/autobuild/TASK-J005-011/checkpoints.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/.guardkit/autobuild/TASK-J005-010/player_turn_1.json",
+    "tests/test_jarvis_005_soft_fail.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-J005-946D/tests/test_contract_nats_core.py"
+  ],
+  "summary": "25 tests passed, all quality gates passed",
+  "sdk_turns": {
+    "turns_used": 53,
+    "max_turns": 150,
+    "ceiling_hit": false
+  },
+  "task_type": "testing",
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Test: BuildQueuedPayload constructs from a known-good dict; model_dump() round-trip preserves all fields; _adapter_required_for_jarvis validator raises when triggered_by=\"jarvis\" and adapter is None.",
+      "status": "complete",
+      "evidence": "Added TestBuildQueuedPayloadContract with 3 tests in tests/test_contract_nats_core.py: (1) constructs_from_known_good_dict \u2014 validates payload from _good_build_queued_dict; (2) model_dump_round_trip_preserves_all_fields \u2014 round-trips via both model_dump() (Python dict) and model_dump_json()/model_validate_json() (bit-stable bytes); (3) adapter_required_for_jarvis_validator_raises \u2014 asserts pydantic ValidationError surfaces the validator's exact message when triggered_by='jarvis' and originating_adapter=None.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Test: StageCompletePayload constructs from a known-good dict; round-trip via model_dump_json() and model_validate_json() is bit-stable.",
+      "status": "complete",
+      "evidence": "Added TestStageCompletePayloadContract with 2 tests: (1) constructs_from_known_good_dict \u2014 validates payload (PASSED stage, target_kind=subagent, gate_mode=AUTO_APPROVE) from _good_stage_complete_dict; (2) json_round_trip_is_bit_stable \u2014 encoded = original.model_dump_json(); decoded = StageCompletePayload.model_validate_json(encoded); asserts decoded == original AND decoded.model_dump_json() == encoded (byte-stable re-serialization, no field-order drift).",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Test: nats_core.Topics.Pipeline.BUILD_QUEUED.format(feature_id=\"X\") produces exactly pipeline.build-queued.X (singular convention, ADR-SP-016).",
+      "status": "complete",
+      "evidence": "Added TestTopicsPipelineFormatters.test_build_queued_format_produces_singular_subject \u2014 directly asserts Topics.Pipeline.BUILD_QUEUED.format(feature_id='X') == 'pipeline.build-queued.X', with an error message that names ADR-SP-016 if the singular convention is broken.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Test: nats_core.Topics.Pipeline.STAGE_COMPLETE template, with the subscribe `>` wildcard, produces a pattern that matches a known stage-complete subject (e.g. pipeline.stage-complete.X.plan-complete).",
+      "status": "complete",
+      "evidence": "Added TestTopicsPipelineFormatters.test_stage_complete_wildcard_matches_known_subject \u2014 derives the wildcard via Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'), asserts derivation == 'pipeline.stage-complete.>', then runs a NATS subject matcher (_nats_subject_matches helper, supports * + trailing >) against the worked example 'pipeline.stage-complete.FEAT-J005.plan-complete', the simpler 3-token form, and a sibling subject (negative case).",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Test: MessageEnvelope(source_id=\"jarvis\", payload=...) round-trips through model_dump_json() + model_validate_json() with source_id preserved.",
+      "status": "complete",
+      "evidence": "Added TestMessageEnvelopeSourceIdRoundTrip.test_jarvis_envelope_round_trips_via_json \u2014 constructs MessageEnvelope wrapping a real BuildQueuedPayload with source_id='jarvis', encodes via model_dump_json, decodes via model_validate_json, and asserts source_id, event_type, correlation_id and the rebuilt BuildQueuedPayload all survive the round trip.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Test: Subscriber drops a message with envelope.source_id=\"malicious\" \u2014 no notification enqueued, WARN logged (Group C #1, security attestation).",
+      "status": "complete",
+      "evidence": "Added TestSubscriberDropsMaliciousSourceId.test_malicious_source_id_drops_message_and_logs_warn \u2014 instantiates the real ForgeNotificationsSubscriber with mocked NATS client / writer / SessionManager, builds a real MessageEnvelope with source_id='malicious' wrapping a real StageCompletePayload, patches forge_notifications.logger.warning to capture structlog calls, awaits subscriber._handle_message(msg), asserts session_manager.enqueue_notification not called, writer.append_build_queue_event not called, and the canonical WARN event 'forge_notification_dropped_unknown_source' was emitted carrying source_id='malicious'.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Grep test: hard-coded \"pipeline.build-queued.\" or \"pipeline.stage-complete.\" strings absent from src/jarvis/ (Subjects must come from nats_core.Topics).",
+      "status": "complete",
+      "evidence": "Extended _FORBIDDEN_SUBJECT_LITERALS in tests/test_contract_nats_core.py to add 'pipeline.build-queued.' and 'pipeline.stage-complete.' \u2014 the existing parametrized TestNoHardcodedSubjectLiteralsInSrc.test_no_hardcoded_subject_literals_in_src now covers both new literals (passing). To keep the grep green I refactored the subscriber's hard-coded subject in src/jarvis/infrastructure/forge_notifications.py: the literal _STAGE_COMPLETE_SUBJECT = \"pipeline.stage-complete.>\" is replaced with a lazy _get_stage_complete_subject() that derives the wildcard from Topics.Pipeline.STAGE_COMPLETE.format(feature_id='>'). The lazy import preserves the schema-import-isolation invariant in test_forge_notification_schema.py (no top-level 'from nats*' allowed) while making subjects flow from the canonical Topics registry.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py",
+        "src/jarvis/infrastructure/forge_notifications.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "uv run pytest tests/test_contract_nats_core.py -v passes.",
+      "status": "complete",
+      "evidence": "python -m pytest tests/test_contract_nats_core.py -v \u2192 25 passed, 1 warning in 2.23s. Full suite (minus 2 pre-existing unrelated failures in tests/test_assemble_tool_list.py::TestAC005NoSubmoduleImports and tests/test_get_calendar_events.py::TestAC002DocstringAndAnnotation, both confirmed via git stash to predate this turn) is green: 2071 passed.",
+      "test_file": "tests/test_contract_nats_core.py",
+      "implementation_files": [
+        "tests/test_contract_nats_core.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 60.664660957991146
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 343.80822191701736
+    }
+  ]
+}
