@@ -60,6 +60,7 @@ from jarvis.tools.types import CalendarEvent, DispatchError, WebResult
 
 if TYPE_CHECKING:
     from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.capabilities_registry import CapabilitiesRegistry
     from jarvis.infrastructure.dispatch_semaphore import DispatchSemaphore
     from jarvis.infrastructure.forge_notifications import ForgeNotificationsSubscriber
     from jarvis.infrastructure.nats_client import NATSClient
@@ -105,6 +106,7 @@ def assemble_tool_list(
     routing_history_writer: RoutingHistoryWriter | None = None,
     dispatch_semaphore: DispatchSemaphore | None = None,
     forge_subscriber: ForgeNotificationsSubscriber | None = None,
+    capabilities_registry: CapabilitiesRegistry | None = None,
 ) -> list[BaseTool]:
     """Wire and return the Jarvis tool list in stable alphabetical order.
 
@@ -118,15 +120,29 @@ def assemble_tool_list(
     1. ``general.configure(config)`` — installs the active config so
        :func:`search_web` can resolve ``tavily_api_key`` lazily on each
        call.
-    2. ``capabilities._capability_registry = list(capability_registry)``
-       — snapshot copy so the catalogue tools see a stable view.
+    2. ``capabilities._capability_registry = capabilities_registry`` —
+       snapshots the supplied :class:`CapabilitiesRegistry` Protocol
+       object into the catalogue-tool slot so the catalogue tools speak
+       the Protocol surface (DDR-021 Live/Stub fallback). When the
+       caller passes ``None`` (the FEAT-J002 / Phase 1 default) the slot
+       is set to ``None`` and the catalogue tools surface
+       ``ERROR: registry_unavailable`` per ADR-ARCH-021 — the pre-wired
+       sentinel semantics. Production wiring (``lifecycle.build_app_state``)
+       always passes a Protocol-shaped registry; tests that exercise
+       the catalogue tools must pass a Protocol-conformant fake.
     3. ``dispatch._capability_registry = list(capability_registry)`` —
        independent snapshot copy so :func:`dispatch_by_capability` can
-       resolve ``tool_name`` to ``agent_id`` deterministically.
+       resolve ``tool_name`` to ``agent_id`` deterministically. The
+       dispatch slot intentionally stays a ``list[CapabilityDescriptor]``
+       — the dispatch tool iterates the list and does not need the
+       Protocol surface.
 
-    Both snapshots are fresh ``list(...)`` copies; mutating the
+    The dispatch snapshot is a fresh ``list(...)`` copy; mutating the
     operator's ``capability_registry`` argument after this call cannot
-    leak into either submodule (ASSUM-006 snapshot isolation).
+    leak into the dispatch submodule (ASSUM-006 snapshot isolation).
+    The capabilities-tool slot stores the Protocol object directly (no
+    copy) because the registry's snapshot semantics are owned by the
+    Protocol implementation, not by ``assemble_tool_list``.
 
     **Layer 3 constitutional gate (DDR-014, ADR-ARCH-022, ADR-ARCH-023).**
     The ``include_frontier`` keyword-only flag is the third (and outermost)
@@ -189,6 +205,20 @@ def assemble_tool_list(
             successful PubAck. ``None`` keeps the dispatch tool in the
             NATS-down degraded mode — the correlation step is skipped
             rather than raising.
+        capabilities_registry: The Protocol-shaped
+            :class:`~jarvis.infrastructure.capabilities_registry.CapabilitiesRegistry`
+            backing the catalogue tools (:func:`list_available_capabilities`,
+            :func:`capabilities_refresh`, :func:`capabilities_subscribe_updates`).
+            Snapshotted into ``jarvis.tools.capabilities._capability_registry``
+            so the catalogue tool bodies can call ``snapshot()`` /
+            ``refresh()`` / ``subscribe_updates(...)`` without dereferencing
+            a list (TASK-J004-FIX-001 / DDR-021 amendment). ``None`` (the
+            FEAT-J002 / Phase 1 default) parks the slot at the pre-wired
+            sentinel — catalogue tools then surface
+            ``ERROR: registry_unavailable`` per ADR-ARCH-021. Production
+            wiring (``lifecycle.build_app_state``) always supplies either
+            a :class:`LiveCapabilitiesRegistry` (NATS up) or a
+            :class:`StubCapabilitiesRegistry` (NATS down — DDR-021 soft-fail).
 
     Returns:
         A fresh ``list[BaseTool]`` in stable alphabetical order:
@@ -207,16 +237,29 @@ def assemble_tool_list(
     # 1. Inject the active config into general.search_web's resolver.
     _general.configure(config)
 
-    # 2. + 3. Snapshot-copy the registry into both consuming modules.
+    # 2. Snapshot the Protocol-shaped registry into the catalogue-tool
+    #    slot so :func:`list_available_capabilities`,
+    #    :func:`capabilities_refresh` and :func:`capabilities_subscribe_updates`
+    #    can drive ``snapshot()`` / ``refresh()`` / ``subscribe_updates(...)``
+    #    against the Live (NATS up) or Stub (NATS down — DDR-021 soft-fail)
+    #    backing object. ``None`` parks the slot at the pre-wired sentinel
+    #    so the catalogue tools surface ``ERROR: registry_unavailable``
+    #    per ADR-ARCH-021 — the same shape as before any wiring runs.
+    #    See TASK-J004-FIX-001 / docs/design/FEAT-JARVIS-004/decisions/
+    #    DDR-021-amendment-capabilities-registry-tool-wiring.md for why
+    #    this slot stores the Protocol object directly while the dispatch
+    #    slot below stays a ``list[CapabilityDescriptor]``.
+    _capabilities._capability_registry = capabilities_registry
+
+    # 3. Snapshot-copy the descriptor list into the dispatch module.
     #
     # Use ``list(...)`` rather than ``capability_registry`` directly so
     # the operator's outer list is decoupled from the in-process view
-    # the tools observe. ASSUM-006 mandates that a concurrent rebinding
-    # of either attribute (e.g. by a future Phase 3
-    # ``capabilities_refresh``) replaces the list rather than mutating
-    # it in place; the in-flight tool calls capture a local reference
-    # at the start of each invocation so they remain consistent.
-    _capabilities._capability_registry = list(capability_registry)
+    # the dispatch tool observes. ASSUM-006 mandates that a concurrent
+    # rebinding of the attribute (e.g. by a future Phase 3
+    # ``capabilities_refresh`` follow-up) replaces the list rather than
+    # mutating it in place; the in-flight tool calls capture a local
+    # reference at the start of each invocation so they remain consistent.
     _dispatch._capability_registry = list(capability_registry)
 
     # 4. FEAT-JARVIS-004 — snapshot the dispatch dependencies into the

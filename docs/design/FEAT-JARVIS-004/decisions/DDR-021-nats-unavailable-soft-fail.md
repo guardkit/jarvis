@@ -72,3 +72,7 @@ The Phase 2 stub YAML at `src/jarvis/config/stub_capabilities.yaml` was scoped a
 ## Status
 
 Accepted at FEAT-JARVIS-004 `/system-design`. Reconnect strategy is a v1.5 candidate if operational pain warrants — append-only DDR.
+
+## Amendments
+
+- **2026-04-30 — [DDR-021 amendment: capabilities-registry tool wiring](DDR-021-amendment-capabilities-registry-tool-wiring.md).** §3's Live/Stub Protocol fallback was correctly designed but incorrectly wired during TASK-J004-013: `assemble_tool_list` was writing the catalogue-tool slot as a `list[CapabilityDescriptor]` instead of a `CapabilitiesRegistry` Protocol object, so every catalogue-tool invocation in production triggered a caught `AttributeError` that was indistinguishable from a real NATS outage. The amendment threads the Protocol through `assemble_tool_list` (and the ambient-factory closure inside `build_supervisor`) so both Live and Stub branches actually reach the slot. The Live/Stub design intent of DDR-021 stands; only the wiring path is amended. See TASK-REV-FFE4 review report and TASK-J004-FIX-001 for the implementation.

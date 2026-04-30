@@ -242,17 +242,57 @@ class TestAC003AlphabeticalOrder:
 class TestAC004SnapshotIsolation:
     """``assemble_tool_list`` is the single point that binds the registry."""
 
-    def test_capabilities_module_receives_snapshot(
+    def test_capabilities_module_receives_protocol(
         self,
         test_config: JarvisConfig,
         descriptor_alpha: CapabilityDescriptor,
         descriptor_bravo: CapabilityDescriptor,
         reset_tool_state: None,
     ) -> None:
-        """``capabilities._capability_registry`` is rebound to a snapshot."""
-        registry = [descriptor_alpha, descriptor_bravo]
-        assemble_tool_list(test_config, registry)
-        assert capabilities_module._capability_registry == registry
+        """``capabilities._capability_registry`` is bound to the Protocol object.
+
+        TASK-J004-FIX-001 — the catalogue-tool slot now stores the
+        Protocol-shaped registry directly (no list copy) so the tool
+        bodies can call ``snapshot()`` / ``refresh()`` /
+        ``subscribe_updates(...)``. The slot is bound to whichever
+        Protocol object the caller passes via ``capabilities_registry=``;
+        ``None`` (the default) parks it at the pre-wired sentinel.
+        """
+
+        class _ProtocolFake:
+            def snapshot(self) -> list[CapabilityDescriptor]:
+                return [descriptor_alpha, descriptor_bravo]
+
+            async def refresh(self) -> None:
+                return None
+
+            async def subscribe_updates(self, callback: object) -> None:
+                return None
+
+            async def close(self) -> None:
+                return None
+
+        registry_obj = _ProtocolFake()
+        assemble_tool_list(
+            test_config,
+            [descriptor_alpha, descriptor_bravo],
+            capabilities_registry=registry_obj,
+        )
+        assert capabilities_module._capability_registry is registry_obj
+
+    def test_capabilities_module_default_is_none(
+        self,
+        test_config: JarvisConfig,
+        descriptor_alpha: CapabilityDescriptor,
+        reset_tool_state: None,
+    ) -> None:
+        """Omitting ``capabilities_registry`` parks the slot at ``None``.
+
+        ADR-ARCH-021 sentinel semantics — catalogue tools then surface
+        ``ERROR: registry_unavailable``.
+        """
+        assemble_tool_list(test_config, [descriptor_alpha])
+        assert capabilities_module._capability_registry is None
 
     def test_dispatch_module_receives_snapshot(
         self,
@@ -266,36 +306,28 @@ class TestAC004SnapshotIsolation:
         assemble_tool_list(test_config, registry)
         assert dispatch_module._capability_registry == registry
 
-    def test_snapshot_is_decoupled_from_caller_list(
+    def test_dispatch_snapshot_is_decoupled_from_caller_list(
         self,
         test_config: JarvisConfig,
         descriptor_alpha: CapabilityDescriptor,
         descriptor_bravo: CapabilityDescriptor,
         reset_tool_state: None,
     ) -> None:
-        """Mutating the caller's list after assembly does not leak."""
+        """Mutating the caller's list after assembly does not leak into dispatch.
+
+        The dispatch slot stores a fresh ``list(...)`` copy (ASSUM-006);
+        the capabilities slot stores the Protocol object directly so its
+        own ``snapshot()`` semantics own freshness, not
+        ``assemble_tool_list``.
+        """
         registry = [descriptor_alpha]
         assemble_tool_list(test_config, registry)
 
-        # Mutate the operator's outer list; the modules must remain
+        # Mutate the operator's outer list; dispatch must remain
         # pinned to the snapshot taken at assemble time.
         registry.append(descriptor_bravo)
 
-        assert capabilities_module._capability_registry == [descriptor_alpha]
         assert dispatch_module._capability_registry == [descriptor_alpha]
-
-    def test_snapshots_are_independent_lists(
-        self,
-        test_config: JarvisConfig,
-        descriptor_alpha: CapabilityDescriptor,
-        reset_tool_state: None,
-    ) -> None:
-        """Each consumer module gets its own list copy."""
-        assemble_tool_list(test_config, [descriptor_alpha])
-        assert (
-            capabilities_module._capability_registry
-            is not dispatch_module._capability_registry
-        )
 
     def test_search_web_config_is_injected(
         self,
@@ -315,17 +347,16 @@ class TestAC004SnapshotIsolation:
     ) -> None:
         """End-to-end: the catalogue tool reflects the assembled snapshot.
 
-        FEAT-JARVIS-004 (TASK-J004-012) swapped the
-        ``capabilities._capability_registry`` swap-point from a ``list``
-        to a ``CapabilitiesRegistry`` Protocol object; the matching
-        ``assemble_tool_list`` upgrade is owned by TASK-J004-013. Until
-        that lands, wrap the assembled list in a Protocol-compatible
-        adapter inside the test so the catalogue tool has a
-        ``.snapshot()`` callable to consume.
+        TASK-J004-FIX-001 — ``assemble_tool_list`` now accepts a
+        ``capabilities_registry`` Protocol kwarg and snapshots it into
+        the catalogue-tool slot directly. The test passes a
+        Protocol-conformant adapter as that kwarg so the catalogue tool
+        can call ``.snapshot()`` without a post-hoc module-attribute
+        rewrite.
         """
 
         class _ListBackedRegistry:
-            """Test-local Protocol adapter for FEAT-J004-012 swap."""
+            """Test-local Protocol adapter for the catalogue-tool slot."""
 
             def __init__(self, descriptors: list[CapabilityDescriptor]) -> None:
                 self._descriptors = descriptors
@@ -342,12 +373,10 @@ class TestAC004SnapshotIsolation:
             async def close(self) -> None:
                 return None
 
-        assemble_tool_list(test_config, [descriptor_alpha])
-        # Wrap the assembled list (still a J002-shape ``list``) in the
-        # Protocol adapter so the FEAT-J004 ``snapshot()``-based tool
-        # body can consume it.
-        capabilities_module._capability_registry = _ListBackedRegistry(
-            list(capabilities_module._capability_registry)
+        assemble_tool_list(
+            test_config,
+            [descriptor_alpha],
+            capabilities_registry=_ListBackedRegistry([descriptor_alpha]),
         )
 
         rendered = list_available_capabilities.invoke({})
@@ -414,9 +443,7 @@ class TestAC005NoSubmoduleImports:
 
             for module_name in _imports(filepath):
                 for forbidden in _INTERNAL_PREFIXES:
-                    if module_name == forbidden or module_name.startswith(
-                        forbidden + "."
-                    ):
+                    if module_name == forbidden or module_name.startswith(forbidden + "."):
                         rel = filepath.relative_to(_SRC_DIR)
                         violations.append(f"{rel}: imports {module_name!r}")
 

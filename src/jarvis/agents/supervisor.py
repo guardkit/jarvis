@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
     from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.capabilities_registry import CapabilitiesRegistry
     from jarvis.tools import CapabilityDescriptor
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,7 @@ AMBIENT_TOOL_FACTORY_ATTR: str = "_jarvis_ambient_tool_factory"
 def _default_ambient_tool_factory(
     config: JarvisConfig,
     available_capabilities: list[CapabilityDescriptor] | None,
+    capabilities_registry: CapabilitiesRegistry | None,
 ) -> Callable[[], list[BaseTool]]:
     """Build the default ``ambient_tool_factory`` for a supervisor.
 
@@ -109,6 +111,15 @@ def _default_ambient_tool_factory(
     ``available_capabilities`` to ``[]`` when the caller passed ``None``
     so the closure body matches the FEAT-J002 ``capability_registry``
     contract (a real list, possibly empty).
+
+    TASK-J004-FIX-001 / Finding F4 — the ``capabilities_registry``
+    Protocol is also threaded through so an ambient activation reuses
+    the same Live/Stub registry the lifecycle wired into the catalogue
+    tool slot.  Without this plumbing an ambient activation would
+    re-overwrite ``jarvis.tools.capabilities._capability_registry`` with
+    ``None`` (the kwarg default of :func:`assemble_tool_list`) and
+    silently re-introduce the latent ``AttributeError`` that the fix
+    closes.
 
     The :mod:`jarvis.tools` import is performed *inside* the closure so
     importing :mod:`jarvis.agents.supervisor` does not eagerly pull the
@@ -125,6 +136,13 @@ def _default_ambient_tool_factory(
             was built with; ``None`` is normalised to ``[]`` inside the
             closure to honour the snapshot-isolation contract
             (ASSUM-006).
+        capabilities_registry: The Protocol-shaped
+            :class:`CapabilitiesRegistry` the lifecycle wired into the
+            catalogue-tool slot; threaded through so the ambient closure
+            preserves the same Live/Stub backing object on each
+            invocation.  ``None`` parks the catalogue slot at the
+            pre-wired ``ERROR: registry_unavailable`` sentinel
+            (ADR-ARCH-021).
 
     Returns:
         A zero-argument callable that, on each invocation, returns a
@@ -140,6 +158,7 @@ def _default_ambient_tool_factory(
             config,
             list(available_capabilities) if available_capabilities is not None else [],
             include_frontier=False,
+            capabilities_registry=capabilities_registry,
         )
 
     return _factory
@@ -152,6 +171,7 @@ def build_supervisor(
     available_capabilities: list[CapabilityDescriptor] | None = None,
     async_subagents: list[AsyncSubAgent] | None = None,
     ambient_tool_factory: Callable[[], list[BaseTool]] | None = None,
+    capabilities_registry: CapabilitiesRegistry | None = None,
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Compose and return the Jarvis supervisor compiled graph.
 
@@ -219,10 +239,21 @@ def build_supervisor(
             surface (DDR-014 registration-layer gate).  ``None`` (the
             FEAT-J002 default) resolves to a closure that calls
             ``assemble_tool_list(config, available_capabilities or [],
-            include_frontier=False)`` — the FEAT-J002 9-tool baseline
-            minus ``escalate_to_frontier``.  Whichever factory is
-            effective is attached to the returned graph as
+            include_frontier=False, capabilities_registry=capabilities_registry)``
+            — the FEAT-J002 9-tool baseline minus
+            ``escalate_to_frontier``.  Whichever factory is effective is
+            attached to the returned graph as
             ``graph._jarvis_ambient_tool_factory``.
+        capabilities_registry: Optional Protocol-shaped
+            :class:`~jarvis.infrastructure.capabilities_registry.CapabilitiesRegistry`
+            (Live or Stub) backing the catalogue tools.  When the caller
+            relies on the default ambient factory, this object is
+            threaded into the closure so an ambient activation reuses
+            the same registry the lifecycle wired into the catalogue
+            tool slot.  ``None`` (the FEAT-J002 default) parks the slot
+            at the pre-wired ``ERROR: registry_unavailable`` sentinel
+            (ADR-ARCH-021).  TASK-J004-FIX-001 / Finding F4 closes the
+            latent re-overwrite hole this kwarg plugs.
 
     Returns:
         A :class:`CompiledStateGraph` ready for invocation — but not yet
@@ -272,7 +303,7 @@ def build_supervisor(
     resolved_ambient_factory = (
         ambient_tool_factory
         if ambient_tool_factory is not None
-        else _default_ambient_tool_factory(config, available_capabilities)
+        else _default_ambient_tool_factory(config, available_capabilities, capabilities_registry)
     )
 
     # 5. Compile the agent graph — DeepAgents built-ins are wired by middleware.

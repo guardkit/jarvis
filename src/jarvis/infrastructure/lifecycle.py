@@ -693,6 +693,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         routing_history_writer=routing_history_writer,
         dispatch_semaphore=dispatch_semaphore,
         forge_subscriber=forge_subscriber,
+        capabilities_registry=capabilities_registry,
     )
     log.info(
         "jarvis_tool_list_attended_assembled",
@@ -711,6 +712,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         routing_history_writer=routing_history_writer,
         dispatch_semaphore=dispatch_semaphore,
         forge_subscriber=forge_subscriber,
+        capabilities_registry=capabilities_registry,
     )
     log.info(
         "jarvis_tool_list_ambient_assembled",
@@ -729,6 +731,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         available_capabilities=capability_registry,
         async_subagents=async_subagents,
         ambient_tool_factory=lambda: tool_list_ambient,
+        capabilities_registry=capabilities_registry,
     )
 
     # 11. Wire the session manager so AppState is fully populated on return.
