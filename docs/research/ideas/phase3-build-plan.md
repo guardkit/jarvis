@@ -49,7 +49,7 @@
 
 Run summary: 20/20 tasks completed, 0 failed, 23 total turns. Source-of-truth: `.guardkit/features/FEAT-J004-702C.yaml`.
 
-**Housekeeping deferred to GuardKit:** task files for the 20 completed tasks still live at `tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/`; the planning review `TASK-REV-22CF` still in `tasks/in_review/`. Both should migrate to `tasks/completed/` on next `/feature-complete` or task-complete pass.
+**Housekeeping (✅ complete, 2026-04-30):** the 20 completed task files are at [`tasks/completed/feat-jarvis-004-fleet-registration-and-specialist-dispatch/`](../../../tasks/completed/feat-jarvis-004-fleet-registration-and-specialist-dispatch/); the planning review `TASK-REV-22CF` is at [`tasks/completed/TASK-REV-22CF-plan-nats-fleet-registration-and-specialist-dispatch.md`](../../../tasks/completed/TASK-REV-22CF-plan-nats-fleet-registration-and-specialist-dispatch.md); the FEAT-J004 follow-up review `TASK-REV-FFE4` and its implementation task `TASK-J004-FIX-001` are also at `tasks/completed/`.
 
 ### FEAT-JARVIS-005 Wave Status — ✅ ALL COMPLETE (resume-merged 2026-04-30, head `505d5e4` on `main`)
 
