@@ -1,0 +1,146 @@
+{
+  "task_id": "TASK-DOC-006",
+  "timestamp": "2026-04-30T20:18:54.340271",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    "README.md"
+  ],
+  "files_created": [
+    "tests/test_readme_doc006.py"
+  ],
+  "tests_written": [
+    "tests/test_readme_doc006.py"
+  ],
+  "requirements_addressed": [
+    "AC-001 - H1 'Jarvis'",
+    "AC-002 - ## Status references Phase 3 + Forge round-trip close criterion",
+    "AC-003 - ## Quick Start has 'uv sync' + 'python -m langgraph dev'",
+    "AC-004 - ## Architecture links to docs/architecture/ARCHITECTURE.md",
+    "AC-005 - ## Design Decisions links to ADR + FEAT-JARVIS-004 DDR + FEAT-JARVIS-005 DDR dirs",
+    "AC-006 - 'Pre-Architecture' literal absent",
+    "AC-007 - stale '341 passing' / standalone integer 341 absent",
+    "AC-008 - all markdown links relative (no leading-/)",
+    "AC-009 - line count 210 (within [100, 300] budget)"
+  ],
+  "requirements_met": [
+    "AC-001 - H1 'Jarvis'",
+    "AC-002 - ## Status references Phase 3 + Forge round-trip close criterion",
+    "AC-003 - ## Quick Start has 'uv sync' + 'python -m langgraph dev'",
+    "AC-004 - ## Architecture links to docs/architecture/ARCHITECTURE.md",
+    "AC-005 - ## Design Decisions links to ADR + FEAT-JARVIS-004 DDR + FEAT-JARVIS-005 DDR dirs",
+    "AC-006 - 'Pre-Architecture' literal absent",
+    "AC-007 - stale '341 passing' / standalone integer 341 absent",
+    "AC-008 - all markdown links relative (no leading-/)",
+    "AC-009 - line count 210 (within [100, 300] budget)"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "First heading is a level-1 (`#`) heading containing the literal string 'Jarvis' (Group A.5 / @smoke).",
+      "status": "complete",
+      "evidence": "README.md line 1 is '# Jarvis - General Purpose DeepAgent & Fleet Coordinator' which matches the regex '^# .*Jarvis'. Verified by tests/test_readme_doc006.py::TestAC001FirstHeadingIsJarvis::test_first_line_is_h1_with_jarvis (PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "File contains a `## Status` (or H2-equivalent) section that references 'Phase 3' by name (ASSUM-006) and describes the Phase-3 close criterion as the end-to-end Forge round-trip (Group A.6 / @smoke).",
+      "status": "complete",
+      "evidence": "README.md line 13 is '## Status'; the section spans lines 13-31 and contains 'Phase 3 - code-complete + regression-clean', 'Phase 3 close criterion - Step 14: end-to-end Forge round-trip', and explains the round-trip mechanics. Verified by tests/test_readme_doc006.py::TestAC002StatusSectionReferencesPhase3 (3 assertions, all PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "File contains a `## Quick Start` (or H2-equivalent) section that includes the canonical install command `uv sync` and the canonical runtime command `python -m langgraph dev` (Group A.7, ASSUM-013).",
+      "status": "complete",
+      "evidence": "README.md line 39 is '## Quick Start'; the section contains the 'uv sync' install step (line 50) and 'uv run python -m langgraph dev' runtime step (line 64), plus a closing paragraph explicitly naming both as canonical (line 70). Verified by tests/test_readme_doc006.py::TestAC003QuickStartHasCanonicalCommands (3 assertions, all PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "File contains an `## Architecture` (or H2-equivalent) section that links (markdown link) to `docs/architecture/ARCHITECTURE.md` (Group A.8).",
+      "status": "complete",
+      "evidence": "README.md line 132 is '## Architecture'; line 146 contains the markdown link '[docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md)' as a relative path. Verified by tests/test_readme_doc006.py::TestAC004ArchitectureSectionLinksToArchitectureDoc (2 assertions, all PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "File contains a `## Design Decisions` (or H2-equivalent) section that references the ADR directory `docs/architecture/decisions/`, the FEAT-JARVIS-004 DDR directory (`docs/design/FEAT-JARVIS-004/decisions/`), and the FEAT-JARVIS-005 DDR directory (`docs/design/FEAT-JARVIS-005/decisions/`) (Group A.9, ASSUM-007).",
+      "status": "complete",
+      "evidence": "README.md line 158 is '## Design Decisions'; the section contains three relative markdown links: '[docs/architecture/decisions/](docs/architecture/decisions/)' (line 165), '[docs/design/FEAT-JARVIS-004/decisions/](docs/design/FEAT-JARVIS-004/decisions/)' (line 170), '[docs/design/FEAT-JARVIS-005/decisions/](docs/design/FEAT-JARVIS-005/decisions/)' (line 175). Per-link one-line summaries describe each set's coverage. Verified by tests/test_readme_doc006.py::TestAC005DesignDecisionsLinksAllThreeDirs (4 assertions, all PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "File does not contain the literal phrase `Pre-Architecture` (Group C.5 - guards against re-introducing stale phase info).",
+      "status": "complete",
+      "evidence": "Grep for 'Pre-Architecture' in README.md returns 0 matches. The old 'Status: Pre-Architecture' line was replaced with the new '## Status' section describing Phase 3 close criterion. Verified by tests/test_readme_doc006.py::TestAC006NoPreArchitecturePhrase (PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "File does not declare a hard-coded passing-test count below the current count (Group C.5 - current count is 2105; '341 passing' from the existing README must be removed or updated).",
+      "status": "complete",
+      "evidence": "Grep for '341 passing' returns 0 matches; grep for the standalone integer '\\b341\\b' also returns 0 matches. The Quick Start section's regression command no longer carries any specific test-count comment - just the bare 'uv run pytest' command. Verified by tests/test_readme_doc006.py::TestAC007NoStaleTestCount (2 assertions, all PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "All in-repo markdown links use relative paths - no absolute filesystem paths (Group D.4, ASSUM-009).",
+      "status": "complete",
+      "evidence": "Grep for the pattern '\\]\\(/' (markdown link target starting with leading slash) in README.md returns 0 matches. Every markdown link in the new README is a relative path: docs/architecture/ARCHITECTURE.md, docs/architecture/decisions/, docs/design/FEAT-JARVIS-004/decisions/, docs/design/FEAT-JARVIS-005/decisions/, docs/research/ideas/jarvis-vision.md, docs/research/ideas/general-purpose-agent.md, docs/research/ideas/phase3-build-plan.md, docs/README.md, CLAUDE.md, tests/conftest.py, etc. Verified by tests/test_readme_doc006.py::TestAC008OnlyRelativeMarkdownLinks (PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "File line count is >= 100 and <= 300 (Group B.1, ASSUM-004/005).",
+      "status": "complete",
+      "evidence": "wc -l README.md returns 210 lines, comfortably inside the [100, 300] budget and within the implementation-notes target band of 180-250 LoC. Verified by tests/test_readme_doc006.py::TestAC009LineCountWithinBudget::test_line_count_in_range (PASSED).",
+      "test_file": "tests/test_readme_doc006.py",
+      "implementation_files": [
+        "README.md"
+      ]
+    }
+  ]
+}
