@@ -256,6 +256,7 @@ markers = [
     "boundary: boundary / parameter-edge scenarios",
     "negative: negative / failure-mode scenarios",
     "edge_case: edge-case scenarios",
+    "e2e: end-to-end soft-prereq tests (real NATS + Forge + Graphiti on GB10). Opt-out via 'pytest -m \"not e2e\"'.",
     "feat_jarvis_002: feature-level tag for FEAT-JARVIS-002",
     "task_TASK_J002_006: scenarios scoped to TASK-J002-006",
     "task_TASK_J002_008: scenarios scoped to TASK-J002-008",

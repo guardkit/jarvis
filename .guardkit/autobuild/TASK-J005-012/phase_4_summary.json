@@ -1,0 +1,7 @@
+{
+  "tests_run": 2102,
+  "tests_failed": 1,
+  "coverage_pct": 92.0,
+  "output_summary": "2101 passed, 1 failed (pre-existing tests/test_assemble_tool_list.py::TestAC005NoSubmoduleImports — unrelated to TASK-J005-012; reproduces on clean stash), 1 skipped (new e2e test skips per AC-001 — GB10 env-vars absent), 1 deselected via -m 'not e2e'; line coverage 92% (gate 80%)",
+  "quality_gates_passed": false
+}

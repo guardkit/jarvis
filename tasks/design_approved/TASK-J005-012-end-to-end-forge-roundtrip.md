@@ -1,30 +1,30 @@
 ---
-id: TASK-J005-012
-title: End-to-end Forge round-trip (soft-prereq, GB10 gated)
-task_type: testing
-parent_review: TASK-REV-3B8B
-feature_id: FEAT-J005-946D
-wave: 5
-implementation_mode: task-work
 complexity: 8
+created: 2026-04-29 00:00:00+00:00
 dependencies:
-  - TASK-J005-008
-  - TASK-J005-010
+- TASK-J005-008
+- TASK-J005-010
+feature_id: FEAT-J005-946D
+id: TASK-J005-012
+implementation_mode: task-work
+parent_review: TASK-REV-3B8B
 priority: high
+status: design_approved
 tags:
-  - tests
-  - end-to-end
-  - phase3-close
-  - soft-prereq
-  - gb10
-  - FEAT-JARVIS-005
-status: backlog
-created: 2026-04-29T00:00:00Z
-updated: 2026-04-29T00:00:00Z
+- tests
+- end-to-end
+- phase3-close
+- soft-prereq
+- gb10
+- FEAT-JARVIS-005
+task_type: testing
 test_results:
-  status: pending
   coverage: null
   last_run: null
+  status: pending
+title: End-to-end Forge round-trip (soft-prereq, GB10 gated)
+updated: 2026-04-29 00:00:00+00:00
+wave: 5
 ---
 
 # TASK-J005-012 — End-to-end Forge round-trip
