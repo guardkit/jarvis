@@ -1,0 +1,130 @@
+{
+  "task_id": "TASK-DOC-007",
+  "turn": 1,
+  "files_modified": [],
+  "files_created": [
+    ".guardkit/autobuild/TASK-DOC-007/player_turn_1.json"
+  ],
+  "tests_written": [],
+  "tests_run": true,
+  "tests_passed": false,
+  "test_output_summary": "uv run pytest tests/ --cov=src/jarvis --cov-report=term: 6 failed, 2165 passed, 1 skipped, 270 warnings in 65.43s. Coverage TOTAL = 92% (175 miss / 2157 stmts). All 6 failures are localised to tests/test_developer_surface.py::TestAC004ReadmeQuickstart and stem from TASK-DOC-006 renaming the README heading from '## Quickstart' to '## Quick Start' (per TASK-DOC-006 AC requiring '## Quick Start') without updating the older TASK-J001-011 grep regex which still hard-codes '^## Quickstart' (no space). uv run mypy src/jarvis/: Success: no issues found in 45 source files. uv run langgraph dev --no-browser: registered both graphs cleanly (jarvis import 0.298s, jarvis_reasoner import 0.382s, app start 1.965s, clean SIGINT shutdown).",
+  "implementation_notes": "TASK-DOC-007 is a verification-only gate task \u2014 the test surface is the task. No executable code, docstring, or README edits were performed (those are wave-1 tasks per the explicit Out-of-scope list). The eight acceptance criteria were each validated by replaying the canonical commands in the task's Test Requirements section: AC-001 tool-docstring invariant verified by AST-extracting docstrings from main:src/jarvis/tools/{general,capabilities,dispatch}.py and HEAD copies \u2014 JSON-encoded function-name -> docstring maps were byte-identical. AC-002 no-executable-code verified by parsing main and HEAD versions of each of the five modified infrastructure files, replacing every module/class/function docstring with a sentinel literal, and confirming ast.dump(...) equality \u2014 held for all five files (capabilities_registry, fleet_registration, forge_notifications, nats_client, routing_history). AC-003 five-module importability verified directly. AC-004 langgraph dev probe ran for ~7s under SIGINT \u2014 both graphs registered, no traceback. AC-006 coverage floor 92% was met exactly (TOTAL 92%). AC-007 mypy delta confirmed zero (Success: no issues found). AC-008 TASK-Jxxx grep over the five infrastructure files returned no matches (exit=1).\n\nAC-005 pytest baseline (target: 0 failed) is NOT met: 6 failures in tests/test_developer_surface.py::TestAC004ReadmeQuickstart all caused by a known design tension between TASK-DOC-006 (which mandates README heading '## Quick Start' with a space) and the older TASK-J001-011 test fixture (which hard-codes '^## Quickstart' with no space). TASK-DOC-006 Implementation Notes explicitly anticipated this \u2014 quoting: 'Either rename to \"## Quick Start\" or keep \"## Quickstart\" and let the test grep on the more permissive \"^## Quick ?[Ss]tart\" pattern.' TASK-DOC-006 chose the rename branch but did not relax the test regex, leaving the existing test_developer_surface.py assertions stale. Neither editing README.md (out of scope per Wave-1 boundary) nor editing tests/test_developer_surface.py (would be a Wave-1 follow-on, not a gate-task action) is in-scope for TASK-DOC-007. Per TASK-DOC-007 Implementation Notes line 168 \u2014 'If any acceptance criterion fails, this task does not pass; the wave-1 task that introduced the regression should be re-opened.' \u2014 the gate is reporting honestly: AC-005 incomplete; recommend TASK-DOC-006 be re-opened to either (a) rename the README heading back to '## Quickstart', or (b) update tests/test_developer_surface.py regex to '^## Quick ?[Ss]tart' as TASK-DOC-006's notes pre-authorised.",
+  "concerns": [
+    "AC-005 pytest baseline fails: 6 failed / 2165 passed / 1 skipped. All 6 failures localised to tests/test_developer_surface.py::TestAC004ReadmeQuickstart. Root cause: TASK-DOC-006 README heading rename ('## Quickstart' -> '## Quick Start') is incompatible with the older TASK-J001-011 hard-coded regex '^## Quickstart'. TASK-DOC-006 Implementation Notes explicitly anticipated this and offered the relaxed regex '^## Quick ?[Ss]tart' as the alternative; that test-side change was never applied. Recommend re-opening TASK-DOC-006 (or filing a TASK-DOC-006-FIX-001 follow-up) to apply the relaxed regex in tests/test_developer_surface.py \u2014 neither README.md nor that test file is editable inside TASK-DOC-007's stated In-Scope.",
+    "AC-006 coverage floor met at exactly 92% TOTAL (175 missed / 2157 stmts). Hot-spot lowest-coverage modules in the polished set are still above floor: src/jarvis/tools/general.py 82-83%, src/jarvis/cli/main.py 76%, src/jarvis/infrastructure/lifecycle.py 84%. Floor is satisfied but the margin is zero \u2014 any future regression of 0.05% would breach. Worth a Phase-3-close note that the gate is single-tile.",
+    "ASSUM-011 mypy-delta gate: HEAD mypy is 0 errors total. The 'pre-existing error' baseline referenced in TASK-DOC-007 line 161 (build-plan Status Log entry for 7e29363) was also 0; therefore delta = 0 trivially. No TASK-REV-FFE4 follow-up is implicated by this gate run."
+  ],
+  "requirements_addressed": [
+    "AC-001 tool-docstring invariant (general.py, capabilities.py, dispatch.py byte-identical docstrings vs main)",
+    "AC-002 no executable code modified (AST docstring-strip equivalence verified on all 5 modified infrastructure files)",
+    "AC-003 five infrastructure modules importable (uv run python -c '...' succeeded)",
+    "AC-004 langgraph dev boots both graphs (jarvis + jarvis_reasoner registered cleanly under 5s probe)",
+    "AC-006 line coverage TOTAL = 92% (>= 92% floor)",
+    "AC-007 mypy delta = 0 (HEAD: Success, no issues found in 45 source files)",
+    "AC-008 TASK-Jxxx markers fully cleared from the 5 in-scope infrastructure files (grep exit=1, no matches)"
+  ],
+  "requirements_remaining": [
+    "AC-005 pytest baseline (6 failed in TestAC004ReadmeQuickstart) \u2014 blocked on TASK-DOC-006 follow-up to relax the README-heading regex per its own Implementation Notes; out of scope for TASK-DOC-007."
+  ],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] **Tool-docstring invariant**: for every `.py` file under `src/jarvis/tools/` excluding `__init__.py`, every `@tool`-decorated function's docstring is byte-identical to the docstring on `main` HEAD prior to this feature (Group C.1 / `@smoke`, ASSUM-012). Concretely: `general.py`, `capabilities.py`, `dispatch.py`.",
+      "status": "complete",
+      "evidence": "AST-extracted {function_name: docstring} maps for src/jarvis/tools/{general,capabilities,dispatch}.py from both `git show main:...` and HEAD (FunctionDef + AsyncFunctionDef), JSON-encoded with sort_keys=True for deterministic ordering, then diffed. All three files produced ZERO diff output, proving every function's docstring (including every @tool-decorated one \u2014 @tool wraps preserve the underlying FunctionDef in the AST, so the comparison covers them) is byte-identical between main and HEAD.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/tools/general.py",
+        "src/jarvis/tools/capabilities.py",
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] **No executable code modified**: `git diff main..HEAD -- src/jarvis/` shows only changes inside Python docstrings; no executable statement is modified (Group C.2).",
+      "status": "complete",
+      "evidence": "git diff main..HEAD --stat -- src/jarvis/ shows only 5 modified files (capabilities_registry.py, fleet_registration.py, forge_notifications.py, nats_client.py, routing_history.py). For each file, parsed both main and HEAD source with ast.parse, walked every Module/ClassDef/FunctionDef/AsyncFunctionDef and replaced the leading docstring Expr-Constant with a sentinel literal '<docstring>', then compared ast.dump(...) (annotate_fields=True, include_attributes=False). Result: structural equivalence held for all 5 files \u2014 i.e. the diff is entirely docstring-only with zero executable-statement changes.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py",
+        "src/jarvis/infrastructure/fleet_registration.py",
+        "src/jarvis/infrastructure/forge_notifications.py",
+        "src/jarvis/infrastructure/nats_client.py",
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] **All five polished modules importable**: `python -c \"import jarvis.infrastructure.{nats_client,fleet_registration,capabilities_registry,routing_history,forge_notifications}\"` all succeed (Group D.1 / `@smoke`).",
+      "status": "complete",
+      "evidence": "uv run python -c 'import jarvis.infrastructure.nats_client; import jarvis.infrastructure.fleet_registration; import jarvis.infrastructure.capabilities_registry; import jarvis.infrastructure.routing_history; import jarvis.infrastructure.forge_notifications; print(\"all five modules importable\")' returned exit 0 with stdout 'all five modules importable'.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/nats_client.py",
+        "src/jarvis/infrastructure/fleet_registration.py",
+        "src/jarvis/infrastructure/capabilities_registry.py",
+        "src/jarvis/infrastructure/routing_history.py",
+        "src/jarvis/infrastructure/forge_notifications.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] **`langgraph dev` boots both graphs**: `uv run langgraph dev --no-browser` registers `jarvis` and `jarvis_reasoner` graphs cleanly with no errors (Group D.1 / `@smoke`).",
+      "status": "complete",
+      "evidence": "uv run langgraph dev --no-browser ran for 8s with SIGINT shutdown. Log shows 'Importing graph profiling ... graph_id=jarvis ... elapsed_seconds=0.298' and 'Importing graph profiling ... graph_id=jarvis_reasoner ... elapsed_seconds=0.382', then 'Application started up in 1.965s', then a clean shutdown sequence ('Shutting down background workers', 'Shutting down remote graphs', 'dev persistence flush loop exiting'). No traceback, no error-level log lines. Matches the build-plan Status entry for 7e29363 (expected 0.27s + 0.36s import shape).",
+      "test_file": null,
+      "implementation_files": [
+        "langgraph.json",
+        "src/jarvis/agents/supervisor.py",
+        "src/jarvis/agents/subagents/jarvis_reasoner.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] **pytest baseline preserved**: `uv run pytest tests/` returns 2105+ passed / 1 skipped / 0 failed (Group D.2 / `@smoke`).",
+      "status": "incomplete",
+      "evidence": "uv run pytest tests/ --cov=src/jarvis --cov-report=term returned: 6 failed, 2165 passed, 1 skipped, 270 warnings in 65.43s. Pass count 2165 exceeds the 2105 floor; skip count 1 matches; HOWEVER fail count is 6, not 0. All 6 failures are co-located in tests/test_developer_surface.py::TestAC004ReadmeQuickstart: test_readme_has_quickstart_heading, test_quickstart_contains_command[uv sync], test_quickstart_contains_command[.env.example], test_quickstart_contains_command[pytest], test_quickstart_mentions_venv, test_quickstart_mentions_cp_env_example. Root cause: TASK-DOC-006 renamed the README heading from '## Quickstart' to '## Quick Start' (per its own ACs), but the older TASK-J001-011 test fixture still hard-codes a regex '^## Quickstart' (no space). TASK-DOC-006 Implementation Notes explicitly anticipated this collision and pre-authorised relaxing the regex to '^## Quick ?[Ss]tart'; that follow-up was not applied. Per TASK-DOC-007 Implementation Notes line 168 \u2014 'If any acceptance criterion fails, this task does not pass; the wave-1 task that introduced the regression should be re-opened' \u2014 this gate report is filed honestly with AC-005 marked incomplete. Editing README.md or test_developer_surface.py is out of scope for TASK-DOC-007 (Wave-1 boundary).",
+      "test_file": "tests/test_developer_surface.py",
+      "implementation_files": []
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] **Coverage floor**: line coverage \u2265 92% (Group D.2 / `@smoke`, ASSUM-010).",
+      "status": "complete",
+      "evidence": "uv run pytest tests/ --cov=src/jarvis --cov-report=term reports TOTAL = 2157 stmts / 175 miss / 92% Cover. Floor is 92% \u2014 met (with zero margin; see concerns).",
+      "test_file": null,
+      "implementation_files": []
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] **mypy delta = 0**: `uv run mypy src/jarvis/` introduces no new error in any file modified by this feature (Group D.3, ASSUM-011).",
+      "status": "complete",
+      "evidence": "uv run mypy src/jarvis/ at HEAD: 'Success: no issues found in 45 source files'. Per TASK-DOC-007 Implementation Notes line 161, the pre-existing baseline at 7e29363 was also 0 errors. Delta = 0 - 0 = 0; ASSUM-011 satisfied.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py",
+        "src/jarvis/infrastructure/fleet_registration.py",
+        "src/jarvis/infrastructure/forge_notifications.py",
+        "src/jarvis/infrastructure/nats_client.py",
+        "src/jarvis/infrastructure/routing_history.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "[ ] **TASK-Jxxx fully cleared from in-scope files**: `grep -rE \"TASK-J[0-9]{3}-[0-9]{3}\" src/jarvis/infrastructure/{nats_client,fleet_registration,capabilities_registry,routing_history,forge_notifications}.py` returns no matches.",
+      "status": "complete",
+      "evidence": "grep -rnE 'TASK-J[0-9]{3}-[0-9]{3}' against the five infrastructure files (nats_client.py, fleet_registration.py, capabilities_registry.py, routing_history.py, forge_notifications.py) returned no output and exited with code 1 (no-match). Cross-task confirmation of Group C.4 / @smoke.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/nats_client.py",
+        "src/jarvis/infrastructure/fleet_registration.py",
+        "src/jarvis/infrastructure/capabilities_registry.py",
+        "src/jarvis/infrastructure/routing_history.py",
+        "src/jarvis/infrastructure/forge_notifications.py"
+      ]
+    }
+  ],
+  "success": true
+}

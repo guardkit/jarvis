@@ -1,0 +1,15 @@
+{
+  "task_id": "TASK-DOC-002",
+  "checkpoints": [
+    {
+      "turn": 1,
+      "commit_hash": "d428075171d01647815eb5628d0e0ff4ea0686b9",
+      "timestamp": "2026-04-30T20:19:27.770316",
+      "tests_passed": true,
+      "test_count": 0,
+      "message": "[guardkit-checkpoint] Turn 1 complete (tests: pass)",
+      "from_prior_run": false
+    }
+  ],
+  "last_updated": "2026-04-30T20:19:27.770561"
+}

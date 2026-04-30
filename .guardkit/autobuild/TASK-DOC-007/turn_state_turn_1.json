@@ -1,0 +1,35 @@
+{
+  "id": "TURN-FEAT-43DE-1",
+  "feature_id": "FEAT-43DE",
+  "task_id": "TASK-DOC-007",
+  "turn_number": 1,
+  "player_summary": "Implementation attempt",
+  "player_decision": "feedback",
+  "coach_decision": "feedback",
+  "coach_feedback": "- Not all acceptance criteria met:\n  \u2022 pytest baseline preserved**: `uv run pytest tests/` returns",
+  "mode": "fresh_start",
+  "blockers_found": [],
+  "progress_summary": "Turn 1: feedback",
+  "acceptance_criteria_status": {
+    "AC-001": "verified",
+    "AC-002": "verified",
+    "AC-003": "verified",
+    "AC-004": "verified",
+    "AC-005": "rejected",
+    "AC-006": "verified",
+    "AC-007": "verified",
+    "AC-008": "verified"
+  },
+  "files_modified": [
+    ".guardkit/autobuild/TASK-DOC-007/player_turn_1.json"
+  ],
+  "tests_passed": null,
+  "tests_failed": null,
+  "coverage": null,
+  "arch_score": null,
+  "started_at": "2026-04-30T20:29:39.365775",
+  "completed_at": "2026-04-30T20:29:39.365775",
+  "duration_seconds": null,
+  "lessons_from_turn": [],
+  "what_to_try_next": null
+}
