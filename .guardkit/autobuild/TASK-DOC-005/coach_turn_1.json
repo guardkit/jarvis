@@ -1,0 +1,166 @@
+{
+  "task_id": "TASK-DOC-005",
+  "turn": 1,
+  "decision": "approve",
+  "validation_results": {
+    "quality_gates": {
+      "tests_passed": true,
+      "coverage_met": true,
+      "arch_review_passed": true,
+      "plan_audit_passed": true,
+      "all_gates_passed": true
+    },
+    "independent_tests": {
+      "tests_passed": true,
+      "test_command": "skipped",
+      "test_output_summary": "Independent test verification skipped (tests not required for documentation tasks)",
+      "duration_seconds": 0.0
+    },
+    "requirements": {
+      "criteria_total": 8,
+      "criteria_met": 8,
+      "all_criteria_met": true,
+      "missing": []
+    }
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "First paragraph of the module docstring describes the module's purpose",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Replaced the previous TASK-changelog opening. The new first paragraph (lines 3-12 of the module) describes the module as 'the in-process Forge stage-complete notification surface for Jarvis' and enumerates the three classes it owns (ForgeNotification, BuildCorrelation, ForgeNotificationsSubscriber) with their roles. test_ac_001_first_paragraph_describes_module_purpose validates the paragraph mentions 'notification'.",
+      "notes": "Replaced the previous TASK-changelog opening. The new first paragraph (lines 3-12 of the module) describes the module as 'the in-process Forge stage-complete notification surface for Jarvis' and enumerates the three classes it owns (ForgeNotification, BuildCorrelation, ForgeNotificationsSubscriber) with their roles. test_ac_001_first_paragraph_describes_module_purpose validates the paragraph mentions 'notification'."
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "Module docstring references `FEAT-JARVIS-005` as origin (Group A.2 \u2014",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Added an explicit 'Origin' section reading 'Group A.2 of FEAT-JARVIS-005 \u2014 the Forge stage-complete notification pipeline.' test_ac_002_references_feat_jarvis_005 asserts the literal token FEAT-JARVIS-005 appears in the docstring.",
+      "notes": "Added an explicit 'Origin' section reading 'Group A.2 of FEAT-JARVIS-005 \u2014 the Forge stage-complete notification pipeline.' test_ac_002_references_feat_jarvis_005 asserts the literal token FEAT-JARVIS-005 appears in the docstring."
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Module docstring cites at least one DDR identifier resolving under",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "References section cites DDR-026, DDR-027, DDR-028, DDR-029, DDR-030, and DDR-031, each with the full path under docs/design/FEAT-JARVIS-005/decisions/. test_ac_003_cites_at_least_one_ddr asserts at least one DDR identifier and at least one DDR path are present.",
+      "notes": "References section cites DDR-026, DDR-027, DDR-028, DDR-029, DDR-030, and DDR-031, each with the full path under docs/design/FEAT-JARVIS-005/decisions/. test_ac_003_cites_at_least_one_ddr asserts at least one DDR identifier and at least one DDR path are present."
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Module docstring references the design doc at",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "References section opens with 'Design document: docs/design/FEAT-JARVIS-005/design.md (\u00a78 \u2014 stage-complete routing, drop policy, and shutdown ordering).' test_ac_004_references_design_doc asserts the design doc path appears in the docstring.",
+      "notes": "References section opens with 'Design document: docs/design/FEAT-JARVIS-005/design.md (\u00a78 \u2014 stage-complete routing, drop policy, and shutdown ordering).' test_ac_004_references_design_doc asserts the design doc path appears in the docstring."
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Each cited design-doc / DDR file exists on disk and is readable",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Every cited path was hand-verified against the worktree filesystem (design.md, DM-forge-notification.md, DDR-026, DDR-027, DDR-028, DDR-029, DDR-030, DDR-031 \u2014 all present). The previous docstring referenced legacy DDR filenames (e.g. DDR-027-correlation-map-in-memory.md) that no longer existed on disk; those are now corrected to the actual filenames. test_ac_005_cited_paths_resolve_on_disk extracts every DDR/DM/design-doc path from the docstring and asserts each resolves to a non-empty readable file.",
+      "notes": "Every cited path was hand-verified against the worktree filesystem (design.md, DM-forge-notification.md, DDR-026, DDR-027, DDR-028, DDR-029, DDR-030, DDR-031 \u2014 all present). The previous docstring referenced legacy DDR filenames (e.g. DDR-027-correlation-map-in-memory.md) that no longer existed on disk; those are now corrected to the actual filenames. test_ac_005_cited_paths_resolve_on_disk extracts every DDR/DM/design-doc path from the docstring and asserts each resolves to a non-empty readable file."
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Entire file** contains **no** token matching `TASK-J\\d{3}-\\d{3}`",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "Removed all 9 occurrences of TASK-J005-XXX from the file: lines 3, 7, 19, 38, 80, 184, 221, 427, 462 of the original. Verified post-edit with `grep TASK-J\\d{3}-\\d{3}` returning zero matches. test_ac_006_no_task_j_tokens_in_entire_file asserts the regex finds no matches across the whole module source.",
+      "notes": "Removed all 9 occurrences of TASK-J005-XXX from the file: lines 3, 7, 19, 38, 80, 184, 221, 427, 462 of the original. Verified post-edit with `grep TASK-J\\d{3}-\\d{3}` returning zero matches. test_ac_006_no_task_j_tokens_in_entire_file asserts the regex finds no matches across the whole module source."
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Module docstring line count is \u2265 20 and \u2264 250 (Group B.2,",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "The polished docstring spans 58 lines (lines 1-58 of the file), well within the [20, 250] bound. test_ac_007_docstring_line_count_within_bounds asserts the line count is in range.",
+      "notes": "The polished docstring spans 58 lines (lines 1-58 of the file), well within the [20, 250] bound. test_ac_007_docstring_line_count_within_bounds asserts the line count is in range."
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "No executable Python statement is modified (Group C.2).",
+      "result": "verified",
+      "status": "verified",
+      "evidence": "All edits are confined to the module docstring, class docstrings, method docstrings, and section-divider comments. No import, class, function, method, or expression was altered. The module still parses cleanly (ast.parse OK). test_ac_008_executable_statements_unchanged asserts every required class/function/method name (ForgeNotification, BuildCorrelation, ForgeNotificationsSubscriber, render_line, register_correlation, start, stop, bind_session_manager, _on_message, _handle_message, _parse_completed_at, _get_deliver_policy_new, _get_stage_complete_subject) is still present in the AST. The full forge subscriber and schema test suites (79 tests across test_forge_notification_schema.py + test_forge_notifications_subscriber.py) all pass unchanged.",
+      "notes": "All edits are confined to the module docstring, class docstrings, method docstrings, and section-divider comments. No import, class, function, method, or expression was altered. The module still parses cleanly (ast.parse OK). test_ac_008_executable_statements_unchanged asserts every required class/function/method name (ForgeNotification, BuildCorrelation, ForgeNotificationsSubscriber, render_line, register_correlation, start, stop, bind_session_manager, _on_message, _handle_message, _parse_completed_at, _get_deliver_policy_new, _get_stage_complete_subject) is still present in the AST. The full forge subscriber and schema test suites (79 tests across test_forge_notification_schema.py + test_forge_notifications_subscriber.py) all pass unchanged."
+    }
+  ],
+  "acceptance_criteria_verification": {
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "First paragraph of the module docstring describes the module's purpose",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Replaced the previous TASK-changelog opening. The new first paragraph (lines 3-12 of the module) describes the module as 'the in-process Forge stage-complete notification surface for Jarvis' and enumerates the three classes it owns (ForgeNotification, BuildCorrelation, ForgeNotificationsSubscriber) with their roles. test_ac_001_first_paragraph_describes_module_purpose validates the paragraph mentions 'notification'.",
+        "notes": "Replaced the previous TASK-changelog opening. The new first paragraph (lines 3-12 of the module) describes the module as 'the in-process Forge stage-complete notification surface for Jarvis' and enumerates the three classes it owns (ForgeNotification, BuildCorrelation, ForgeNotificationsSubscriber) with their roles. test_ac_001_first_paragraph_describes_module_purpose validates the paragraph mentions 'notification'."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Module docstring references `FEAT-JARVIS-005` as origin (Group A.2 \u2014",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added an explicit 'Origin' section reading 'Group A.2 of FEAT-JARVIS-005 \u2014 the Forge stage-complete notification pipeline.' test_ac_002_references_feat_jarvis_005 asserts the literal token FEAT-JARVIS-005 appears in the docstring.",
+        "notes": "Added an explicit 'Origin' section reading 'Group A.2 of FEAT-JARVIS-005 \u2014 the Forge stage-complete notification pipeline.' test_ac_002_references_feat_jarvis_005 asserts the literal token FEAT-JARVIS-005 appears in the docstring."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Module docstring cites at least one DDR identifier resolving under",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "References section cites DDR-026, DDR-027, DDR-028, DDR-029, DDR-030, and DDR-031, each with the full path under docs/design/FEAT-JARVIS-005/decisions/. test_ac_003_cites_at_least_one_ddr asserts at least one DDR identifier and at least one DDR path are present.",
+        "notes": "References section cites DDR-026, DDR-027, DDR-028, DDR-029, DDR-030, and DDR-031, each with the full path under docs/design/FEAT-JARVIS-005/decisions/. test_ac_003_cites_at_least_one_ddr asserts at least one DDR identifier and at least one DDR path are present."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "Module docstring references the design doc at",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "References section opens with 'Design document: docs/design/FEAT-JARVIS-005/design.md (\u00a78 \u2014 stage-complete routing, drop policy, and shutdown ordering).' test_ac_004_references_design_doc asserts the design doc path appears in the docstring.",
+        "notes": "References section opens with 'Design document: docs/design/FEAT-JARVIS-005/design.md (\u00a78 \u2014 stage-complete routing, drop policy, and shutdown ordering).' test_ac_004_references_design_doc asserts the design doc path appears in the docstring."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Each cited design-doc / DDR file exists on disk and is readable",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Every cited path was hand-verified against the worktree filesystem (design.md, DM-forge-notification.md, DDR-026, DDR-027, DDR-028, DDR-029, DDR-030, DDR-031 \u2014 all present). The previous docstring referenced legacy DDR filenames (e.g. DDR-027-correlation-map-in-memory.md) that no longer existed on disk; those are now corrected to the actual filenames. test_ac_005_cited_paths_resolve_on_disk extracts every DDR/DM/design-doc path from the docstring and asserts each resolves to a non-empty readable file.",
+        "notes": "Every cited path was hand-verified against the worktree filesystem (design.md, DM-forge-notification.md, DDR-026, DDR-027, DDR-028, DDR-029, DDR-030, DDR-031 \u2014 all present). The previous docstring referenced legacy DDR filenames (e.g. DDR-027-correlation-map-in-memory.md) that no longer existed on disk; those are now corrected to the actual filenames. test_ac_005_cited_paths_resolve_on_disk extracts every DDR/DM/design-doc path from the docstring and asserts each resolves to a non-empty readable file."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Entire file** contains **no** token matching `TASK-J\\d{3}-\\d{3}`",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Removed all 9 occurrences of TASK-J005-XXX from the file: lines 3, 7, 19, 38, 80, 184, 221, 427, 462 of the original. Verified post-edit with `grep TASK-J\\d{3}-\\d{3}` returning zero matches. test_ac_006_no_task_j_tokens_in_entire_file asserts the regex finds no matches across the whole module source.",
+        "notes": "Removed all 9 occurrences of TASK-J005-XXX from the file: lines 3, 7, 19, 38, 80, 184, 221, 427, 462 of the original. Verified post-edit with `grep TASK-J\\d{3}-\\d{3}` returning zero matches. test_ac_006_no_task_j_tokens_in_entire_file asserts the regex finds no matches across the whole module source."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Module docstring line count is \u2265 20 and \u2264 250 (Group B.2,",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "The polished docstring spans 58 lines (lines 1-58 of the file), well within the [20, 250] bound. test_ac_007_docstring_line_count_within_bounds asserts the line count is in range.",
+        "notes": "The polished docstring spans 58 lines (lines 1-58 of the file), well within the [20, 250] bound. test_ac_007_docstring_line_count_within_bounds asserts the line count is in range."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "No executable Python statement is modified (Group C.2).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "All edits are confined to the module docstring, class docstrings, method docstrings, and section-divider comments. No import, class, function, method, or expression was altered. The module still parses cleanly (ast.parse OK). test_ac_008_executable_statements_unchanged asserts every required class/function/method name (ForgeNotification, BuildCorrelation, ForgeNotificationsSubscriber, render_line, register_correlation, start, stop, bind_session_manager, _on_message, _handle_message, _parse_completed_at, _get_deliver_policy_new, _get_stage_complete_subject) is still present in the AST. The full forge subscriber and schema test suites (79 tests across test_forge_notification_schema.py + test_forge_notifications_subscriber.py) all pass unchanged.",
+        "notes": "All edits are confined to the module docstring, class docstrings, method docstrings, and section-divider comments. No import, class, function, method, or expression was altered. The module still parses cleanly (ast.parse OK). test_ac_008_executable_statements_unchanged asserts every required class/function/method name (ForgeNotification, BuildCorrelation, ForgeNotificationsSubscriber, render_line, register_correlation, start, stop, bind_session_manager, _on_message, _handle_message, _parse_completed_at, _get_deliver_policy_new, _get_stage_complete_subject) is still present in the AST. The full forge subscriber and schema test suites (79 tests across test_forge_notification_schema.py + test_forge_notifications_subscriber.py) all pass unchanged."
+      }
+    ]
+  },
+  "issues": [],
+  "rationale": "All quality gates passed. Tests not required for this task type. All acceptance criteria met. Architecture context: 393 chars provided.",
+  "context_used": "## Job-Specific Context\n\nBudget: 1458/5200 tokens\n\n### \u2705 Similar Outcomes\n- REFERENCED_IN\n- THREADS_PROTOTYPE_OBJECT\n\n### \ud83c\udfa8 Relevant Patterns\n- HAS_METADATA_PROJECT\n- IS_PARAM_TYPE_OF\n\n### \u26a0\ufe0f Warnings\n- REQUIRES_USE_OF\n- FOUND_AT_PATH\n\n### \ud83c\udfad Role Constraints\n- MONITORS_RESULTS_FROM\n- MONITOR_QUALITY_GATES_RESULTS_FROM_JSON\n\n### \ud83d\udee0\ufe0f Implementation Modes\n- APPLIES_TO\n- HAS_IMPLEMENTATION_MODE\n",
+  "approved_without_independent_tests": false,
+  "is_configuration_error": false,
+  "environment_conditional_approval": false
+}
