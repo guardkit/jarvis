@@ -1,0 +1,113 @@
+{
+  "task_id": "TASK-DOC-002",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/infrastructure/fleet_registration.py"
+  ],
+  "files_created": [
+    "tests/test_fleet_registration_docstring_polish.py"
+  ],
+  "tests_written": [
+    "tests/test_fleet_registration_docstring_polish.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "12/12 docstring polish tests pass; existing fleet_registration suites (test_fleet_registration.py 23 tests + test_fleet_registration_integration.py 4 tests) still pass \u2014 confirming AC-008 (no executable statement modified).",
+  "implementation_notes": "Polished the module docstring of src/jarvis/infrastructure/fleet_registration.py: the first paragraph now describes the module purpose (registers Jarvis as a NATS fleet citizen \u2014 manifest build, register, heartbeat, deregister); FEAT-JARVIS-004 is named explicitly under an Origin section; the design doc at docs/design/FEAT-JARVIS-004/design.md and the API-internal contract are referenced; DDR-021 (docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md) is cited as the soft-fail anchor; ADR-ARCH-004, ADR-ARCH-016, and ADR-ARCH-026 anchor the architectural decisions (replacing the previous broken ADR-SP-016 link, which had no file on disk). Removed both occurrences of TASK-J004-006 \u2014 one from the module docstring and one from _resolve_registry's helper docstring \u2014 to satisfy AC-006 across the entire file. No executable Python statements (imports, constants, class bodies, function bodies) were touched. The new module docstring contains 72 lines, well within [20, 250]. A pytest suite test_fleet_registration_docstring_polish.py mirrors the AC-by-AC structure of the existing test_capabilities_registry_docstring_polish.py and test_nats_client_docstring.py suites \u2014 purpose check, FEAT token check, DDR identifier + path-resolves-under-feature-decisions check, design.md reference check, every cited doc readable on disk, regex sweep for TASK-J\\d{3}-\\d{3} on the entire source text, line-count bounds check, and an AST-parses + module-imports + public-callables intact check.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007",
+    "AC-008"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] First paragraph of the module docstring describes the module's purpose",
+      "status": "complete",
+      "evidence": "First paragraph reads 'Fleet registration, heartbeat, and deregistration for the Jarvis agent.' followed by an explanatory paragraph stating the module owns Jarvis's lifecycle as a NATS fleet citizen \u2014 building the AgentManifest, registering, heartbeating, and deregistering. Verified by TestFirstParagraphDescribesPurpose (test_first_paragraph_is_present, test_first_paragraph_describes_fleet_registration).",
+      "test_file": "tests/test_fleet_registration_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/fleet_registration.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Module docstring references `FEAT-JARVIS-004` as origin (Group A.2).",
+      "status": "complete",
+      "evidence": "Origin section explicitly says 'Introduced as part of **FEAT-JARVIS-004 \u2014 NATS Fleet Registration & Specialist Dispatch (real transport)**.' Verified by TestReferencesFeatJarvis004.test_feat_jarvis_004_token_present.",
+      "test_file": "tests/test_fleet_registration_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/fleet_registration.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Module docstring cites at least one DDR identifier resolving under",
+      "status": "complete",
+      "evidence": "Docstring cites DDR-021 by both identifier and full path docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md in the 'Design decisions' section. Verified by TestCitesDdrIdentifier.test_at_least_one_ddr_identifier and test_cited_ddr_resolves_under_feat_jarvis_004_decisions.",
+      "test_file": "tests/test_fleet_registration_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/fleet_registration.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Module docstring references the design doc at",
+      "status": "complete",
+      "evidence": "Origin section contains 'The full feature design lives at ``docs/design/FEAT-JARVIS-004/design.md``'. Verified by TestReferencesDesignDoc.test_design_doc_path_present.",
+      "test_file": "tests/test_fleet_registration_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/fleet_registration.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] Each cited design-doc / DDR file exists on disk and is readable",
+      "status": "complete",
+      "evidence": "All cited paths exist on disk: docs/design/FEAT-JARVIS-004/design.md, docs/design/FEAT-JARVIS-004/contracts/API-internal.md, docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md, docs/architecture/decisions/ADR-ARCH-004-jarvis-registers-on-fleet-register.md, docs/architecture/decisions/ADR-ARCH-016-six-consumer-surfaces-nats-only-transport.md, docs/architecture/decisions/ADR-ARCH-026-no-horizontal-scaling.md. The previous broken reference to ADR-SP-016 (which had no file on disk) was replaced. Verified by TestCitedDocsExistOnDisk.test_each_cited_doc_path_resolves_and_is_readable, which iterates every regex-extracted path and asserts is_file() + read_text().",
+      "test_file": "tests/test_fleet_registration_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/fleet_registration.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] **Entire file** contains **no** token matching `TASK-J\\d{3}-\\d{3}`",
+      "status": "complete",
+      "evidence": "Removed both TASK-J004-006 occurrences (the original module-docstring sentence about TASK-J004-006 'landing the local NATSClient wrapper' and the parenthetical '(planned in TASK-J004-006)' inside _resolve_registry's docstring). `grep -n 'TASK-J' src/jarvis/infrastructure/fleet_registration.py` returns no matches. Verified by TestEntireFileFreeOfTaskTokens.test_file_has_no_task_j_token, which regex-sweeps the whole source_text fixture.",
+      "test_file": "tests/test_fleet_registration_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/fleet_registration.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] Module docstring line count is \u2265 20 and \u2264 250 (Group B.2,",
+      "status": "complete",
+      "evidence": "Module docstring is 72 lines (well within [20, 250]). Verified by TestDocstringLineCount.test_module_docstring_line_count_within_range, which computes module_docstring.count('\\n') + 1 and asserts 20 <= n <= 250.",
+      "test_file": "tests/test_fleet_registration_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/fleet_registration.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "[ ] No executable Python statement is modified (Group C.2).",
+      "status": "complete",
+      "evidence": "Only the module-level docstring and the _resolve_registry function docstring were touched (to delete the TASK-J004-006 token, which was required for AC-006). No imports, constants, class bodies, function bodies, or signatures were altered. The full pre-existing pytest suites tests/test_fleet_registration.py (23 tests) and tests/test_fleet_registration_integration.py (4 tests) still pass. Verified by TestNoExecutableStatementsModified.test_module_parses_as_valid_python (ast.parse round-trip), test_module_imports_cleanly (importlib + 8-symbol public surface check), and test_public_callables_remain_callable.",
+      "test_file": "tests/test_fleet_registration_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/fleet_registration.py"
+      ]
+    }
+  ],
+  "success": true
+}
