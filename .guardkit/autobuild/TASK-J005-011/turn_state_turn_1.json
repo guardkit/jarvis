@@ -1,0 +1,33 @@
+{
+  "id": "TURN-FEAT-J005-946D-1",
+  "feature_id": "FEAT-J005-946D",
+  "task_id": "TASK-J005-011",
+  "turn_number": 1,
+  "player_summary": "Implementation attempt",
+  "player_decision": "approve",
+  "coach_decision": "approve",
+  "coach_feedback": null,
+  "mode": "fresh_start",
+  "blockers_found": [],
+  "progress_summary": "Turn 1: approve",
+  "acceptance_criteria_status": {
+    "AC-001": "verified",
+    "AC-002": "verified",
+    "AC-003": "verified",
+    "AC-004": "verified",
+    "AC-005": "verified"
+  },
+  "files_modified": [
+    "src/jarvis/tools/dispatch.py",
+    "tests/test_phase2_stubs_retired.py"
+  ],
+  "tests_passed": null,
+  "tests_failed": null,
+  "coverage": null,
+  "arch_score": null,
+  "started_at": "2026-04-30T10:52:04.597744",
+  "completed_at": "2026-04-30T10:52:04.597744",
+  "duration_seconds": null,
+  "lessons_from_turn": [],
+  "what_to_try_next": null
+}

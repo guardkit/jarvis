@@ -1,29 +1,29 @@
 ---
-id: TASK-J005-009
-title: Soft-fail tests — NATS down, Graphiti down, subscriber stop bounded
-task_type: testing
-parent_review: TASK-REV-3B8B
-feature_id: FEAT-J005-946D
-wave: 4
-implementation_mode: task-work
 complexity: 5
+created: 2026-04-29 00:00:00+00:00
 dependencies:
-  - TASK-J005-005
-  - TASK-J005-008
+- TASK-J005-005
+- TASK-J005-008
+feature_id: FEAT-J005-946D
+id: TASK-J005-009
+implementation_mode: task-work
+parent_review: TASK-REV-3B8B
 priority: high
+status: design_approved
 tags:
-  - tests
-  - soft-fail
-  - DDR-021
-  - DDR-019
-  - FEAT-JARVIS-005
-status: backlog
-created: 2026-04-29T00:00:00Z
-updated: 2026-04-29T00:00:00Z
+- tests
+- soft-fail
+- DDR-021
+- DDR-019
+- FEAT-JARVIS-005
+task_type: testing
 test_results:
-  status: pending
   coverage: null
   last_run: null
+  status: pending
+title: Soft-fail tests — NATS down, Graphiti down, subscriber stop bounded
+updated: 2026-04-29 00:00:00+00:00
+wave: 4
 ---
 
 # TASK-J005-009 — Soft-fail tests

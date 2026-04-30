@@ -45,7 +45,9 @@ from nats_core.events import (
     BuildQueuedPayload,
     CommandPayload,
     ResultPayload,
+    StageCompletePayload,
 )
+from pydantic import ValidationError
 
 from jarvis.config.settings import JarvisConfig
 from jarvis.infrastructure.fleet_registration import build_jarvis_manifest
@@ -66,6 +68,10 @@ _FORBIDDEN_SUBJECT_LITERALS: tuple[str, ...] = (
     "agents.command.",
     "agents.result.",
     "fleet.register",
+    # FEAT-JARVIS-005 / TASK-J005-010 — every pipeline subject must be
+    # derived from ``nats_core.Topics.Pipeline`` (ADR-SP-014 / ADR-SP-016).
+    "pipeline.build-queued.",
+    "pipeline.stage-complete.",
 )
 
 # ---------------------------------------------------------------------------

@@ -221,12 +221,16 @@ class BuildCorrelation(BaseModel):
 # §3 — ForgeNotificationsSubscriber (TASK-J005-003)
 # ---------------------------------------------------------------------------
 
-# Subject pattern is hard-coded — this is a single, stable contract with the
-# Forge side per nats_core.Topics.Pipeline.STAGE_COMPLETE
-# ("pipeline.stage-complete.{feature_id}"). We subscribe to the wildcard
-# ``pipeline.stage-complete.>`` so a single ephemeral consumer routes every
-# Forge feature_id back to its own correlation_id.
-_STAGE_COMPLETE_SUBJECT = "pipeline.stage-complete.>"
+# Subscribe wildcard derived from the canonical
+# ``nats_core.Topics.Pipeline.STAGE_COMPLETE`` template
+# (``pipeline.stage-complete.{feature_id}``) by substituting the NATS ``>``
+# wildcard for ``{feature_id}``. The cross-repo contract test in
+# ``tests/test_contract_nats_core.py`` (TASK-J005-010 AC-007) forbids
+# hard-coded subject literals in ``src/jarvis/`` — every subject must come
+# from ``nats_core.Topics``.
+from nats_core import Topics as _Topics
+
+_STAGE_COMPLETE_SUBJECT = _Topics.Pipeline.STAGE_COMPLETE.format(feature_id=">")
 
 # DDR-027: ephemeral push consumer with deliver_policy=NEW. We avoid a top-
 # level import of the nats.js.api so the schema-only import of this module

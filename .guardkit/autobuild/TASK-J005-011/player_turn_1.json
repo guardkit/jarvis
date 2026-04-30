@@ -1,0 +1,82 @@
+{
+  "task_id": "TASK-J005-011",
+  "turn": 1,
+  "files_modified": [
+    "src/jarvis/tools/dispatch.py"
+  ],
+  "files_created": [
+    "tests/test_phase2_stubs_retired.py"
+  ],
+  "tests_written": [
+    "tests/test_phase2_stubs_retired.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "uv run pytest tests/test_phase2_stubs_retired.py -v collected 7 items, all passed in 0.70s. Combined with the dispatch-side retire test (test_no_retired_roster_strings.py) the full retire-suite is 24 passed in 0.59s. dispatch.py still imports cleanly after docstring/comment cleanup.",
+  "implementation_notes": "Created tests/test_phase2_stubs_retired.py as the queue-build-side companion to TASK-J004-020's dispatch-side retire test. The module mirrors the established Path.rglob + substring-check pattern from test_no_retired_roster_strings.py (TASK-J004-020), but is dedicated to the FEAT-J005 anchors so the failure surface and AC mapping stay clear. Four AC classes: TestAC001 walks src/jarvis/ and asserts LOG_PREFIX_QUEUE_BUILD is absent; TestAC002 narrows the substring 'queue_build stub' check to src/jarvis/tools/dispatch.py; TestAC003 pins the walk under 100ms with time.perf_counter; TestAC004 verifies the file:line diagnostic shape against a synthetic offender tree using monkeypatch + tmp_path so the helper proves AC-004 without relying on a real reintroduction. To make the assertions pass cleanly, src/jarvis/tools/dispatch.py needed a docstring/comment cleanup: three lingering references to the literal 'LOG_PREFIX_QUEUE_BUILD' in the module docstring and the Phase-2-anchor-retirement comment block were rewritten in descriptive form ('the queue-build log-prefix constant') so the literal symbol is fully gone from src/jarvis/. The forbidden-token literals are kept ONLY in the test module's globals so the source tree itself stays free of them \u2014 same convention used by the FEAT-J004 retire test.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] New test in `tests/test_phase2_stubs_retired.py` (or extend the FEAT-J004 test file): asserts the literal string `LOG_PREFIX_QUEUE_BUILD` is absent from `src/jarvis/` source tree (excluding `tests/`).",
+      "status": "complete",
+      "evidence": "Created tests/test_phase2_stubs_retired.py with TestAC001NoQueueBuildLogPrefixAnchor::test_log_prefix_queue_build_absent_from_src_tree, which walks _SRC_JARVIS = src/jarvis/ recursively (Path.rglob('*'), filtered to .py/.yaml/.yml/.txt, skipping __pycache__) and asserts the literal 'LOG_PREFIX_QUEUE_BUILD' is absent. The forbidden literal is held in _RETIRED_QUEUE_BUILD_LOG_PREFIX so it lives only in the test module. Three lingering references in src/jarvis/tools/dispatch.py docstring/comments were rewritten as descriptive prose so the assertion passes.",
+      "test_file": "tests/test_phase2_stubs_retired.py",
+      "implementation_files": [
+        "tests/test_phase2_stubs_retired.py",
+        "src/jarvis/tools/dispatch.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Test asserts the literal `\"queue_build stub\"` is absent from `src/jarvis/tools/dispatch.py`.",
+      "status": "complete",
+      "evidence": "TestAC002NoQueueBuildStubLiteralInDispatch::test_queue_build_stub_literal_absent_from_dispatch uses _find_literal_offenders_in_file (a single-file substring scan that returns 'rel-path:lineno' offenders) scoped to _DISPATCH_PY = src/jarvis/tools/dispatch.py to assert the literal 'queue_build stub' (with the space, no backticks) is absent. A companion test_dispatch_module_exists guards against silent path drift.",
+      "test_file": "tests/test_phase2_stubs_retired.py",
+      "implementation_files": [
+        "tests/test_phase2_stubs_retired.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Test runs in <100ms (it's a `Path.rglob` + substring check).",
+      "status": "complete",
+      "evidence": "TestAC003WalkPerformance::test_walk_runs_under_100_ms times the AC-001 + AC-002 walks combined with time.perf_counter and asserts elapsed_ms < 100. Empirically the walk completes in single-digit ms on a warm filesystem; the full file (7 tests) passes in 0.70s wall-clock per the pytest summary. The walk is implemented as Path.rglob + str.read_text + 'forbidden in content' substring check, exactly the cheap shape the AC requires.",
+      "test_file": "tests/test_phase2_stubs_retired.py",
+      "implementation_files": [
+        "tests/test_phase2_stubs_retired.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Test fails with a clear message naming the offending file when the string is present.",
+      "status": "complete",
+      "evidence": "Both _find_literal_offenders and _find_literal_offenders_in_file return 'rel-path:lineno' entries by enumerating splitlines and matching the forbidden substring per line, naming the offending file AND the line number. The AC-001 / AC-002 assert-not messages embed those offenders in a self-explanatory failure ('Retired Phase 2 anchor X reappeared in src/jarvis/ ... Offending locations (file:line): [...]'). TestAC004FailureNamesOffendingFile drives the helpers against a synthetic offender tree (tmp_path + monkeypatch on _PROJECT_ROOT) and asserts the returned offender list is exactly ['src/jarvis/offender.py:2'] / ['src/jarvis/tools/dispatch.py:2'], proving the diagnostic shape without needing a real regression.",
+      "test_file": "tests/test_phase2_stubs_retired.py",
+      "implementation_files": [
+        "tests/test_phase2_stubs_retired.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] `uv run pytest tests/test_phase2_stubs_retired.py -v` passes.",
+      "status": "complete",
+      "evidence": "Ran `uv run pytest tests/test_phase2_stubs_retired.py -v` \u2014 collected 7 items, 7 passed in 0.70s. Also ran combined with the existing FEAT-J004 retire test (tests/test_no_retired_roster_strings.py) \u2014 24 passed in 0.59s, confirming no cross-test interference. `uv run python -c 'import jarvis.tools.dispatch'` exits cleanly, confirming the dispatch.py docstring/comment cleanup did not break the module.",
+      "test_file": "tests/test_phase2_stubs_retired.py",
+      "implementation_files": [
+        "tests/test_phase2_stubs_retired.py",
+        "src/jarvis/tools/dispatch.py"
+      ]
+    }
+  ],
+  "success": true
+}

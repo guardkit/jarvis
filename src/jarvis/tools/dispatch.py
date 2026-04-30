@@ -15,7 +15,7 @@ This module hosts the two dispatch tools (``dispatch_by_capability`` and
 * ``queue_build`` — **FEAT-JARVIS-005 (TASK-J005-005)**: real JetStream
   publish on ``pipeline.build-queued.{feature_id}`` per ADR-SP-014
   Pattern A and design.md §8. The Phase 2 stub callable +
-  ``logger.info`` log anchor + ``LOG_PREFIX_QUEUE_BUILD`` grep token are
+  ``logger.info`` log anchor + queue-build grep token are
   **retired**; module-level dependencies for this tool are
   ``_nats_client``, ``_routing_history_writer``, ``_dispatch_semaphore``,
   ``_forge_subscriber`` and ``_jarvis_config`` (see API-internal §7).
@@ -25,12 +25,14 @@ The Phase 2 anchors on both halves of the seam have been retired:
 * The dispatch-side Phase 2 anchors (the swap-point log-prefix constant,
   the test stub-response hook, and the ``StubResponse`` alias) were
   removed by TASK-J004-011.
-* The queue-build-side Phase 2 anchor (``LOG_PREFIX_QUEUE_BUILD`` and
-  the associated ``logger.info`` line) was removed by TASK-J005-005.
+* The queue-build-side Phase 2 anchor (the queue-build log-prefix
+  constant and the associated ``logger.info`` line) was removed by
+  TASK-J005-005.
 
 Their absence is asserted by the (flipped) TASK-J002-021 grep invariant
 landing in TASK-J004-020 / TASK-J005-011 (``test_no_phase_2_stub_anchors``
-in ``test_no_retired_roster_strings``).
+in ``test_no_retired_roster_strings`` and the
+``tests/test_phase2_stubs_retired.py`` module).
 """
 
 from __future__ import annotations
@@ -96,10 +98,10 @@ def _now_utc() -> datetime:
 # ---------------------------------------------------------------------------
 # Phase-2 swap-point anchor retirement.
 #
-# ``LOG_PREFIX_QUEUE_BUILD`` (the DDR-009 grep token used by the Phase 2
-# ``queue_build`` stub) was retired by TASK-J005-005 — the tool now
-# performs a real ``js.publish(...)`` round-trip and emits no anchor log
-# line. The dispatch-side anchor was retired by TASK-J004-011.
+# The DDR-009 grep token used by the Phase 2 ``queue_build`` stub (the
+# queue-build log-prefix constant) was retired by TASK-J005-005 — the
+# tool now performs a real ``js.publish(...)`` round-trip and emits no
+# anchor log line. The dispatch-side anchor was retired by TASK-J004-011.
 # ---------------------------------------------------------------------------
 
 
