@@ -1,0 +1,158 @@
+{
+  "task_id": "TASK-DOC-003",
+  "timestamp": "2026-04-30T20:16:55.439830",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    "src/jarvis/infrastructure/capabilities_registry.py"
+  ],
+  "files_created": [
+    "tests/test_capabilities_registry_docstring_polish.py"
+  ],
+  "tests_written": [
+    "tests/test_capabilities_registry_docstring_polish.py"
+  ],
+  "requirements_addressed": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007",
+    "AC-008",
+    "AC-009",
+    "AC-010"
+  ],
+  "requirements_met": [
+    "AC-001",
+    "AC-002",
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-006",
+    "AC-007",
+    "AC-008",
+    "AC-009",
+    "AC-010"
+  ],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "[ ] First paragraph of the module docstring describes the module's purpose",
+      "status": "complete",
+      "evidence": "Line 1 of the docstring reads 'CapabilitiesRegistry \u2014 Protocol + Live + Stub implementations.' which states the module's purpose. Test test_first_paragraph_describes_module_purpose asserts the first paragraph mentions CapabilitiesRegistry.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "[ ] Module docstring references `FEAT-JARVIS-004` as origin (Group A.2).",
+      "status": "complete",
+      "evidence": "The docstring references FEAT-JARVIS-004 in two places: 'Public surface (per FEAT-JARVIS-004 API-internal \u00a73)' and the design-doc references list. Test test_references_feat_jarvis_004_as_origin asserts the literal token is present.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "[ ] Module docstring cites at least one DDR identifier resolving under",
+      "status": "complete",
+      "evidence": "The docstring cites DDR-021 (in the StubCapabilitiesRegistry bullet and in the References section). Test test_cites_at_least_one_ddr_identifier asserts the regex \\bDDR-\\d{3}\\b matches.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "[ ] Module docstring references the design doc at",
+      "status": "complete",
+      "evidence": "The References section cites :doc:`docs/design/FEAT-JARVIS-004/contracts/API-internal.md` and :doc:`docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md`. Test test_references_a_design_doc asserts a design-doc path is present.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "[ ] Each cited design-doc / DDR file exists on disk and is readable",
+      "status": "complete",
+      "evidence": "All three cited paths exist and are readable: docs/design/FEAT-JARVIS-004/contracts/API-internal.md, docs/design/FEAT-JARVIS-004/decisions/DDR-021-nats-unavailable-soft-fail.md, and docs/architecture/decisions/ADR-ARCH-017-static-skill-declaration-v1.md (the prior ADR-ARCH-017 path was broken \u2014 corrected during polish). Test test_each_cited_doc_path_resolves_and_is_readable extracts every :doc: target and asserts is_file() and read_text() succeed.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "[ ] Polished module docstring still cites **DDR-021**",
+      "status": "complete",
+      "evidence": "DDR-021 is cited twice (StubCapabilitiesRegistry bullet and References section). Test test_still_cites_ddr_021 asserts the literal token survives the polish.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "[ ] Polished module docstring still cites **ADR-ARCH-017**",
+      "status": "complete",
+      "evidence": "ADR-ARCH-017 is cited inline ('follows ADR-ARCH-017 (Forge inheritance)') and in the References section path. Test test_still_cites_adr_arch_017 asserts the literal token is present.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "[ ] **Entire file** contains **no** token matching `TASK-J\\d{3}-\\d{3}`",
+      "status": "complete",
+      "evidence": "Removed both occurrences: TASK-J004-007 (line 174 module-level comment) and TASK-J004-006 (line 309 inside LiveCapabilitiesRegistry.create docstring). Both edits were confined to comments/docstrings. Verified via Grep returning 'No matches found' and via test test_file_has_no_task_j_token.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "[ ] Module docstring line count is \u2265 20 and \u2264 250 (Group B.2,",
+      "status": "complete",
+      "evidence": "Module docstring spans lines 1-40 of the file = 40 lines, which is within [20, 250]. Test test_module_docstring_line_count_within_range asserts the bound holds.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "[ ] No executable Python statement is modified (Group C.2).",
+      "status": "complete",
+      "evidence": "All three edits were confined to docstring text and comment text \u2014 no class, function, import, assignment, or other statement was touched. Verified by (a) ast.parse succeeding on the modified file (test_module_parses_as_valid_python), (b) the public symbols still importing (test_module_imports_cleanly), and (c) the existing 20-test tests/test_capabilities_registry_unit.py suite still passing unchanged.",
+      "test_file": "tests/test_capabilities_registry_docstring_polish.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/capabilities_registry.py"
+      ]
+    }
+  ]
+}
