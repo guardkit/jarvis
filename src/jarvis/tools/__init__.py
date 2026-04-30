@@ -39,6 +39,7 @@ from jarvis.tools import dispatch as _dispatch
 from jarvis.tools import general as _general
 from jarvis.tools.capabilities import (
     CapabilityDescriptor,
+    CapabilityToolSummary,
     capabilities_refresh,
     capabilities_subscribe_updates,
     list_available_capabilities,
@@ -70,9 +71,10 @@ if TYPE_CHECKING:
 # the isort-style alphabetical sort RUF022 wants would scatter related
 # symbols and obscure the surface contract.
 __all__ = [  # noqa: RUF022 — deliberate category grouping (see comment above)
-    # Pydantic types (3 + 1 internal sentinel = 4)
+    # Pydantic types (4 + 1 internal sentinel = 5)
     "CalendarEvent",
     "CapabilityDescriptor",
+    "CapabilityToolSummary",
     "DispatchError",
     "WebResult",
     # General tools (4)

@@ -1,8 +1,8 @@
 # Phase 3 Build Plan — Fleet Integration: NATS Specialist Dispatch & Build Queue Dispatch to Forge
 
 ## For: Swapping Phase 2's stubbed transports for real NATS — Jarvis registers on `fleet.register`, dispatches via `agents.command.*`, publishes to `pipeline.build-queued.*`, and writes its first ADR-FLEET-001 trace-rich records to `jarvis_routing_history`. After Phase 3, Jarvis v1 is functionally complete for dispatch.
-## Date: 20 April 2026 (last updated 29 April 2026)
-## Status: **In progress.** Phase 2 closed. **FEAT-JARVIS-004 closed** (merged to `main` as commit `b228d7d` on 2026-04-28; AutoBuild plan `FEAT-J004-702C` completed all 20 tasks across 7 waves). Next: `/system-design FEAT-JARVIS-005`.
+## Date: 20 April 2026 (last updated 30 April 2026)
+## Status: **In progress — code-complete.** Phase 2 closed. **FEAT-JARVIS-004 closed** (merged to `main` as commit `b228d7d` on 2026-04-28; AutoBuild plan `FEAT-J004-702C` completed all 20 tasks across 7 waves). **FEAT-JARVIS-005 closed** (AutoBuild plan `FEAT-J005-946D` completed all 12 tasks across 5 waves on 2026-04-30 after a TASK-J005-005 timeout + decision-mode review + clean resume; landed on `main` via `d382f2b` → `a8a2b36` → `505d5e4`; worktree archived to `.guardkit/archive/FEAT-J005-946D/`). **Next: Step 11 (full regression) → Step 12 (integration-server check) → Step 13 (Rich picks FEAT-JARVIS-INTERNAL-*** candidate) → Step 14 (end-to-end Forge round-trip — Phase 3 close criterion).**
 ## Repo: `guardkit/jarvis`
 ## Machine: MacBook Pro M2 Max (planning + build via Claude Code). Integration tests use in-process NATS/Graphiti; end-to-end test requires NATS on GB10 + Forge running + Graphiti on GB10.
 
@@ -21,11 +21,17 @@
 | 2026-04-27 | **AutoBuild kickoff — Wave 1** | `GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J004-702C --verbose --max-turns 30` invoked. Worktree created at `.guardkit/worktrees/FEAT-J004-702C` (base branch `main`). Wave 1 (4 tasks parallel): TASK-J004-001 (DDR-023 + DDR-024), TASK-J004-002 (pyproject extras), TASK-J004-003 (JarvisConfig fields), TASK-J004-004 (`JarvisRoutingHistoryEntry` schema) all in `in_progress` with `current_turn: 1`. Feature YAML status: `planned` → `in_progress`. |
 | 2026-04-28 | **AutoBuild Waves 1–7 complete** | All 20 tasks across 7 waves completed in 23 total turns (`FEAT-J004-702C.yaml` execution.completed_at 2026-04-28T13:53:18). 0 tasks failed. Run-3 metadata + history recorded (commit `6428731`). |
 | 2026-04-28 | **FEAT-JARVIS-004 merged to `main`** | Merge commit `b228d7d` — `feat(jarvis): FEAT-J004-702C NATS fleet registration + specialist dispatch`. Worktree gitlink cleaned up (`8daa414`); stray root-level coverage artefacts purged + `.gitignore` extended (`3fd346c`). |
-| *pending* | Soft-prereq check — NATS on GB10 + Forge running | End-to-end test (Step 14 below) requires both. Integration tests up to Step 13 use in-process test servers and are unaffected. |
-| *pending* | Rich selects FEAT-JARVIS-INTERNAL-*** candidate | Per Q10.6 — choose from: (a) docstring/README polish, (b) trace-schema refinement, (c) skill scaffolding. Resolve before Step 14. |
-| *pending — next* | `/system-design FEAT-JARVIS-005` | Design doc. **This is the next GuardKit invocation.** |
-| *pending* | `/feature-spec FEAT-JARVIS-005` | Gherkin scenarios. |
-| *pending* | `/feature-plan FEAT-JARVIS-005` | Task breakdown. |
+| 2026-04-29 | **`/system-design FEAT-JARVIS-005`** | Design doc landed at [`docs/design/FEAT-JARVIS-005/design.md`](../../design/FEAT-JARVIS-005/design.md) with 7 DDRs (DDR-025..031): real `queue_build` transport (DDR-025), `forge_notifications.py` module location (DDR-026), ephemeral push consumer with `deliver_policy=NEW` (DDR-027), bounded in-memory correlation map (DDR-028), append-only stage_complete edges on the originating routing entry (DDR-029), CLI between-prompts rendering (DDR-030), and adapter identity from `Session.adapter` not the model arg (DDR-031). Contracts (`API-tools.md`, `API-internal.md`, `API-events.md`), models, and diagrams alongside. |
+| 2026-04-29 | **`/feature-spec FEAT-JARVIS-005`** | 32 Gherkin scenarios (1 outline × 3 example rows = 34 effective rows). 11 assumptions (all high confidence). Output at [`features/feat-jarvis-005-build-queue-dispatch-to-forge/`](../../../features/feat-jarvis-005-build-queue-dispatch-to-forge/). No REVIEW REQUIRED flags. |
+| 2026-04-29 | **`/feature-plan FEAT-JARVIS-005`** | Decision-mode review TASK-REV-3B8B. Produced `FEAT-J005-946D.yaml` with 12 tasks across 5 dependency-aware parallel waves; [`tasks/completed/feat-jarvis-005-build-queue-dispatch-to-forge/`](../../../tasks/completed/feat-jarvis-005-build-queue-dispatch-to-forge/) with [`IMPLEMENTATION-GUIDE.md`](../../../tasks/completed/feat-jarvis-005-build-queue-dispatch-to-forge/IMPLEMENTATION-GUIDE.md). |
+| 2026-04-29 / 30 | **AutoBuild kickoff — TASK-J005-005 timeout** | First run hit the 4500s task-timeout floor on TASK-J005-005 (`dispatch.py` real JetStream publish). Implementation in fact landed in the worktree (`js.publish` + `pipeline_publish_timeout_seconds` present at dispatch.py:1142/810/1000; commit `0069a0d` at the second of timeout) — diagnosed as autobuild's per-task wall-clock cap not being refreshed between Phase 4/5 specialist invocations. Captured at [`autobuild-FEAT-J005-946D-timeout-history.md`](../../history/autobuild-FEAT-J005-946D-timeout-history.md). |
+| 2026-04-30 | **TASK-REV-E73C — timeout decision review** | Decision-mode review (v2 deepened against source + worktree state) at [`.claude/reviews/TASK-REV-E73C-review-report.md`](../../../.claude/reviews/TASK-REV-E73C-review-report.md). Verdict: TASK-J005-005 implementation valid; safe to **resume** with `GUARDKIT_AUTOBUILD_TASK_TIMEOUT_FLOOR=4500`. Latent autobuild cap-refresh bug noted for GuardKit follow-up. |
+| 2026-04-30 | **AutoBuild resume — Waves 1–5 complete** | 12/12 tasks complete in 13 turns / 36m19s ([`autobuild-FEAT-J005-946D-resume-history.md`](../../history/autobuild-FEAT-J005-946D-resume-history.md)). 8 already-completed (Waves 1–3 + most of Wave 4) skipped, 4 SUCCESS (TASK-J005-009..012). All approved on first turn. 100% clean-execution rate; 0 SDK ceiling hits. |
+| 2026-04-30 | **FEAT-JARVIS-005 landed on `main`** | Linear/fast-forward via `d382f2b` (final autobuild artifact for FEAT-J005-946D), `a8a2b36` (close + migrate task files to `tasks/completed/`), `505d5e4` (purge stale duplicates). Worktree + autobuild branch + per-task autobuild folders removed; review summary archived to [`.guardkit/archive/FEAT-J005-946D/review-summary.md`](../../../.guardkit/archive/FEAT-J005-946D/review-summary.md). `src/jarvis/infrastructure/forge_notifications.py` present on main. |
+| *pending — next* | **Step 11 — full regression** | `uv run pytest tests/ -v --cov=src/jarvis` + ruff + mypy + `langgraph dev --no-browser`. Confirm zero regression against Phase 1+2+FEAT-J004 baseline. **This is the next invocation.** |
+| *pending* | Step 12 — integration-server check | Full integration suite against in-process NATS + Graphiti stub. Portable Phase 3 floor; no GB10 dependency. |
+| *pending* | Step 13 — Rich picks FEAT-JARVIS-INTERNAL-*** candidate | Per Q10.6 — choose from: (a) docstring/README polish, (b) trace-schema refinement, (c) skill scaffolding. Then run `/feature-spec` + `/feature-plan` against the Jarvis repo to produce the *payload* for Step 14. Recommendation in build plan: **prefer (a) — smallest, safest first real run.** |
+| *pending* | Step 14 — end-to-end test with real Forge | **Phase 3 close criterion.** Hard prereqs: NATS on GB10 + Forge running + Graphiti on GB10 + subagent provider keys. Records chat transcript + Graphiti trace dump as evidence artefact. |
 
 ### FEAT-JARVIS-004 Wave Status — ✅ ALL COMPLETE (merged 2026-04-28, commit `b228d7d`)
 
@@ -42,6 +48,22 @@
 Run summary: 20/20 tasks completed, 0 failed, 23 total turns. Source-of-truth: `.guardkit/features/FEAT-J004-702C.yaml`.
 
 **Housekeeping deferred to GuardKit:** task files for the 20 completed tasks still live at `tasks/backlog/feat-jarvis-004-fleet-registration-and-specialist-dispatch/`; the planning review `TASK-REV-22CF` still in `tasks/in_review/`. Both should migrate to `tasks/completed/` on next `/feature-complete` or task-complete pass.
+
+### FEAT-JARVIS-005 Wave Status — ✅ ALL COMPLETE (resume-merged 2026-04-30, head `505d5e4` on `main`)
+
+| Wave | Tasks | Status |
+|------|-------|--------|
+| 1 | T001 (config), T002 (forge notification models), T004 (routing-history build-queue extensions), T006 (session-manager pending-notifications) | ✅ complete (resume run skipped — already_completed) |
+| 2 | T003 (forge-notifications subscriber), T007 (CLI between-prompts render) | ✅ complete (resume run skipped — already_completed) |
+| 3 | T005 (dispatch real `queue_build` JetStream publish), T008 (lifecycle wiring) | ✅ complete (T005 in initial run pre-timeout; T008 already_completed on resume) |
+| 4 | T009 (soft-fail tests), T010 (contract tests vs `nats-core`), T011 (grep invariant + retire stubs) | ✅ complete (resume run — all SUCCESS / approved, 1 turn each) |
+| 5 | T012 (end-to-end Forge round-trip test scaffolding) | ✅ complete (resume run — SUCCESS / approved, 1 turn) |
+
+Run summary: 12/12 tasks completed, 0 failed, 13 total turns across initial + resume; 11/12 first-turn approvals. Source-of-truth: `.guardkit/archive/FEAT-J005-946D/feature_state.yaml` (worktree + active feature YAML cleaned up post-merge).
+
+**Housekeeping deferred to GuardKit:** the planning review `TASK-REV-3B8B` still sits in `tasks/backlog/`; the timeout decision review `TASK-REV-E73C` is already in `tasks/completed/`. `TASK-REV-3B8B` should migrate to `tasks/completed/` (and consider rolling FEAT-J004's lingering `TASK-REV-22CF` at the same time) on the next `/feature-complete` or task-complete pass.
+
+**GuardKit follow-up surfaced by the timeout:** TASK-REV-E73C identified a latent autobuild cap-refresh bug (`autobuild.py:2880–2904` — specialist `sdk_timeout` cap input not refreshed between Phase 4 and Phase 5). Worth raising as a GuardKit issue independently of this phase.
 
 ---
 

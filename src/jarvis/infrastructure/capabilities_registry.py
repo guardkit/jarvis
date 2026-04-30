@@ -52,7 +52,7 @@ from nats_core import AgentManifest, NATSKVManifestRegistry
 
 from jarvis.infrastructure.nats_client import NATSClient
 from jarvis.shared.exceptions import NATSConnectionError
-from jarvis.tools.capabilities import (
+from jarvis.tools import (
     CapabilityDescriptor,
     CapabilityToolSummary,
     load_stub_registry,

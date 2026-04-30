@@ -75,6 +75,7 @@ EXPECTED_PUBLIC_SURFACE = {
     # Pydantic types
     "CalendarEvent",
     "CapabilityDescriptor",
+    "CapabilityToolSummary",
     "DispatchError",
     "WebResult",
     # General tools
