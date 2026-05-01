@@ -10,10 +10,12 @@ feature_id: FEAT-JARVIS-INTERNAL-001-FRR
 id: TASK-FRR-001
 implementation_mode: task-work
 parent_runbook_results: docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md
-previous_state: backlog
+completed: 2026-05-01T18:30:00+00:00
+completed_location: tasks/completed/feat-jarvis-internal-001-followups/
+previous_state: in_review
 priority: high
-state_transition_reason: Automatic transition for task-work execution
-status: in_progress
+state_transition_reason: Task closure — all acceptance criteria satisfied, RED→GREEN commits landed, DDR-027 revised, ruff/mypy clean, knowledge captured
+status: completed
 tags:
 - jarvis
 - feat-jarvis-internal-001-followups
@@ -24,7 +26,7 @@ tags:
 - infrastructure-reconciliation
 task_type: bugfix
 title: Reconcile NATS subscriptions (fleet register, KV bind, forge_subscriber) with canonical provisioning
-updated: 2026-05-01 12:00:00+00:00
+updated: 2026-05-01 18:30:00+00:00
 wave: 1
 ---
 
@@ -101,3 +103,34 @@ Forge's `forge-serve` durable consumer **does** depend on workqueue retention to
 - The TDD red-then-green split is mandatory because the regression spans a cross-repo contract (jarvis ↔ nats-infrastructure ↔ forge); the failing-test commit gives us a durable artefact that the canonical provisioning was, in fact, the runtime shape on 2026-05-01.
 - If during implementation a forth NATS-side mismatch surfaces (e.g. NOTIFICATIONS or AGENTS stream config drift), capture it in the same task and extend the test scope; do not split into a fifth task unless it touches a different config domain.
 - Out of scope: forge-side `dispatch_payload` real-orchestrator wiring (tracked as forge follow-up #1 in the RESULTS file). This task closes the *receive* side; the *publish* side is forge's problem.
+
+## Implementation Summary
+
+The three failures collapsed to two single-line root causes once the actual code was inspected:
+
+**Failures (1) and (2) — same root cause, different log line.** Both `jarvis_fleet_register_failed` and `jarvis_live_capabilities_registry_failed` route through `nats_core.NATSKVManifestRegistry.create` → `js.create_key_value(bucket="agent-registry")` (a SHARED helper, not two independent bind sites — the runbook listed them separately because they surfaced as two distinct lifecycle log lines). With no `KeyValueConfig` argument, nats-py asserts its own defaults (history=1, unlimited size) and rejects the canonical bucket (history=5, max_value_size=256KB) with `code=10058 stream name already in use with a different configuration`. Fix: switch to `js.key_value(bucket=...)` (lookup-only) in `nats_core/client.py:408`. Bucket-provisioning ownership stays with `nats-infrastructure`, which is the canonical contract direction. One line in the sibling repo closed both jarvis log lines.
+
+**Failure (3).** `forge_subscriber.start()` attached with `DeliverPolicy.NEW` against a workqueue stream. Workqueue retention only accepts `DeliverPolicy.ALL` (`code=10101`). The original DDR-027's "no replay-on-restart UX" rationale assumed PIPELINE was a `LimitsPolicy` stream — that assumption was incorrect from the moment `nats-infrastructure` standardised on workqueue retention for the dev pipeline. Fix: flip to `DeliverPolicy.ALL` and rewrite DDR-027 in place (per task author's preference) to document that the no-replay UX property is preserved structurally instead — workqueue + auto-ack drains every delivery on the consumer's slice; the DDR-028 in-memory correlation map is lost on restart so any backlog drained at restart hits the silent-drop branch. Net observable behaviour matches what `DeliverPolicy.NEW` would have produced if it were a valid choice.
+
+**TDD audit trail.** Per the acceptance criteria, the failing tests landed first as a separate commit (jarvis 93f01b1) before any production code change. The five-test integration file pre-provisions the canonical PIPELINE workqueue + agent-registry KV on the in-process test broker, mirroring `nats-infrastructure`'s `provision-streams.sh` / `provision-kv.sh`, then drives the affected lifecycle paths and asserts no `*_failed` warnings emit. The conftest fixture `nats_test_server` was extended to pre-provision both surfaces by default so existing fleet-registration / capabilities-real integration tests didn't regress.
+
+**Cross-repo coordination.** Required user confirmation before touching `nats-core` (sibling editable-installed repo). User approved; nats-core commit b6d445a precedes the jarvis GREEN commit 5391f35.
+
+## Lessons
+
+1. **A single shared helper can be the root cause of two log lines that look independent in the runbook.** The runbook listed `jarvis_fleet_register_failed` and `jarvis_live_capabilities_registry_failed` as distinct failures with distinct fixes. They were the same one-line bug in `nats_core.NATSKVManifestRegistry.create`, surfaced twice via two lifecycle call sites. Don't trust runbook line counts as a fix-count estimate — trace each failure to the actual source line before sizing the work.
+
+2. **`js.create_key_value(bucket=...)` is assertive even with no config args.** It asserts nats-py's defaults (history=1, unlimited size) which collide with any pre-provisioned bucket. The lookup-only counterpart `js.key_value(bucket=...)` exists in the same module and is the right shape when infrastructure ownership is elsewhere. Same trap will exist for any future `js.add_stream`-without-config usage — prefer `js.stream_info` for lookup.
+
+3. **DDR rationales are time-stamped contracts, not eternal truths.** DDR-027's `DeliverPolicy.NEW` rationale was correct for the LimitsPolicy stream the original author was working against. Once `nats-infrastructure` standardised PIPELINE on workqueue retention, the rationale was invalidated but the DDR was never revisited — it took a real-run failure to surface the drift. When canonical infrastructure changes, walk every DDR that referenced its retention/storage/policy assumptions.
+
+4. **Workqueue retention + auto-ack + in-memory correlation map composes to a "silent drain" property** that's worth understanding before defaulting to `DeliverPolicy.NEW`. Any future ephemeral consumer on a workqueue stream can safely use `DeliverPolicy.ALL` if its message handler has an in-process state that's lost on restart — the silent-drop branch absorbs the backlog drainage.
+
+5. **Pre-existing test flakes are real but should not block completion.** The `test_capabilities_real::test_kv_watch_invalidates_cache_on_new_registration` flake (TOCTOU port-binding race in the `nats_test_server` fixture, comment-acknowledged on conftest line 296-298) passes in isolation. Don't conflate flake noise with regressions from your changes — verify by stash + re-run on `main` before chasing.
+
+## Related ADRs / DDRs
+
+- DDR-027 (revised in place): `pipeline.stage-complete.>` is an ephemeral push consumer with `deliver_policy=ALL` (was `NEW`).
+- DDR-021 (referenced): NATS unavailable soft-fail at the lifecycle boundary — this task does NOT change DDR-021 semantics; both fixes preserve the soft-fail wrapping.
+- DDR-028 (referenced): in-memory correlation map bounded; load-bearing for the "silent drain on restart" property after the deliver_policy flip.
+- DDR-030 (referenced): between-prompt notification rendering — this task unblocks the path; rendering itself was already correct.
