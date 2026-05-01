@@ -2097,3 +2097,100 @@ GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003-FIX --verbose
 
 
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-001 --verbose
+
+
+
+===============================================================================
+RUNBOOK EXECUTION — FEAT-JARVIS-INTERNAL-001 first-real-run
+Date: 2026-05-01  Machine: GB10 (promaxgb10-41b1, co-resident host)
+Operator: Claude Code session, attended
+correlation_id: a58ec9a7-27c6-485a-beac-e18675639a10
+RESULTS: docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md
+===============================================================================
+
+# Phase 0.1 — jarvis main on FEAT-JARVIS-INTERNAL-001 close (✅)
+cd ~/Projects/appmilla_github/jarvis && git fetch origin && git status && git log --oneline -5
+
+# Phase 0.2 — GB10 reachable (✅, /etc/hosts maps to 127.0.0.1)
+uname -a && uptime && hostname && grep gb10 /etc/hosts
+
+# Phase 0.3 — forge nats-core symlink (✅, already in place)
+cd ~/Projects/appmilla_github/forge && ls -la .guardkit/worktrees/nats-core
+
+# Phase 0.4 — provider keys (✅ with notes — local-only via llama-swap)
+env | grep -E "ANTHROPIC|OPENAI|GOOGLE|GEMINI|JARVIS_NATS|JARVIS_GRAPHITI|JARVIS_OPENAI" | sed "s/=.*/=<set>/"
+set -a && . ~/Projects/appmilla_github/jarvis/.env && set +a
+
+# Phase 1.1 — NATS container up (✅)
+cd ~/Projects/appmilla_github/nats-infrastructure && docker compose ps
+
+# Phase 1.2 — provision streams + KV (✅; required NATS auth — verify-nats.sh without auth misreports streams as MISSING)
+cd ~/Projects/appmilla_github/nats-infrastructure && set -a && . .env && set +a && \
+    export NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" && \
+    bash streams/provision-streams.sh   [as of forge:732408f]
+nats --server "$NATS_URL" stream ls
+nats --server "$NATS_URL" kv ls
+
+# Phase 1.3 — PIPELINE bound to pipeline.> (✅)
+nats --server "$NATS_URL" stream info PIPELINE -j | jq -r '.config.subjects[]'
+
+# Phase 2.1 — forge image build (✅ via workaround — scripts/build-image.sh broken on canonical layout)
+cd ~/Projects/appmilla_github/forge && \
+    docker buildx build --build-context nats-core=../nats-core -t forge:production-validation -f Dockerfile .
+docker tag forge:production-validation forge:latest
+
+# Phase 2.2 — forge serve up (✅ with workaround — runbook used wrong env var name + wrong default port)
+set -a && . ~/Projects/appmilla_github/nats-infrastructure/.env && set +a && \
+    docker rm -f forge-prod 2>/dev/null; \
+    mkdir -p ~/forge-state && \
+    docker run -d --name forge-prod --network host \
+        -e FORGE_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+        -e FORGE_HEALTHZ_PORT=8088 \
+        -e FORGE_LOG_LEVEL=info \
+        -v ~/forge-state:/var/forge \
+        forge:latest serve
+
+# Phase 2.3 — /healthz green + durable consumer attached (✅)
+curl -s http://localhost:8088/healthz
+nats --server "$NATS_URL" consumer ls PIPELINE
+
+# Phase 3 — specialist-agent fleet (⚠️ skipped — runbook says optional for FEAT-JARVIS-INTERNAL-001)
+docker ps --format "{{.Names}}\t{{.Status}}" | grep -i specialist  # no rows
+
+# Phase 4 — Graphiti reachable (⚠️ partial — graphiti-mcp unhealthy, FALKORDB_HOST off-host, JARVIS_GRAPHITI_ENDPOINT unset → DDR-019 soft-fail path)
+docker ps --format "{{.Names}}\t{{.Status}}" | grep -E "graphiti|falkor"
+curl -sf -X POST http://localhost:9000/v1/embeddings \
+    -H "Content-Type: application/json" \
+    -d '{"input": "runbook smoke", "model": "nomic-embed"}' | jq '.data[0].index'
+
+# Phase 5 — jarvis chat boot (✅)
+cd ~/Projects/appmilla_github/jarvis && python3 -m venv .venv
+.venv/bin/pip install -q -e ../nats-core
+.venv/bin/pip install -q -e ".[providers]"
+# .env edit: JARVIS_SUPERVISOR_MODEL=openai:qwen36-workhorse, JARVIS_OPENAI_BASE_URL=http://localhost:9000/v1
+#   (lifecycle.py:569 unconditionally clobbers OPENAI_BASE_URL with llama-swap URL — cloud OpenAI never wins)
+set -a && . .env && set +a && set -a && . ~/Projects/appmilla_github/nats-infrastructure/.env && set +a && \
+    export JARVIS_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" && \
+    export JARVIS_LOG_LEVEL=INFO && \
+    printf '%s\n' "What tools do you have available?" "/exit" | .venv/bin/jarvis chat
+
+# Phase 6 — queue_build wire test (✅ — required substituting FEAT-43DE for the runbook's literal FEAT-JARVIS-INTERNAL-001)
+printf '%s\n' \
+    "Queue feature FEAT-43DE for build. The feature YAML path is .guardkit/archive/FEAT-43DE/feature_state.yaml in the appmilla_github/jarvis repo on the main branch. Call queue_build directly with feature_id=FEAT-43DE, feature_yaml_path=.guardkit/archive/FEAT-43DE/feature_state.yaml, repo=appmilla_github/jarvis, branch=main." \
+    "What's happening with that build?" \
+    "/exit" \
+    | timeout 240 .venv/bin/jarvis chat
+
+# Phase 6.3 / 7.2 — wire-side evidence (✅ — message published, forge consumed and acked)
+nats --server "$NATS_URL" stream info PIPELINE -j | jq '{messages:.state.messages,last_seq:.state.last_seq}'
+nats --server "$NATS_URL" consumer info PIPELINE forge-serve -j | jq '{delivered:.delivered.consumer_seq,acked:.ack_floor.consumer_seq,num_pending:.num_pending}'
+
+# Phase 7.1 — between-prompt Forge notifications (❌ as expected — see RESULTS for two structural reasons)
+
+# Phase 8.1 — chat transcript saved (✅)
+cp /tmp/runbook-evidence/phase6-7-chat-v2.log ~/.jarvis/transcripts/a58ec9a7-27c6-485a-beac-e18675639a10.txt
+
+# Phase 8.2 — Graphiti dump (⚠️ skipped — no endpoint)
+# Phase 8.3 — local trace offload (⚠️ none written — DDR-019 path drops on the floor when traces dir absent; jarvis gap)
+
+# Final pass/fail per phase: see RESULTS file table.
