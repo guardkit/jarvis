@@ -1889,7 +1889,7 @@ wheels = [
 
 [[package]]
 name = "nats-core"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "../nats-core" }
 dependencies = [
     { name = "nats-py" },
