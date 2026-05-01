@@ -11,7 +11,8 @@ id: TASK-FRR-003
 implementation_mode: task-work
 parent_runbook_results: docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md
 priority: medium
-status: in_review
+status: completed
+completed: 2026-05-01T00:00:00+00:00
 tags:
 - jarvis
 - feat-jarvis-internal-001-followups
@@ -22,7 +23,7 @@ tags:
 - observability
 task_type: bugfix
 title: DDR-019 trace-offload — autocreate ~/.jarvis/traces and stop silently dropping traces on the floor
-updated: 2026-05-01 00:00:00+00:00
+updated: 2026-05-01T00:00:00+00:00
 wave: 1
 ---
 
