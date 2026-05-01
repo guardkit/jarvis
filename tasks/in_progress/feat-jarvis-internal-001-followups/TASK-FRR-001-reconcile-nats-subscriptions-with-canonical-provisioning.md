@@ -10,8 +10,10 @@ feature_id: FEAT-JARVIS-INTERNAL-001-FRR
 id: TASK-FRR-001
 implementation_mode: task-work
 parent_runbook_results: docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md
+previous_state: backlog
 priority: high
-status: backlog
+state_transition_reason: Automatic transition for task-work execution
+status: in_progress
 tags:
 - jarvis
 - feat-jarvis-internal-001-followups
@@ -22,7 +24,7 @@ tags:
 - infrastructure-reconciliation
 task_type: bugfix
 title: Reconcile NATS subscriptions (fleet register, KV bind, forge_subscriber) with canonical provisioning
-updated: 2026-05-01 00:00:00+00:00
+updated: 2026-05-01 12:00:00+00:00
 wave: 1
 ---
 
