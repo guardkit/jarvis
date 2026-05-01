@@ -234,7 +234,11 @@ class TestAC005NoRegression:
         assert cfg.openai_api_key is None
         assert cfg.anthropic_api_key is None
         assert cfg.google_api_key is None
-        assert cfg.openai_base_url is None
+        # openai_base_url was intentionally removed by TASK-FRR-002
+        # (ADR-ARCH-001 — local-first inference). The supervisor always
+        # routes through ``llama_swap_base_url`` and there is no cloud
+        # OpenAI escape hatch.
+        assert not hasattr(cfg, "openai_base_url")
 
     def test_phase2_web_search_provider_default(self) -> None:
         from jarvis.config.settings import JarvisConfig
@@ -250,15 +254,55 @@ class TestAC005NoRegression:
             cfg = JarvisConfig()
         assert cfg.workspace_root.is_absolute()
 
-    def test_validate_provider_keys_still_works(self) -> None:
-        """validate_provider_keys() still raises for missing OPENAI_BASE_URL."""
+    def test_validate_provider_keys_passes_for_default_openai_supervisor(self) -> None:
+        """validate_provider_keys() does NOT raise for ``openai:`` supervisor.
+
+        TASK-FRR-002 / ADR-ARCH-001: the supervisor always routes through
+        llama-swap, governed by ``llama_swap_base_url`` which has a
+        non-empty default. There is therefore no operator-supplied
+        credential to validate for the ``openai:`` provider — the field
+        and the validation entry were both removed.
+        """
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict("os.environ", {}, clear=True):
+            cfg = JarvisConfig(supervisor_model="openai:jarvis-reasoner")
+        # Should not raise.
+        cfg.validate_provider_keys()
+
+    def test_validate_provider_keys_still_raises_for_anthropic(self) -> None:
+        """validate_provider_keys() still raises for missing ANTHROPIC_API_KEY."""
         from jarvis.config.settings import JarvisConfig
         from jarvis.shared.exceptions import ConfigurationError
 
         with patch.dict("os.environ", {}, clear=True):
-            cfg = JarvisConfig(supervisor_model="openai:jarvis-reasoner")
-        with pytest.raises(ConfigurationError, match="OPENAI_BASE_URL"):
+            cfg = JarvisConfig(supervisor_model="anthropic:claude-sonnet-4-20250514")
+        with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
             cfg.validate_provider_keys()
+
+    def test_no_openai_base_url_field_on_settings_model(self) -> None:
+        """JarvisConfig no longer documents an ``openai_base_url`` field.
+
+        TASK-FRR-002: cloud OpenAI is not a supported supervisor target
+        (ADR-ARCH-001 — local-first inference). The settings model must
+        not advertise any field whose name suggests cloud OpenAI is
+        reachable, and no field's description may point at
+        ``api.openai.com``.
+        """
+        from jarvis.config.settings import JarvisConfig
+
+        field_names = set(JarvisConfig.model_fields.keys())
+        assert "openai_base_url" not in field_names, (
+            "openai_base_url field must be removed (TASK-FRR-002 / ADR-ARCH-001)"
+        )
+
+        for field_name, field_info in JarvisConfig.model_fields.items():
+            description = (field_info.description or "").lower()
+            assert "api.openai.com" not in description, (
+                f"Field {field_name!r} description must not mention "
+                f"api.openai.com (ADR-ARCH-001 — cloud OpenAI is not a "
+                f"supported supervisor target)"
+            )
 
 
 # ---------------------------------------------------------------------------

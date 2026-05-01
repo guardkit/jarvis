@@ -195,7 +195,7 @@ class TestSessionAdapterCheck:
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict("os.environ", {}, clear=True):
-            cfg = JarvisConfig(openai_base_url="http://fake/v1")
+            cfg = JarvisConfig(llama_swap_base_url="http://fake")
         assert cfg.attended_adapter_ids == dispatch.ATTENDED_ADAPTER_IDS
 
 

@@ -357,15 +357,16 @@ class TestSeamSupervisorModelEndpoint:
 
     @pytest.mark.seam
     def test_supervisor_model_endpoint_format(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Verify supervisor_model is provider-prefixed and openai: → OPENAI_BASE_URL is required.
+        """Verify supervisor_model is provider-prefixed and openai: routes via llama-swap.
 
-        Contract: supervisor_model must be provider-prefixed (e.g. 'openai:jarvis-reasoner');
-        openai: prefix routes to llama-swap via OPENAI_BASE_URL.
-        Producer: TASK-J001-003
+        Contract: supervisor_model must be provider-prefixed (e.g. 'openai:jarvis-reasoner').
+        Per ADR-ARCH-001 and TASK-FRR-002 the openai: prefix is mandatorily routed
+        through ``llama_swap_base_url`` — there is no cloud OpenAI escape hatch.
+        Producer: TASK-J001-003 (revised by TASK-FRR-002)
         """
         from jarvis.config.settings import JarvisConfig
 
-        monkeypatch.setenv("JARVIS_OPENAI_BASE_URL", "http://promaxgb10-41b1:9000/v1")
+        monkeypatch.setenv("JARVIS_LLAMA_SWAP_BASE_URL", "http://promaxgb10-41b1:9000")
         config = JarvisConfig()
 
         assert ":" in config.supervisor_model, (
@@ -376,6 +377,6 @@ class TestSeamSupervisorModelEndpoint:
             f"Unknown provider prefix {provider!r} in {config.supervisor_model!r}"
         )
         if provider == "openai":
-            assert config.openai_base_url, (
-                "openai: prefix requires OPENAI_BASE_URL to route via llama-swap"
+            assert config.llama_swap_base_url, (
+                "openai: prefix requires llama_swap_base_url to route through llama-swap"
             )

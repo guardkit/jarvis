@@ -168,7 +168,7 @@ class TestSecretRedaction:
 
         with patch.dict("os.environ", {}, clear=True):
             config = JarvisConfig(
-                openai_base_url="http://fake/v1",
+                llama_swap_base_url="http://fake",
                 openai_api_key="sk-real-secret-key-value",  # type: ignore[arg-type]
                 anthropic_api_key="ant-real-secret",  # type: ignore[arg-type]
             )
@@ -261,7 +261,7 @@ class TestStartup:
 
         with patch.dict("os.environ", {}, clear=True):
             config = JarvisConfig(
-                openai_base_url="http://fake-endpoint/v1",
+                llama_swap_base_url="http://fake-endpoint",
             )
 
         captured = io.StringIO()
@@ -307,7 +307,7 @@ class TestShutdown:
         structlog.reset_defaults()
 
         with patch.dict("os.environ", {}, clear=True):
-            config = JarvisConfig(openai_base_url="http://fake/v1")
+            config = JarvisConfig(llama_swap_base_url="http://fake")
 
         captured = io.StringIO()
         with (
@@ -336,7 +336,7 @@ class TestShutdown:
         structlog.reset_defaults()
 
         with patch.dict("os.environ", {}, clear=True):
-            config = JarvisConfig(openai_base_url="http://fake/v1")
+            config = JarvisConfig(llama_swap_base_url="http://fake")
 
         captured = io.StringIO()
         with (
@@ -367,7 +367,7 @@ class TestShutdown:
         structlog.reset_defaults()
 
         with patch.dict("os.environ", {}, clear=True):
-            config = JarvisConfig(openai_base_url="http://fake/v1")
+            config = JarvisConfig(llama_swap_base_url="http://fake")
 
         captured = io.StringIO()
         with (

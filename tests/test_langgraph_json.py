@@ -268,9 +268,8 @@ class TestJarvisGraphSymbolResolves:
         )
 
         # Compose a JarvisConfig that survives ``validate_provider_keys`` in
-        # the test sandbox (real openai_base_url is not available; an absolute
-        # ``stub_capabilities_path`` is required because conftest chdirs to
-        # tmp_path per test).
+        # the test sandbox. An absolute ``stub_capabilities_path`` is
+        # required because conftest chdirs to tmp_path per test.
         from jarvis.config.settings import JarvisConfig
 
         stub_path = REPO_ROOT / "src" / "jarvis" / "config" / "stub_capabilities.yaml"
@@ -278,7 +277,6 @@ class TestJarvisGraphSymbolResolves:
 
         with patch.dict("os.environ", {}, clear=True):
             stub_config = JarvisConfig(
-                openai_base_url="http://fake-endpoint/v1",
                 stub_capabilities_path=stub_path,
                 llama_swap_base_url="http://fake-llama-swap:9000",
             )
@@ -353,7 +351,6 @@ class TestJarvisGraphSymbolResolves:
         stub_path = REPO_ROOT / "src" / "jarvis" / "config" / "stub_capabilities.yaml"
         with patch.dict("os.environ", {}, clear=True):
             stub_config = JarvisConfig(
-                openai_base_url="http://fake-endpoint/v1",
                 stub_capabilities_path=stub_path,
                 llama_swap_base_url="http://fake-llama-swap:9000",
             )

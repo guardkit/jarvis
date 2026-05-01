@@ -53,7 +53,7 @@ class TestEndToEndSmoke:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake-endpoint/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake-endpoint"},
                 clear=True,
             ),
             patch(

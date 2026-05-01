@@ -125,7 +125,7 @@ def jarvis_config() -> JarvisConfig:
     The default ``jarvis_agent_version`` is a valid semver so the
     manifest validates without any overrides.
     """
-    return JarvisConfig(openai_base_url="http://fake-endpoint/v1")
+    return JarvisConfig(llama_swap_base_url="http://fake-endpoint")
 
 
 def _make_registry() -> list[CapabilityDescriptor]:

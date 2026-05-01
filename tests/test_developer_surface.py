@@ -46,7 +46,7 @@ class TestAC001EnvExample:
         "var_name",
         [
             "JARVIS_SUPERVISOR_MODEL",
-            "JARVIS_OPENAI_BASE_URL",
+            "JARVIS_LLAMA_SWAP_BASE_URL",
             "JARVIS_LOG_LEVEL",
             "JARVIS_MEMORY_STORE_BACKEND",
         ],
@@ -64,7 +64,7 @@ class TestAC001EnvExample:
         "var_name",
         [
             "JARVIS_SUPERVISOR_MODEL",
-            "JARVIS_OPENAI_BASE_URL",
+            "JARVIS_LLAMA_SWAP_BASE_URL",
             "JARVIS_LOG_LEVEL",
             "JARVIS_MEMORY_STORE_BACKEND",
         ],

@@ -158,7 +158,7 @@ class TestAC003TavilyKeyWarning:
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 supervisor_model="openai:jarvis-reasoner",
-                openai_base_url="http://localhost:9000/v1",
+                llama_swap_base_url="http://localhost:9000",
                 web_search_provider="tavily",
             )
 
@@ -176,7 +176,7 @@ class TestAC003TavilyKeyWarning:
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 supervisor_model="openai:jarvis-reasoner",
-                openai_base_url="http://localhost:9000/v1",
+                llama_swap_base_url="http://localhost:9000",
                 web_search_provider="tavily",
                 tavily_api_key=None,
             )
@@ -192,7 +192,7 @@ class TestAC003TavilyKeyWarning:
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 supervisor_model="openai:jarvis-reasoner",
-                openai_base_url="http://localhost:9000/v1",
+                llama_swap_base_url="http://localhost:9000",
                 web_search_provider="tavily",
                 tavily_api_key="tvly-real-key",
             )
@@ -210,7 +210,7 @@ class TestAC003TavilyKeyWarning:
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 supervisor_model="openai:jarvis-reasoner",
-                openai_base_url="http://localhost:9000/v1",
+                llama_swap_base_url="http://localhost:9000",
                 web_search_provider="none",
                 tavily_api_key=None,
             )
@@ -229,7 +229,7 @@ class TestAC003TavilyKeyWarning:
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 supervisor_model="openai:jarvis-reasoner",
-                openai_base_url="http://localhost:9000/v1",
+                llama_swap_base_url="http://localhost:9000",
                 web_search_provider="tavily",
                 tavily_api_key="",
             )

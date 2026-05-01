@@ -73,12 +73,14 @@ class TestAC001DefaultConfig:
             cfg = JarvisConfig()
         assert cfg.google_api_key is None
 
-    def test_default_openai_base_url_is_none(self) -> None:
+    def test_no_openai_base_url_field_exists(self) -> None:
+        """``openai_base_url`` was removed by TASK-FRR-002 (ADR-ARCH-001)."""
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig()
-        assert cfg.openai_base_url is None
+        assert not hasattr(cfg, "openai_base_url")
+        assert "openai_base_url" not in JarvisConfig.model_fields
 
     def test_env_prefix_is_jarvis(self) -> None:
         """SettingsConfigDict uses env_prefix='JARVIS_'."""
@@ -263,22 +265,30 @@ class TestAC004SecretStrMasking:
 class TestAC005ValidateProviderKeys:
     """validate_provider_keys() raises ConfigurationError naming missing env var."""
 
-    def test_openai_model_requires_openai_base_url(self) -> None:
+    def test_openai_model_passes_without_explicit_credentials(self) -> None:
+        """``openai:`` supervisor models always validate cleanly.
+
+        TASK-FRR-002 / ADR-ARCH-001 (local-first inference): the
+        ``openai:`` provider prefix routes through llama-swap, and
+        ``llama_swap_base_url`` has a hard-coded default — so no
+        operator action is required and no validation fires for the
+        ``openai:`` provider. Cloud OpenAI is NOT a supported supervisor
+        target.
+        """
         from jarvis.config.settings import JarvisConfig
-        from jarvis.shared.exceptions import ConfigurationError
 
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(supervisor_model="openai:jarvis-reasoner")
-        with pytest.raises(ConfigurationError, match="OPENAI_BASE_URL"):
-            cfg.validate_provider_keys()
+        # Should not raise — llama_swap_base_url default is sufficient.
+        cfg.validate_provider_keys()
 
-    def test_openai_model_with_base_url_passes(self) -> None:
+    def test_openai_model_with_custom_llama_swap_base_url_passes(self) -> None:
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 supervisor_model="openai:jarvis-reasoner",
-                openai_base_url="http://promaxgb10-41b1:9000/v1",
+                llama_swap_base_url="http://promaxgb10-41b1:9000",
             )
         # Should not raise
         cfg.validate_provider_keys()
@@ -339,7 +349,7 @@ class TestAC005ValidateProviderKeys:
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 memory_store_backend="file",
-                openai_base_url="http://localhost:9000/v1",
+                llama_swap_base_url="http://localhost:9000",
             )
         with pytest.raises(ConfigurationError, match="not implemented"):
             cfg.validate_provider_keys()
@@ -351,7 +361,7 @@ class TestAC005ValidateProviderKeys:
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 memory_store_backend="graphiti",
-                openai_base_url="http://localhost:9000/v1",
+                llama_swap_base_url="http://localhost:9000",
             )
         with pytest.raises(ConfigurationError, match="not implemented"):
             cfg.validate_provider_keys()

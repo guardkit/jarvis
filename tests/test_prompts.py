@@ -400,8 +400,11 @@ class TestAC004TestConfigFixture:
 
         assert isinstance(test_config, JarvisConfig)
 
-    def test_test_config_has_openai_base_url(self, test_config: Any) -> None:
-        assert test_config.openai_base_url == "http://fake-endpoint/v1"
+    def test_test_config_has_llama_swap_base_url(self, test_config: Any) -> None:
+        # TASK-FRR-002: ``openai_base_url`` field was removed; the active
+        # endpoint for the ``openai:`` provider prefix is now
+        # ``llama_swap_base_url`` (ADR-ARCH-001 — local-first inference).
+        assert test_config.llama_swap_base_url == "http://fake-endpoint"
 
     def test_test_config_default_log_level(self, test_config: Any) -> None:
         assert test_config.log_level == "INFO"

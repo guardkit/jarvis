@@ -561,11 +561,18 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     )
 
     # 6. Export ``OPENAI_BASE_URL`` so the ``jarvis-reasoner`` leaf graph
-    # picks up the local proxy URL when DeepAgents compiles it.  This
-    # MUST happen BEFORE ``build_async_subagents`` runs because the
-    # AsyncSubAgentMiddleware will resolve the ``graph_id`` at
-    # ``create_deep_agent`` time and the leaf graph's
-    # ``init_chat_model`` instantiation reads the env var.
+    # picks up the local proxy URL when DeepAgents compiles it. This MUST
+    # happen BEFORE ``build_async_subagents`` runs because the
+    # AsyncSubAgentMiddleware resolves the ``graph_id`` at
+    # ``create_deep_agent`` time and the leaf graph's ``init_chat_model``
+    # instantiation reads the env var.
+    #
+    # ADR-ARCH-001 (local-first inference): the supervisor always routes
+    # through llama-swap on the GB10 (or its Tailscale-reachable
+    # equivalent). Cloud OpenAI is NOT a supported supervisor target; this
+    # ``OPENAI_BASE_URL`` clobber is intentional and unconditional, and
+    # there is no escape hatch to cloud APIs. To point at a different
+    # llama-swap instance, set ``JARVIS_LLAMA_SWAP_BASE_URL``.
     openai_base_url = f"{config.llama_swap_base_url}/v1"
     os.environ["OPENAI_BASE_URL"] = openai_base_url
     log.info(

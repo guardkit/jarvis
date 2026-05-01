@@ -206,8 +206,10 @@ def fake_llm() -> Any:
 def test_config() -> Any:
     """Return a ``JarvisConfig`` with sensible test defaults.
 
-    Uses ``openai_base_url="http://fake-endpoint/v1"`` so that
-    ``validate_provider_keys()`` passes without requiring real credentials.
+    The default ``llama_swap_base_url`` already satisfies the ``openai:``
+    provider routing path (ADR-ARCH-001 — local-first inference). No
+    cloud credentials are required for ``validate_provider_keys()`` to
+    pass on the default ``openai:jarvis-reasoner`` supervisor model.
 
     Returns:
         A ``JarvisConfig`` instance that validates cleanly.
@@ -216,7 +218,7 @@ def test_config() -> Any:
 
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
+            llama_swap_base_url="http://fake-endpoint",
         )
     # Validate provider keys to ensure no ConfigurationError
     cfg.validate_provider_keys()
@@ -377,7 +379,7 @@ async def nats_test_server(
             )
 
         config = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
+            llama_swap_base_url="http://fake-endpoint",
             nats_url=nats_url,
         )
         client = await NATSClient.connect(config)

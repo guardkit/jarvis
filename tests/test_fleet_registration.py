@@ -65,7 +65,7 @@ def jarvis_config() -> JarvisConfig:
     the manifest validates without overrides.
     """
     return JarvisConfig(
-        openai_base_url="http://fake-endpoint/v1",
+        llama_swap_base_url="http://fake-endpoint",
     )
 
 
@@ -238,7 +238,7 @@ class TestBuildJarvisManifest:
         """JarvisConfig rejects bad semver before build_jarvis_manifest runs."""
         with pytest.raises(ValidationError):
             JarvisConfig(
-                openai_base_url="http://fake-endpoint/v1",
+                llama_swap_base_url="http://fake-endpoint",
                 jarvis_agent_version="not-a-semver",
             )
 
