@@ -199,7 +199,14 @@ class TestModuleDocstring:
             "_on_message",
             "_handle_message",
             "_parse_completed_at",
-            "_get_deliver_policy_new",
+            # Renamed 2026-05-01 from ``_get_deliver_policy_new`` per
+            # TASK-FRR-001 / DDR-027 revision: canonical PIPELINE is a
+            # workqueue stream so ``DeliverPolicy.ALL`` is the only valid
+            # policy for the consumer. See module-level rationale block
+            # near ``_get_deliver_policy_all`` for why the rename was
+            # required and why the no-replay-on-restart UX property is
+            # preserved structurally instead of via the enum.
+            "_get_deliver_policy_all",
             "_get_stage_complete_subject",
         ):
             assert required in names, (

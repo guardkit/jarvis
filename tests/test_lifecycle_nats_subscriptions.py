@@ -45,12 +45,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from nats.js.api import (
-    KeyValueConfig,
-    RetentionPolicy,
-    StorageType,
-    StreamConfig,
-)
 
 from jarvis.config.settings import JarvisConfig
 from jarvis.infrastructure.capabilities_registry import LiveCapabilitiesRegistry
@@ -86,43 +80,22 @@ def _build_config() -> JarvisConfig:
     )
 
 
-async def _provision_canonical_pipeline_stream(client: Any) -> None:
-    """Mirror ``nats-infrastructure/streams/stream-definitions.json`` PIPELINE.
+async def _assert_canonical_provisioning_present(client: Any) -> None:
+    """Sanity-check the canonical streams / KV are on the broker.
 
-    Provisions the PIPELINE stream with workqueue retention so a subsequent
-    consumer attach exercises the "consumer must be deliver all on
-    workqueue stream" branch in nats-py.
+    The conftest ``nats_test_server`` fixture provisions the canonical
+    PIPELINE workqueue stream and ``agent-registry`` KV bucket on every
+    setup (mirroring ``nats-infrastructure/kv/provision-kv.sh`` and
+    ``streams/provision-streams.sh``). This helper exists so the tests
+    document that they DEPEND on canonical provisioning rather than
+    silently relying on a fixture detail — the assertion makes the
+    contract direction loud at the test body.
     """
     js = client.client.jetstream()
-    config = StreamConfig(
-        name="PIPELINE",
-        subjects=["pipeline.>"],
-        retention=RetentionPolicy.WORK_QUEUE,
-        storage=StorageType.FILE,
-        num_replicas=1,
-    )
-    # ``max_msgs``/``max_age`` are intentionally elided — the workqueue
-    # retention is what drives the ``code=10101 deliver_policy`` mismatch
-    # the test is asserting against; sizing fields don't change that.
-    await js.add_stream(config=config)
-
-
-async def _provision_canonical_agent_registry_bucket(client: Any) -> None:
-    """Mirror ``nats-infrastructure/kv/kv-definitions.json`` agent-registry.
-
-    Pre-provisions the KV bucket with the canonical history=5 / 256KB shape
-    so any subsequent ``js.create_key_value`` call that asserts nats-py
-    defaults (history=1, unlimited size) hits the ``code=10058`` mismatch.
-    """
-    js = client.client.jetstream()
-    config = KeyValueConfig(
-        bucket="agent-registry",
-        history=5,
-        max_value_size=256 * 1024,
-        storage=StorageType.FILE,
-        replicas=1,
-    )
-    await js.create_key_value(config=config)
+    # Both lookups raise on absence — the test fails loud here rather
+    # than later inside the production code under test.
+    await js.key_value(bucket="agent-registry")
+    await js.stream_info(name="PIPELINE")
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +119,7 @@ async def test_fleet_register_against_canonical_kv_bucket_succeeds(
     Green phase: nats_core uses ``js.key_value(bucket=...)`` (lookup-only)
     so the bucket's canonical config is honoured untouched.
     """
-    await _provision_canonical_agent_registry_bucket(nats_test_server)
+    await _assert_canonical_provisioning_present(nats_test_server)
 
     config = _build_config()
     manifest = build_jarvis_manifest(config)
@@ -189,7 +162,7 @@ async def test_capabilities_registry_kv_bind_against_canonical_bucket_succeeds(
     the registry warms up cleanly and ``capabilities_mode`` reports ``"live"``
     rather than the DDR-021 stub fallback.
     """
-    await _provision_canonical_agent_registry_bucket(nats_test_server)
+    await _assert_canonical_provisioning_present(nats_test_server)
 
     # The registry must successfully bind + warm up. Any failure to bind
     # raises NATSConnectionError, which is what the lifecycle catches and
@@ -227,7 +200,7 @@ async def test_forge_subscriber_attach_against_canonical_workqueue_succeeds(
     combination preserves the no-replay-on-restart UX the original DDR-027
     rationale was after — see DDR-027 (revised).
     """
-    await _provision_canonical_pipeline_stream(nats_test_server)
+    await _assert_canonical_provisioning_present(nats_test_server)
 
     # RoutingHistoryWriter is not load-bearing for the consumer create
     # path — pass a None and rely on the start() code never reaching the
@@ -277,9 +250,10 @@ async def test_full_canonical_provisioning_emits_no_failed_warnings(
     canonical streams/KV and asserts the structured log emits zero of the
     three ``*_failed`` warnings.
     """
-    # Provision canonical PIPELINE workqueue + agent-registry KV.
-    await _provision_canonical_pipeline_stream(nats_test_server)
-    await _provision_canonical_agent_registry_bucket(nats_test_server)
+    # Canonical PIPELINE workqueue + agent-registry KV are provisioned by
+    # the conftest fixture; assert they're present so a fixture regression
+    # surfaces here loudly rather than as a downstream production error.
+    await _assert_canonical_provisioning_present(nats_test_server)
 
     config = _build_config()
     manifest = build_jarvis_manifest(config)
@@ -348,7 +322,7 @@ async def test_fleet_register_does_not_raise_natsconnectionerror_on_canonical(
     as :class:`NATSConnectionError`. This test asserts the wrapping branch
     is no longer hit — i.e. the underlying call returns cleanly.
     """
-    await _provision_canonical_agent_registry_bucket(nats_test_server)
+    await _assert_canonical_provisioning_present(nats_test_server)
 
     config = _build_config()
     manifest = build_jarvis_manifest(config)
@@ -360,3 +334,72 @@ async def test_fleet_register_does_not_raise_natsconnectionerror_on_canonical(
             "register_on_fleet wrapped a config mismatch as "
             f"NATSConnectionError against canonical agent-registry: {exc}"
         )
+
+
+# ---------------------------------------------------------------------------
+# AC-6 — capabilities_mode reports "live" once the KV bind succeeds
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_app_state_reports_capabilities_mode_live_against_canonical(
+    nats_test_server: Any,
+    fake_llm: Any,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``capabilities_mode == "live"`` once the canonical KV bind succeeds.
+
+    The TASK-FRR-001 acceptance criteria call out an explicit assertion of
+    ``capabilities_mode == "live"`` (not the DDR-021 stub fallback) once
+    the KV bind no longer fails against canonical provisioning. Drives
+    ``build_app_state`` end-to-end against the canonical broker fixture
+    with the autouse ``_connect_nats`` stub overridden so the production
+    capabilities-bind branch (``LiveCapabilitiesRegistry.create``) actually
+    runs.
+
+    Capture path: ``configure()`` clears the stdlib root logger handlers
+    and installs its own JSON-rendering ``StreamHandler(sys.stderr)``,
+    which means pytest's ``caplog`` (which attaches at the root) is
+    cleared mid-test. We capture stderr via ``capsys`` instead and assert
+    the rendered JSON event by substring, which is robust to renderer
+    field-ordering tweaks.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from jarvis.infrastructure.lifecycle import build_app_state, shutdown
+
+    config = _build_config()
+
+    with (
+        patch(
+            "jarvis.infrastructure.lifecycle._connect_nats",
+            new=AsyncMock(return_value=nats_test_server),
+        ),
+        patch(
+            "jarvis.infrastructure.lifecycle._connect_graphiti",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "jarvis.agents.supervisor.init_chat_model",
+            return_value=fake_llm,
+        ),
+    ):
+        state = await build_app_state(config)
+        try:
+            stderr = capsys.readouterr().err
+            # structlog's JSON renderer emits the event as a flat
+            # ``"capabilities_mode": "live"`` field on the
+            # ``jarvis_startup_complete`` record. Substring-assert against
+            # both halves of the expected log line so a mode flip from
+            # ``live`` → ``stub`` (the DDR-021 fallback) trips this test
+            # immediately rather than at production-runtime triage.
+            assert "jarvis_startup_complete" in stderr, (
+                "lifecycle did not emit jarvis_startup_complete on stderr — "
+                "capabilities_mode field cannot be asserted"
+            )
+            assert '"capabilities_mode": "live"' in stderr, (
+                "Expected capabilities_mode=live with canonical KV bound; "
+                f"stderr did not contain it. Last 2KB:\n{stderr[-2048:]}"
+            )
+        finally:
+            await shutdown(state)

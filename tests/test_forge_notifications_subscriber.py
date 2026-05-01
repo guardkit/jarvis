@@ -182,10 +182,19 @@ class TestConstructorSignature:
 
 
 class TestStart:
-    """AC-002: ephemeral push consumer with deliver_policy=NEW; idempotent."""
+    """AC-002: ephemeral push consumer with deliver_policy=ALL; idempotent.
+
+    DDR-027 was revised on 2026-05-01 (TASK-FRR-001) from
+    ``DeliverPolicy.NEW`` to ``DeliverPolicy.ALL`` because the canonical
+    PIPELINE stream is provisioned with workqueue retention, which
+    rejects any other policy with ``code=10101 consumer must be deliver
+    all on workqueue stream``. The no-replay-on-restart UX is preserved
+    structurally — see the module-level rationale block on
+    ``_get_deliver_policy_all`` and DDR-027 §"Workqueue interaction".
+    """
 
     @pytest.mark.asyncio
-    async def test_start_subscribes_with_deliver_policy_new(self) -> None:
+    async def test_start_subscribes_with_deliver_policy_all(self) -> None:
         sub, nats_client, _ = _make_subscriber()
 
         await sub.start()
@@ -197,10 +206,11 @@ class TestStart:
         assert args[0] == "pipeline.stage-complete.>"
         # ordered_consumer=False per implementation notes.
         assert kwargs["ordered_consumer"] is False
-        # deliver_policy is the NEW enum from nats.js.api
+        # deliver_policy is the ALL enum from nats.js.api (DDR-027 revised
+        # 2026-05-01 per TASK-FRR-001 — workqueue retention).
         from nats.js.api import DeliverPolicy
 
-        assert kwargs["deliver_policy"] == DeliverPolicy.NEW
+        assert kwargs["deliver_policy"] == DeliverPolicy.ALL
         # Callback is wired.
         assert callable(kwargs["cb"])
 

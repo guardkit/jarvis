@@ -246,11 +246,33 @@ class BuildCorrelation(BaseModel):
 # pulling the canonical subject from :class:`nats_core.Topics` (cross-repo
 # contract test ``tests/test_contract_nats_core.py`` AC-007).
 
-# DDR-027: ephemeral push consumer with deliver_policy=NEW. We avoid a top-
-# level import of the nats.js.api so the schema-only import of this module
-# (e.g. from a unit test that only exercises ``ForgeNotification``) does not
-# pay the nats-py import cost. ``_get_deliver_policy_new`` lazy-loads the
-# enum on the start path.
+# DDR-027 (revised 2026-05-01 per TASK-FRR-001): ephemeral push consumer
+# with deliver_policy=ALL. The canonical PIPELINE stream provisioned by
+# ``nats-infrastructure`` is ``retention=workqueue`` (per
+# ``streams/stream-definitions.json``); workqueue retention requires
+# ``deliver_policy=all`` on consumers and rejects ``deliver_policy=new``
+# with ``BadRequestError code=10101 consumer must be deliver all on
+# workqueue stream``. The original DDR-027 ``DeliverPolicy.NEW`` choice
+# assumed PIPELINE was a LimitsPolicy stream, which the canonical infra
+# has not been since FEAT-JARVIS-INTERNAL-001 surfaced the contract drift.
+#
+# The "no replay-on-restart UX surprise" property the original DDR-027
+# rationale was after is preserved structurally rather than via the
+# delivery policy:
+#   * Workqueue retention deletes a message once any consumer acks it.
+#     Jarvis's only filter on this stream is ``pipeline.stage-complete.>``,
+#     and auto-ack drains every delivery the moment the callback returns —
+#     so the consumer's slice is empty in steady state.
+#   * The DDR-028 in-memory correlation map is lost on Jarvis restart.
+#     Any backlog drained at restart with deliver_policy=all hits a
+#     "correlation_id not found" silent drop in ``_handle_message`` and
+#     the message is gone (workqueue + auto-ack).
+# Net effect: the operator never sees replay UX, just like before.
+#
+# We avoid a top-level import of nats.js.api so the schema-only import of
+# this module (e.g. from a unit test that only exercises
+# ``ForgeNotification``) does not pay the nats-py import cost.
+# ``_get_deliver_policy_all`` lazy-loads the enum on the start path.
 
 # DDR-027 §"Consequences": no replay on restart in v1. Backfill is out of
 # scope; the subscriber drops on the floor anything published while Jarvis
@@ -261,17 +283,23 @@ class BuildCorrelation(BaseModel):
 _DEFAULT_CORRELATION_CAP = 1000
 
 
-def _get_deliver_policy_new() -> Any:
-    """Lazy-load ``nats.js.api.DeliverPolicy.NEW``.
+def _get_deliver_policy_all() -> Any:
+    """Lazy-load ``nats.js.api.DeliverPolicy.ALL``.
 
     Schema-only consumers of this module never import ``nats``; the
     subscriber start path is the only call site that needs the enum.
     Keeping the import lazy stops cold imports of the schema from
     transitively pulling in the full ``nats-py`` JetStream surface.
+
+    DDR-027 (revised): the canonical PIPELINE stream is a workqueue —
+    only ``DeliverPolicy.ALL`` is accepted on attached consumers
+    (``code=10101`` otherwise). The no-replay-on-restart UX is preserved
+    by workqueue retention + auto-ack + DDR-028 correlation-map loss
+    (see the module-level rationale block above).
     """
     from nats.js.api import DeliverPolicy
 
-    return DeliverPolicy.NEW
+    return DeliverPolicy.ALL
 
 
 def _get_stage_complete_subject() -> str:
@@ -282,7 +310,7 @@ def _get_stage_complete_subject() -> str:
     ``Topics.Pipeline.STAGE_COMPLETE`` (``pipeline.stage-complete.{feature_id}``)
     by substituting NATS ``>`` for the ``{feature_id}`` placeholder.
 
-    Imported lazily — same rationale as :func:`_get_deliver_policy_new`,
+    Imported lazily — same rationale as :func:`_get_deliver_policy_all`,
     plus the schema-import-isolation invariant in
     ``tests/test_forge_notification_schema.py`` forbids top-level
     ``from nats_core`` / ``from nats`` statements in this module.
@@ -379,7 +407,14 @@ class ForgeNotificationsSubscriber:
     async def start(self) -> None:
         """Subscribe to ``pipeline.stage-complete.>`` (idempotent).
 
-        DDR-027: ephemeral push consumer with ``deliver_policy=NEW``.
+        DDR-027 (revised 2026-05-01 / TASK-FRR-001): ephemeral push
+        consumer with ``deliver_policy=ALL``. Workqueue retention on the
+        canonical PIPELINE stream rejects ``DeliverPolicy.NEW`` with
+        ``code=10101 consumer must be deliver all on workqueue stream``;
+        the no-replay-on-restart UX the original DDR-027 wanted is
+        preserved structurally instead — see the module-level rationale
+        block by ``_get_deliver_policy_all``.
+
         Auto-ack — the subscriber does not call ``msg.ack()`` because
         ``manual_ack=False`` is the default and the JetStream context
         will ack each delivery once the callback returns.
@@ -388,14 +423,14 @@ class ForgeNotificationsSubscriber:
             return
 
         js: JetStreamContext = self._nats_client.js
-        deliver_policy_new = _get_deliver_policy_new()
+        deliver_policy_all = _get_deliver_policy_all()
         stage_complete_subject = _get_stage_complete_subject()
 
         self._subscription = await js.subscribe(
             stage_complete_subject,
             cb=self._on_message,
             ordered_consumer=False,
-            deliver_policy=deliver_policy_new,
+            deliver_policy=deliver_policy_all,
         )
         self._started = True
         logger.info(

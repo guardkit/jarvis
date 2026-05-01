@@ -258,6 +258,68 @@ def app_state() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Canonical NATS provisioning helper — mirrors what
+# ``nats-infrastructure/streams/provision-streams.sh`` and
+# ``nats-infrastructure/kv/provision-kv.sh`` do at infra deploy time.
+#
+# The in-process broker the ``nats_test_server`` fixture spins up starts
+# completely bare. Before TASK-FRR-001 jarvis (via nats_core) used
+# ``js.create_key_value(bucket=...)`` which silently auto-created the
+# ``agent-registry`` bucket on first use — so a bare broker was fine.
+# Switching to lookup-only (so jarvis interoperates with the canonical
+# infra without a config-mismatch BadRequestError) made the contract
+# direction explicit: the bucket / streams MUST be pre-provisioned. The
+# fixture mirrors that production contract by calling this helper once
+# at setup so existing tests (test_fleet_registration_integration,
+# test_capabilities_real, etc.) keep their original semantics.
+#
+# Provisioning is idempotent — tests that re-assert the canonical config
+# from inside the test body (test_lifecycle_nats_subscriptions) succeed
+# because nats-py treats matching-config (re)creates as no-ops.
+# ---------------------------------------------------------------------------
+async def _provision_canonical_streams_and_buckets(client: Any) -> None:
+    """Provision the canonical agent-registry KV + PIPELINE stream.
+
+    Mirrors:
+    * ``nats-infrastructure/kv/kv-definitions.json`` (agent-registry:
+      ``history=5``, ``max_value_size=256KB``, ``storage=file``,
+      ``replicas=1``).
+    * ``nats-infrastructure/streams/stream-definitions.json`` (PIPELINE:
+      ``subjects=["pipeline.>"]``, ``retention=workqueue``, ``storage=file``).
+
+    Args:
+        client: A connected :class:`NATSClient` whose ``.client``
+            attribute exposes the underlying nats-py async connection.
+    """
+    from nats.js.api import (
+        KeyValueConfig,
+        RetentionPolicy,
+        StorageType,
+        StreamConfig,
+    )
+
+    js = client.client.jetstream()
+    await js.create_key_value(
+        config=KeyValueConfig(
+            bucket="agent-registry",
+            history=5,
+            max_value_size=256 * 1024,
+            storage=StorageType.FILE,
+            replicas=1,
+        )
+    )
+    await js.add_stream(
+        config=StreamConfig(
+            name="PIPELINE",
+            subjects=["pipeline.>"],
+            retention=RetentionPolicy.WORK_QUEUE,
+            storage=StorageType.FILE,
+            num_replicas=1,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # nats_test_server — in-process JetStream-enabled NATS broker for integration
 # tests (TASK-J004-014, FEAT-JARVIS-004 Phase 3 floor capability).
 #
@@ -386,6 +448,19 @@ async def nats_test_server(
                 f"NATSClient.connect returned None for {nats_url} — "
                 "in-process broker handshake failed"
             )
+
+        # Pre-provision the canonical streams / KV that ``nats-infrastructure``
+        # provisions in production (TASK-FRR-001). nats_core's
+        # ``NATSKVManifestRegistry.create`` is now lookup-only against the
+        # ``agent-registry`` bucket and the canonical PIPELINE stream is
+        # ``retention=workqueue``; a bare in-process broker has neither, so
+        # tests that exercise those paths would surface ``BucketNotFoundError``
+        # / ``StreamNotFoundError`` instead of the production failure modes.
+        # Provisioning here is idempotent — tests that re-assert the same
+        # config (e.g. ``test_lifecycle_nats_subscriptions``) succeed; tests
+        # that don't touch these surfaces (e.g. ``test_routing_e2e``) pay only
+        # the negligible cost of the two creates.
+        await _provision_canonical_streams_and_buckets(client)
 
         yield client
     finally:
