@@ -11,7 +11,7 @@ id: TASK-FRR-003
 implementation_mode: task-work
 parent_runbook_results: docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md
 priority: medium
-status: backlog
+status: in_progress
 tags:
 - jarvis
 - feat-jarvis-internal-001-followups
