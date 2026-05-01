@@ -578,9 +578,22 @@ class RoutingHistoryWriter:
            — fire-and-forget; this method awaits the *submission*.
         5. Any failure logs ``WARN routing_history_write_failed
            reason=<err>`` and is swallowed.
+
+        DDR-019 soft-fail offload (TASK-FRR-003): when the writer was
+        constructed with ``graphiti_client=None`` (Graphiti endpoint
+        unset or unreachable at startup), the entry is offloaded to
+        ``<traces_dir>/<correlation_id>.json`` so that a future
+        rehydration tool can replay it once Graphiti is reachable
+        again. Successful offload emits
+        ``routing_history_offloaded_locally``; both-paths-failed emits
+        ``routing_history_offload_failed`` carrying both error paths.
+        See :meth:`_offload_to_local_filesystem_soft_fail` for the
+        on-disk shape.
         """
         if self._graphiti_client is None:
-            self._warn_graphiti_unavailable_once()
+            self._offload_to_local_filesystem_soft_fail(
+                entry, graphiti_error="graphiti_endpoint_unset"
+            )
             return
 
         try:
@@ -613,9 +626,16 @@ class RoutingHistoryWriter:
         5. Failures log ``WARN routing_history_write_failed
            reason=<err>`` per DDR-019 and are swallowed — the writer
            never raises.
+
+        DDR-019 soft-fail offload (TASK-FRR-003): when
+        ``graphiti_client`` is ``None``, the entry is written to
+        ``<traces_dir>/<correlation_id>.json`` instead of being
+        dropped. See :meth:`_offload_to_local_filesystem_soft_fail`.
         """
         if self._graphiti_client is None:
-            self._warn_graphiti_unavailable_once()
+            self._offload_to_local_filesystem_soft_fail(
+                entry, graphiti_error="graphiti_endpoint_unset"
+            )
             return
 
         # Register the correlation BEFORE submitting so that a
@@ -774,7 +794,15 @@ class RoutingHistoryWriter:
     # ------------------------------------------------------------------
 
     def _warn_graphiti_unavailable_once(self) -> None:
-        """Emit ``WARN`` exactly once per writer instance."""
+        """Emit ``WARN`` exactly once per writer instance.
+
+        Used by :meth:`append_build_queue_event` for stage-complete edges.
+        Edges are dict events, not :class:`JarvisRoutingHistoryEntry`
+        records, so there's no canonical-payload offload path for them
+        (TASK-FRR-003 scope was the dispatch-write entries only). The
+        once-per-instance dedup keeps the operator log clean when
+        Graphiti is down for an extended period.
+        """
         if self._graphiti_unavailable_warned:
             return
         logger.warning(
@@ -782,6 +810,98 @@ class RoutingHistoryWriter:
             extra={"reason": "graphiti_unavailable"},
         )
         self._graphiti_unavailable_warned = True
+
+    def _offload_to_local_filesystem_soft_fail(
+        self,
+        entry: JarvisRoutingHistoryEntry,
+        *,
+        graphiti_error: str,
+    ) -> None:
+        """Write ``entry`` to ``<traces_dir>/<correlation_id>.json`` (DDR-019).
+
+        TASK-FRR-003 (DDR-019 soft-fail offload). When the writer was
+        constructed with ``graphiti_client=None`` — i.e. Graphiti was
+        unreachable at startup or the endpoint was not configured —
+        the dispatch-write entry is offloaded to local disk so that a
+        future rehydration tool can replay it once Graphiti is
+        reachable. Without this, the trace is silently dropped on the
+        floor (the pre-fix behaviour observed during the GB10 first
+        real run, 2026-05-01, correlation_id
+        ``a58ec9a7-27c6-485a-beac-e18675639a10``).
+
+        First-write autocreate: the configured ``jarvis_traces_dir`` is
+        created with ``mkdir(parents=True, exist_ok=True)`` lazily on
+        the first write. We chose first-write over startup creation so
+        that a misconfigured ``JARVIS_TRACES_DIR`` (e.g. a path under
+        a read-only parent) does not crash supervisor startup — the
+        failure surfaces here, scoped to a single trace, and the
+        operator gets a structured log event documenting both the
+        graphiti error and the local-write error.
+
+        Filename: ``<correlation_id>.json``, where ``correlation_id``
+        is :attr:`JarvisRoutingHistoryEntry.subagent_task_id`. This is
+        the nats-core correlation_id for ``specialist`` dispatches and
+        the ``BuildQueuedPayload.correlation_id`` for
+        ``forge_build_queue`` dispatches per the schema docstring.
+
+        On-disk content: the redacted (per ADR-ARCH-029) full entry
+        payload, JSON-encoded with ``sort_keys=True``. Round-trips
+        through :meth:`JarvisRoutingHistoryEntry.model_validate_json`
+        per DDR-029 — non-negotiable, because downstream rehydration
+        tooling deserialises with that method.
+
+        Logging contract:
+
+        * Success → ``WARN routing_history_offloaded_locally`` with
+          ``correlation_id``, ``traces_dir``, ``path``, and
+          ``graphiti_error``. One event per write — no dedup, because
+          the on-disk file count must match the audit-trail count.
+        * Failure → ``WARN routing_history_offload_failed`` with
+          ``correlation_id``, ``traces_dir``, ``graphiti_error`` AND
+          ``local_error``. This is the new "trace genuinely lost"
+          event — operationally distinct from the success case.
+
+        Never raises.
+        """
+        traces_dir = Path(self._config.jarvis_traces_dir)
+        correlation_id = entry.subagent_task_id
+        path = traces_dir / f"{correlation_id}.json"
+
+        try:
+            # Apply redaction at the write boundary on a deep copy so the
+            # frozen entry is never mutated (ADR-ARCH-029 + DDR-018 seam).
+            data = entry.model_dump(mode="json")
+            data = _redact_recursive(data)
+            content = json.dumps(data, sort_keys=True)
+
+            # First-write autocreate. ``parents=True`` covers the case
+            # where ``JARVIS_TRACES_DIR`` is several levels deep and the
+            # operator hasn't pre-created the chain.
+            traces_dir.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        except Exception as local_exc:  # DDR-019: never raise — log + return
+            logger.warning(
+                "routing_history_offload_failed",
+                extra={
+                    "correlation_id": correlation_id,
+                    "traces_dir": str(traces_dir),
+                    "graphiti_error": graphiti_error,
+                    "local_error": (
+                        f"{type(local_exc).__name__}: {local_exc}"
+                    ),
+                },
+            )
+            return
+
+        logger.warning(
+            "routing_history_offloaded_locally",
+            extra={
+                "correlation_id": correlation_id,
+                "traces_dir": str(traces_dir),
+                "path": str(path),
+                "graphiti_error": graphiti_error,
+            },
+        )
 
     async def _write_entry(self, entry: JarvisRoutingHistoryEntry) -> None:
         """Inline-or-offload write path. Caller wraps the broad catch."""

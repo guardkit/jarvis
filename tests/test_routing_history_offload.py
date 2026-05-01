@@ -41,9 +41,9 @@ from jarvis.infrastructure.routing_history import (
 # JarvisConfig with a dotenv-isolated ``patch.dict`` and _build_entry
 # returns a minimal valid entry.
 from tests.test_routing_history_writer import (
-    _RecordingGraphitiClient,
     _build_entry,
     _make_config,
+    _RecordingGraphitiClient,
 )
 
 
