@@ -14,6 +14,7 @@
 - ✅ FEAT-JARVIS-INTERNAL-001 merged to `jarvis` `main`
 - ✅ FCH-001 canonical NATS provisioning artefacts shipped in `nats-infrastructure` (compose, provision-streams.sh, provision-kv.sh)
 - ✅ FEAT-FORGE-009 production image + `forge serve` daemon merged to `forge` `main` (`732408f`, 2026-05-01)
+- ⚠️ **FEAT-FORGE-XXX (orchestrator wiring) — REQUIRED for Phase 7 close** — currently being scoped through `/feature-spec` + `/feature-plan` against `forge/docs/research/forge-orchestrator-wiring-gap.md`. F009 alone ships only the daemon process container; the orchestrator chain (Supervisor + dispatchers + autobuild_runner subagent + PipelineLifecycleEmitter) that actually runs autobuilds and publishes lifecycle events is wired by this new feature. **Do not run this runbook expecting Phase 7 to pass until FEAT-FORGE-XXX has merged.** See "Phase 7 expectations" below for the per-stage envelope sequence the new feature delivers.
 - ✅ specialist-agent architect role NATS-callable (live verification per TASK-REV-B8E4)
 - ✅ nats-core 0.2.0 with `BuildQueuedPayload` schema (`pipeline.build-queued.{feature_id}`)
 
@@ -53,7 +54,7 @@ Confirm the assumptions baked into this runbook still hold before executing:
 |---|---|---|
 | `jarvis` | `main` includes `2864173` (FEAT-JARVIS-INTERNAL-001 close) | 2026-05-01 |
 | `nats-infrastructure` | Has `docker-compose.yml` + `streams/provision-streams.sh` + `kv/provision-kv.sh`. Streams: PIPELINE, AGENTS, JARVIS, FLEET, NOTIFICATIONS, SYSTEM, FINPROXY. KV: agent-status, agent-registry, pipeline-state, jarvis-session. | 2026-05-01 |
-| `forge` | `main` includes `732408f` (FEAT-FORGE-009 production image + `forge serve`) and `225d279` (feat-complete chore). `pyproject.toml` declares `nats-core>=0.3.0,<0.4` but the active install resolves via `[tool.uv.sources] nats-core = "../nats-core"` (editable). | 2026-05-01 |
+| `forge` | `main` includes `732408f` (FEAT-FORGE-009 production image + `forge serve`) and `225d279` (feat-complete chore). `pyproject.toml` declares `nats-core>=0.3.0,<0.4` but the active install resolves via `[tool.uv.sources] nats-core = "../nats-core"` (editable). **For Phase 7 to close, also requires the orchestrator-wiring feature merge** — see "FEAT-FORGE-XXX" predecessor row above. F009 alone ships only the daemon process; the orchestrator chain it hosts (Supervisor + dispatchers + autobuild_runner subagent + PipelineLifecycleEmitter) is wired by the new feature. As of 2026-05-02 the new feature is being scoped through `/feature-spec`; until it merges, expect Phase 7 to fail in the way RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md captures (consumer info shows `delivered=N, acked=N`, but `pipeline.stage-complete.*` is empty and the chat REPL drains zero notifications). | 2026-05-01 (F009 portion); pending (orchestrator-wiring portion) |
 | `nats-core` | Sibling of forge. Version `0.2.0`. `BuildQueuedPayload` defined at `src/nats_core/events/_pipeline.py:265`. **Note:** the formal schema does not declare `task_id`/`mode` — `ConfigDict(extra="allow")` permits them as untyped extras. **Not relevant for FEAT-JARVIS-INTERNAL-001 (Mode B).** | 2026-05-01 |
 | `specialist-agent` | Architect role NATS-callable (verified TASK-REV-B8E4). PO role recently fixed (TASK-MDF-PORT/POLR Apr 17) but **not required for this run** — FEAT-JARVIS-INTERNAL-001 is documentation-only and dispatches no PO work. | 2026-05-01 |
 
@@ -345,9 +346,11 @@ ssh promaxgb10-41b1 'docker exec -i $(docker ps -qf name=nats) \
 
 ---
 
-## Phase 7: Stage-complete events arrive in chat as between-prompt notifications
+## Phase 7: Real per-stage lifecycle events arrive in chat as between-prompt notifications
 
-The REPL from 6.1 should still be open. Forge is now autobuilding (or short-circuiting — see operator decision note above). Either way, `pipeline.stage-complete` messages should flow back, and the chat REPL drains `pending_notifications(session_id)` before each new input prompt.
+> **What this phase tests changed on 2026-05-02.** The 2026-05-01 walkthrough (results captured in `RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md`) failed Phase 7 because nothing on the forge side publishes any lifecycle envelope back today — F009 ships a receipt-only stub at `_serve_daemon._default_dispatch`. The follow-up forge-side task FRR-001 was filed assuming "wire dispatch_payload" was a one-day fix; Phase 2.8 design investigation discovered the entire orchestration chain is unwired in production and re-scoped the work to a feature (`forge/docs/research/forge-orchestrator-wiring-gap.md`). Phase 7 now tests for the **real per-stage envelope sequence** that feature delivers, not the receipt-only behaviour F009 actually shipped or the synthetic single-envelope FRR-001 was originally going to ship. **If FEAT-FORGE-XXX (orchestrator wiring) has not merged, expect Phase 7 to fail in the same shape as the 2026-05-01 run** — capture verbatim and stop.
+
+The REPL from 6.1 should still be open. Forge is now autobuilding (or short-circuiting cleanly via the supervisor's "no work to do" terminal path — see operator decision note in 6.1). Either way, the **full lifecycle envelope sequence** should flow back from `pipeline_consumer.handle_message` → `Supervisor.process_build` → `autobuild_runner` AsyncSubAgent → `PipelineLifecycleEmitter`, and the chat REPL drains `pending_notifications(session_id)` before each new input prompt.
 
 ### 7.1 Trigger a notification drain
 
@@ -357,28 +360,83 @@ In the REPL, type a small follow-up — anything that produces a new prompt cycl
 > What's happening with that build?
 ```
 
-**Pass:** Before the supervisor's response, one or more rendered notification lines appear in the format:
+**Pass criteria — the rendered notification sequence must include all three of:**
 
-```text
-[HH:MM] Forge FEAT-JARVIS-INTERNAL-001: stage <stage_label> (<status>)
+1. **At least one `build-started` line**, fired when the autobuild dispatch begins (one per build):
+
+   ```text
+   [HH:MM] Forge FEAT-JARVIS-INTERNAL-001: build-started (RUNNING)
+   ```
+
+2. **One or more `stage-complete` lines**, one per real stage transition the autobuild orchestrator records in `stage_log`. The exact stage-label sequence depends on the build mode (Mode A / B / C) and what the autobuild actually does on this feature, but the format is:
+
+   ```text
+   [HH:MM] Forge FEAT-JARVIS-INTERNAL-001: stage <stage_label> (<status>)
+   ```
+
+   Where `<stage_label>` is a `forge.pipeline.stage_taxonomy.StageClass` value (e.g. `PLAN`, `AUTOBUILD`, `PR_REVIEW`) and `<status>` is one of `PASSED`, `FAILED`, `GATED`, `SKIPPED` per the `StageCompletePayload` schema.
+
+3. **One terminal line** — either `build-complete` (status `PASSED`) or `build-failed` (with `failure_reason`) — fired when the autobuild reaches a terminal lifecycle state. Format:
+
+   ```text
+   [HH:MM] Forge FEAT-JARVIS-INTERNAL-001: build-complete (PASSED)
+   ```
+
+   or
+
+   ```text
+   [HH:MM] Forge FEAT-JARVIS-INTERNAL-001: build-failed (<failure_reason>)
+   ```
+
+**Capture every line verbatim, in order.** This is the sequence the new orchestrator-wiring feature commits the chat REPL to threading by `correlation_id` — anything other than this shape (e.g. only one envelope, or out-of-order envelopes, or the `build-started` envelope missing) is a regression worth folding to a follow-up.
+
+**Hard rejects (do NOT mark Phase 7 as passing if any of these is true):**
+- Only one `stage-complete` envelope arrives, with `stage_label="dispatch"` — that was the **synthetic placeholder** the abandoned FRR-001 design was going to ship. The real feature must publish per-stage transitions from inside the autobuild_runner subagent, not a single envelope from the daemon dispatcher. If you see only the dispatch-stage envelope, check that the merge actually included the orchestrator-wiring feature (not just a partial FRR-001 reset).
+- The `correlation_id` on any of the rendered envelopes does not equal the `correlation_id` jarvis published in 6.2 — breaks DDR-029's notification-thread contract.
+- Notifications arrive but are not drained before the supervisor's response — breaks the between-prompt rendering contract jarvis-side (see DDR-030).
+
+### 7.2 Verify the envelope sequence on the wire (forge side)
+
+In a third SSH session, tail the published lifecycle envelopes directly off JetStream rather than relying on the forge container's stdout:
+
+```bash
+ssh promaxgb10-41b1 'nats sub "pipeline.>" --raw' | \
+    grep -i "<correlation_id_from_6.2>" | \
+    tee /tmp/forge-pipeline-envelopes-phase7.log
 ```
 
-Capture every such line verbatim. The expected sequence depends on what forge actually does with an already-merged feature — record what you see, not what you expect.
+**Pass:** The wire shows the same lifecycle sequence the chat REPL rendered in 7.1, in the same order, with the same `correlation_id`. Specifically:
 
-### 7.2 Tail the forge container logs for the same correlation_id
+```
+pipeline.build-started.FEAT-JARVIS-INTERNAL-001
+pipeline.stage-complete.FEAT-JARVIS-INTERNAL-001       (one per stage transition; N >= 1)
+pipeline.stage-complete.FEAT-JARVIS-INTERNAL-001
+...
+pipeline.build-complete.FEAT-JARVIS-INTERNAL-001       (or build-failed)
+```
 
-In a third SSH session:
+`nats consumer info PIPELINE forge-serve -j` should also show `delivered=1, acked=1, num_pending=0, num_redelivered=0` for the inbound `build-queued` message — the deferred-ack contract means the message is acked only on the **terminal** lifecycle transition, so this confirms the orchestrator drove the build all the way through.
+
+### 7.3 Tail the forge container logs for the same correlation_id
+
+In a fourth session:
 
 ```bash
 ssh promaxgb10-41b1 'docker logs -f forge-prod 2>&1 | grep -i "<correlation_id_from_6.2>"' | \
     tee /tmp/forge-events-phase7.log
 ```
 
-**Pass:** Forge logs show the correlation_id consuming from JetStream and at least one stage-complete publish back. Capture log tail.
+**Pass:** Forge logs show the correlation_id consuming from JetStream, the autobuild_runner subagent launch, each per-stage emit_stage_complete call, and the terminal build-complete/build-failed publish. Capture log tail.
 
-**If no stage-complete events arrive after ~5 minutes:** check forge container logs in the third session — likely either:
-- forge subscribed but failed to dispatch (autobuild error): capture the exception in RESULTS, fold to a follow-up task.
-- forge consumed but didn't publish back (publish topic / connection broken): reproduce the LES1 CMDW pattern. Stop and fix before re-running.
+**If the lifecycle envelope sequence is missing or incomplete after ~5 minutes**, the failure mode tells you where the gap is:
+
+| Symptom on the wire | Likely cause | Action |
+|---|---|---|
+| **No envelopes at all**; consumer info shows `delivered=1, acked=1` (the F009-only baseline from 2026-05-01) | The orchestrator-wiring feature has not merged. The daemon is still on the receipt-only `_default_dispatch` stub. | Confirm `git log` on the forge image's source includes the FEAT-FORGE-XXX commits. If not, the runbook's preconditions row was not satisfied; stop and re-build the image. |
+| **Only one `stage-complete` envelope** with `stage_label="dispatch"`, no `build-started`, no terminal | A stub of the abandoned FRR-001 design was deployed instead of the real feature. | Check the deployed image — should NOT contain the synthetic dispatch-stage publish. If it does, that's a misroll; redeploy with the real feature image. |
+| **`build-started` arrives but no per-stage `stage-complete`**; long delay then `build-failed` | The autobuild_runner subagent dispatched but failed internally. | Capture the forge container logs (Phase 7.3) for the autobuild traceback. Fold to a follow-up against the autobuild_runner. |
+| **Per-stage `stage-complete` arrives but no terminal** | The autobuild reached its terminal state but `emit_build_complete`/`emit_build_failed` did not fire. The deferred-ack contract means JetStream will redeliver the inbound `build-queued` message after `ack_wait` (1 hour). | Capture forge logs; the orchestrator's terminal-transition path is broken. Fold to a follow-up. |
+| **All envelopes arrive but `correlation_id` doesn't match what jarvis published** | The publisher is not threading `correlation_id` through the lifecycle emitter. | Capture both the inbound and outbound envelopes; reproduce the LES1 CMDW pattern. Stop and fix before re-running. |
 
 ---
 
@@ -462,8 +520,9 @@ Mirror the runbook's phase structure with a `Phase | Gate | Outcome | Evidence` 
 | 5.2 | tool inventory smoke | ✅ | REPL transcript |
 | 6.2 | queue_build returns success | ✅ | REPL transcript |
 | 6.3 | message visible on PIPELINE stream | ✅ | nats stream view |
-| 7.1 | between-prompt notifications render | ✅ | REPL transcript |
-| 7.2 | forge logs show consume + publish-back | ✅ | /tmp/forge-events-phase7.log |
+| 7.1 | between-prompt notifications render full lifecycle sequence (`build-started` + `stage-complete`×N + `build-complete`/`build-failed`, all threaded by same `correlation_id`) | ✅ | REPL transcript |
+| 7.2 | wire shows the same lifecycle sequence on JetStream subjects in the same order | ✅ | /tmp/forge-pipeline-envelopes-phase7.log |
+| 7.3 | forge container logs show autobuild_runner subagent launch + per-stage emit_stage_complete + terminal publish | ✅ | /tmp/forge-events-phase7.log |
 | 8.x | evidence captured | ✅ | file paths |
 
 ## Runbook gaps discovered (gap-fold candidates)
