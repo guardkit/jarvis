@@ -2414,3 +2414,61 @@ nats sub "pipeline.>" --raw &     # tail outbound envelopes per run
   sleep 90 ) | timeout 240 .venv/bin/jarvis chat
 ```
 
+
+---
+
+## 2026-05-04 — Joint live-wire validation rerun after F010.A–D (late afternoon)
+
+**Forge HEAD:** `a7eb9d5` (4 commits on top of TASK-FIX-F010: F010A migrations + F010B StageLogReader + F010C correlation_id + F010D-forge recovery)
+**Jarvis HEAD:** working tree (F010D-jarvis applied — Option A widening to `pipeline.>`)
+**Image rebuilt:** `forge:latest` = sha256 `2ae6f655ad08...`
+**Outcome:** 🟡 4 of 5 implementations verified live; 1 regression (F010.D-jarvis Option A → workqueue consumer overlap); 1 new gap (F010.E — `'StructuredTool' object has no attribute 'start_async_task'`).
+
+```bash
+# Wipe SQLite to verify F010.A migrations-on-boot
+rm -f ~/forge-state/forge.db ~/forge-state/forge.db-shm ~/forge-state/forge.db-wal
+
+# Rebuild forge image with F010 fixes (4 commits)
+cd ~/Projects/appmilla_github/forge
+docker buildx build --build-context nats-core=../nats-core \
+    -t forge:production-validation -t forge:latest -f Dockerfile .
+
+# Restart forge-prod (verifies F010.A live: "applied 2 SQLite migration(s) at boot" log line)
+docker rm -f forge-prod 2>/dev/null
+docker run -d --name forge-prod --network host \
+    -e FORGE_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+    -e FORGE_HEALTHZ_PORT=8088 -e FORGE_LOG_LEVEL=info \
+    -e FORGE_DB_PATH=/var/forge/forge.db \
+    -v ~/forge-state:/var/forge \
+    -v ~/forge-state/forge.yaml:/home/forge/forge.yaml:ro \
+    -v ~/Projects/appmilla_github/jarvis:~/Projects/appmilla_github/jarvis:ro \
+    forge:latest --config /home/forge/forge.yaml serve
+
+# Drive jarvis chat (surfaces F010.D-jarvis regression in boot log + Gap F010.E in dispatch path)
+( echo 'Queue FEAT-43DE for build. The feature YAML is at .guardkit/archive/FEAT-43DE/feature_state.yaml on the main branch of guardkit/jarvis.'
+  sleep 90
+  echo "What is happening with that build?"
+  sleep 90 ) | timeout 240 .venv/bin/jarvis chat
+
+# Verify F010.C correlation_id threading via synthetic publish (forces allowlist-rejection codepath)
+nats sub "pipeline.build-failed.>" --raw &
+CORR=$(uuidgen)
+TS=$(date -u +%Y-%m-%dT%H:%M:%S.%6NZ)
+ENVELOPE=$(jq -nc --arg cid "$CORR" --arg mid "$(uuidgen)" --arg ts "$TS" '{message_id:$mid,timestamp:$ts,version:"1.0",source_id:"jarvis",event_type:"build_queued",project:null,correlation_id:$cid,payload:{feature_id:"FEAT-43DE",repo:"guardkit/jarvis",branch:"main",feature_yaml_path:"/etc/passwd",max_turns:5,sdk_timeout_seconds:1800,wave_gating:false,config_overrides:null,triggered_by:"jarvis",originating_adapter:"terminal",originating_user:null,correlation_id:$cid,parent_request_id:null,retry_count:0,requested_at:$ts,queued_at:$ts,task_id:null,mode:"mode-a"}}')
+nats pub "pipeline.build-queued.FEAT-43DE" "$ENVELOPE"
+# → outbound pipeline.build-failed.FEAT-43DE with correlation_id MATCHING (F010.C verified)
+```
+
+### Findings recap
+
+- **F010.A ✅** — `applied 2 SQLite migration(s) at boot` is the new first log line; fresh `forge.db` recreated cleanly.
+- **F010.B ✅** — `build_stage_log_reader: composed SQLite-backed StageLogReader` log line; dispatcher reaches `dispatching autobuild` without the prior `get_approved_stage_entry` AttributeError.
+- **F010.C ✅** — synthetic publish with `feature_yaml_path=/etc/passwd` (forces allowlist rejection — the only outbound codepath exercised today since F010.E blocks autobuild) round-trips the inbound `correlation_id` correctly. Compare with morning run's `correlation_id: null`.
+- **F010.D-forge ✅** — code review + AST lint guard test confirmed; not directly observed live (no PREPARING recovery case fired).
+- **F010.D-jarvis ⚠️ regression** — Option A (widen to `pipeline.>`) overlaps with forge-serve's `pipeline.build-queued.>` filter on the same workqueue stream → JetStream rejects with `err_code=10100 'filtered consumer not unique on workqueue stream'`. Jarvis subscriber fails to bind; no notifications can render. **Fix shape:** switch to Option B (explicit four-subject set excluding `build-queued`). The implementer's renderer/payload-handling code is correct — only the filter constant + `subscribe()` call need to change.
+- **Gap F010.E** (NEW) — `'StructuredTool' object has no attribute 'start_async_task'` exposed once F010.B fixed the persistence-layer AttributeError. The autobuild dispatcher calls `tool.start_async_task(...)` on a LangChain `StructuredTool`, which exposes `tool.invoke(...)` instead. Wiring drift between FW10-008 and the dispatcher's expected tool API.
+
+### Documents updated
+
+- `docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md` — appended **Addendum 2** with full per-fix verification, regression diagnosis (F010.D-jarvis), new gap (F010.E), and updated follow-up list. Document is now 455 lines covering three same-day reruns: morning (post-FRR-001..004), evening 1 (post-TASK-FIX-F010), late afternoon (post-F010.A-D).
+

@@ -32,13 +32,19 @@ These four follow-ups are scoped to jarvis (or jarvis-owned docs). Forge-side fo
 
 ## Post-TASK-FIX-F010 follow-up (2026-05-04 evening)
 
-Once the four tasks above all merged, a fresh GB10 rerun was executed (`docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md` — addendum at the bottom). The rerun closed every jarvis-side gap from the 2026-05-01 baseline; the remaining failure was a forge-side production-binding gap (`compose_dispatch_chain` not rebound to `bind_production_dispatch_chain` in `serve_cmd`) which was tracked and closed forge-side as **TASK-FIX-F010**. Once exercised end-to-end, the post-FIX-F010 rerun surfaced four new gaps — three forge-side (**F010.A** schema-bootstrap on fresh `FORGE_DB_PATH`, **F010.B** `SqliteLifecyclePersistence.get_approved_stage_entry` AttributeError in the autobuild dispatcher, **F010.C** outbound `correlation_id` threading) tracked in the forge repo, and one jarvis-side (**F010.D** — this folder, see the row below) which is the only post-FIX-F010 task that lives here.
+Once the four tasks above all merged, a fresh GB10 rerun was executed (`docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md` — addendum at the bottom). The rerun closed every jarvis-side gap from the 2026-05-01 baseline; the remaining failure was a forge-side production-binding gap (`compose_dispatch_chain` not rebound to `bind_production_dispatch_chain` in `serve_cmd`) which was tracked and closed forge-side as **TASK-FIX-F010**. Once exercised end-to-end, the post-FIX-F010 rerun surfaced four new gaps — three forge-side (**F010.A** schema-bootstrap on fresh `FORGE_DB_PATH`, **F010.B** `SqliteLifecyclePersistence.get_approved_stage_entry` AttributeError in the autobuild dispatcher, **F010.C** outbound `correlation_id` threading) tracked in the forge repo, and one jarvis-side (**F010.D** — this folder, see the rows below) which is the only post-FIX-F010 task that lives here.
+
+A second joint live-wire validation rerun on **2026-05-04 late afternoon** (see Addendum 2 of the same RESULTS file) revealed that:
+
+- **F010.D's first pass landed real work** — the renderer / payload-discriminator / source-id-gate are all correct and stay in place — **but its Option A choice (widening the filter to `pipeline.>`) regressed boot-time subscriber binding**. Option A's wildcard is a superset of `forge-serve`'s existing `pipeline.build-queued.>` filter on the workqueue-retention PIPELINE stream, and JetStream's workqueue policy forbids overlapping filters across consumers — the bind is rejected with `BadRequestError code=400 err_code=10100 description='filtered consumer not unique on workqueue stream'`. **TASK-FRR-F010Db** (filed below) amends the filter to Option B (the explicit four-subject lifecycle set excluding `build-queued`), which has identical rendering coverage and is non-overlapping.
+- **The companion forge-side gap analysis is in two new forge tasks** filed in parallel — **TASK-FORGE-FRR-F010E** (forge-side `StructuredTool.start_async_task` gap blocking the full per-stage envelope sequence) and **TASK-FORGE-FRR-F010F** — both tracked in the forge repo. F010Db is **independent** of F010.E and lands first; once F010Db lands, jarvis renders `build-failed` envelopes from forge's path-rejection codepath (already on the wire today per F010.C). Cross-link: RESULTS Addendum 2.
 
 | # | Task | Title | Status | Priority | Complexity | Mode |
 |---|---|---|---|---|---|---|
-| 5 | [TASK-FRR-F010D](TASK-FRR-F010D-widen-forge-subscriber-subject-filter.md) | Widen `forge_subscriber` subject filter from `pipeline.stage-complete.>` to cover `build-started`/`build-complete`/`build-failed` | backlog | high | 2 | task-work (TDD) |
+| 5 | [TASK-FRR-F010D](../../completed/feat-jarvis-internal-001-followups/TASK-FRR-F010D-widen-forge-subscriber-subject-filter.md) | Widen `forge_subscriber` subject filter from `pipeline.stage-complete.>` to cover `build-started`/`build-complete`/`build-failed` | completed (filter choice amended by F010Db) | high | 2 | task-work (TDD) |
+| 6 | [TASK-FRR-F010Db](TASK-FRR-F010Db-narrow-forge-subscriber-to-explicit-lifecycle-subjects.md) | Narrow `forge_subscriber` from `pipeline.>` (Option A) to explicit lifecycle subjects (Option B) to avoid workqueue consumer overlap | backlog | high | 2 | task-work (TDD) |
 
-Total: 5 tasks, aggregate complexity 15/50 (4 completed, 1 backlog).
+Total: 6 tasks, aggregate complexity 17/50 (5 completed, 1 backlog).
 
 ### Independence and ordering
 

@@ -292,3 +292,164 @@ All under `/tmp/runbook-evidence-rerun-2026-05-04-postfix/`:
 - Transcripts: `~/.jarvis/transcripts/{21df1258,b5c5e1e2,a55df422,f876fd47}-...txt` (4 files; the latest one — `f876fd47` — is the most informative because run 4 reached the deepest point in the dispatch chain)
 - Routing-history offloads (FRR-003): `~/.jarvis/traces/{21df1258,b5c5e1e2,a55df422,f876fd47}-...json` (4 files, all 1124 bytes, full DDR-029 schema)
 
+
+---
+
+# Addendum 2: Joint live-wire validation rerun after F010.A–D (2026-05-04, late afternoon)
+
+**Forge HEAD when re-run:** `a7eb9d5` (post `c066033 F010A` + `751995f F010B` + `172c795 F010C` + `795d13d` F010D-forge-file + `a7eb9d5 F010D-forge` PREPARING-recovery threading)
+**Jarvis HEAD when re-run:** working tree (F010D-jarvis applied; tests passing per implementer summary; uncommitted)
+**Image rebuilt:** `forge:latest` = sha256 `2ae6f655ad08...`
+**Run window:** 2026-05-04 ~12:22 → ~12:28 UTC (1 chat-driven queue + 1 synthetic publish for F010.C verification)
+**correlation_ids:**
+1. `dfad8e7f-92af-4b5f-896f-ca75ad8343bf` — chat-driven queue, end-to-end through dispatcher
+2. `45f04289-95e2-4710-9d59-764b7fccf86b` — synthetic `nats pub` with `feature_yaml_path=/etc/passwd` to force allowlist rejection (only way to observe an outbound `build-failed` envelope on the wire today)
+
+**Outcome:** 🟡 **Mixed.** 4 of 5 implementations verified live on the wire; 1 regression discovered on the F010.D-jarvis side; 1 new forge-side gap surfaced once F010.B unblocked the next layer of wiring drift.
+
+## Verified live (4 of 5)
+
+### ✅ F010.A — `bind_production_serve` applies SQLite migrations at boot
+
+**Evidence:** Wiped `~/forge-state/forge.db` (and WAL files) before docker run. New first log line on boot:
+
+```
+2026-05-04T12:22:13 [INFO] forge.cli._serve_production: forge-serve: applied 2 SQLite migration(s) at boot
+```
+
+`sqlite3 ~/forge-state/forge.db ".tables"` after boot shows the canonical 5 tables (`async_tasks`, `builds`, `stage_log`, `sqlite_sequence`, `schema_version`). The previous rerun's manual `docker exec ... apply_at_boot` workaround is gone; daemon is self-bootstrapping.
+
+### ✅ F010.B — `'SqliteLifecyclePersistence' object has no attribute 'get_approved_stage_entry'` resolved via StageLogReader adapter
+
+**Evidence:** New `build_stage_log_reader` step appears in the deps composition log sequence:
+
+```
+2026-05-04T12:22:13 [INFO] forge.cli._serve_deps_forward_context: build_stage_log_reader: composed SQLite-backed StageLogReader against pool db_path=/var/forge/forge.db
+```
+
+Run 1's chat-driven queue reaches `dispatch_build`'s `dispatching autobuild` step (the same point that was the F010.B failure site) without raising the previous `get_approved_stage_entry` AttributeError:
+
+```
+2026-05-04T12:22:55 [INFO] forge.adapters.nats.pipeline_consumer: pipeline_consumer: dispatching build feature_id=FEAT-43DE correlation_id=dfad8e7f-... originating_adapter=terminal
+2026-05-04T12:22:55 [INFO] forge.cli._serve_deps: dispatch_build: persisted QUEUED row build_id=build-FEAT-43DE-20260504122255 feature_id=FEAT-43DE correlation_id=dfad8e7f-...; dispatching autobuild
+```
+
+The implementer chose adapter-wrapping (wrap `sqlite_pool` in a `StageLogReader` adapter) over method-add on the persistence facade — see TASK-FORGE-FRR-F010B's completion notes for the rationale.
+
+### ✅ F010.C — Outbound `pipeline.build-failed.*` envelopes thread inbound `correlation_id`
+
+**Evidence:** Synthetic `nats pub` with a known correlation_id and `feature_yaml_path=/etc/passwd` (forces the allowlist-rejection codepath, which is the only outbound publish site exercised today since F010.B-next-layer keeps autobuild from running):
+
+Inbound (synthetic, published via `nats pub "pipeline.build-queued.FEAT-43DE" "$ENVELOPE"`):
+```json
+{"correlation_id":"45f04289-95e2-4710-9d59-764b7fccf86b", "payload":{"feature_id":"FEAT-43DE","feature_yaml_path":"/etc/passwd",...}}
+```
+
+Outbound (forge-published, on `pipeline.build-failed.FEAT-43DE`):
+```json
+{"correlation_id":"45f04289-95e2-4710-9d59-764b7fccf86b","source_id":"forge","event_type":"build_failed","payload":{"feature_id":"FEAT-43DE","build_id":"FEAT-43DE","failure_reason":"path outside allowlist","recoverable":false,"failed_task_id":null}}
+```
+
+**Same correlation_id round-trips.** Compare with morning-rerun runs 1+2 where the same envelope had `correlation_id: null`. DDR-029 thread holds for the rejection-publish site.
+
+> **Caveat:** the dispatch-failure path (run 1's `'StructuredTool' object has no attribute 'start_async_task'` — see Gap F010.E below) still does not publish any outbound envelope, so we cannot directly confirm correlation_id threading on that path. Once Gap F010.E closes, that path will start publishing and the F010.C threading should already be in place by inheritance.
+
+### ✅ F010.D-forge — PREPARING-recovery `_handle_preparing` threads `BuildRow.correlation_id`
+
+**Evidence:** Not directly observed on the wire (no PREPARING recovery case fired during this run — the daemon did not crash mid-build), but verified by:
+- Code review: `forge/src/forge/lifecycle/recovery.py:_handle_preparing` now calls `attach_correlation_id(payload, build_row.correlation_id)` before publishing the v1 `BuildFailedPayload` (commit `a7eb9d5`).
+- Test coverage: `tests/forge/test_recovery_correlation_id.py` (2 tests, both passing per implementer summary):
+  - `TestPreparingRecoveryThreadsCorrelationId` — happy-path regression
+  - `TestRecoveryPublishSitesThreadCorrelationId` — AST lint guard locking the contract for future recovery branches
+
+The lint guard is the right shape for a contract this load-bearing — it catches future drift before review.
+
+## Regression discovered (1 of 5)
+
+### ⚠️ F010.D-jarvis — Option A widening to `pipeline.>` causes JetStream workqueue consumer conflict
+
+**Symptom (jarvis boot log, evening rerun):**
+
+```json
+{"error_class": "BadRequestError",
+ "error": "nats: BadRequestError: code=400 err_code=10100 description='filtered consumer not unique on workqueue stream'",
+ "event": "jarvis_forge_subscriber_start_failed", "level": "warning",
+ "logger": "jarvis.infrastructure.lifecycle",
+ "timestamp": "2026-05-04T12:22:51.515049Z"}
+```
+
+`jarvis_forge_subscriber_bound_session_manager` log line — present in the morning rerun — is **absent**. The forge_subscriber failed to attach during startup; no chat REPL notifications can render even if forge publishes envelopes.
+
+**Root cause:** The PIPELINE stream is a **workqueue-retention** stream (`retention=workqueue` per the canonical NATS provisioning — confirmed in this run's Phase 1.3 and the morning's). On a workqueue stream, every consumer's subject filter must be **non-overlapping** with every other consumer's filter — otherwise JetStream rejects the subscribe with `err_code=10100 'filtered consumer not unique on workqueue stream'`. The existing forge-serve consumer already filters `pipeline.build-queued.>` on PIPELINE; widening jarvis's filter from `pipeline.stage-complete.>` to `pipeline.>` overlaps (`pipeline.>` ⊃ `pipeline.build-queued.>`), and JetStream rejects.
+
+**Why TASK-FRR-F010D's task body recommended Option A anyway:** the runbook task body weighed Option A (single subject `pipeline.>`) against Option B (explicit four-subject set `pipeline.build-{started,complete,failed}.>` + `pipeline.stage-complete.>`) and recommended A on the grounds of cheapness. The task body warned about non-lifecycle `pipeline.*` traffic noise but **did not anticipate the workqueue-overlap rejection** — that's the blind spot. The implementer followed the recommendation; the runtime caught it.
+
+**Impact on this rerun:** zero notifications can render in the chat REPL. Forge published the inbound build-queued (and would have published an outbound terminal envelope if Gap F010.E weren't in the way) but jarvis can't see them. Chat REPL second turn: *"I don't have a live way to check the build status from here ... You'll need to check Forge's own pipeline status."*
+
+**Recommended fix shape:** switch from Option A to Option B. The four explicit lifecycle subjects (`pipeline.build-started.>`, `pipeline.stage-complete.>`, `pipeline.build-complete.>`, `pipeline.build-failed.>`) **do not overlap** with `pipeline.build-queued.>`, so JetStream will accept the bind. Per the implementer's summary, the renderer/payload-handling work F010.D shipped (event_type discriminator, four render branches, two `_handle_*` paths) is independent of which subject filter is used — only the filter constant + the subscribe call need to change.
+
+**Filing:** see new TASK-FRR-F010D-FIX (post-mortem) or amend the existing TASK-FRR-F010D in-place with an Option-B addendum and re-open. Reviewer's choice.
+
+## New gap surfaced (1)
+
+### Gap F010.E — `'StructuredTool' object has no attribute 'start_async_task'` in autobuild dispatch path
+
+**Symptom (run 1 of evening rerun, after F010.B's StageLogReader fix unblocked the next layer):**
+
+```
+2026-05-04T12:22:55 [INFO] forge.adapters.nats.pipeline_consumer: pipeline_consumer: dispatching build feature_id=FEAT-43DE correlation_id=dfad8e7f-... originating_adapter=terminal
+2026-05-04T12:22:55 [INFO] forge.cli._serve_deps: dispatch_build: persisted QUEUED row build_id=build-FEAT-43DE-20260504122255 feature_id=FEAT-43DE correlation_id=dfad8e7f-...; dispatching autobuild
+2026-05-04T12:22:55 [WARNING] forge.adapters.nats.pipeline_consumer: pipeline_consumer: dispatch_build raised ('StructuredTool' object has no attribute 'start_async_task') for feature_id=FEAT-43DE correlation_id=dfad8e7f-...; acking and continuing so the next build can be processed
+```
+
+**Distinction from F010.B:** F010.B was about `'SqliteLifecyclePersistence' object has no attribute 'get_approved_stage_entry'` — a *persistence-layer* method missing. F010.E is about `'StructuredTool' object has no attribute 'start_async_task'` — a *tool-invocation API* mismatch. F010.B's fix unblocked the dispatcher's progression past the persistence call; the next thing it tried to do was call `tool.start_async_task(...)` on the AsyncSubAgentMiddleware tool surface, which is a LangChain `StructuredTool`. `StructuredTool` exposes `tool.invoke(...)` and `tool.ainvoke(...)` — not `tool.start_async_task(...)`. This is wiring drift between FW10-008 (which built the `AsyncSubAgentMiddleware`) and the autobuild dispatcher's expectation of how to invoke its tools.
+
+**Root cause hypothesis:** the autobuild dispatcher likely expects a thin wrapper or a callable with `start_async_task` as a named method, but the actual tool surface returned by `_build_async_subagent_middleware()` is the LangChain `StructuredTool` wrapper around the underlying function. Either:
+- (A) the dispatcher should call `tool.invoke({"task_name": ..., "instructions": ..., ...})` and the named method is the wrong abstraction, or
+- (B) the middleware should also expose a non-LangChain wrapper that bundles `start_async_task` / `check_async_task` / etc. as named attributes, and the dispatcher uses that wrapper.
+
+**Co-symptom:** when `dispatch_build` raises here, **no outbound build-failed envelope is published** (the consumer logs the warning, acks, and moves on). This is also a gap — the dispatch-failure error path should publish a terminal envelope so jarvis can render the failure. The morning rerun documented this same co-symptom; F010.C's fix only covers the validation-rejection publish site, not the dispatch-failure publish site. Possibly worth a separate task or a sub-AC on F010.E.
+
+**Recommended fix shape:** investigate whether the call site in `forge.pipeline.dispatchers.autobuild_async` (or wherever `dispatch_build`'s autobuild step lives) is correct against the `AsyncSubAgentMiddleware` tool API documented in FW10-008's task / AC. Pick (A) or (B) based on which side is the source of truth.
+
+## Per-phase outcome delta (final, post-F010.A–D)
+
+| Phase | Gate | Morning (pre-FIX) | Evening 1 (post-FIX) | Evening 2 (post-F010-A/B/C/D) | Evidence |
+|---|---|---|---|---|---|
+| 2.2 | forge serve running | ✅ | ✅ + production composer | ✅ + **migrations apply on fresh DB** + **StageLogReader composed** | New first log line: `applied 2 SQLite migration(s) at boot` |
+| 5.1 | jarvis chat boots | ✅ clean | ✅ clean | ⚠️ **regression** — `jarvis_forge_subscriber_start_failed` (F010.D Option A workqueue conflict) | New WARNING log line; supervisor still functional, just notification-blind |
+| 6.2 | `queue_build` returns success | ✅ | ✅ ×4 | ✅ (correlation_id `dfad8e7f-...`) + 1 synthetic | `routing_history_offloaded_locally` for both |
+| 7.1 | between-prompt notifications render | ❌ | ❌ (still — Gap F010.D-jarvis-not-yet) | ❌ — but for **a different reason** now (F010.D-jarvis Option A regression) | Chat second-turn: *"no notifications received... you'd need to check Forge directly"* |
+| 7.2 | wire shows lifecycle envelope sequence | ❌ stub | ⚠️ partial — `build-failed` published but `correlation_id: null` | ⚠️ partial — **`build-failed` now threads `correlation_id` correctly** (F010.C ✅); full `build-started + stage-complete*N + build-complete` sequence still blocked by Gap F010.E | Synthetic publish proved threading; chat-driven query blocked at dispatcher's StructuredTool call |
+| 7.3 | forge container logs show autobuild_runner subagent launch | ❌ | ⚠️ partial | ⚠️ same — daemon logs reach `dispatching autobuild` but raise on Gap F010.E before launching the runner | Same shape, deeper failure point than F010.B |
+
+## Decision delta (final)
+
+- [ ] Phase 3 closed canonical
+- [x] **Phase 3 closed with gap-folds — large net progress, 4-of-5 fixes verified, 1 regression and 1 new gap left** — F010.A/B/C/D-forge are all live; F010.D-jarvis Option A is a workqueue overlap and needs a switch to Option B; Gap F010.E is the next layer of wiring drift that F010.B's fix exposed.
+- [ ] Partial — single-phase failure with follow-up task
+
+## Recommended follow-ups (final delta)
+
+1. **jarvis (F010.D Option B amend):** Re-open or post-mortem TASK-FRR-F010D — switch the subject filter from `pipeline.>` (Option A) to the explicit four-subject set (Option B): `pipeline.build-started.>`, `pipeline.stage-complete.>`, `pipeline.build-complete.>`, `pipeline.build-failed.>`. The renderer and payload-handling code shipped by F010.D's first pass is correct; only the subject constant + the `subscribe(...)` invocation need to change. Add an integration test that asserts `forge_subscriber` binds successfully against a workqueue-retention PIPELINE stream alongside an existing `forge-serve` consumer with `pipeline.build-queued.>` filter — this is the regression-protection test that would have caught Option A.
+2. **forge (F010.E):** Resolve `'StructuredTool' object has no attribute 'start_async_task'` AttributeError in the autobuild dispatch path. Investigate whether the dispatcher should call `tool.invoke(...)` (Option A) or whether the middleware should expose a named-method wrapper (Option B). Cross-reference FW10-008's AsyncSubAgentMiddleware design.
+3. **forge (dispatch-failure-publish — possibly a sub-AC of F010.E):** When `dispatch_build` raises an unhandled exception, publish a terminal `pipeline.build-failed.<feature_id>` envelope (with `correlation_id` threaded per F010.C) before acking. Today the consumer logs the warning, acks, and moves on — silently dropping the operator's chat thread. Possibly already covered by FW10-009's "validation surface and build-failed paths" but evidently not for this codepath; audit that task's ACs.
+4. **MacBook-over-Tailscale walkthrough:** still deferred. The wire is now meaningfully closer to producing a full lifecycle sequence; once F010.D-Option-B amend + Gap F010.E close, the MacBook walkthrough becomes a useful integration test (no longer just re-proving consume+ack). Re-evaluate after both close.
+
+## Updated cross-machine state (delta from evening 1)
+
+- **forge-prod** (host-network, `forge:latest` = sha256 `2ae6f655ad08...`, post-`a7eb9d5`): up healthy, durable consumer attached, **production composer bound**, **migrations applied automatically** at boot from the fresh `~/forge-state/forge.db` (verified by deleting the DB before docker-run; daemon recreated it with all 5 canonical tables).
+- **jarvis (working tree)**: F010D-jarvis Option A applied; subscriber failing to bind on workqueue overlap. Trace offload still works (FRR-003 unaffected).
+- **PIPELINE stream consumers:** only `forge-serve` (filter `pipeline.build-queued.>`); jarvis's `forge-subscriber` consumer **never appeared** in the consumer list this rerun (it failed to bind during startup), confirming the F010.D-jarvis regression diagnosis.
+
+## Updated evidence files (post-F010-A/B/C/D only)
+
+All under `/tmp/runbook-evidence-rerun-2026-05-04-final/`:
+
+- `phase2.1-build-image.log`, `phase2.2-docker-run.log`, `phase2.2-forge-logs.log`
+- `phase6-7-chat.log` — full DEBUG transcript including the `jarvis_forge_subscriber_start_failed` regression line and the chat-driven dispatch-failure path
+- `phase7-pipeline-tail.log` — chat-driven inbound build-queued (correlation_id `dfad8e7f-...`); no outbound published (Gap F010.E blocked)
+- `phase7-tail-f010c.log` — first synthetic-publish attempt (CLI invocation bug — empty bytes; produced an unrelated `feature_id=unknown` `correlation_id=null` malformed-envelope rejection — captured as a side-evidence point that the malformed-envelope codepath also doesn't thread correlation_id, which is acceptable since the inbound was unparseable)
+- `phase7-tail-f010c-2.log` — successful synthetic publish (correlation_id `45f04289-...`); outbound `build-failed` correctly threads correlation_id (**F010.C verified**)
+- `phase7-forge-logs.log` — full daemon log including F010.A migration line, F010.B StageLogReader composition, F010.E StructuredTool failure
+- `synthetic-envelope.json` — the JSON file used for the F010.C synthetic publish, captured for reproducibility
