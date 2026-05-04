@@ -78,7 +78,7 @@ class _FleetWorld:
         # ``heartbeat_interval_seconds`` (30) are valid for the manifest
         # validators; tests override the interval indirectly by patching
         # ``asyncio.sleep`` rather than mutating config here.
-        self.config = JarvisConfig(openai_base_url="http://fake-endpoint/v1")
+        self.config = JarvisConfig(llama_swap_base_url="http://fake-endpoint")
         self.registry = InMemoryManifestRegistry()
         self.client = object()
         self.initial_manifest = None

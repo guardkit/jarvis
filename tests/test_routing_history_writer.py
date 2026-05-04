@@ -96,7 +96,7 @@ def _make_config(traces_dir: Path) -> JarvisConfig:
     """Return a JarvisConfig pointing at ``traces_dir`` for offload writes."""
     with patch.dict("os.environ", {}, clear=True):
         return JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
+            llama_swap_base_url="http://fake-endpoint",
             jarvis_traces_dir=traces_dir,
         )
 
@@ -436,32 +436,48 @@ class TestRedaction:
 
 
 # ---------------------------------------------------------------------------
-# AC-007 — Graphiti unavailable: one-time WARN, never raise
+# AC-007 — Graphiti unavailable: per-write local offload, never raise
+# (TASK-FRR-003: replaced the once-per-instance WARN dedup with per-write
+# local offload; see tests/test_routing_history_offload.py for the full
+# soft-fail offload contract.)
 # ---------------------------------------------------------------------------
 
 
 class TestGraphitiUnavailable:
-    """``graphiti_client is None`` → no-op + one-time WARN."""
+    """``graphiti_client is None`` → local offload + per-write WARN.
 
-    async def test_first_write_logs_warn_and_subsequent_writes_are_silent(
+    The pre-FRR-003 contract was "log one ``graphiti_unavailable`` WARN
+    per writer, then silently drop subsequent traces". That meant the
+    operator learned graphiti was down once, and every later trace
+    vanished off the floor. The post-FRR-003 contract is "write each
+    trace to ``<traces_dir>/<correlation_id>.json`` and emit one
+    ``routing_history_offloaded_locally`` event per write so the
+    audit-trail count matches the on-disk file count". The dedup
+    behaviour is preserved on the :meth:`append_build_queue_event`
+    edge path, which has no canonical-payload offload story (see
+    :meth:`RoutingHistoryWriter._warn_graphiti_unavailable_once`).
+    """
+
+    async def test_each_dispatch_write_emits_offload_event(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
+        """Each write emits one offload event — no dedup on dispatch writes."""
         writer = RoutingHistoryWriter(None, _make_config(tmp_path / "traces"))
 
         with caplog.at_level(logging.WARNING):
-            await writer.write_specialist_dispatch(_build_entry())
-            await writer.write_specialist_dispatch(_build_entry())
-            await writer.write_specialist_dispatch(_build_entry())
+            for i in range(3):
+                entry = _build_entry(
+                    subagent_task_id=f"corr-{i:08x}-1111-2222-3333-444444444444"
+                )
+                await writer.write_specialist_dispatch(entry)
 
-        unavailable_warns = [
+        offloaded = [
             rec
             for rec in caplog.records
-            if rec.levelname == "WARNING"
-            and rec.__dict__.get("reason") == "graphiti_unavailable"
+            if rec.message == "routing_history_offloaded_locally"
         ]
-        assert len(unavailable_warns) == 1, (
-            f"Expected exactly one graphiti_unavailable WARN, got "
-            f"{len(unavailable_warns)}"
+        assert len(offloaded) == 3, (
+            f"Expected one offload event per write, got {len(offloaded)}"
         )
 
     async def test_unavailable_writer_does_not_raise(

@@ -27,9 +27,15 @@ logger = logging.getLogger(__name__)
 # Provider-key requirements keyed by the provider prefix in supervisor_model.
 # Each entry maps to (field_name, env_var_name) so error messages name the
 # exact environment variable the operator needs to set.
+#
+# ADR-ARCH-001: the ``openai:`` provider is intentionally absent. The
+# supervisor always routes through llama-swap on the GB10 (or its
+# Tailscale-reachable equivalent) and that endpoint is governed by
+# ``llama_swap_base_url``, which has a hard-coded default — no operator
+# action is required to satisfy the ``openai:`` provider, so there is
+# nothing to validate. Cloud OpenAI is NOT a supported supervisor target.
 # ---------------------------------------------------------------------------
 _PROVIDER_KEY_REQUIREMENTS: dict[str, tuple[str, str]] = {
-    "openai": ("openai_base_url", "OPENAI_BASE_URL"),
     "anthropic": ("anthropic_api_key", "ANTHROPIC_API_KEY"),
     "google_genai": ("google_api_key", "GOOGLE_API_KEY"),
 }
@@ -50,9 +56,12 @@ class JarvisConfig(BaseSettings):
     data_dir: Path = Path.home() / ".jarvis"
 
     # -- Provider API keys (SecretStr for masking) ---------------------------
+    # NOTE: there is intentionally no ``openai_base_url`` field. The supervisor
+    # always routes through llama-swap (ADR-ARCH-001 — local-first inference);
+    # the active endpoint is ``llama_swap_base_url`` below. Cloud OpenAI is
+    # NOT a supported supervisor target — see TASK-FRR-002.
     anthropic_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
-    openai_base_url: str | None = None
     google_api_key: SecretStr | None = None
 
     # -- Phase 2: web search + workspace settings ----------------------------

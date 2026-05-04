@@ -68,7 +68,6 @@ def graphiti_unreachable_config(tmp_path: Path) -> JarvisConfig:
 
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
             graphiti_endpoint="bolt://203.0.113.2:7687",
@@ -84,7 +83,6 @@ def basic_config(tmp_path: Path) -> JarvisConfig:
     stub_path = _stub_yaml_path()
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
             graphiti_endpoint=None,
@@ -94,7 +92,10 @@ def basic_config(tmp_path: Path) -> JarvisConfig:
     return cfg
 
 
-def _make_entry(decision_id: str = "11111111-2222-4333-8444-555555555555") -> JarvisRoutingHistoryEntry:
+def _make_entry(
+    decision_id: str = "11111111-2222-4333-8444-555555555555",
+    subagent_task_id: str = "corr-graphiti-down",
+) -> JarvisRoutingHistoryEntry:
     """Construct a minimum-valid routing-history entry."""
     return JarvisRoutingHistoryEntry(
         decision_id=decision_id,
@@ -103,7 +104,7 @@ def _make_entry(decision_id: str = "11111111-2222-4333-8444-555555555555") -> Ja
         supervisor_tool_call_sequence=[],
         capability_snapshot_hash="0" * 64,
         subagent_type="specialist",
-        subagent_task_id="corr-graphiti-down",
+        subagent_task_id=subagent_task_id,
         subagent_final_state="success",
         wall_clock_ms=42,
         total_cost_usd=0.0,
@@ -287,10 +288,20 @@ class TestDispatchSucceedsWhenGraphitiDown:
 
 
 # ===========================================================================
-# AC: DDR-019 "WARN once, then silent" ratchet
+# AC: DDR-019 soft-fail offload — per-write local file + structured WARN
+# (TASK-FRR-003 superseded the original "WARN once, then silent" ratchet —
+# the dedup left every subsequent trace dropped on the floor. The writer
+# now offloads each entry to ``<traces_dir>/<correlation_id>.json`` and
+# emits one ``routing_history_offloaded_locally`` event per write so
+# the audit-trail count matches the on-disk file count.)
 # ===========================================================================
 class TestRatchetWarnOnceThenSilent:
-    """The writer emits exactly one WARN per instance — subsequent writes silent."""
+    """Each soft-fail write produces a local offload file + a per-write WARN.
+
+    The class name is preserved to keep ``git log -L`` and grep-anchored
+    runbooks pointing at the same place; the contract this class
+    asserts has changed (see TASK-FRR-003).
+    """
 
     @pytest.mark.asyncio
     async def test_warn_once_then_silent_ratchet(
@@ -298,7 +309,7 @@ class TestRatchetWarnOnceThenSilent:
         graphiti_unreachable_config: JarvisConfig,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Three writes against a degraded writer: WARN exactly once."""
+        """Three writes against a degraded writer: three offload events + three files."""
         caplog.set_level(logging.WARNING, logger=ROUTING_HISTORY_LOGGER)
 
         writer = RoutingHistoryWriter(
@@ -306,21 +317,44 @@ class TestRatchetWarnOnceThenSilent:
             config=graphiti_unreachable_config,
         )
 
-        for i in range(3):
+        n = 3
+        for i in range(n):
             await writer.write_specialist_dispatch(
-                _make_entry(decision_id=f"00000000-1111-4222-8333-{i:012d}")
+                _make_entry(
+                    decision_id=f"00000000-1111-4222-8333-{i:012d}",
+                    subagent_task_id=f"corr-{i:08d}-aaaa-bbbb-cccc-dddddddddddd",
+                )
             )
 
         warnings = _routing_history_warnings(caplog)
-        # AC: WARN routing_history_write_failed asserted via caplog records.
-        # AC: ratchet — exactly one WARN, not "WARN every dispatch".
-        assert len(warnings) == 1, (
-            f"DDR-019 ratchet violated — expected 1 WARN, got {len(warnings)}"
+        offloaded = [
+            rec
+            for rec in warnings
+            if rec.getMessage() == "routing_history_offloaded_locally"
+        ]
+        # AC: per-write structured event — one event per write, not a single
+        # warn-once dedup. The on-disk file count must match this number
+        # (FEAT-JARVIS-INTERNAL-001-FRR / TASK-FRR-003).
+        assert len(offloaded) == n, (
+            f"Expected {n} routing_history_offloaded_locally events, "
+            f"got {len(offloaded)}"
         )
-        record = warnings[0]
-        assert record.getMessage() == "routing_history_write_failed"
-        # The ``extra={"reason": "graphiti_unavailable"}`` rides on LogRecord.
-        assert getattr(record, "reason", None) == "graphiti_unavailable"
+        # Each event carries the correlation_id, traces_dir, path, and
+        # graphiti_error so on-call can correlate locally-offloaded
+        # traces with their dispatch.
+        for record in offloaded:
+            assert getattr(record, "correlation_id", None) is not None
+            assert getattr(record, "traces_dir", None) is not None
+            assert getattr(record, "path", None) is not None
+            assert getattr(record, "graphiti_error", None) is not None
+
+        # n distinct files should land on disk.
+        traces_dir = graphiti_unreachable_config.jarvis_traces_dir
+        assert traces_dir.exists()
+        files = sorted(traces_dir.glob("*.json"))
+        assert len(files) == n, (
+            f"Expected {n} offload files on disk, got {len(files)}"
+        )
 
 
 # ===========================================================================

@@ -2089,7 +2089,55 @@ INFO:guardkit.orchestrator.feature_orchestrator:Feature orchestration complete: 
 
 
 
+════════════════════════════════════════════════════════════
+FEATURE RESULT: SUCCESS
+════════════════════════════════════════════════════════════
 
+Feature: FEAT-43DE - FEAT-JARVIS-INTERNAL-001 Documentation Foundation
+Status: COMPLETED
+Tasks: 7/7 completed
+Total Turns: 8
+Duration: 21m 36s
+
+                                  Wave Summary
+╭────────┬──────────┬────────────┬──────────┬──────────┬──────────┬─────────────╮
+│  Wave  │  Tasks   │   Status   │  Passed  │  Failed  │  Turns   │  Recovered  │
+├────────┼──────────┼────────────┼──────────┼──────────┼──────────┼─────────────┤
+│   1    │    6     │   ✓ PASS   │    6     │    -     │    6     │      -      │
+│   2    │    1     │   ✓ PASS   │    1     │    -     │    2     │      -      │
+╰────────┴──────────┴────────────┴──────────┴──────────┴──────────┴─────────────╯
+
+Execution Quality:
+  Clean executions: 7/7 (100%)
+
+                                  Task Details
+╭──────────────────────┬────────────┬──────────┬─────────────────┬──────────────╮
+│ Task                 │ Status     │  Turns   │ Decision        │  SDK Turns   │
+├──────────────────────┼────────────┼──────────┼─────────────────┼──────────────┤
+│ TASK-DOC-001         │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-DOC-002         │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-DOC-003         │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-DOC-004         │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-DOC-005         │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-DOC-006         │ SUCCESS    │    1     │ approved        │      -       │
+│ TASK-DOC-007         │ SUCCESS    │    2     │ approved        │      -       │
+╰──────────────────────┴────────────┴──────────┴─────────────────┴──────────────╯
+
+Worktree: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-43DE
+Branch: autobuild/FEAT-43DE
+
+Next Steps:
+  1. Review: cd /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-43DE
+  2. Diff: git diff main
+  3. Merge: git checkout main && git merge autobuild/FEAT-43DE
+  4. Cleanup: guardkit worktree cleanup FEAT-43DE
+INFO:guardkit.cli.display:Final summary rendered: FEAT-43DE - completed
+INFO:guardkit.orchestrator.review_summary:Review summary written to /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/autobuild/FEAT-43DE/review-summary.md
+✓ Review summary: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/autobuild/FEAT-43DE/review-summary.md
+INFO:guardkit.orchestrator.feature_orchestrator:Feature orchestration complete: FEAT-43DE, status=completed, completed=7/7
+
+
+/feature-complete FEAT-43DE
 
 
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003-FIX --verbose
@@ -2097,6 +2145,7 @@ GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-J003-FIX --verbose
 
 
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-001 --verbose
+
 
 
 
@@ -2212,14 +2261,14 @@ Summary
 forge (tasks/backlog/feat-jarvis-internal-001-followups/):
 
 TASK-FORGE-FRR-001 — Wire dispatch_payload to real autobuild + stage-complete publish
-TASK-FORGE-FRR-002 — Wire logging.basicConfig so FORGE_LOG_LEVEL actually emits logs
-TASK-FORGE-FRR-003 — Fix scripts/build-image.sh build-context path
+DONE - TASK-FORGE-FRR-002 — Wire logging.basicConfig so FORGE_LOG_LEVEL actually emits logs
+DONE - TASK-FORGE-FRR-003 — Fix scripts/build-image.sh build-context path
 jarvis (tasks/backlog/feat-jarvis-internal-001-followups/):
 
 TASK-FRR-001 — Reconcile NATS subscriptions with canonical provisioning (forge_subscriber deliver_policy=all, fleet/KV config)
-TASK-FRR-002 — Drop misleading JARVIS_OPENAI_BASE_URL field; align with local-only ethos
-TASK-FRR-003 — DDR-019 trace-offload directory auto-create + non-silent drop
-TASK-FRR-004 — Runbook gap-fold rewrite (apply all 13 gaps from RESULTS)
+DONE - TASK-FRR-002 — Drop misleading JARVIS_OPENAI_BASE_URL field; align with local-only ethos
+DONE - TASK-FRR-003 — DDR-019 trace-offload directory auto-create + non-silent drop
+DONE - TASK-FRR-004 — Runbook gap-fold rewrite (apply all 13 gaps from RESULTS)
 guardkit (tasks/backlog/infra-orchestration/):
 
 TASK-INFRA-001 — graphiti-mcp repair (point at llama-swap :9000 with nomic-embed + qwen-graphiti) + clean idempotent up/down scripts + infra-up.sh/infra-down.sh/infra-status.sh orchestration scaffold with documented extension points for NATS + agents tiers

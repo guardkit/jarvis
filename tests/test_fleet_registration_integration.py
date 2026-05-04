@@ -59,7 +59,7 @@ class _FastHeartbeatConfig:
 
 def _build_config() -> JarvisConfig:
     """Return a ``JarvisConfig`` valid enough for manifest construction."""
-    return JarvisConfig(openai_base_url="http://fake-endpoint/v1")
+    return JarvisConfig(llama_swap_base_url="http://fake-endpoint")
 
 
 # ---------------------------------------------------------------------------

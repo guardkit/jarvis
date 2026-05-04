@@ -112,7 +112,7 @@ def stub_registry_config() -> JarvisConfig:
     stub_path = _stub_registry_path()
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
+            llama_swap_base_url="http://fake-endpoint",
             stub_capabilities_path=stub_path,
         )
     cfg.validate_provider_keys()

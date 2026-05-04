@@ -100,7 +100,6 @@ def nats_unreachable_config(tmp_path: Path) -> JarvisConfig:
     assert stub_path.exists(), "stub_capabilities.yaml must ship with the package"
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
             graphiti_endpoint=None,
@@ -117,7 +116,6 @@ def graphiti_unreachable_config(tmp_path: Path) -> JarvisConfig:
     stub_path = _stub_yaml_path()
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
             graphiti_endpoint="bolt://203.0.113.2:7687",

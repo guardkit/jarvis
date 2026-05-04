@@ -4,7 +4,9 @@ Covers acceptance criteria for TASK-J001-008:
   AC-001: ``jarvis`` (no args) prints the command list and exits 0.
   AC-002: ``jarvis version`` prints version, exits 0, does NOT load config.
   AC-003: ``jarvis health`` with valid config succeeds.
-  AC-004: ``jarvis health`` with missing OPENAI_BASE_URL fails with ConfigurationError.
+  AC-004: ``jarvis health`` with missing provider key (anthropic/google_genai) fails
+          with ConfigurationError. (TASK-FRR-002 retired the OPENAI_BASE_URL gate —
+          ADR-ARCH-001 mandates llama-swap, which has a hard-coded default endpoint.)
   AC-005: ``jarvis health`` with malformed supervisor model fails with ValidationError.
   AC-006: ``jarvis chat`` REPL — /exit, EOF, SIGINT, empty lines, provider errors.
   AC-007: REPL serialises turns (ASSUM-004).
@@ -147,7 +149,7 @@ class TestHealthValid:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -163,7 +165,7 @@ class TestHealthValid:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -179,7 +181,7 @@ class TestHealthValid:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -192,22 +194,35 @@ class TestHealthValid:
 
 
 # ---------------------------------------------------------------------------
-# AC-004: ``jarvis health`` missing OPENAI_BASE_URL → ConfigurationError, exit 1
+# AC-004: ``jarvis health`` missing provider key → ConfigurationError, exit 1
+#
+# TASK-FRR-002 / ADR-ARCH-001 retired the OPENAI_BASE_URL operator-failure
+# mode (the supervisor always routes through llama-swap and that endpoint
+# has a hard-coded default). The remaining operator-failure modes are the
+# anthropic / google_genai supervisor models without their respective keys.
 # ---------------------------------------------------------------------------
 class TestHealthMissingKey:
-    """AC-004: health with missing provider key."""
+    """AC-004: health with missing provider key (anthropic/google_genai)."""
 
-    def test_health_missing_openai_base_url_exits_one(self) -> None:
+    def test_health_missing_anthropic_key_exits_one(self) -> None:
         runner = CliRunner()
-        with patch.dict("os.environ", {}, clear=True):
+        with patch.dict(
+            "os.environ",
+            {"JARVIS_SUPERVISOR_MODEL": "anthropic:claude-sonnet-4-20250514"},
+            clear=True,
+        ):
             result = runner.invoke(main, ["health"])
         assert result.exit_code == 1
 
-    def test_health_missing_key_names_env_var(self) -> None:
+    def test_health_missing_anthropic_key_names_env_var(self) -> None:
         runner = CliRunner()
-        with patch.dict("os.environ", {}, clear=True):
+        with patch.dict(
+            "os.environ",
+            {"JARVIS_SUPERVISOR_MODEL": "anthropic:claude-sonnet-4-20250514"},
+            clear=True,
+        ):
             result = runner.invoke(main, ["health"])
-        assert "OPENAI_BASE_URL" in result.output
+        assert "ANTHROPIC_API_KEY" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +237,7 @@ class TestHealthMalformedModel:
             "os.environ",
             {
                 "JARVIS_SUPERVISOR_MODEL": "jarvis-reasoner",
-                "JARVIS_OPENAI_BASE_URL": "http://fake/v1",
+                "JARVIS_LLAMA_SWAP_BASE_URL": "http://fake",
             },
             clear=True,
         ):
@@ -253,7 +268,7 @@ class TestChatRepl:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -272,7 +287,7 @@ class TestChatRepl:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -292,7 +307,7 @@ class TestChatRepl:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -311,7 +326,7 @@ class TestChatRepl:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -333,7 +348,7 @@ class TestChatRepl:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -353,7 +368,7 @@ class TestChatRepl:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -374,7 +389,7 @@ class TestChatRepl:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -417,7 +432,7 @@ class TestReplSerialisation:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -493,7 +508,7 @@ class TestReplBetweenPromptsNotificationRender:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -516,7 +531,7 @@ class TestReplBetweenPromptsNotificationRender:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -548,7 +563,7 @@ class TestReplBetweenPromptsNotificationRender:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -574,7 +589,7 @@ class TestReplBetweenPromptsNotificationRender:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(
@@ -605,7 +620,7 @@ class TestReplBetweenPromptsNotificationRender:
         with (
             patch.dict(
                 "os.environ",
-                {"JARVIS_OPENAI_BASE_URL": "http://fake/v1"},
+                {"JARVIS_LLAMA_SWAP_BASE_URL": "http://fake"},
                 clear=True,
             ),
             patch(

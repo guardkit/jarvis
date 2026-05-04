@@ -76,7 +76,7 @@ _FORBIDDEN_SUBSTRINGS: tuple[str, ...] = (
 def _config() -> JarvisConfig:
     """Build a clean ``JarvisConfig`` insensitive to ambient env vars."""
     with patch.dict("os.environ", {}, clear=True):
-        return JarvisConfig(openai_base_url="http://fake-endpoint/v1")
+        return JarvisConfig(llama_swap_base_url="http://fake-endpoint")
 
 
 # ---------------------------------------------------------------------------

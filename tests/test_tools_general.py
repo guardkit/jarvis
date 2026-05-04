@@ -424,7 +424,7 @@ def configured_jarvis() -> Generator[JarvisConfig, None, None]:
     """
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
+            llama_swap_base_url="http://fake-endpoint",
             tavily_api_key=SecretStr("fake-tavily-key"),
         )
     configure(cfg)

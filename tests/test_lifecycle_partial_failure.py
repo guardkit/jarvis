@@ -70,7 +70,6 @@ def cross_product_config(tmp_path: Path) -> JarvisConfig:
 
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
-            openai_base_url="http://fake-endpoint/v1",
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
             graphiti_endpoint="bolt://203.0.113.2:7687",
@@ -207,12 +206,33 @@ class TestNATSUpGraphitiDown:
         assert parsed["success"] is True
         assert parsed["command"] == "review_spec"
 
-        # Trace was attempted but Graphiti was down — exactly one WARN.
+        # Trace was attempted; Graphiti is down so the writer offloaded
+        # to <traces_dir>/<correlation_id>.json per TASK-FRR-003 instead
+        # of dropping the trace on the floor. The structured WARN now
+        # carries the local-offload contract — see TestRatchetWarnOnceThenSilent
+        # in tests/test_graphiti_unavailable.py for the full contract.
         warnings = _routing_history_warnings(caplog)
-        assert len(warnings) == 1, (
-            "Expected one WARN routing_history_write_failed per DDR-019 ratchet"
+        offloaded = [
+            rec
+            for rec in warnings
+            if rec.getMessage() == "routing_history_offloaded_locally"
+        ]
+        assert len(offloaded) == 1, (
+            f"Expected one routing_history_offloaded_locally WARN per "
+            f"dispatch (TASK-FRR-003 supersedes the warn-once ratchet), "
+            f"got {len(offloaded)}"
         )
-        assert warnings[0].getMessage() == "routing_history_write_failed"
+        # The dispatch-side trace is no longer "lost" — it lives at
+        # <traces_dir>/<correlation_id>.json on disk for future
+        # rehydration into Graphiti.
+        offload_path = getattr(offloaded[0], "path", None)
+        assert offload_path is not None, (
+            "routing_history_offloaded_locally must carry the on-disk path"
+        )
+        from pathlib import Path as _Path
+        assert _Path(offload_path).exists(), (
+            f"Soft-fail offload file must exist on disk: {offload_path}"
+        )
 
 
 # ===========================================================================
