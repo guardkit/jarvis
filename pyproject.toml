@@ -78,7 +78,7 @@ nats = [
 # graphiti-core is still on its 0.x stabilisation path and a 1.0 bump is
 # expected to ship breaking surface changes.
 graphiti = [
-    "graphiti-core>=0.9,<1",
+    "graphiti-core @ git+https://github.com/guardkit/graphiti.git@v0.29.5-guardkit.1",
 ]
 providers = [
     # langchain-* providers rebaselined 2026-04-27 to coherent 1.x; see
