@@ -810,7 +810,7 @@ wheels = [
 [[package]]
 name = "graphiti-core"
 version = "0.29.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/guardkit/graphiti.git?rev=v0.29.5-guardkit.1#8a8174713f5958320515b80fea8ebdcbaf36b3cb" }
 dependencies = [
     { name = "neo4j" },
     { name = "numpy" },
@@ -819,10 +819,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "tenacity" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a5/95/c6e05d3cae650f6e236ed4b6cf2201f480e7dea38d9c947553e16424cef3/graphiti_core-0.29.0.tar.gz", hash = "sha256:00bdc148901a0f1c3952e0ed12f704f179221065a31b3d1edad0777a46b03c09", size = 6896765, upload-time = "2026-04-27T15:55:07.575Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d1/0c/54cebaa2e668d1a89d934a924ccefa752a9f7c6e8d93eddcd93372832bd7/graphiti_core-0.29.0-py3-none-any.whl", hash = "sha256:6b94e1c3e66b35216f1ad51e9a2274e52f92ef5ec872e647d6c1e4af51390996", size = 342037, upload-time = "2026-04-27T15:55:05.589Z" },
 ]
 
 [[package]]
@@ -1109,7 +1105,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "deepagents", specifier = ">=0.5.3,<0.6" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=0.3.0" },
-    { name = "graphiti-core", marker = "extra == 'graphiti'", specifier = ">=0.9,<1" },
+    { name = "graphiti-core", marker = "extra == 'graphiti'", git = "https://github.com/guardkit/graphiti.git?rev=v0.29.5-guardkit.1" },
     { name = "jarvis", extras = ["graphiti"], marker = "extra == 'providers'" },
     { name = "jarvis", extras = ["nats"], marker = "extra == 'providers'" },
     { name = "langchain", specifier = ">=1.2,<2" },
