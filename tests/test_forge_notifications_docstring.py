@@ -198,6 +198,14 @@ class TestModuleDocstring:
             "bind_session_manager",
             "_on_message",
             "_handle_message",
+            # TASK-FRR-F010D split the single message handler into a
+            # stage-complete branch and a build-lifecycle branch so the
+            # widened ``pipeline.>`` subscription can route ``build-started``
+            # / ``build-complete`` / ``build-failed`` envelopes onto
+            # ForgeNotification's new event_type discriminator.
+            "_handle_stage_complete",
+            "_handle_build_lifecycle",
+            "_enqueue_for_correlation",
             "_parse_completed_at",
             # Renamed 2026-05-01 from ``_get_deliver_policy_new`` per
             # TASK-FRR-001 / DDR-027 revision: canonical PIPELINE is a
@@ -207,7 +215,12 @@ class TestModuleDocstring:
             # required and why the no-replay-on-restart UX property is
             # preserved structurally instead of via the enum.
             "_get_deliver_policy_all",
-            "_get_stage_complete_subject",
+            # Renamed 2026-05-04 from ``_get_stage_complete_subject``
+            # per TASK-FRR-F010D: subscriber widened from
+            # ``pipeline.stage-complete.>`` to the canonical
+            # ``Topics.Pipeline.ALL`` (``pipeline.>``) so all four
+            # runbook §7.1 lifecycle envelope types reach the renderer.
+            "_get_pipeline_subject",
         ):
             assert required in names, (
                 f"Executable statement removed by docstring polish: {required}"

@@ -2277,3 +2277,140 @@ Traceability: every task file carries the runbook correlation_id: a58ec9a7-27c6-
 Method note: each subagent wrote files directly rather than invoking /task-create. Reasons: each repo's existing on-disk task convention has diverged from the skill's documented flat layout (per-feature subfolders + README + IMPLEMENTATION-GUIDE shape), and the request was for multi-file orchestration (folder + README + multiple tasks) which the single-task interactive skill doesn't support cleanly.
 
 The new task files in all three repos are uncommitted. Want me to commit them per-repo with appropriate messages, or hold them for your review first?
+---
+
+## 2026-05-04 — FEAT-JARVIS-INTERNAL-001 first-real-run RERUN (post-FRR follow-ups)
+
+**Machine:** GB10 (`promaxgb10-41b1`) — co-resident
+**correlation_id:** `18036705-2bb7-4564-8363-315bf7716a48`
+**Outcome:** ⏸ Same overall shape as 2026-05-01 (forge consume+ack proven; per-stage envelope sequence still doesn't flow back) — but every jarvis-side gap from the 2026-05-01 RESULTS is now resolved. The remaining gap is forge-side: `serve_cmd` doesn't bind `compose_dispatch_chain` to the production composer, so even with FEAT-FORGE-010 (FEAT-DEA8) merged the receipt-only `_default_dispatch` stub still wins on the daemon's hot path.
+**Evidence dir:** `/tmp/runbook-evidence-rerun-2026-05-04/`
+**Fresh RESULTS:** `docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md`
+
+### Wire-block summary (verbatim per LES1 §8)
+
+```bash
+# Phase 0: pre-flight
+git status; git log --oneline -5
+ping -c 2 promaxgb10-41b1
+ls -la ~/Projects/appmilla_github/forge/.guardkit/worktrees/nats-core/pyproject.toml
+set -a && source ~/Projects/appmilla_github/nats-infrastructure/.env && set +a
+export JARVIS_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222"
+
+# Phase 1: NATS canonical
+docker compose ps                                                 # ships-computer-nats Up 44h healthy
+bash ~/Projects/appmilla_github/nats-infrastructure/scripts/verify-nats.sh  # 7 streams, 4 KV, 7/0
+nats stream info PIPELINE -j | jq '.config.subjects, .state'
+
+# Phase 2: forge serve (rebuilt to pick up FEAT-FORGE-010 merge of 2026-05-02)
+cd ~/Projects/appmilla_github/forge
+docker buildx build --build-context nats-core=../nats-core \
+    -t forge:production-validation -t forge:latest -f Dockerfile .
+docker rm -f forge-prod 2>/dev/null
+docker run -d --name forge-prod --network host \
+    -e FORGE_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+    -e FORGE_HEALTHZ_PORT=8088 -e FORGE_LOG_LEVEL=info \
+    -v ~/forge-state:/var/forge forge:latest serve
+curl -s http://localhost:8088/healthz                              # {"status":"healthy"}
+nats consumer ls PIPELINE                                          # forge-serve attached
+
+# Phases 3-4: specialist skipped (doc-only feature); graphiti unhealthy/8080-shadowed by open-webui
+docker ps | grep -E "graphiti|falkor"
+curl -sf -X POST http://localhost:9000/v1/embeddings \
+    -H "Content-Type: application/json" \
+    -d '{"input": "runbook smoke", "model": "nomic-embed"}' | jq '.data[0].index'   # 0
+
+# Phase 5: jarvis chat smoke (NB: clean boot — no FRR-001 NATS errors)
+echo "What tools do you have available?" | timeout 60 .venv/bin/jarvis chat
+
+# Phase 6+7: e2e (background pipeline tail + queue prompt + follow-up)
+nats sub "pipeline.>" &        # captures inbound build-queued envelope
+( cat <<<'Queue FEAT-43DE for build. The feature YAML is at .guardkit/archive/FEAT-43DE/feature_state.yaml on the main branch of guardkit/jarvis.'
+  sleep 30
+  echo "What is happening with that build?"
+  sleep 30 ) | timeout 120 .venv/bin/jarvis chat
+
+# Phase 8: evidence
+cp /tmp/runbook-evidence-rerun-2026-05-04/phase6-7-chat.log \
+    ~/.jarvis/transcripts/18036705-2bb7-4564-8363-315bf7716a48.txt
+ls ~/.jarvis/traces/                                               # 18036705-...json (FRR-003 autocreate fired)
+```
+
+### Per-phase verdicts
+
+| Phase | 2026-05-01 verdict | 2026-05-04 verdict | Delta |
+|---|---|---|---|
+| 0.1–0.4 | ✅ with notes | ✅ | nats auth needed in shell — same as before, runbook now folds it |
+| 1.1–1.3 | ✅ | ✅ | unchanged |
+| 2.1     | ✅ with workaround | ✅ with same workaround | forge-followup-3 (`scripts/build-image.sh`) still not folded forge-side; runbook documents the buildx-from-inside-forge invocation |
+| 2.2     | ✅ with workaround (no logs) | ✅ **logs now visible** | forge-followup-2 fixed by FEAT-FORGE-010 — `_configure_logging` now runs at startup |
+| 2.3     | ✅ | ✅ | unchanged |
+| 3.x     | ⚠️ skipped | ⚠️ skipped | non-blocking |
+| 4.x     | ⚠️ partial | ⚠️ partial | graphiti-mcp container reports healthy this time, but `:8080` still shadowed by open-webui — same fall-back to FRR-003 soft-fail offload |
+| 5.1     | ✅ with caveat (3 NATS errors at boot) | ✅ **clean** | **FRR-001 win** — fleet register, KV bind, forge_subscriber attach all succeed; `forge_notifications_subscribed on pipeline.stage-complete.>` |
+| 5.2     | ✅ | ✅ | unchanged |
+| 6.2     | ✅ | ✅ | correlation_id `18036705-2bb7-4564-8363-315bf7716a48`, publish_target `pipeline.build-queued.FEAT-43DE` |
+| 6.3     | ✅ via state | ✅ via state + raw envelope | tail also captured the inbound JSON envelope verbatim |
+| 7.1     | ❌ as expected | ❌ same shape | no notifications drained; supervisor's second-turn answer is honest — no per-stage events arrived |
+| 7.2     | ⚠️ via consumer state | ⚠️ via consumer state + forge log line | **forge log now shows** `forge-serve: received build-queued envelope feature_id=FEAT-43DE correlation_id=18036705-...` (forge-followup-2 win); but **no outbound `pipeline.build-started/stage-complete/build-complete` envelopes** — `serve_cmd` doesn't rebind `compose_dispatch_chain` to the production composer, so the receipt-only stub still wins |
+| 8.1     | ✅ | ✅ | transcript saved |
+| 8.3     | ⚠️ none written | ✅ **trace landed** | **FRR-003 win** — `~/.jarvis/traces/18036705-...json` autocreated; full DDR-029 routing-history schema captured |
+| 8.4     | ✅ (filename gap-folded) | ✅ | this entry |
+
+### Gap remaining (forge-side, follow-up needed)
+
+`forge/src/forge/cli/serve.py` `serve_cmd()` calls `_run_serve(config, state)` but never rebinds `compose_dispatch_chain` to the `bind_production_dispatch_chain(...)` factory output. The default `_default_compose_dispatch_chain` is a logged no-op, so the daemon falls through to the receipt-only `_default_dispatch` stub at `_serve_daemon.py:166`. FEAT-FORGE-010 wave 4 capstone task FW10-011 is at status `design_approved` (not implemented) — it's the integration test that would have caught this. New forge-side follow-up needed: rebind `compose_dispatch_chain` in `serve_cmd` (or in a thin ops wrapper) so the production composition actually runs.
+
+
+---
+
+## 2026-05-04 — Post-TASK-FIX-F010 rerun (same day, evening)
+
+**Forge HEAD:** `af62d5c` (post-`32b67f8 fix(serve): bind compose_dispatch_chain to production composer (TASK-FIX-F010)`)
+**Image rebuilt:** `forge:latest` = sha256 `ebc4311026cc...`
+**4 chat sessions:** correlation_ids `21df1258-…`, `b5c5e1e2-…`, `a55df422-…`, `f876fd47-…`
+**Outcome:** 🟢 **TASK-FIX-F010 verified live on the wire.** The `forge-serve: dispatch chain composed; _serve_daemon.dispatch_payload rebound to handle_message dispatcher (receipt-only stub no longer reachable)` log line — absent in the morning rerun — now fires at every forge-prod boot. Runs 1+2 produced an outbound `pipeline.build-failed.FEAT-43DE` envelope on the wire (real codepath ✅). Run 4 (after manual `apply_at_boot` schema bootstrap) reached the autobuild dispatcher's `dispatching autobuild` step before bombing on a missing persistence method. Four new forge-side gaps surfaced (F010.A migrations-on-boot; F010.B `get_approved_stage_entry`; F010.C correlation_id null on rejection; F010.D jarvis subscription narrower than rendering surface) — captured in the addendum to `docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md`.
+
+```bash
+# Rebuild forge image with TASK-FIX-F010
+cd ~/Projects/appmilla_github/forge
+docker buildx build --build-context nats-core=../nats-core \
+    -t forge:production-validation -t forge:latest -f Dockerfile .
+
+# Minimal forge.yaml in the host-mounted state dir
+cat > ~/forge-state/forge.yaml <<'YAML'
+permissions:
+  filesystem:
+    allowlist:
+      - /home/forge
+      - /home/richardwoollcott/Projects/appmilla_github/jarvis
+      - /home/richardwoollcott/Projects/appmilla_github/forge
+YAML
+
+# Start forge-prod with --config and forge.yaml mount
+docker rm -f forge-prod 2>/dev/null
+docker run -d --name forge-prod --network host \
+    -e FORGE_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+    -e FORGE_HEALTHZ_PORT=8088 -e FORGE_LOG_LEVEL=info \
+    -e FORGE_DB_PATH=/var/forge/forge.db \
+    -v ~/forge-state:/var/forge \
+    -v ~/forge-state/forge.yaml:/home/forge/forge.yaml:ro \
+    -v ~/Projects/appmilla_github/jarvis:~/Projects/appmilla_github/jarvis:ro \
+    forge:latest --config /home/forge/forge.yaml serve
+
+# Workaround for Gap F010.A — bootstrap SQLite schema on fresh DB
+docker exec forge-prod python -c "
+from pathlib import Path; import sqlite3
+from forge.lifecycle.migrations import apply_at_boot
+db = Path('/var/forge/forge.db'); db.parent.mkdir(parents=True, exist_ok=True)
+conn = sqlite3.connect(db); print(apply_at_boot(conn)); conn.close()"
+docker restart forge-prod
+
+# Drive jarvis chat 4 times (relative path, absolute path, widened allowlist, schema bootstrapped)
+nats sub "pipeline.>" --raw &     # tail outbound envelopes per run
+( cat <<<'Queue FEAT-43DE for build. The feature YAML is at .guardkit/archive/FEAT-43DE/feature_state.yaml on the main branch of guardkit/jarvis.'
+  sleep 90
+  echo "What is happening with that build?"
+  sleep 90 ) | timeout 240 .venv/bin/jarvis chat
+```
+

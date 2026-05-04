@@ -100,79 +100,135 @@ class ForgeNotification(BaseModel):
 
     model_config = ConfigDict(extra="ignore", frozen=True)
 
+    event_type: Literal[
+        "stage_complete", "build_started", "build_complete", "build_failed"
+    ] = Field(
+        default="stage_complete",
+        description=(
+            "Discriminator for the rendered line shape. Defaults to "
+            "``stage_complete`` so existing call sites that build a "
+            "ForgeNotification with the stage-complete fields continue "
+            "to render the canonical DDR-030 stage line. Per "
+            "TASK-FRR-F010D, the subscriber widened to the full "
+            "pipeline namespace (``Topics.Pipeline.ALL``) and now "
+            "projects build-started, build-complete and build-failed "
+            "envelopes onto this same model with the "
+            "stage-complete-specific fields left as None."
+        ),
+    )
     correlation_id: str = Field(
         min_length=1,
         description=(
             "BuildQueuedPayload.correlation_id — used to thread back "
-            "to the originating routing-history entry."
+            "to the originating routing-history entry. For "
+            "stage_complete events this is the payload's own "
+            "correlation_id; for the three build-lifecycle event "
+            "types (which carry no payload-level correlation_id) it "
+            "is sourced from MessageEnvelope.correlation_id (forge "
+            "threads it on outbound envelopes per "
+            "TASK-FORGE-FRR-F010C)."
         ),
     )
     feature_id: str = Field(
         pattern=r"^FEAT-[A-Z0-9]{3,12}$",
         description="The Forge feature identifier (matches BuildQueuedPayload).",
     )
-    stage_label: str = Field(
+    stage_label: str | None = Field(
+        default=None,
         min_length=1,
         max_length=128,
         description=(
             "Reasoning-model-chosen stage label (emergent per "
             "ADR-ARCH-016). Examples: 'plan-complete', 'autobuild-complete', "
-            "'task-review-complete'."
+            "'task-review-complete'. Only populated for "
+            "``event_type='stage_complete'``; None for the three "
+            "build-lifecycle event types."
         ),
     )
-    status: Literal["PASSED", "FAILED", "GATED", "SKIPPED"] = Field(
-        description="Stage outcome from StageCompletePayload.",
-    )
-    target_kind: Literal["local_tool", "fleet_capability", "subagent"] = Field(
+    status: Literal["PASSED", "FAILED", "GATED", "SKIPPED"] | None = Field(
+        default=None,
         description=(
-            "Which kind of executor ran the stage on Forge's side. "
-            "Surfaced on the rendered line so Rich can see whether a "
-            "stage was internal-tool work, fleet-dispatch, or "
-            "subagent-driven."
+            "Stage outcome from StageCompletePayload. Only populated "
+            "for ``event_type='stage_complete'``."
         ),
     )
-    target_identifier: str = Field(
+    target_kind: Literal["local_tool", "fleet_capability", "subagent"] | None = (
+        Field(
+            default=None,
+            description=(
+                "Which kind of executor ran the stage on Forge's side. "
+                "Surfaced on the rendered line so Rich can see whether "
+                "a stage was internal-tool work, fleet-dispatch, or "
+                "subagent-driven. Only populated for "
+                "``event_type='stage_complete'``."
+            ),
+        )
+    )
+    target_identifier: str | None = Field(
+        default=None,
         min_length=1,
         description=(
             "Concrete identifier of the executor "
-            "(tool name / agent_id:tool_name / subagent name)."
+            "(tool name / agent_id:tool_name / subagent name). Only "
+            "populated for ``event_type='stage_complete'``."
         ),
     )
     completed_at: datetime = Field(
         description=(
-            "When Forge published the stage-complete event. Parsed from "
-            "StageCompletePayload.completed_at (ISO 8601 string). "
+            "When Forge published the event. For stage-complete events "
+            "this is parsed from StageCompletePayload.completed_at "
+            "(ISO 8601 string). For the three build-lifecycle event "
+            "types (whose payloads carry no completed_at field) this "
+            "is sourced from MessageEnvelope.timestamp. "
             "Timezone-aware UTC datetime per DM-forge-notification §1."
         ),
     )
-    duration_secs: float = Field(
+    duration_secs: float | None = Field(
+        default=None,
         ge=0.0,
-        description="Stage duration in seconds — surfaced on the rendered line.",
+        description=(
+            "Stage duration in seconds — surfaced on the rendered "
+            "line. Only populated for ``event_type='stage_complete'``."
+        ),
+    )
+    failure_reason: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Failure reason from BuildFailedPayload.failure_reason. "
+            "Only populated for ``event_type='build_failed'``; "
+            "rendered in parens on the canonical line per the "
+            "FEAT-JARVIS-INTERNAL-001 first-real-run runbook §7.1 "
+            "shape ``[HH:MM] Forge FEAT-XXX: build-failed (path "
+            "outside allowlist)``."
+        ),
     )
 
     def render_line(self) -> str:
         """Render the canonical CLI line per DDR-030 / DM-forge-notification §1.
 
-        Shape::
+        Shapes (one per ``event_type`` discriminator member; FEAT-J006 /
+        FEAT-J009 reuse all four verbatim — the cross-adapter rendering
+        contract is the union of these four lines)::
 
             [HH:MM] Forge {feature_id}: stage {stage_label} ({status})
+            [HH:MM] Forge {feature_id}: build-started (RUNNING)
+            [HH:MM] Forge {feature_id}: build-complete (PASSED)
+            [HH:MM] Forge {feature_id}: build-failed ({failure_reason})
 
         Examples::
 
             [15:42] Forge FEAT-JARVIS-INTERNAL-001: stage plan-complete (PASSED)
             [15:44] Forge FEAT-JARVIS-INTERNAL-001: stage autobuild-complete (PASSED)
-            [15:45] Forge FEAT-JARVIS-INTERNAL-001: stage task-review (FAILED)
+            [15:42] Forge FEAT-43DE: build-started (RUNNING)
+            [15:50] Forge FEAT-43DE: build-complete (PASSED)
+            [15:48] Forge FEAT-43DE: build-failed (path outside allowlist)
 
         Time is the local-time portion of :attr:`completed_at` rendered
         as ``HH:MM`` (no seconds, no timezone offset). When
         ``completed_at`` is timezone-aware UTC, ``astimezone()`` shifts
         it into the host's local zone before formatting; naive datetimes
         fall through ``strftime`` unchanged.
-
-        FEAT-J006 (Telegram) reuses this method verbatim for the
-        notification body; FEAT-J009 (Dashboard) reuses it for the
-        live-trace viewport's per-stage line. The shape is the
-        cross-adapter rendering contract.
         """
         local_completed_at = (
             self.completed_at.astimezone()
@@ -180,10 +236,21 @@ class ForgeNotification(BaseModel):
             else self.completed_at
         )
         hhmm = local_completed_at.strftime("%H:%M")
-        return (
-            f"[{hhmm}] Forge {self.feature_id}: "
-            f"stage {self.stage_label} ({self.status})"
-        )
+        prefix = f"[{hhmm}] Forge {self.feature_id}:"
+
+        if self.event_type == "stage_complete":
+            # Existing DDR-030 shape — preserved verbatim for the
+            # cross-adapter contract (FEAT-J006 / FEAT-J009 consumers).
+            return f"{prefix} stage {self.stage_label} ({self.status})"
+        if self.event_type == "build_started":
+            return f"{prefix} build-started (RUNNING)"
+        if self.event_type == "build_complete":
+            return f"{prefix} build-complete (PASSED)"
+        # build_failed — failure_reason rendered in parens per runbook
+        # §7.1; defensive fallback if unset (should never happen given
+        # the projection in _handle_message always sets it).
+        reason = self.failure_reason or "unknown"
+        return f"{prefix} build-failed ({reason})"
 
 
 # ---------------------------------------------------------------------------
@@ -302,13 +369,18 @@ def _get_deliver_policy_all() -> Any:
     return DeliverPolicy.ALL
 
 
-def _get_stage_complete_subject() -> str:
+def _get_pipeline_subject() -> str:
     """Lazy-derive the subscribe wildcard from ``nats_core.Topics``.
 
-    Returns the wildcard subject Jarvis subscribes to for stage-complete
-    events: ``pipeline.stage-complete.>`` derived from
-    ``Topics.Pipeline.STAGE_COMPLETE`` (``pipeline.stage-complete.{feature_id}``)
-    by substituting NATS ``>`` for the ``{feature_id}`` placeholder.
+    Returns the canonical pipeline-namespace catch-all Jarvis subscribes
+    to for the full lifecycle envelope set: ``pipeline.>`` (the value
+    of ``Topics.Pipeline.ALL``). Per TASK-FRR-F010D this widened from
+    ``pipeline.stage-complete.>`` so the subscriber receives all four
+    runbook §7.1 envelope types — ``build-started``, ``stage-complete``,
+    ``build-complete``, ``build-failed``. Jarvis's own
+    ``pipeline.build-queued.*`` self-publishes (the only legitimate
+    "noise" on the wider wildcard) are dropped by the
+    ``source_id != "forge"`` gate inside ``_handle_message``.
 
     Imported lazily — same rationale as :func:`_get_deliver_policy_all`,
     plus the schema-import-isolation invariant in
@@ -317,7 +389,7 @@ def _get_stage_complete_subject() -> str:
     """
     from nats_core import Topics
 
-    return Topics.Pipeline.STAGE_COMPLETE.format(feature_id=">")
+    return Topics.Pipeline.ALL
 
 
 class ForgeNotificationsSubscriber:
@@ -347,15 +419,15 @@ class ForgeNotificationsSubscriber:
     """
 
     __slots__ = (
-        "_nats_client",
-        "_routing_history_writer",
-        "_queue_cap",
         "_correlation_cap",
         "_correlations",
+        "_nats_client",
+        "_queue_cap",
+        "_routing_history_writer",
         "_session_manager",
-        "_subscription",
         "_started",
         "_stop_timeout",
+        "_subscription",
     )
 
     def __init__(
@@ -405,7 +477,16 @@ class ForgeNotificationsSubscriber:
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
-        """Subscribe to ``pipeline.stage-complete.>`` (idempotent).
+        """Subscribe to ``pipeline.>`` (idempotent).
+
+        TASK-FRR-F010D (2026-05-04): subject was widened from
+        ``pipeline.stage-complete.>`` to the canonical
+        ``Topics.Pipeline.ALL`` (``pipeline.>``) so the subscriber
+        receives all four runbook §7.1 lifecycle envelope types
+        (``build-started`` / ``stage-complete`` / ``build-complete`` /
+        ``build-failed``). Jarvis's own ``pipeline.build-queued.*``
+        self-publishes are dropped by the ``source_id != "forge"`` gate
+        inside ``_handle_message``.
 
         DDR-027 (revised 2026-05-01 / TASK-FRR-001): ephemeral push
         consumer with ``deliver_policy=ALL``. Workqueue retention on the
@@ -424,10 +505,10 @@ class ForgeNotificationsSubscriber:
 
         js: JetStreamContext = self._nats_client.js
         deliver_policy_all = _get_deliver_policy_all()
-        stage_complete_subject = _get_stage_complete_subject()
+        pipeline_subject = _get_pipeline_subject()
 
         self._subscription = await js.subscribe(
-            stage_complete_subject,
+            pipeline_subject,
             cb=self._on_message,
             ordered_consumer=False,
             deliver_policy=deliver_policy_all,
@@ -435,7 +516,7 @@ class ForgeNotificationsSubscriber:
         self._started = True
         logger.info(
             "forge_notifications_subscribed",
-            subject=stage_complete_subject,
+            subject=pipeline_subject,
             correlation_cap=self._correlation_cap,
         )
 
@@ -466,7 +547,7 @@ class ForgeNotificationsSubscriber:
                 "forge_notifications_stop_timeout",
                 timeout=self._stop_timeout,
             )
-        except Exception as exc:  # noqa: BLE001 — never raise on shutdown
+        except Exception as exc:
             logger.warning(
                 "forge_notifications_stop_failed",
                 error_class=type(exc).__name__,
@@ -571,7 +652,7 @@ class ForgeNotificationsSubscriber:
         """
         try:
             await self._handle_message(msg)
-        except Exception as exc:  # noqa: BLE001 — never raise out of cb
+        except Exception as exc:
             # Defensive backstop. Every legitimate drop path inside
             # ``_handle_message`` already logs and returns; this catch
             # only fires on a genuine programming error and ensures the
@@ -583,12 +664,23 @@ class ForgeNotificationsSubscriber:
             )
 
     async def _handle_message(self, msg: Msg) -> None:
-        """Inner message-routing path. Never raises."""
+        """Inner message-routing path. Never raises.
+
+        Per TASK-FRR-F010D, dispatches on ``envelope.event_type`` after
+        the source-id gate so the four runbook §7.1 lifecycle envelope
+        types each route to their type-specific projection. The
+        ``stage_complete`` branch preserves the original DDR-029
+        routing-history edge plus DDR-030 enqueue path verbatim; the
+        three build-lifecycle branches share a single light projector
+        that skips the DDR-029 edge (the routing-history writer's
+        ``append_build_queue_event`` is keyed on stage-complete
+        payloads — broadening it is out of scope for this fix) and
+        enqueues directly on the session FIFO.
+        """
         # Local imports keep the schema-only consumers of this module
         # free of nats_core's payload classes (and the transitive nats
         # import chain).
         from nats_core import MessageEnvelope
-        from nats_core.events import StageCompletePayload
 
         # --- 1. Decode envelope --------------------------------------------
         try:
@@ -615,7 +707,40 @@ class ForgeNotificationsSubscriber:
             )
             return
 
-        # --- 3. Decode payload ---------------------------------------------
+        # --- 3. Dispatch on event_type -------------------------------------
+        # Per TASK-FRR-F010D the subscription is the canonical
+        # ``pipeline.>`` catch-all; dispatch to the right projection.
+        event_type = envelope.event_type
+        if event_type == "stage_complete":
+            await self._handle_stage_complete(envelope)
+            return
+        if event_type in ("build_started", "build_complete", "build_failed"):
+            await self._handle_build_lifecycle(envelope, event_type)
+            return
+        # Other pipeline.* events (build_queued, build_progress,
+        # build_paused, build_resumed, build_cancelled, feature_planned,
+        # feature_ready_for_build, stage_gated) are intentionally not
+        # rendered as CLI between-prompt notifications today. Drop with
+        # a debug log; consumers needing those types will be added by a
+        # follow-up task.
+        logger.debug(
+            "forge_notification_dropped_unsupported_event_type",
+            event_type=str(event_type),
+            correlation_id=envelope.correlation_id,
+        )
+
+    async def _handle_stage_complete(self, envelope: Any) -> None:
+        """Stage-complete projection (original DDR-029 + DDR-030 path).
+
+        Preserved verbatim from the pre-TASK-FRR-F010D implementation —
+        decodes ``StageCompletePayload``, fires the routing-history edge,
+        and enqueues a stage-shaped :class:`ForgeNotification`. Routing
+        key is ``payload.correlation_id`` because StageCompletePayload
+        carries one of its own (the three build-lifecycle payloads do
+        not).
+        """
+        from nats_core.events import StageCompletePayload
+
         try:
             payload = StageCompletePayload.model_validate(envelope.payload)
         except ValidationError as exc:
@@ -629,7 +754,6 @@ class ForgeNotificationsSubscriber:
 
         correlation_id = payload.correlation_id
 
-        # --- 4. Correlation lookup -----------------------------------------
         correlation = self._correlations.get(correlation_id)
         if correlation is None:
             # Group C #2 — silent drop. The correlation was either evicted
@@ -642,19 +766,18 @@ class ForgeNotificationsSubscriber:
         # in-flight stream of stage-complete events.
         self._correlations.move_to_end(correlation_id)
 
-        # --- 5. Routing-history edge (DDR-029, fire-and-forget) ------------
-        # The writer is itself fire-and-forget; we await the *submission*
-        # so a writer-side exception lands in the WARN-only branch rather
+        # Routing-history edge (DDR-029, fire-and-forget). The writer is
+        # itself fire-and-forget; we await the *submission* so a
+        # writer-side exception lands in the WARN-only branch rather
         # than escaping the JetStream callback. ``append_build_queue_event``
-        # never raises (DDR-019) so the suppress is a defensive belt-and-
-        # braces for future writer evolutions.
+        # never raises (DDR-019) so the suppress is a defensive belt-
+        # and-braces for future writer evolutions.
         edge_payload = payload.model_dump(mode="json")
         with contextlib.suppress(Exception):
             await self._routing_history_writer.append_build_queue_event(
                 correlation_id, edge_payload
             )
 
-        # --- 6. Build the in-process notification --------------------------
         try:
             completed_at_dt = _parse_completed_at(payload.completed_at)
         except ValueError as exc:
@@ -668,6 +791,7 @@ class ForgeNotificationsSubscriber:
 
         try:
             notification = ForgeNotification(
+                event_type="stage_complete",
                 correlation_id=correlation_id,
                 feature_id=payload.feature_id,
                 stage_label=payload.stage_label,
@@ -686,18 +810,124 @@ class ForgeNotificationsSubscriber:
             )
             return
 
-        # --- 7. Enqueue on session FIFO ------------------------------------
-        if self._session_manager is None:
+        self._enqueue_for_correlation(correlation, notification)
+
+    async def _handle_build_lifecycle(
+        self,
+        envelope: Any,
+        event_type: str,
+    ) -> None:
+        """Project a build-lifecycle envelope onto a ForgeNotification.
+
+        Handles the three runbook §7.1 lifecycle types whose payloads do
+        not carry a ``correlation_id`` of their own:
+
+        * ``build_started``  → BuildStartedPayload
+        * ``build_complete`` → BuildCompletePayload
+        * ``build_failed``   → BuildFailedPayload (failure_reason
+          captured for the rendered line)
+
+        Routing key is ``envelope.correlation_id`` (forge threads the
+        inbound build-queued correlation onto outbound envelopes per
+        TASK-FORGE-FRR-F010C). ``completed_at`` is sourced from
+        ``envelope.timestamp`` since the lifecycle payloads have no
+        completed_at field.
+        """
+        from nats_core.events import (
+            BuildCompletePayload,
+            BuildFailedPayload,
+            BuildStartedPayload,
+        )
+
+        correlation_id = envelope.correlation_id
+        if not correlation_id:
+            # Forge envelopes pre-TASK-FORGE-FRR-F010C may have
+            # correlation_id=null on rejection-published failures; drop
+            # with a structured WARN so operators can spot the missing
+            # threading.
             logger.warning(
-                "forge_notification_dropped_unbound_session_manager",
+                "forge_notification_dropped_missing_envelope_correlation",
+                event_type=event_type,
+            )
+            return
+
+        # Validate the payload against the right model. A bad payload
+        # mirrors the stage-complete branch's ``dropped_bad_payload``
+        # WARN shape so diagnostic tooling can grep one log key for
+        # both.
+        payload_model: type[Any]
+        if event_type == "build_started":
+            payload_model = BuildStartedPayload
+        elif event_type == "build_complete":
+            payload_model = BuildCompletePayload
+        else:  # build_failed
+            payload_model = BuildFailedPayload
+
+        try:
+            payload = payload_model.model_validate(envelope.payload)
+        except ValidationError as exc:
+            logger.warning(
+                "forge_notification_dropped_bad_payload",
+                error_class=type(exc).__name__,
+                error=str(exc),
+                event_type=event_type,
                 correlation_id=correlation_id,
             )
             return
 
+        correlation = self._correlations.get(correlation_id)
+        if correlation is None:
+            # Same silent-drop semantics as stage-complete (Group C #2).
+            return
+        self._correlations.move_to_end(correlation_id)
+
+        # ``isinstance`` narrows the union — only BuildFailedPayload
+        # carries ``failure_reason``; the other two branches keep it None
+        # and the renderer falls through to its non-failure shapes.
+        failure_reason: str | None = (
+            payload.failure_reason
+            if isinstance(payload, BuildFailedPayload)
+            else None
+        )
+
+        try:
+            notification = ForgeNotification(
+                event_type=event_type,  # type: ignore[arg-type]
+                correlation_id=correlation_id,
+                feature_id=payload.feature_id,
+                completed_at=envelope.timestamp,
+                failure_reason=failure_reason,
+            )
+        except ValidationError as exc:
+            logger.warning(
+                "forge_notification_dropped_projection_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+                event_type=event_type,
+                correlation_id=correlation_id,
+            )
+            return
+
+        self._enqueue_for_correlation(correlation, notification)
+
+    def _enqueue_for_correlation(
+        self,
+        correlation: BuildCorrelation,
+        notification: ForgeNotification,
+    ) -> None:
+        """Common FIFO enqueue path shared by all event-type branches.
+
+        Drops on unbound session manager (DDR-030) and skips the enqueue
+        when the correlation has no session (sessionless test path).
+        """
+        if self._session_manager is None:
+            logger.warning(
+                "forge_notification_dropped_unbound_session_manager",
+                correlation_id=notification.correlation_id,
+            )
+            return
+
         if correlation.session_id is None:
-            # The correlation was registered without a session
-            # (sessionless test path). The trace edge is still useful;
-            # we simply have no FIFO to enqueue on.
             return
 
         # SessionManager.enqueue_notification is idempotent on missing /

@@ -23,14 +23,22 @@ These four follow-ups are scoped to jarvis (or jarvis-owned docs). Forge-side fo
 
 ## The four tasks
 
-| # | Task | Title | Complexity | Mode |
-|---|---|---|---|---|
-| 1 | [TASK-FRR-001](TASK-FRR-001-reconcile-nats-subscriptions-with-canonical-provisioning.md) | Reconcile NATS subscriptions with canonical provisioning (fleet register, KV bind, forge_subscriber) | 5 | task-work (TDD) |
-| 2 | [TASK-FRR-002](TASK-FRR-002-drop-misleading-jarvis-openai-base-url-field.md) | Drop the misleading `JARVIS_OPENAI_BASE_URL` field from documented config surface | 2 | direct |
-| 3 | [TASK-FRR-003](TASK-FRR-003-ddr-019-trace-offload-autocreate-and-non-silent-drop.md) | DDR-019 trace-offload: autocreate `~/.jarvis/traces/` and stop silently dropping traces on the floor | 3 | task-work (TDD) |
-| 4 | [TASK-FRR-004](TASK-FRR-004-runbook-gap-fold-rewrite.md) | Runbook gap-fold rewrite — fold all 13 gaps so a fresh operator can copy-paste end-to-end | 3 | direct |
+| # | Task | Title | Status | Priority | Complexity | Mode |
+|---|---|---|---|---|---|---|
+| 1 | [TASK-FRR-001](../../completed/feat-jarvis-internal-001-followups/TASK-FRR-001-reconcile-nats-subscriptions-with-canonical-provisioning.md) | Reconcile NATS subscriptions with canonical provisioning (fleet register, KV bind, forge_subscriber) | completed | medium | 5 | task-work (TDD) |
+| 2 | [TASK-FRR-002](../../completed/feat-jarvis-internal-001-followups/TASK-FRR-002-drop-misleading-jarvis-openai-base-url-field.md) | Drop the misleading `JARVIS_OPENAI_BASE_URL` field from documented config surface | completed | medium | 2 | direct |
+| 3 | [TASK-FRR-003](../../completed/feat-jarvis-internal-001-followups/TASK-FRR-003-ddr-019-trace-offload-autocreate-and-non-silent-drop.md) | DDR-019 trace-offload: autocreate `~/.jarvis/traces/` and stop silently dropping traces on the floor | completed | medium | 3 | task-work (TDD) |
+| 4 | [TASK-FRR-004](../../completed/feat-jarvis-internal-001-followups/TASK-FRR-004-runbook-gap-fold-rewrite.md) | Runbook gap-fold rewrite — fold all 13 gaps so a fresh operator can copy-paste end-to-end | completed | medium | 3 | direct |
 
-Total: 4 tasks, aggregate complexity 13/40.
+## Post-TASK-FIX-F010 follow-up (2026-05-04 evening)
+
+Once the four tasks above all merged, a fresh GB10 rerun was executed (`docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md` — addendum at the bottom). The rerun closed every jarvis-side gap from the 2026-05-01 baseline; the remaining failure was a forge-side production-binding gap (`compose_dispatch_chain` not rebound to `bind_production_dispatch_chain` in `serve_cmd`) which was tracked and closed forge-side as **TASK-FIX-F010**. Once exercised end-to-end, the post-FIX-F010 rerun surfaced four new gaps — three forge-side (**F010.A** schema-bootstrap on fresh `FORGE_DB_PATH`, **F010.B** `SqliteLifecyclePersistence.get_approved_stage_entry` AttributeError in the autobuild dispatcher, **F010.C** outbound `correlation_id` threading) tracked in the forge repo, and one jarvis-side (**F010.D** — this folder, see the row below) which is the only post-FIX-F010 task that lives here.
+
+| # | Task | Title | Status | Priority | Complexity | Mode |
+|---|---|---|---|---|---|---|
+| 5 | [TASK-FRR-F010D](TASK-FRR-F010D-widen-forge-subscriber-subject-filter.md) | Widen `forge_subscriber` subject filter from `pipeline.stage-complete.>` to cover `build-started`/`build-complete`/`build-failed` | backlog | high | 2 | task-work (TDD) |
+
+Total: 5 tasks, aggregate complexity 15/50 (4 completed, 1 backlog).
 
 ### Independence and ordering
 
