@@ -94,6 +94,32 @@ def _valid_correlation_kwargs(**overrides: Any) -> dict[str, Any]:
     return kwargs
 
 
+def _literal_members(annotation: Any) -> set[Any]:
+    """Recover the closed-set members of a ``Literal[...]`` field annotation.
+
+    TASK-FRR-F010D made several formerly-required Literal fields
+    Optional (``Literal[...] | None``) so the same ``ForgeNotification``
+    model can carry build-lifecycle event types whose payloads do not
+    carry those fields. ``get_args`` on ``Literal[...] | None`` returns
+    ``(Literal[...], NoneType)`` — the inner Literal is one element of
+    the union, not the strings themselves.
+
+    Strip the ``| None`` wrapper if present and return the Literal's
+    closed-set string members.
+    """
+    union_members = get_args(annotation)
+    if not union_members:
+        # Already a bare Literal[...] — return its members directly.
+        return set(get_args(annotation)) or set()  # pragma: no cover
+    if type(None) in union_members:
+        # Optional[Literal[...]] — find the non-None inner type and
+        # recurse one level to peel its Literal members.
+        inner = next(m for m in union_members if m is not type(None))
+        return set(get_args(inner))
+    # Bare Literal[...] — get_args already returned the members.
+    return set(union_members)
+
+
 # ============================================================================
 # AC-001 — explicit __all__ exports
 # ============================================================================
@@ -346,9 +372,17 @@ class TestForgeNotificationFieldValidators:
             )
 
     def test_status_literal_members_match_dm_section_1(self) -> None:
-        """The closed Literal must contain exactly the four DM members."""
-        annotation = ForgeNotification.model_fields["status"].annotation
-        members = set(get_args(annotation))
+        """The closed Literal must contain exactly the four DM members.
+
+        TASK-FRR-F010D made ``status`` Optional (``Literal[...] | None``)
+        because the three new build-lifecycle event types — ``build_started``,
+        ``build_complete``, ``build_failed`` — do not carry a status
+        field. Unwrap the union to recover the inner Literal and assert
+        its closed-set membership unchanged from DM-forge-notification §1.
+        """
+        members = _literal_members(
+            ForgeNotification.model_fields["status"].annotation
+        )
         assert members == {"PASSED", "FAILED", "GATED", "SKIPPED"}
 
     # ---- target_kind: closed Literal --------------------------------------
@@ -371,8 +405,12 @@ class TestForgeNotificationFieldValidators:
             )
 
     def test_target_kind_literal_members_match_dm_section_1(self) -> None:
-        annotation = ForgeNotification.model_fields["target_kind"].annotation
-        members = set(get_args(annotation))
+        """TASK-FRR-F010D parity with status: ``target_kind`` is now
+        ``Literal[...] | None`` because the build-lifecycle event types
+        do not carry it."""
+        members = _literal_members(
+            ForgeNotification.model_fields["target_kind"].annotation
+        )
         assert members == {"local_tool", "fleet_capability", "subagent"}
 
     # ---- target_identifier: min_length=1 ----------------------------------

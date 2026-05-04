@@ -91,6 +91,7 @@ def _envelope_bytes(
     *,
     source_id: str = "forge",
     correlation_id: str | None = None,
+    event_type: str = "stage_complete",
     extra: dict[str, Any] | None = None,
 ) -> bytes:
     """Serialise a MessageEnvelope-shaped dict to JSON bytes."""
@@ -99,7 +100,7 @@ def _envelope_bytes(
         "timestamp": "2026-04-29T15:42:00+00:00",
         "version": "1.0",
         "source_id": source_id,
-        "event_type": "stage_complete",
+        "event_type": event_type,
         "project": None,
         "correlation_id": correlation_id or payload.get("correlation_id"),
         "payload": payload,
@@ -107,6 +108,58 @@ def _envelope_bytes(
     if extra:
         body.update(extra)
     return json.dumps(body).encode("utf-8")
+
+
+def _build_started_payload(
+    *,
+    feature_id: str = "FEAT-J005DEMO",
+    build_id: str = "build-abc",
+    wave_total: int = 3,
+) -> dict[str, Any]:
+    """Build a known-good ``BuildStartedPayload`` dict (TASK-FRR-F010D)."""
+    return {
+        "feature_id": feature_id,
+        "build_id": build_id,
+        "wave_total": wave_total,
+    }
+
+
+def _build_complete_payload(
+    *,
+    feature_id: str = "FEAT-J005DEMO",
+    build_id: str = "build-abc",
+    tasks_completed: int = 5,
+    tasks_failed: int = 0,
+    tasks_total: int = 5,
+    duration_seconds: int = 120,
+    summary: str = "All tasks completed successfully",
+) -> dict[str, Any]:
+    """Build a known-good ``BuildCompletePayload`` dict (TASK-FRR-F010D)."""
+    return {
+        "feature_id": feature_id,
+        "build_id": build_id,
+        "tasks_completed": tasks_completed,
+        "tasks_failed": tasks_failed,
+        "tasks_total": tasks_total,
+        "duration_seconds": duration_seconds,
+        "summary": summary,
+    }
+
+
+def _build_failed_payload(
+    *,
+    feature_id: str = "FEAT-J005DEMO",
+    build_id: str = "build-abc",
+    failure_reason: str = "path outside allowlist",
+    recoverable: bool = False,
+) -> dict[str, Any]:
+    """Build a known-good ``BuildFailedPayload`` dict (TASK-FRR-F010D)."""
+    return {
+        "feature_id": feature_id,
+        "build_id": build_id,
+        "failure_reason": failure_reason,
+        "recoverable": recoverable,
+    }
 
 
 def _make_msg(data: bytes) -> mock.MagicMock:
@@ -191,6 +244,15 @@ class TestStart:
     all on workqueue stream``. The no-replay-on-restart UX is preserved
     structurally — see the module-level rationale block on
     ``_get_deliver_policy_all`` and DDR-027 §"Workqueue interaction".
+
+    TASK-FRR-F010D (2026-05-04): subject was widened from
+    ``pipeline.stage-complete.>`` to ``pipeline.>`` so the subscriber
+    also receives ``build-started`` / ``build-complete`` /
+    ``build-failed`` envelopes — three of the four lifecycle envelope
+    types required by the runbook §7.1 acceptance criteria. The
+    ``source_id != "forge"`` gate in ``_handle_message`` drops jarvis's
+    own ``pipeline.build-queued.*`` self-publishes (the only "noise" on
+    the wider wildcard) at the envelope step.
     """
 
     @pytest.mark.asyncio
@@ -202,8 +264,10 @@ class TestStart:
         nats_client.js.subscribe.assert_called_once()
         kwargs = nats_client.js.subscribe.call_args.kwargs
         args = nats_client.js.subscribe.call_args.args
-        # Subject is the wildcard pattern.
-        assert args[0] == "pipeline.stage-complete.>"
+        # Subject is the canonical pipeline catch-all (TASK-FRR-F010D
+        # widened from ``pipeline.stage-complete.>`` so all four
+        # lifecycle envelope types reach the renderer).
+        assert args[0] == "pipeline.>"
         # ordered_consumer=False per implementation notes.
         assert kwargs["ordered_consumer"] is False
         # deliver_policy is the ALL enum from nats.js.api (DDR-027 revised
@@ -619,4 +683,230 @@ class TestSessionlessCorrelation:
         await sub._on_message(msg)
 
         writer.append_build_queue_event.assert_awaited_once()
+        sm.enqueue_notification.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# TASK-FRR-F010D — full pipeline lifecycle (build-started / build-complete /
+# build-failed) routes through the widened subscription
+# ---------------------------------------------------------------------------
+
+
+class TestBuildStartedRouting:
+    """TASK-FRR-F010D AC-3: ``pipeline.build-started.*`` envelopes route
+    through to the originating session FIFO with a non-empty rendered line.
+
+    BuildStartedPayload carries no ``correlation_id`` field of its own
+    (only ``feature_id`` / ``build_id`` / ``wave_total``). Routing must
+    therefore pull the correlation key off ``envelope.correlation_id``
+    — the same key forge already populates on the outbound envelope as
+    of TASK-FORGE-FRR-F010C.
+    """
+
+    @pytest.mark.asyncio
+    async def test_build_started_envelope_routes_and_renders(self) -> None:
+        sub, _, writer = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sub.register_correlation(
+            correlation_id="corr-bs-001",
+            session_id="cli-bs",
+            adapter="cli",
+            queued_at=datetime.now(UTC),
+            feature_id="FEAT-J005DEMO",
+        )
+
+        payload = _build_started_payload(feature_id="FEAT-J005DEMO")
+        msg = _make_msg(
+            _envelope_bytes(
+                payload,
+                correlation_id="corr-bs-001",
+                event_type="build_started",
+            )
+        )
+        msg.subject = "pipeline.build-started.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        # build-started is a routing-only event — the routing-history
+        # writer's ``append_build_queue_event`` is the stage-complete
+        # path; for lifecycle events we only require the FIFO enqueue.
+        sm.enqueue_notification.assert_called_once()
+        ses_id, notif = sm.enqueue_notification.call_args.args
+        assert ses_id == "cli-bs"
+        assert isinstance(notif, ForgeNotification)
+        assert notif.event_type == "build_started"
+        assert notif.feature_id == "FEAT-J005DEMO"
+        assert notif.correlation_id == "corr-bs-001"
+        rendered = notif.render_line()
+        assert rendered  # non-empty (AC-2 wording)
+        assert "FEAT-J005DEMO" in rendered
+        assert "build-started" in rendered
+        # The ``writer`` arg is unused for non-stage-complete events to
+        # keep the routing-history edge contract scoped to stage events.
+        writer.append_build_queue_event.assert_not_awaited()
+
+
+class TestBuildCompleteRouting:
+    """TASK-FRR-F010D AC-3: ``pipeline.build-complete.*`` envelopes route
+    through to the originating session FIFO with a non-empty rendered
+    line. BuildCompletePayload carries no ``correlation_id``; routing
+    uses ``envelope.correlation_id``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_build_complete_envelope_routes_and_renders(self) -> None:
+        sub, _, writer = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sub.register_correlation(
+            correlation_id="corr-bc-001",
+            session_id="cli-bc",
+            adapter="cli",
+            queued_at=datetime.now(UTC),
+            feature_id="FEAT-J005DEMO",
+        )
+
+        payload = _build_complete_payload(feature_id="FEAT-J005DEMO")
+        msg = _make_msg(
+            _envelope_bytes(
+                payload,
+                correlation_id="corr-bc-001",
+                event_type="build_complete",
+            )
+        )
+        msg.subject = "pipeline.build-complete.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        sm.enqueue_notification.assert_called_once()
+        ses_id, notif = sm.enqueue_notification.call_args.args
+        assert ses_id == "cli-bc"
+        assert isinstance(notif, ForgeNotification)
+        assert notif.event_type == "build_complete"
+        assert notif.feature_id == "FEAT-J005DEMO"
+        assert notif.correlation_id == "corr-bc-001"
+        rendered = notif.render_line()
+        assert rendered
+        assert "FEAT-J005DEMO" in rendered
+        assert "build-complete" in rendered
+        writer.append_build_queue_event.assert_not_awaited()
+
+
+class TestBuildFailedRouting:
+    """TASK-FRR-F010D AC-2: ``pipeline.build-failed.*`` envelopes route
+    through to the originating session FIFO with a non-empty rendered
+    line whose suffix carries the payload's ``failure_reason`` per the
+    runbook §7.1 line shape ``[HH:MM] Forge FEAT-XXX: build-failed
+    (path outside allowlist)``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_build_failed_envelope_routes_and_renders(self) -> None:
+        sub, _, writer = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sub.register_correlation(
+            correlation_id="corr-bf-001",
+            session_id="cli-bf",
+            adapter="cli",
+            queued_at=datetime.now(UTC),
+            feature_id="FEAT-J005DEMO",
+        )
+
+        payload = _build_failed_payload(
+            feature_id="FEAT-J005DEMO",
+            failure_reason="path outside allowlist",
+        )
+        msg = _make_msg(
+            _envelope_bytes(
+                payload,
+                correlation_id="corr-bf-001",
+                event_type="build_failed",
+            )
+        )
+        msg.subject = "pipeline.build-failed.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        sm.enqueue_notification.assert_called_once()
+        ses_id, notif = sm.enqueue_notification.call_args.args
+        assert ses_id == "cli-bf"
+        assert isinstance(notif, ForgeNotification)
+        assert notif.event_type == "build_failed"
+        assert notif.feature_id == "FEAT-J005DEMO"
+        assert notif.correlation_id == "corr-bf-001"
+        assert notif.failure_reason == "path outside allowlist"
+        rendered = notif.render_line()
+        assert rendered
+        assert "FEAT-J005DEMO" in rendered
+        assert "build-failed" in rendered
+        # Per runbook §7.1, failure_reason is rendered in parens.
+        assert "path outside allowlist" in rendered
+        writer.append_build_queue_event.assert_not_awaited()
+
+
+class TestLifecycleEventDropsOnUnknownCorrelation:
+    """TASK-FRR-F010D AC-4 (regression-shape): non-stage-complete
+    envelopes for an unregistered ``envelope.correlation_id`` are
+    silent-dropped exactly like stage-complete (DDR-028 LRU eviction
+    backstop)."""
+
+    @pytest.mark.asyncio
+    async def test_build_failed_unknown_correlation_silent_drop(self) -> None:
+        sub, _, _ = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        # Note: no register_correlation call.
+
+        payload = _build_failed_payload()
+        msg = _make_msg(
+            _envelope_bytes(
+                payload,
+                correlation_id="never-registered",
+                event_type="build_failed",
+            )
+        )
+        msg.subject = "pipeline.build-failed.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        sm.enqueue_notification.assert_not_called()
+
+
+class TestLifecycleEventDropsOwnPublishes:
+    """TASK-FRR-F010D AC-4 (regression-shape): jarvis's own
+    ``pipeline.build-queued.*`` self-publishes (the only legitimate
+    "noise" on the widened ``pipeline.>`` subscription) are dropped at
+    the source-id gate. This exercises the rationale recorded in the
+    new docstring of ``TestStart``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_self_publish_with_jarvis_source_is_dropped(self) -> None:
+        sub, _, _ = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sub.register_correlation(
+            correlation_id="corr-self-001",
+            session_id="cli-self",
+            adapter="cli",
+            queued_at=datetime.now(UTC),
+            feature_id="FEAT-J005DEMO",
+        )
+
+        # build_queued is jarvis's own publish; source_id="jarvis".
+        payload = {
+            "feature_id": "FEAT-J005DEMO",
+            "build_id": "build-self",
+            "wave_total": 1,
+        }
+        msg = _make_msg(
+            _envelope_bytes(
+                payload,
+                source_id="jarvis",
+                correlation_id="corr-self-001",
+                event_type="build_queued",
+            )
+        )
+        msg.subject = "pipeline.build-queued.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        # Source-ID gate drops it before any further processing.
         sm.enqueue_notification.assert_not_called()
