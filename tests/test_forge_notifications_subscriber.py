@@ -234,6 +234,14 @@ class TestConstructorSignature:
 # ---------------------------------------------------------------------------
 
 
+_LIFECYCLE_SUBJECTS = (
+    "pipeline.build-started.>",
+    "pipeline.stage-complete.>",
+    "pipeline.build-complete.>",
+    "pipeline.build-failed.>",
+)
+
+
 class TestStart:
     """AC-002: ephemeral push consumer with deliver_policy=ALL; idempotent.
 
@@ -249,10 +257,18 @@ class TestStart:
     ``pipeline.stage-complete.>`` to ``pipeline.>`` so the subscriber
     also receives ``build-started`` / ``build-complete`` /
     ``build-failed`` envelopes — three of the four lifecycle envelope
-    types required by the runbook §7.1 acceptance criteria. The
-    ``source_id != "forge"`` gate in ``_handle_message`` drops jarvis's
-    own ``pipeline.build-queued.*`` self-publishes (the only "noise" on
-    the wider wildcard) at the envelope step.
+    types required by the runbook §7.1 acceptance criteria.
+
+    TASK-FRR-F010Db (2026-05-04, late afternoon): the Option-A
+    ``pipeline.>`` catch-all overlapped with forge-serve's existing
+    ``pipeline.build-queued.>`` consumer on the workqueue PIPELINE
+    stream and was rejected on every boot with ``err_code=10100
+    'filtered consumer not unique on workqueue stream'``. The fix
+    narrows the filter to the explicit four-subject lifecycle list
+    (Option B), passed via ``ConsumerConfig.filter_subjects`` —
+    disjoint from ``pipeline.build-queued.>`` by construction. The
+    ``source_id != "forge"`` gate in ``_handle_message`` is preserved
+    as defence-in-depth.
     """
 
     @pytest.mark.asyncio
@@ -264,10 +280,21 @@ class TestStart:
         nats_client.js.subscribe.assert_called_once()
         kwargs = nats_client.js.subscribe.call_args.kwargs
         args = nats_client.js.subscribe.call_args.args
-        # Subject is the canonical pipeline catch-all (TASK-FRR-F010D
-        # widened from ``pipeline.stage-complete.>`` so all four
-        # lifecycle envelope types reach the renderer).
-        assert args[0] == "pipeline.>"
+        # Positional ``subject`` arg is used by js.subscribe only for
+        # stream lookup; the actual filter is in
+        # ``config.filter_subjects``. It must be one of the four
+        # lifecycle subjects (TASK-FRR-F010Db).
+        assert args[0] in _LIFECYCLE_SUBJECTS
+        # The multi-subject filter must be the four-subject lifecycle
+        # list (Option B). Sorted compare so the implementation is free
+        # to pick any deterministic order.
+        config = kwargs["config"]
+        assert config is not None, (
+            "ConsumerConfig must be passed via config= so "
+            "filter_subjects (plural) overrides the singular "
+            "filter_subject derived from the positional subject arg"
+        )
+        assert sorted(config.filter_subjects) == sorted(_LIFECYCLE_SUBJECTS)
         # ordered_consumer=False per implementation notes.
         assert kwargs["ordered_consumer"] is False
         # deliver_policy is the ALL enum from nats.js.api (DDR-027 revised
@@ -277,6 +304,57 @@ class TestStart:
         assert kwargs["deliver_policy"] == DeliverPolicy.ALL
         # Callback is wired.
         assert callable(kwargs["cb"])
+
+    @pytest.mark.asyncio
+    async def test_filter_subjects_disjoint_from_workqueue_overlap(
+        self,
+    ) -> None:
+        """Regression test for AC-2 / TASK-FRR-F010Db.
+
+        The PIPELINE stream is workqueue-retention; workqueue policy
+        forbids overlapping subject filters across consumers
+        (``err_code=10100 'filtered consumer not unique on workqueue
+        stream'``). The forge daemon's ``forge-serve`` consumer
+        already filters ``pipeline.build-queued.>``, so any consumer
+        Jarvis attaches must use a filter disjoint from that.
+
+        TASK-FRR-F010D's Option A (``pipeline.>`` catch-all) was a
+        superset of ``pipeline.build-queued.>`` and JetStream rejected
+        the bind on every boot. This test would have caught that
+        regression — it asserts the structural invariant the broker
+        enforces, mock-side, so the runbook §7 live-wire rerun can
+        regression-protect against future re-widening attempts
+        without needing a live broker.
+
+        Also covers AC-4: the filter is correctly narrower than
+        ``pipeline.>``, so ``pipeline.build-queued.*`` envelopes never
+        reach ``_handle_message`` at the wire level.
+        """
+        sub, nats_client, _ = _make_subscriber()
+
+        await sub.start()
+
+        kwargs = nats_client.js.subscribe.call_args.kwargs
+        config = kwargs["config"]
+        filter_subjects = config.filter_subjects
+
+        # The Option-A catch-all must NOT appear (it overlaps with
+        # forge-serve's ``pipeline.build-queued.>``).
+        assert "pipeline.>" not in filter_subjects
+
+        # forge-serve's exact filter must NOT appear.
+        assert "pipeline.build-queued.>" not in filter_subjects
+
+        # No filter may be a sibling of pipeline.build-queued.> — any
+        # subject under the build-queued namespace would overlap with
+        # forge-serve's workqueue consumer.
+        for s in filter_subjects:
+            assert not s.startswith("pipeline.build-queued."), (
+                f"filter subject {s!r} would overlap with forge-serve "
+                f"workqueue consumer (pipeline.build-queued.>) and the "
+                f"PIPELINE workqueue stream would reject the bind with "
+                f"err_code=10100"
+            )
 
     @pytest.mark.asyncio
     async def test_start_is_idempotent(self) -> None:

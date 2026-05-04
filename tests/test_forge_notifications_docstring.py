@@ -215,12 +215,19 @@ class TestModuleDocstring:
             # required and why the no-replay-on-restart UX property is
             # preserved structurally instead of via the enum.
             "_get_deliver_policy_all",
-            # Renamed 2026-05-04 from ``_get_stage_complete_subject``
-            # per TASK-FRR-F010D: subscriber widened from
-            # ``pipeline.stage-complete.>`` to the canonical
-            # ``Topics.Pipeline.ALL`` (``pipeline.>``) so all four
-            # runbook §7.1 lifecycle envelope types reach the renderer.
-            "_get_pipeline_subject",
+            # Renamed 2026-05-04 (late afternoon) from
+            # ``_get_pipeline_subject`` per TASK-FRR-F010Db: filter
+            # narrowed from ``Topics.Pipeline.ALL`` (``pipeline.>``) to
+            # the explicit four-subject lifecycle list because
+            # ``pipeline.>`` overlapped with forge-serve's
+            # ``pipeline.build-queued.>`` consumer on the workqueue
+            # PIPELINE stream and JetStream rejected the bind. The
+            # helper now returns ``list[str]`` (the four lifecycle
+            # subjects) rather than a single subject string. The
+            # earlier rename (TASK-FRR-F010D, morning) from
+            # ``_get_stage_complete_subject`` to
+            # ``_get_pipeline_subject`` is superseded by this one.
+            "_get_lifecycle_subjects",
         ):
             assert required in names, (
                 f"Executable statement removed by docstring polish: {required}"

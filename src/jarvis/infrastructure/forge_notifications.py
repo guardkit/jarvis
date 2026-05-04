@@ -303,15 +303,24 @@ class BuildCorrelation(BaseModel):
 # §3 — ForgeNotificationsSubscriber
 # ---------------------------------------------------------------------------
 
-# Subscribe wildcard derived lazily from the canonical
-# ``nats_core.Topics.Pipeline.STAGE_COMPLETE`` template
-# (``pipeline.stage-complete.{feature_id}``) by substituting the NATS ``>``
-# wildcard for ``{feature_id}``. The derivation is wrapped in
-# :func:`_get_stage_complete_subject` rather than evaluated at import time
-# so this module continues to satisfy the schema-import-isolation invariant
-# checked by ``tests/test_forge_notification_schema.py`` while still
-# pulling the canonical subject from :class:`nats_core.Topics` (cross-repo
-# contract test ``tests/test_contract_nats_core.py`` AC-007).
+# Subscribe wildcards derived lazily from the canonical
+# ``nats_core.Topics.Pipeline`` templates by substituting the NATS ``>``
+# wildcard for ``{feature_id}``. TASK-FRR-F010Db (2026-05-04) narrowed
+# the filter from ``Topics.Pipeline.ALL`` (``pipeline.>``, the Option A
+# choice from TASK-FRR-F010D) to the explicit four-subject lifecycle
+# list returned by :func:`_get_lifecycle_subjects` because
+# ``pipeline.>`` overlaps with forge-serve's ``pipeline.build-queued.>``
+# consumer on the workqueue PIPELINE stream and JetStream rejects the
+# bind with ``err_code=10100 'filtered consumer not unique on workqueue
+# stream'``. The four lifecycle subjects are disjoint from
+# ``pipeline.build-queued.>`` by construction.
+#
+# The derivation is wrapped in :func:`_get_lifecycle_subjects` rather
+# than evaluated at import time so this module continues to satisfy the
+# schema-import-isolation invariant checked by
+# ``tests/test_forge_notification_schema.py`` while still pulling the
+# canonical subjects from :class:`nats_core.Topics` (cross-repo contract
+# test ``tests/test_contract_nats_core.py`` AC-007).
 
 # DDR-027 (revised 2026-05-01 per TASK-FRR-001): ephemeral push consumer
 # with deliver_policy=ALL. The canonical PIPELINE stream provisioned by
@@ -369,27 +378,55 @@ def _get_deliver_policy_all() -> Any:
     return DeliverPolicy.ALL
 
 
-def _get_pipeline_subject() -> str:
-    """Lazy-derive the subscribe wildcard from ``nats_core.Topics``.
+def _get_lifecycle_subjects() -> list[str]:
+    """Lazy-derive the four lifecycle subject wildcards from ``nats_core.Topics``.
 
-    Returns the canonical pipeline-namespace catch-all Jarvis subscribes
-    to for the full lifecycle envelope set: ``pipeline.>`` (the value
-    of ``Topics.Pipeline.ALL``). Per TASK-FRR-F010D this widened from
-    ``pipeline.stage-complete.>`` so the subscriber receives all four
-    runbook §7.1 envelope types — ``build-started``, ``stage-complete``,
-    ``build-complete``, ``build-failed``. Jarvis's own
-    ``pipeline.build-queued.*`` self-publishes (the only legitimate
-    "noise" on the wider wildcard) are dropped by the
-    ``source_id != "forge"`` gate inside ``_handle_message``.
+    Returns the explicit four-subject lifecycle filter list Jarvis
+    binds on the canonical PIPELINE stream:
+
+    * ``pipeline.build-started.>``
+    * ``pipeline.stage-complete.>``
+    * ``pipeline.build-complete.>``
+    * ``pipeline.build-failed.>``
+
+    These are exactly the runbook §7.1 envelope types Jarvis renders.
+
+    Why this list (and not the wider ``Topics.Pipeline.ALL`` —
+    ``pipeline.>``)? PIPELINE is workqueue-retention; workqueue policy
+    forbids overlapping subject filters across consumers. The forge
+    daemon's ``forge-serve`` consumer already filters
+    ``pipeline.build-queued.>``, so any consumer Jarvis attaches must
+    use a filter disjoint from that. ``pipeline.>`` is a superset of
+    ``pipeline.build-queued.>`` and JetStream rejects the bind with
+    ``err_code=10100 'filtered consumer not unique on workqueue
+    stream'``. The four lifecycle subjects above are disjoint from
+    ``pipeline.build-queued.>`` by construction (TASK-FRR-F010Db, the
+    correction to TASK-FRR-F010D's Option A widening). Jarvis's own
+    ``pipeline.build-queued.*`` self-publishes never reach
+    ``_handle_message`` at the wire level; the
+    ``source_id != "forge"`` gate inside ``_handle_message`` is kept
+    as defence-in-depth against future publishers that mis-set
+    ``source_id``.
 
     Imported lazily — same rationale as :func:`_get_deliver_policy_all`,
     plus the schema-import-isolation invariant in
     ``tests/test_forge_notification_schema.py`` forbids top-level
     ``from nats_core`` / ``from nats`` statements in this module.
+
+    The ``replace("{feature_id}", ">")`` substitution mirrors the
+    pre-TASK-FRR-F010D derivation pattern; the templates themselves
+    are validated against the cross-repo contract by
+    ``tests/test_contract_nats_core.py``.
     """
     from nats_core import Topics
 
-    return Topics.Pipeline.ALL
+    pipeline = Topics.Pipeline
+    return [
+        pipeline.BUILD_STARTED.replace("{feature_id}", ">"),
+        pipeline.STAGE_COMPLETE.replace("{feature_id}", ">"),
+        pipeline.BUILD_COMPLETE.replace("{feature_id}", ">"),
+        pipeline.BUILD_FAILED.replace("{feature_id}", ">"),
+    ]
 
 
 class ForgeNotificationsSubscriber:
@@ -477,16 +514,27 @@ class ForgeNotificationsSubscriber:
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
-        """Subscribe to ``pipeline.>`` (idempotent).
+        """Subscribe to the four lifecycle subjects (idempotent).
 
-        TASK-FRR-F010D (2026-05-04): subject was widened from
-        ``pipeline.stage-complete.>`` to the canonical
-        ``Topics.Pipeline.ALL`` (``pipeline.>``) so the subscriber
-        receives all four runbook §7.1 lifecycle envelope types
+        TASK-FRR-F010Db (2026-05-04, late afternoon): subject filter
+        narrowed from ``Topics.Pipeline.ALL`` (``pipeline.>``, the
+        Option A choice from TASK-FRR-F010D) to the explicit four-
+        subject lifecycle list returned by
+        :func:`_get_lifecycle_subjects` (Option B). The Option A
+        catch-all overlapped with forge-serve's existing
+        ``pipeline.build-queued.>`` consumer on the workqueue PIPELINE
+        stream and JetStream rejected the bind on every boot with
+        ``err_code=10100 'filtered consumer not unique on workqueue
+        stream'``. The four lifecycle subjects are disjoint from
+        ``pipeline.build-queued.>`` by construction. See
+        :func:`_get_lifecycle_subjects` for the workqueue-overlap
+        rationale.
+
+        TASK-FRR-F010D (2026-05-04, morning): the subscriber is
+        responsible for all four runbook §7.1 lifecycle envelope types
         (``build-started`` / ``stage-complete`` / ``build-complete`` /
-        ``build-failed``). Jarvis's own ``pipeline.build-queued.*``
-        self-publishes are dropped by the ``source_id != "forge"`` gate
-        inside ``_handle_message``.
+        ``build-failed``); the ``source_id != "forge"`` gate in
+        ``_handle_message`` is preserved as defence-in-depth.
 
         DDR-027 (revised 2026-05-01 / TASK-FRR-001): ephemeral push
         consumer with ``deliver_policy=ALL``. Workqueue retention on the
@@ -499,24 +547,42 @@ class ForgeNotificationsSubscriber:
         Auto-ack — the subscriber does not call ``msg.ack()`` because
         ``manual_ack=False`` is the default and the JetStream context
         will ack each delivery once the callback returns.
+
+        Implementation note: the multi-subject filter is passed via
+        ``nats.js.api.ConsumerConfig.filter_subjects`` (the plural
+        form). When ``filter_subjects`` is set on the config,
+        :meth:`nats.js.JetStreamContext.subscribe` ignores the
+        positional ``subject`` arg for filter purposes (it is still
+        used for stream lookup) — see the ``subscribe`` source in
+        ``nats.js.client`` (``if not config.filter_subjects:
+        config.filter_subject = subject``). We pass the first
+        lifecycle subject as the positional lookup hint so
+        ``find_stream_name_by_subject`` resolves the canonical
+        PIPELINE stream without needing to hard-code its name.
         """
         if self._started:
             return
 
+        # Lazy import — keeps ``nats.js.api`` out of the module's top-
+        # level import chain (same rationale as
+        # :func:`_get_deliver_policy_all`).
+        from nats.js.api import ConsumerConfig
+
         js: JetStreamContext = self._nats_client.js
         deliver_policy_all = _get_deliver_policy_all()
-        pipeline_subject = _get_pipeline_subject()
+        lifecycle_subjects = _get_lifecycle_subjects()
 
         self._subscription = await js.subscribe(
-            pipeline_subject,
+            lifecycle_subjects[0],
             cb=self._on_message,
+            config=ConsumerConfig(filter_subjects=list(lifecycle_subjects)),
             ordered_consumer=False,
             deliver_policy=deliver_policy_all,
         )
         self._started = True
         logger.info(
             "forge_notifications_subscribed",
-            subject=pipeline_subject,
+            subjects=lifecycle_subjects,
             correlation_cap=self._correlation_cap,
         )
 
