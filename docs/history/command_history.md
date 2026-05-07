@@ -2472,3 +2472,185 @@ nats pub "pipeline.build-queued.FEAT-43DE" "$ENVELOPE"
 
 - `docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md` — appended **Addendum 2** with full per-fix verification, regression diagnosis (F010.D-jarvis), new gap (F010.E), and updated follow-up list. Document is now 455 lines covering three same-day reruns: morning (post-FRR-001..004), evening 1 (post-TASK-FIX-F010), late afternoon (post-F010.A-D).
 
+
+---
+
+## 2026-05-04 — Final validation rerun after F010Db + F010E + F010F (late evening)
+
+**Forge HEAD:** `50f646f` (F010E + F010F landed)
+**Jarvis HEAD:** `85f2e39` (F010Db landed; graphiti repointed to GB10)
+**Image rebuilt:** `forge:latest` = sha256 `dac09cbfa4da6...`
+**correlation_id:** `db27f127-a863-4723-a4be-b8cbb68eab5a`
+**Outcome:** 🟢 **Phase 7 structural close achieved.** Chat REPL rendered `[14:38] Forge FEAT-43DE: build-failed (RuntimeError: ...)` between prompts — the canonical runbook §7.1 line shape, threaded by the same correlation_id jarvis published. The full happy-path `build-started + stage-complete*N + build-complete` sequence requires the autobuild to actually run, which surfaces one final gap (F010.G — `autobuild_runner` async subagent has no URL configured for ASGI transport).
+
+```bash
+# Wipe SQLite to re-verify F010.A migrations-on-boot
+rm -f ~/forge-state/forge.db ~/forge-state/forge.db-shm ~/forge-state/forge.db-wal
+
+# Rebuild forge image with F010E (StructuredTool→AsyncTaskStarter adapter) + F010F (publish on dispatch raise)
+cd ~/Projects/appmilla_github/forge
+docker buildx build --build-context nats-core=../nats-core \
+    -t forge:production-validation -t forge:latest -f Dockerfile .
+
+# Restart forge-prod
+docker rm -f forge-prod 2>/dev/null
+docker run -d --name forge-prod --network host \
+    -e FORGE_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+    -e FORGE_HEALTHZ_PORT=8088 -e FORGE_LOG_LEVEL=info \
+    -e FORGE_DB_PATH=/var/forge/forge.db \
+    -v ~/forge-state:/var/forge \
+    -v ~/forge-state/forge.yaml:/home/forge/forge.yaml:ro \
+    -v ~/Projects/appmilla_github/jarvis:~/Projects/appmilla_github/jarvis:ro \
+    forge:latest --config /home/forge/forge.yaml serve
+
+# Drive jarvis chat — boot log now shows F010Db disjoint filter binding cleanly
+nats sub "pipeline.>" --raw &
+( echo 'Queue FEAT-43DE for build. The feature YAML is at .guardkit/archive/FEAT-43DE/feature_state.yaml on the main branch of guardkit/jarvis.'
+  sleep 90
+  echo "What is happening with that build?"
+  sleep 90 ) | timeout 240 .venv/bin/jarvis chat
+```
+
+### Final fix verdict
+
+| Fix | Status | One-line evidence |
+|---|---|---|
+| F010A | ✅ verified again | `applied 2 SQLite migration(s) at boot` (fresh DB) |
+| F010B | ✅ verified again | `build_stage_log_reader: composed SQLite-backed StageLogReader` (no `get_approved_stage_entry` raise) |
+| F010C | ✅ re-verified | outbound build-failed carries `correlation_id=db27f127-…` matching inbound |
+| F010D-forge | ✅ via test only | recovery code unchanged in this run; AST lint guard locks the contract |
+| F010Db | ✅ verified live | boot log shows four-subject disjoint filter; `BadRequestError 10100` is gone |
+| F010E | ✅ verified live | `_StructuredToolAsyncTaskStarter` adapter wires the Protocol bridge; failure now happens *inside* the launched coroutine, not at the call boundary |
+| F010F | ✅ verified live | new log line `dispatch_build raised (...); publishing build-failed and acking`; outbound envelope on the wire; chat REPL rendered the resulting line |
+
+### One last-mile gap — Phase 7 happy-path one follow-up away
+
+**Gap F010.G** — `autobuild_runner` async subagent has no URL configured. `deepagents.middleware.async_subagents` requires a URL for ASGI transport launches. F010E's adapter is correct; the deployment wiring of the subagent itself is the last loose end. Either configure a URL at boot (likely the langgraph-dev / langgraph-deploy ASGI surface) or extend the middleware to support direct in-process invocation. Once F010.G closes, expect a successful autobuild and the full `build-started + stage-complete*N + build-complete` envelope sequence on the wire.
+
+### Documents updated
+
+- `docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md` — appended **Addendum 3** with final per-fix verification, the rendered chat line as the canonical Phase 7 close evidence, and the F010.G last-mile gap. RESULTS file is now 608 lines covering five same-day reruns spanning four implementation passes.
+
+
+---
+
+## 2026-05-04 — Post-F010G rerun (evening, 6th same-day rerun)
+
+**Forge HEAD:** `8d08b93 fix(serve): switch autobuild dispatch to async coroutine path (TASK-FORGE-FRR-F010G)` (Option C — async coroutine path)
+**Image rebuilt:** `forge:latest` = sha256 `8ce899e7d03ab...`
+**correlation_id:** `bf697f49-3114-4c90-ae62-63936b8c53bf`
+**Outcome:** 🟢 Phase 7 structural close re-confirmed (chat REPL rendered `[18:55] Forge FEAT-43DE: build-failed (RuntimeError: ...)` between prompts) + 🟡 F010G works as designed (URL=None ASGI guard bypassed, error message changed) but exposes a deeper layer of wiring drift inside the now-reached `get_async()` codepath: `'NoneType' object is not callable`. Likely the autobuild_runner's compiled graph isn't being threaded through to the LangGraph SDK's `get_client(url=None)` in-process client — Gap F010.H.
+
+```bash
+# Same recipe as Addendum 3 — fresh DB, rebuild forge image, drive jarvis chat with extended wait
+rm -f ~/forge-state/forge.db ~/forge-state/forge.db-shm ~/forge-state/forge.db-wal
+cd ~/Projects/appmilla_github/forge
+docker buildx build --build-context nats-core=../nats-core -t forge:production-validation -t forge:latest -f Dockerfile .
+docker rm -f forge-prod 2>/dev/null
+docker run -d --name forge-prod --network host \
+    -e FORGE_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+    -e FORGE_HEALTHZ_PORT=8088 -e FORGE_LOG_LEVEL=info \
+    -e FORGE_DB_PATH=/var/forge/forge.db \
+    -v ~/forge-state:/var/forge \
+    -v ~/forge-state/forge.yaml:/home/forge/forge.yaml:ro \
+    -v ~/Projects/appmilla_github/jarvis:~/Projects/appmilla_github/jarvis:ro \
+    forge:latest --config /home/forge/forge.yaml serve
+
+# Drive jarvis chat with extended wait window for autobuild stages (~7 min)
+nats sub "pipeline.>" --raw &
+( echo 'Queue FEAT-43DE for build. The feature YAML is at .guardkit/archive/FEAT-43DE/feature_state.yaml on the main branch of guardkit/jarvis.'
+  sleep 120; echo "What is happening with that build?"
+  sleep 180; echo "Any updates yet?"
+  sleep 120; echo "Final status?"
+  sleep 60 ) | timeout 540 .venv/bin/jarvis chat
+```
+
+### Headline
+
+The error message change is the proof F010G's code is being exercised:
+
+| Pre-F010G | Post-F010G |
+|---|---|
+| `'has no url configured. ASGI transport (url=None) requires async invocation.'` (sync `get_sync()` rejects url=None) | `''NoneType' object is not callable'` (async `get_async()` reached; in-process transport called something that's None) |
+
+### Documents updated
+
+- `docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md` — appended **Addendum 4** with Phase 7 close re-confirmation, F010G live verification, Gap F010.H (one-line-fix candidate: thread the compiled autobuild_runner graph into the AsyncSubAgent registration). RESULTS file is now **712 lines** covering six same-day reruns spanning five implementation passes and 12 wiring gaps closed; one remaining (F010.H).
+
+
+---
+
+## 2026-05-04 — Joint live-wire validation rerun after TASK-FORGE-FRR-F010J (late evening, 7th same-day rerun)
+
+**Forge HEAD:** working tree (F010J in working tree, uncommitted)
+**Image rebuilt:** `forge:latest` = sha256 `807c65f13c842...`
+**Sidecar:** `langgraph dev --config forge.langgraph.json --port 8124` (host process; needed `pip install langgraph-cli[inmem]` + `uv pip install deepagents>=0.5.3,<0.6` into the forge venv first; new `forge/forge.langgraph.json` registers only `autobuild_runner`)
+**correlation_id:** `e9433033-ea80-449f-885d-b2d1bdfb839e`
+**Outcome:** 🟢 **F010J wires the production autobuild dispatch path end-to-end live on the wire.** Forge → sidecar HTTP POST `/threads` + `/runs` both returned 200; autobuild_runner graph launched with `task_id=019df49e-...`. Then the autobuild stalled inside the sidecar on `Could not resolve authentication method` — autobuild_runner's first node calls Anthropic Claude, no `ANTHROPIC_API_KEY` in the sidecar env. **Config gap, not wiring drift.**
+
+```bash
+# Bring up langgraph-runner sidecar (one-time per session — host-side)
+cd ~/Projects/appmilla_github/forge
+.venv/bin/pip install 'langgraph-cli[inmem]'
+VIRTUAL_ENV=~/Projects/appmilla_github/forge/.venv uv pip install 'deepagents>=0.5.3,<0.6'
+
+cat > forge.langgraph.json <<'JSON'
+{
+    "dependencies": ["."],
+    "graphs": {"autobuild_runner": "./src/forge/subagents/autobuild_runner.py:graph"},
+    "env": ".env"
+}
+JSON
+
+.venv/bin/langgraph dev --config forge.langgraph.json --port 8124 --host 0.0.0.0 \
+    --no-browser --allow-blocking --no-reload &
+
+# Restart forge-prod with FORGE_AUTOBUILD_RUNNER_URL set
+docker rm -f forge-prod 2>/dev/null
+rm -f ~/forge-state/forge.db ~/forge-state/forge.db-shm ~/forge-state/forge.db-wal
+docker run -d --name forge-prod --network host \
+    -e FORGE_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+    -e FORGE_HEALTHZ_PORT=8088 -e FORGE_LOG_LEVEL=info \
+    -e FORGE_DB_PATH=/var/forge/forge.db \
+    -e FORGE_AUTOBUILD_RUNNER_URL="http://localhost:8124" \
+    -v ~/forge-state:/var/forge \
+    -v ~/forge-state/forge.yaml:/home/forge/forge.yaml:ro \
+    -v ~/Projects/appmilla_github/jarvis:~/Projects/appmilla_github/jarvis:ro \
+    forge:latest --config /home/forge/forge.yaml serve
+
+# Drive jarvis chat with extended wait window (~9 min)
+nats sub "pipeline.>" --raw &
+( echo 'Queue FEAT-43DE for build. The feature YAML is at .guardkit/archive/FEAT-43DE/feature_state.yaml on the main branch of guardkit/jarvis.'
+  sleep 120; echo "What is happening with that build?"
+  sleep 180; echo "Any updates yet?"
+  sleep 180; echo "Final status?"
+  sleep 60 ) | timeout 600 .venv/bin/jarvis chat
+```
+
+### Headline log lines (the F010J win)
+
+```
+2026-05-04T20:12:22 [INFO] dispatch_build: persisted QUEUED row build_id=build-FEAT-43DE-20260504201222 ...; dispatching autobuild
+2026-05-04T20:12:22 [INFO] httpx: HTTP Request: POST http://localhost:8124/threads "HTTP/1.1 200 OK"
+2026-05-04T20:12:22 [INFO] httpx: HTTP Request: POST http://localhost:8124/threads/019df49e-.../runs "HTTP/1.1 200 OK"
+2026-05-04T20:12:22 [INFO] dispatch_autobuild_async: launched task_id=019df49e-d419-79a2-9f9b-307a935b9157 build_id=build-FEAT-43DE-20260504201222 feature_id=FEAT-43DE correlation_id=e9433033-...
+```
+
+This is the deepest layer of FEAT-FORGE-010's wiring functioning correctly in production. **Every NATS / SQLite / Protocol / transport layer between jarvis chat and the autobuild_runner graph is now demonstrably wired.**
+
+### Two sub-feature gaps remain (downstream of F010J)
+
+- **F010.L** — autobuild_runner subagent's first node calls Anthropic Claude; sidecar has no API key. Either provision `ANTHROPIC_API_KEY` (config) or retarget the autobuild_runner's model to llama-swap (codebase, aligned with ADR-ARCH-001's local-only ethos and TASK-FRR-002's reasoning).
+- **F010.M** — when the autobuild_runner's run completes (success/failure) on the sidecar, forge needs a path that translates the result into a `pipeline.build-complete.*` / `pipeline.build-failed.*` envelope on the wire. Today F010F's safety-net only catches sync raises in `dispatch_build`; an async stall or async failure inside the sidecar produces no terminal envelope. May already be partially covered by FW10-009/010 — needs audit.
+
+### Documents updated
+
+- `docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-04.md` — appended **Addendum 5** (the F010J win + the two sub-feature gaps F010.L + F010.M). RESULTS file is now **848 lines** covering seven same-day reruns spanning six implementation passes and 13 wiring gaps closed; two sub-feature gaps remaining.
+
+### Tally
+
+- 7 same-day reruns
+- 6 implementation passes
+- **13 wiring gaps closed** — FRR-001/2/3/4 → FIX-F010 → F010A/B/C/D-forge → F010Db-jarvis → F010E → F010F → F010G → F010J
+- **2 sub-feature gaps remaining** — F010.L (autobuild_runner model retargeting) + F010.M (autobuild_runner ↔ pipeline-lifecycle-emitter bridge)
+

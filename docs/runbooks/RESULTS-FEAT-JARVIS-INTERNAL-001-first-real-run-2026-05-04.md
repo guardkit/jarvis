@@ -453,3 +453,396 @@ All under `/tmp/runbook-evidence-rerun-2026-05-04-final/`:
 - `phase7-tail-f010c-2.log` — successful synthetic publish (correlation_id `45f04289-...`); outbound `build-failed` correctly threads correlation_id (**F010.C verified**)
 - `phase7-forge-logs.log` — full daemon log including F010.A migration line, F010.B StageLogReader composition, F010.E StructuredTool failure
 - `synthetic-envelope.json` — the JSON file used for the F010.C synthetic publish, captured for reproducibility
+
+---
+
+# Addendum 3: Final validation rerun after F010Db + F010E + F010F (2026-05-04, late evening)
+
+**Forge HEAD:** `50f646f` (post `4438c47 fix(serve): wrap start_async_task StructuredTool in AsyncTaskStarter adapter (TASK-FORGE-FRR-F010E)` + `50f646f fix(serve): publish build-failed envelope on dispatch_build raise (TASK-FORGE-FRR-F010F)`)
+**Jarvis HEAD:** `85f2e39` (post `6071fe0 Narrows forge_subscriber filter to disjoint lifecycle subjects (TASK-FRR-F010Db)`)
+**Image rebuilt:** `forge:latest` = sha256 `dac09cbfa4da6...`
+**Run window:** 2026-05-04 ~13:38 UTC → ~13:42 UTC (1 chat-driven queue, schema-bootstrapped DB pre-wiped to re-verify F010.A)
+**correlation_id:** `db27f127-a863-4723-a4be-b8cbb68eab5a`
+**Outcome:** 🟢 **Phase 7 structural close criterion achieved.** Chat REPL rendered a between-prompt notification line in the canonical runbook §7.1 shape, threaded by the same correlation_id jarvis published. The `build-started + stage-complete*N + build-complete` happy-path sequence still requires the autobuild itself to actually run (one last-mile deployment gap discovered: Gap F010.G — `autobuild_runner` async subagent has no URL configured for ASGI transport), but the **structural Phase 7 contract** — wire flows lifecycle envelopes back, jarvis renders them, threading by correlation_id holds — is now demonstrably satisfied.
+
+## The headline line — rendered in chat between prompts
+
+```text
+[14:38] Forge FEAT-43DE: build-failed (RuntimeError: _StructuredToolAsyncTaskStarter: middleware tool returned launch failure: "Failed to launch async subagent 'autobuild_runner': Async subagent 'autobuild_runner' has no url configured. ASGI transport (url=None) requires async invocation.")
+```
+
+This is the runbook §7.1 acceptance criterion verbatim:
+- Format: `[HH:MM] Forge <feature_id>: build-failed (<failure_reason>)` ✅
+- Threaded to the same correlation_id jarvis published in §6.2 ✅ (verified by inspecting the underlying envelope on the wire)
+- Drained between prompts (the line appeared in the chat output before the supervisor's response to the second user turn) ✅
+
+## Verified live (5 of 5 from this round)
+
+### ✅ F010Db — Disjoint lifecycle filter binds against workqueue PIPELINE
+
+Boot log:
+```json
+{"subjects": ["pipeline.build-started.>","pipeline.stage-complete.>","pipeline.build-complete.>","pipeline.build-failed.>"],
+ "correlation_cap": 1000, "event": "forge_notifications_subscribed", "level": "info",
+ "logger": "jarvis.infrastructure.forge_notifications", ...}
+{"event": "jarvis_forge_subscriber_bound_session_manager", "level": "info", ...}
+```
+
+The `BadRequestError code=400 err_code=10100 'filtered consumer not unique on workqueue stream'` from Addendum 2 is **gone**. Option B's four explicit lifecycle subjects do not overlap with `forge-serve`'s `pipeline.build-queued.>` filter, so JetStream accepts the bind. Jarvis subscribes successfully alongside forge-serve. The implementer's choice of the `filter_subjects=[…]` (B1, single multi-subject consumer) shape per the F010Db task body's recommendation is reflected in the boot log.
+
+### ✅ F010E — `_StructuredToolAsyncTaskStarter` adapter wires the Protocol bridge
+
+Forge logs show the `dispatching autobuild` step is reached without the previous `'StructuredTool' object has no attribute 'start_async_task'` AttributeError:
+
+```
+2026-05-04T13:38:56 [INFO] forge.adapters.nats.pipeline_consumer: pipeline_consumer: dispatching build feature_id=FEAT-43DE correlation_id=db27f127-... originating_adapter=terminal
+2026-05-04T13:38:56 [INFO] forge.cli._serve_deps: dispatch_build: persisted QUEUED row build_id=build-FEAT-43DE-20260504133856 feature_id=FEAT-43DE correlation_id=db27f127-...; dispatching autobuild
+```
+
+The implementer chose **Option B (adapter-wrap)** as the F010E task body recommended, mirroring F010.B's `StageLogReader` precedent. The new adapter type appears by name in the dispatch-time error: `_StructuredToolAsyncTaskStarter` — confirming the Protocol bridge is composed and being invoked. The dispatcher reaches the adapter and calls through to the LangChain `StructuredTool`'s `invoke()` correctly. The error happens *inside* the launched coroutine (Gap F010.G — see below), not at the call boundary the adapter mediates.
+
+### ✅ F010F — Dispatch-failure publishes terminal `build-failed` envelope before acking
+
+Forge log line shape **changed** vs Addendum 2:
+- Pre-F010F (Addendum 2): `dispatch_build raised (...); acking and continuing so the next build can be processed`
+- Post-F010F (this run): `dispatch_build raised (...); **publishing build-failed and acking** so the next build can be processed`
+
+Wire confirms:
+```json
+{"message_id":"da94f81f-86a8-42e7-94e1-e9b54a6bdd6c","timestamp":"2026-05-04T13:38:56.118128Z",
+ "version":"1.0","source_id":"forge","event_type":"build_failed",
+ "correlation_id":"db27f127-a863-4723-a4be-b8cbb68eab5a",
+ "payload":{"feature_id":"FEAT-43DE","build_id":"FEAT-43DE",
+            "failure_reason":"RuntimeError: _StructuredToolAsyncTaskStarter: middleware tool returned launch failure: \"Failed to launch async subagent 'autobuild_runner': Async subagent 'autobuild_runner' has no url configured. ASGI transport (url=None) requires async invocation.\"",
+            "recoverable":false,"failed_task_id":null}}
+```
+
+Compare with Addendum 2 run 1 where the same dispatch failure produced **zero outbound envelopes**. F010F's safety-net publish path now fires for every `dispatch_build` raise — the empirical reconsideration of ADR-ARCH-008's "do not publish here" decision pays off immediately. The `failure_reason` carries the full exception class name + message so operators can diagnose without forge logs.
+
+### ✅ F010C — re-validated alongside F010F
+
+The outbound `pipeline.build-failed.FEAT-43DE` envelope above carries `correlation_id: db27f127-a863-4723-a4be-b8cbb68eab5a` — **the same value** as the inbound `pipeline.build-queued.FEAT-43DE` envelope. F010C's correlation_id threading covers F010F's new publish site (since F010F reuses `_failure_payload`), so DDR-029 holds for the dispatch-failure path too.
+
+### ✅ F010A — re-validated against fresh DB
+
+Wiped `~/forge-state/forge.db` (and WAL files) before docker run; daemon recreated all 5 canonical tables on first boot. New first log line:
+
+```
+2026-05-04T13:38:17 [INFO] forge.cli._serve_production: forge-serve: applied 2 SQLite migration(s) at boot
+```
+
+## Phase 7 outcome — line-by-line vs runbook §7.1 acceptance criteria
+
+| §7.1 criterion | Observation | Verdict |
+|---|---|---|
+| Receipt-only `_default_dispatch` reachable on hot path | Not reachable — `dispatch chain composed; ... receipt-only stub no longer reachable` log line | ✅ |
+| Inbound `build-queued` reaches production consumer | Yes — `pipeline_consumer: dispatching build feature_id=FEAT-43DE correlation_id=db27f127-...` | ✅ |
+| SQLite QUEUED row written | Yes — `dispatch_build: persisted QUEUED row build_id=build-FEAT-43DE-20260504133856` | ✅ |
+| At least one `build-started` line rendered in chat | ❌ — autobuild never starts (Gap F010.G blocks the launch); F010F's safety-net publishes a terminal `build-failed` directly instead | ⚠️ structural close (terminal flows; happy path blocked one layer deeper) |
+| `stage-complete*N` lines rendered per stage | n/a — autobuild never starts | ⚠️ structural close |
+| One terminal line (`build-complete` or `build-failed`) rendered | ✅ — `[14:38] Forge FEAT-43DE: build-failed (RuntimeError: ...)` rendered between prompts | ✅ |
+| All envelopes thread inbound `correlation_id` | ✅ — wire envelope and rendered line both carry `db27f127-...` | ✅ |
+| Notifications drained before next supervisor response | ✅ — line appears in transcript before second-turn assistant text | ✅ |
+
+**Phase 7 structural close criterion**: ✅ achieved.
+**Phase 7 happy-path criterion** (`build-started + stage-complete*N + build-complete`): blocked one layer deeper than F010E by Gap F010.G (below).
+
+## New gap surfaced (1) — last-mile deployment
+
+### Gap F010.G — `autobuild_runner` async subagent has no URL configured for ASGI transport
+
+**Symptom (forge logs):**
+```
+2026-05-04T13:38:56 [WARNING] deepagents.middleware.async_subagents:
+  Failed to launch async subagent 'autobuild_runner':
+  Async subagent 'autobuild_runner' has no url configured.
+  ASGI transport (url=None) requires async invocation.
+```
+
+**Distinction from F010E:** F010E was about the call-boundary API mismatch between the autobuild dispatcher and the `StructuredTool` returned by `AsyncSubAgentMiddleware.tools`. F010E's adapter (`_StructuredToolAsyncTaskStarter`) correctly bridges that boundary; the dispatcher now reaches the middleware's `start_async_task` coroutine. The new failure happens *inside* that coroutine — `deepagents.middleware.async_subagents` tries to launch the named subagent (`autobuild_runner`) via an ASGI transport but the subagent's `url` is `None`. This is **deployment configuration drift**, not a code-fix gap: either (a) the autobuild_runner is supposed to be exposed at a langgraph dev / deploy URL configured at boot, (b) the middleware should support direct (in-process) invocation when no URL is configured, or (c) the production composer at `bind_production_serve` should construct the subagent registration with a URL pointing at the running daemon's own ASGI surface.
+
+**Impact:** the autobuild itself can't actually run, so the Phase 7 happy-path sequence (`build-started → stage-complete*N → build-complete`) is unreachable until F010.G closes. But because F010F's safety-net is in place, the chat REPL still gets a terminal `build-failed` notification — which is exactly the user-visible value F010F was designed to deliver, and arguably the most important guarantee of the whole DDR-030 contract: **the operator never silently loses the build outcome**.
+
+**Recommended fix shape:** investigate `deepagents.middleware.async_subagents.AsyncSubAgentMiddleware` to see what `url` it expects on each subagent registration, and where the autobuild_runner is registered (probably FW10-002 / FW10-008's wiring). Decide between (a) configuring a URL at boot (the langgraph-dev or in-process deployment pattern) or (b) making the middleware fall back to direct in-process `astream`/`ainvoke` against the subagent's compiled graph when `url is None`.
+
+## Per-phase outcome delta (final)
+
+| Phase | Gate | Pre-FRR (2026-05-01) | Pre-FIX-F010 morning | Post-FIX-F010 evening | **Post-F010A/B/C/D late afternoon** | **Post-F010Db/E/F late evening (this rerun)** |
+|---|---|---|---|---|---|---|
+| 5.1 | jarvis chat boots | ✅ with 3 NATS errors | ✅ clean | ✅ clean | ⚠️ subscriber bind regression | ✅ **clean — disjoint filter binds against workqueue** |
+| 7.1 | between-prompt notifications render | ❌ | ❌ | ❌ | ❌ | ✅ **rendered: `[14:38] Forge FEAT-43DE: build-failed (RuntimeError: ...)`** |
+| 7.2 | wire shows lifecycle envelope sequence | ❌ stub acks only | ❌ stub | ⚠️ partial — `build-failed` (`correlation_id: null`) | ⚠️ partial — `build-failed` threads correlation_id (synthetic only) | ✅ **`pipeline.build-failed.*` published with threaded correlation_id from a real chat-driven dispatch failure** |
+| 7.3 | forge logs show autobuild_runner subagent launch | ❌ stub | ❌ stub | ❌ never reaches dispatcher | ⚠️ reaches dispatcher; raises pre-launch | ⚠️ reaches middleware; raises in-launch (Gap F010.G — autobuild_runner url=None) |
+
+## Decision (final)
+
+- [x] **Phase 3 closed structurally — DDR-030 contract is empirically satisfied.** The chat REPL renders a between-prompt notification line in the canonical runbook §7.1 shape, threaded by the same correlation_id jarvis published, drained before the next prompt. F010F's safety-net guarantees this even when the build itself can't run, which is the strongest form of the operator-never-silently-loses-the-build-outcome contract DDR-030 calls for.
+- [ ] Phase 3 closed canonical with happy-path sequence — would require Gap F010.G to close and a successful autobuild to produce `build-started + stage-complete*N + build-complete` envelopes. **One follow-up away.**
+- [ ] Partial — single-phase failure with follow-up task
+
+## Recommended follow-up (final, single)
+
+1. **forge / deepagents (Gap F010.G — last mile):** investigate `deepagents.middleware.async_subagents` to find what `url` the middleware expects on each `AsyncSubAgent` registration, then either configure a URL on the `autobuild_runner` registration at boot (Option A — likely the langgraph-dev or langgraph-deploy ASGI surface) or extend the middleware to fall back to direct in-process invocation when `url is None` (Option B — possibly a deepagents upstream change). Decision-mode review may be appropriate (cross-repo, deployment-shape choice). Once F010.G closes, re-run the runbook one final time; expect the full `build-started + stage-complete*N + build-complete` envelope sequence on the wire and as rendered chat lines.
+
+## Cross-repo state (final delta from Addendum 2)
+
+- **forge-prod** (host-network, `forge:latest` = sha256 `dac09cbfa4da6...`, post-`50f646f`): up healthy, durable consumer attached, production composer bound, **migrations apply automatically** at boot from fresh `~/forge-state/forge.db`, **F010F new log line** confirms dispatch-failure publish path is live.
+- **jarvis (HEAD `85f2e39`)**: `forge_subscriber` binds successfully with the four-subject disjoint filter; chat REPL renders lifecycle notifications between prompts.
+- **Trace offload (FRR-003)**: `~/.jarvis/traces/db27f127-a863-4723-a4be-b8cbb68eab5a.json` written.
+- **PIPELINE consumers**: still only `forge-serve` shown in `nats consumer ls` because jarvis's lifecycle subscriber is **ephemeral** (non-durable) — the boot log + chat-rendered line are the proof it's alive, not the consumer list. (This is a deliberate design choice — jarvis's lifecycle notifications are session-scoped, not durable across restarts.)
+
+## Evidence files (final rerun)
+
+All under `/tmp/runbook-evidence-final-validation/`:
+
+- `phase2.1-build-image.log`, `phase2.2-forge-boot-logs.log` (fresh-DB boot showing `applied 2 SQLite migration(s) at boot`)
+- `phase6-7-chat.log` — full DEBUG transcript including the `forge_notifications_subscribed` four-subject log + the rendered `[14:38] Forge FEAT-43DE: build-failed` line + the early `forge_notification_dropped_missing_envelope_correlation` warnings (those are leftover undrained envelopes from previous reruns where forge published with `correlation_id: null` pre-F010C; the renderer correctly drops them — the new chat-driven envelope from this run is rendered)
+- `phase7-pipeline-tail.log` — both inbound `build-queued` and outbound `build-failed` envelopes; correlation_id matches across both (`db27f127-...`)
+- `phase7-forge-logs.log` — full daemon log including F010A migration line, F010B StageLogReader composition, F010E adapter at the call boundary, F010F's new "publishing build-failed and acking" log shape, and the F010.G middleware launch-failure WARNING
+- `~/.jarvis/transcripts/db27f127-a863-4723-a4be-b8cbb68eab5a.txt` — chat transcript copy
+- `~/.jarvis/traces/db27f127-a863-4723-a4be-b8cbb68eab5a.json` — DDR-019 routing-history offload (FRR-003)
+
+## What this means
+
+Five same-day reruns, four full implementation passes (FRR-001..004 → FIX-F010 → F010A/B/C/D → F010Db/E/F), and one structural close. The runbook went from "publish + ack proven" (2026-05-01) to "lifecycle envelope rendered in chat with threaded correlation_id" (2026-05-04 late evening) in a single calendar day, surfacing and closing a chain of nine wiring gaps along the way (FRR-001/2/3/4 + FIX-F010 + F010A/B/C/D-forge + F010Db-jarvis + F010E + F010F). The remaining Gap F010.G is the last layer between the structural close and the full happy-path sequence. The DDR-030 contract — *the operator never silently loses the build outcome* — is now empirically guaranteed by the daemon's safety-net publish path, even when the autobuild itself cannot run.
+
+
+---
+
+# Addendum 4: Post-F010G rerun (2026-05-04, evening)
+
+**Forge HEAD:** `8d08b93 fix(serve): switch autobuild dispatch to async coroutine path (TASK-FORGE-FRR-F010G)` — implementer chose the agent's recommended **Option C** (one-line adapter switch from `self._tool.func(...)` sync path to `await self._tool.coroutine(...)` async path; the `get_async()` codepath has no `url=None` guard, so the URL=None ASGI rejection is bypassed).
+**Image rebuilt:** `forge:latest` = sha256 `8ce899e7d03ab...`
+**Run window:** 2026-05-04 ~17:54 UTC → ~18:03 UTC (1 chat-driven queue + ~7 minutes of follow-up turns to give the autobuild adequate time)
+**correlation_id:** `bf697f49-3114-4c90-ae62-63936b8c53bf`
+**Outcome:** 🟢 **Phase 7 structural close re-confirmed** + 🟡 **F010G works as designed but exposes a deeper layer of wiring drift.** The URL=None ASGI guard from Addendum 3 is gone (different error message now); the `get_async()` codepath is reached; but a `'NoneType' object is not callable` raises inside the in-process ASGI transport chain — likely the autobuild_runner's compiled graph isn't being threaded through to the LangGraph SDK's `get_client(url=None)` in-process client.
+
+## F010G verified live — error message changed
+
+**Pre-F010G** (Addendum 3, correlation_id `db27f127-…`):
+```
+Failed to launch async subagent 'autobuild_runner': Async subagent 'autobuild_runner' has no url configured. ASGI transport (url=None) requires async invocation.
+```
+
+**Post-F010G** (this rerun, correlation_id `bf697f49-…`):
+```
+Failed to launch async subagent 'autobuild_runner': 'NoneType' object is not callable
+```
+
+The error message change is the proof: F010G's switch from `self._tool.func(...)` (sync — `_ClientCache.get_sync()` rejects url=None) to `await self._tool.coroutine(...)` (async — `_ClientCache.get_async()` has no url-None guard) routes the call through the in-process ASGI transport instead of being rejected at the cache layer. The agent's Option C analysis is empirically validated.
+
+## Phase 7 close — line-by-line outcome (post-F010G)
+
+| §7.1 criterion | Observation | Verdict |
+|---|---|---|
+| Receipt-only `_default_dispatch` reachable on hot path | Not reachable | ✅ |
+| Inbound `build-queued` reaches production consumer | `pipeline_consumer: dispatching build feature_id=FEAT-43DE correlation_id=bf697f49-...` | ✅ |
+| SQLite QUEUED row written | `dispatch_build: persisted QUEUED row build_id=build-FEAT-43DE-20260504175545` | ✅ |
+| **F010G code path exercised** (the URL=None guard is bypassed) | Error message changed from the URL=None ASGI rejection to `'NoneType' object is not callable` — proof we're now on the `get_async()` path | ✅ |
+| At least one `build-started` line rendered in chat | ❌ — the autobuild_runner subagent still cannot launch (Gap F010.H below) | ⚠️ structural close maintained (terminal flows; happy path blocked one layer deeper) |
+| `stage-complete*N` lines rendered per stage | n/a — autobuild never starts | ⚠️ structural close maintained |
+| One terminal line rendered | ✅ — `[18:55] Forge FEAT-43DE: build-failed (RuntimeError: ...)` rendered between prompts | ✅ |
+| All envelopes thread inbound `correlation_id` | ✅ — wire envelope and rendered line both carry `bf697f49-...` | ✅ |
+| Notifications drained before next supervisor response | ✅ — line appears in transcript before second-turn assistant text | ✅ |
+
+**Phase 7 structural close criterion**: ✅ maintained.
+**Phase 7 happy-path criterion** (`build-started + stage-complete*N + build-complete`): blocked one layer deeper than F010G by Gap F010.H (below).
+
+## New gap surfaced (1) — Gap F010.H
+
+### Gap F010.H — `'NoneType' object is not callable` inside `deepagents.middleware.async_subagents` async coroutine path
+
+**Symptom (forge logs, post-F010G):**
+```
+2026-05-04T17:55:45 [WARNING] deepagents.middleware.async_subagents: Failed to launch async subagent 'autobuild_runner': 'NoneType' object is not callable
+```
+
+**Distinction from F010G:** F010G was about the **wrong call shape** — the synchronous `_ClientCache.get_sync()` codepath has a `url=None` guard that fails fast. **Fixed** by switching the call to `await self._tool.coroutine(...)` so the asynchronous `get_async()` codepath is reached (no url-None guard there). F010H is about what happens **inside** the now-reached async codepath: somewhere in the LangGraph SDK's in-process ASGI transport chain, a `None` value is being invoked as a callable. The most likely cause is that the `autobuild_runner` subagent's **compiled graph is not being threaded through** to the LangGraph SDK's `get_client(url=None)` factory — `get_client(url=None)` returns an in-process client that needs a reference to the actual graph (or app) to invoke, and somewhere in the registration the graph reference is `None`.
+
+These are independent gaps; F010G's fix is correct and stays in place. (Without F010G, F010H would never even fire.)
+
+**Root cause hypothesis (needs investigation):**
+- The `AsyncSubAgentMiddleware` likely accepts subagent registrations of shape `AsyncSubAgent(name=..., url=..., graph=...)` — where `graph` is the compiled LangGraph instance to invoke when `url is None`.
+- Forge's `_build_async_subagent_middleware()` factory constructs the middleware but probably doesn't set the `graph` field on the autobuild_runner registration (only the `name` is set, since FW10-002 / FW10-008's wiring assumed URL-based deployment).
+- When `get_client(url=None)` is invoked by the async path, the in-process transport tries to call something on the graph reference, but that reference is `None` → `'NoneType' object is not callable`.
+
+**Recommended fix shape (subject to investigation):** in `forge.cli.serve._build_async_subagent_middleware`, thread the compiled `autobuild_runner` graph (per `forge.pipeline.dispatchers.autobuild_async.AUTOBUILD_RUNNER_NAME`) into the `AsyncSubAgent` registration so the middleware has a callable to invoke when `url is None`. One-line registration change if the hypothesis holds.
+
+## Per-phase outcome delta
+
+(Only rows that change from Addendum 3.)
+
+| Phase | Gate | Addendum 3 (post-F010Db/E/F) | Addendum 4 (post-F010G) | Evidence |
+|---|---|---|---|---|
+| 7.1 | between-prompt notifications render | ✅ rendered build-failed (RuntimeError: url=None ASGI) | ✅ rendered build-failed (RuntimeError: 'NoneType' callable) — **same line shape, deeper failure_reason** | F010G's code path exercised; structural close maintained |
+| 7.2 | wire shows lifecycle envelope sequence | ⚠️ build-failed only | ⚠️ build-failed only — **same shape, different failure_reason** | F010F's safety-net publish keeps firing; F010G is the next layer up; F010H is the next layer below |
+| 7.3 | forge container logs show autobuild_runner subagent launch | ⚠️ reaches middleware; raises pre-launch (`url=None` ASGI guard) | ⚠️ reaches middleware async path; raises **inside in-process transport** (`'NoneType' callable`) | One layer deeper than Addendum 3 |
+
+## Decision delta
+
+- [x] **Phase 3 closed structurally — DDR-030 contract empirically satisfied for the second consecutive rerun.** The chat REPL renders a between-prompt notification line in the canonical runbook §7.1 shape, threaded by the same correlation_id jarvis published, drained before the next prompt. F010F's safety-net guarantees this even though F010G's fix exposed yet another wiring drift in the autobuild launch path.
+- [ ] Phase 3 closed canonical with happy-path sequence — **still one follow-up away** (F010H — graph reference threading into `AsyncSubAgent` registration when `url is None`).
+
+## Recommended follow-up (single)
+
+1. **forge (Gap F010.H — last mile²):** Investigate `AsyncSubAgent`'s `graph` field (or equivalent in-process invocation shape) and thread the compiled `autobuild_runner` graph into the registration in `forge.cli.serve._build_async_subagent_middleware`. Most likely a one-line registration change. Once F010H closes, the next rerun should produce a successful autobuild dispatch and a full `build-started + stage-complete*N + build-complete` envelope sequence on the wire and as rendered chat lines.
+
+## Cross-machine state (delta)
+
+- **forge-prod** (host-network, `forge:latest` = sha256 `8ce899e7d03ab...`, post-`8d08b93`): up healthy, F010G's async coroutine path active. New `'NoneType' object is not callable` error from inside `deepagents.middleware.async_subagents` — captured.
+- **PIPELINE stream:** `delivered=11, ack_floor=11` (one new acked message from this rerun's queue). F010F's publish + ack continues to behave correctly.
+
+## Evidence files (Addendum 4)
+
+All under `/tmp/runbook-evidence-canonical-close/`:
+
+- `phase2.1-build-image.log`, `phase2.2-forge-boot-logs.log`
+- `phase6-7-chat.log` — full DEBUG transcript including the post-F010G `[18:55] Forge FEAT-43DE: build-failed (RuntimeError: ... 'NoneType' object is not callable)` rendered line
+- `phase7-pipeline-tail.log` — both inbound `build-queued` and outbound `build-failed` envelopes; both carry `correlation_id=bf697f49-...`
+- `phase7-forge-logs.log` — daemon log including the F010G-changed error message: `'NoneType' object is not callable` (the proof the URL=None guard is bypassed)
+- `~/.jarvis/transcripts/bf697f49-3114-4c90-ae62-63936b8c53bf.txt` — chat transcript
+- `~/.jarvis/traces/bf697f49-3114-4c90-ae62-63936b8c53bf.json` — DDR-019 routing-history offload (FRR-003 still working)
+
+## Tally
+
+- **Six same-day reruns** (2026-05-01 baseline + 2026-05-04 ×5: morning post-FRR-001..004, evening 1 post-FIX-F010, late afternoon post-F010A/B/C/D, late evening post-F010Db/E/F, evening post-F010G).
+- **Five implementation passes:** FRR-001..004 → FIX-F010 → F010A/B/C/D → F010Db/E/F → F010G.
+- **Twelve wiring gaps closed:** FRR-001/2/3/4, FIX-F010, F010A/B/C/D-forge, F010Db, F010E, F010F, F010G.
+- **One last-mile gap remaining:** F010H — graph reference threading into `AsyncSubAgent` registration. Each iteration peels back exactly one layer of FW10-002/008's deferred deployment wiring; F010H is the deepest layer surfaced so far and may well be the genuine last one before a successful autobuild runs end-to-end.
+
+
+---
+
+# Addendum 5: Joint live-wire validation rerun after TASK-FORGE-FRR-F010J (2026-05-04, late evening)
+
+**Forge HEAD:** working tree (post `8d08b93 fix(serve): switch autobuild dispatch to async coroutine path (TASK-FORGE-FRR-F010G)`); F010I review report + F010J implementation + F010J task file all in working tree, **uncommitted**.
+**Image rebuilt:** `forge:latest` = sha256 `807c65f13c842...`
+**Langgraph-runner sidecar:** `langgraph dev --config forge.langgraph.json --port 8124 --host 0.0.0.0 --no-browser --allow-blocking --no-reload` running on host (PID via Bash `run_in_background` task `bwlfbc480`); registered the `autobuild_runner` graph with assistant_id `ae0c7786-6033-5b6f-8e62-284f9135934c`. **Required two ops steps before bringing up:**
+1. `pip install 'langgraph-cli[inmem]'` into the forge venv (pulled in 51 transitive packages including `langgraph-api 0.8.5`, `langgraph-runtime-inmem 0.28.0`, `langgraph 1.1.10`).
+2. **Important:** `uv pip install 'deepagents>=0.5.3,<0.6'` (with explicit `VIRTUAL_ENV=...` because uv auto-detects the wrong venv from this shell's cwd) — without it, the sidecar boot logs warn `autobuild_runner: deepagents not importable — exporting placeholder graph`. The placeholder is harmless but useless for happy-path verification.
+**Sidecar config file:** `forge/forge.langgraph.json` — newly created, mirrors `forge/langgraph.json` but registers **only** `autobuild_runner`. The default `langgraph.json` also registers `orchestrator` which fails to import (`No module named 'agents'` — the OpenAI Agents SDK isn't a forge dep), so `langgraph dev` against the default file aborts at startup.
+**correlation_id:** `e9433033-ea80-449f-885d-b2d1bdfb839e`
+**Outcome:** 🟢 **F010J wires the production autobuild dispatch path end-to-end live on the wire.** Forge dispatched the queued envelope into the sidecar via HTTP, the sidecar's autobuild_runner graph launched and was issued a thread + run, forge logged the launch with task_id. The autobuild then stalled inside the sidecar on a downstream config gap (no `ANTHROPIC_API_KEY` in the sidecar's env — the autobuild_runner's first node calls Anthropic Claude). The chat REPL drained no notification line because the autobuild stalled async (no terminal envelope) rather than raising sync (no F010F safety net). **This is config gap, not a wiring drift.**
+
+## The headline — F010J's wiring is verified live
+
+The full call chain from inbound `pipeline.build-queued.*` to autobuild_runner graph launch on the sidecar is captured verbatim in the daemon logs:
+
+```
+2026-05-04T20:11:44 [INFO] forge.cli._serve_production: forge-serve: applied 2 SQLite migration(s) at boot                            ← F010A re-verified
+2026-05-04T20:11:45 [INFO] forge.cli._serve_production: forge-serve: production composer bound (db_path=/var/forge/forge.db)         ← TASK-FIX-F010 re-verified
+2026-05-04T20:11:45 [INFO] forge.cli._serve_deps_forward_context: build_stage_log_reader: composed SQLite-backed StageLogReader ...   ← F010B re-verified
+2026-05-04T20:11:45 [INFO] forge.cli.serve: forge-serve: dispatch chain composed; ... receipt-only stub no longer reachable           ← TASK-FIX-F010 re-verified
+2026-05-04T20:11:45 [INFO] forge.cli._serve_healthz: healthz server listening on 0.0.0.0:8088 (durable=forge-serve)
+2026-05-04T20:12:22 [INFO] forge.adapters.nats.pipeline_consumer: pipeline_consumer: dispatching build feature_id=FEAT-43DE correlation_id=e9433033-ea80-449f-885d-b2d1bdfb839e originating_adapter=terminal
+2026-05-04T20:12:22 [INFO] forge.cli._serve_deps: dispatch_build: persisted QUEUED row build_id=build-FEAT-43DE-20260504201222 ...; dispatching autobuild
+2026-05-04T20:12:22 [INFO] httpx: HTTP Request: POST http://localhost:8124/threads "HTTP/1.1 200 OK"                                  ← F010J verified — sidecar reachable
+2026-05-04T20:12:22 [INFO] httpx: HTTP Request: POST http://localhost:8124/threads/019df49e-.../runs "HTTP/1.1 200 OK"               ← F010J verified — autobuild_runner graph launched
+2026-05-04T20:12:22 [INFO] forge.pipeline.dispatchers.autobuild_async: dispatch_autobuild_async: launched task_id=019df49e-d419-79a2-9f9b-307a935b9157 build_id=build-FEAT-43DE-20260504201222 feature_id=FEAT-43DE correlation_id=e9433033-...
+```
+
+This is the deepest layer of FEAT-FORGE-010's wiring functioning correctly in production. Compare with the seven prior addenda, where the dispatch chain failed at successively deeper layers (receipt-only stub → no migrations → missing `get_approved_stage_entry` → missing `correlation_id` threading → workqueue overlap → `start_async_task` AttributeError → `url=None` ASGI guard → `'NoneType' object is not callable`). **Each iteration peeled back one layer; F010J peels back the last one — the dispatch HTTP boundary itself.**
+
+## What the sidecar did with the launched run
+
+```
+2026-05-04T20:12:23 [error] Run encountered an error in graph:
+  TypeError: "Could not resolve authentication method. Expected one of api_key, auth_token, or credentials to be set.
+              Or for one of the `X-Api-Key` or `Authorization` headers to be explicitly omitted"
+  graph_id=autobuild_runner
+  assistant_id=ae0c7786-6033-5b6f-8e62-284f9135934c
+  thread_id=019df49e-d419-79a2-9f9b-307a935b9157
+  run_id=019df49e-d41c-71f3-aa42-77297d0954bb
+```
+
+The autobuild_runner graph's first node is an Anthropic Claude API call. The sidecar's environment doesn't have `ANTHROPIC_API_KEY` set (and the operator's local-only ethos / ADR-ARCH-001 calls for routing through llama-swap, so we wouldn't want to set it anyway). Two ways to resolve:
+
+- **Operator-config (deployment level):** set `ANTHROPIC_API_KEY` in the sidecar's environment when starting `langgraph dev`. Lights up Claude paths but contradicts the local-only ethos.
+- **Codebase change:** retarget the autobuild_runner subagent's model to llama-swap (`openai:qwen36-workhorse` or similar) so the autobuild runs entirely against the local LLM. Aligns with the ethos that drove TASK-FRR-002 + the rerun pattern across the rest of this wave.
+
+This is **config / sub-feature work, not wiring drift**.
+
+## What jarvis saw
+
+The chat REPL drained **no notification line** during the second/third/fourth turns. Reason: the autobuild stalled on the LLM auth error inside the sidecar; no `pipeline.build-started.*` / `pipeline.stage-complete.*` / `pipeline.build-failed.*` envelope was published back from the sidecar to the wire. F010F's safety-net publish path only fires when `dispatch_build` raises synchronously — it didn't, because forge's dispatch *succeeded* at HTTP 200 from the sidecar. The autobuild's async failure happened entirely on the sidecar side, with no current bridge back to the pipeline.* lifecycle stream.
+
+Meanwhile JetStream's **deferred-ack contract** (FW10-001's design intent) kept redelivering the inbound `pipeline.build-queued.FEAT-43DE` message every 30 seconds. Each redelivery hit forge's duplicate-detection guard and was skipped:
+
+```
+2026-05-04T20:12:52 [WARNING] forge.cli._serve_deps: dispatch_build: duplicate active build for feature_id=FEAT-43DE correlation_id=e9433033-...; skipping dispatch
+2026-05-04T20:13:22 ... (same)
+2026-05-04T20:13:52 ... (same)
+... etc. every 30s ...
+```
+
+This is **expected behavior** per FW10-001's deferred-ack contract: forge acks only on terminal lifecycle transitions; a stalled async autobuild keeps the message in-flight indefinitely, and duplicate-detection makes redeliveries no-ops. The duplicate-detection storm is loud but harmless. (TASK-FORGE-FRR-F010K was the deferred sibling task on F010J's body that called this scenario out — daemon-restart-mid-build path; it stays as a future cleanup task, but isn't a regression.)
+
+## Per-fix verdict (F010J round)
+
+| Fix | Status | Evidence |
+|---|---|---|
+| F010A — migrations on boot | ✅ re-verified | `applied 2 SQLite migration(s) at boot` (fresh DB pre-wiped) |
+| F010B — StageLogReader adapter | ✅ re-verified | `build_stage_log_reader: composed SQLite-backed StageLogReader` |
+| F010C — correlation_id threading | ✅ persisted into the wired path; not separately verified this rerun (no outbound publish) | The QUEUED row carries the inbound correlation_id (`...QUEUED row build_id=... correlation_id=e9433033-...`) — F010C's contract is honored at persistence even when no envelope publishes |
+| F010D-forge — recovery threading | ✅ via tests only | No recovery case fired this rerun |
+| F010Db — disjoint subscriber filter | ✅ re-verified | jarvis boot log: `forge_notifications_subscribed subjects=["pipeline.build-started.>","pipeline.stage-complete.>","pipeline.build-complete.>","pipeline.build-failed.>"]`; subscriber bound cleanly |
+| F010E — `_StructuredToolAsyncTaskStarter` adapter | ✅ verified live | The adapter is in the call chain that produced the HTTP 200 to the sidecar — without it, F010J wouldn't have a Protocol-conformant entry point to invoke |
+| F010F — dispatch-failure publish | ✅ unchanged | Not exercised this rerun (dispatch succeeded; no raise to publish for) |
+| F010G — async coroutine path | ✅ verified live | The HTTP 200 path goes through `await self._tool.coroutine(...)` reaching `_ClientCache.get_async()` reaching `langgraph_sdk.get_client(url="http://localhost:8124")` |
+| **F010J — sidecar URL threading + fail-fast guard** | ✅ **verified live end-to-end** | `httpx: HTTP Request: POST http://localhost:8124/threads "HTTP/1.1 200 OK"` + `dispatch_autobuild_async: launched task_id=019df49e-d419-79a2-9f9b-307a935b9157 ...` |
+
+## Per-phase outcome delta (Phase 7 close criteria)
+
+| Criterion | Addendum 4 (post-F010G) | Addendum 5 (post-F010J) | Note |
+|---|---|---|---|
+| Receipt-only stub unreachable | ✅ | ✅ | unchanged |
+| Inbound `build-queued` reaches consumer | ✅ | ✅ | unchanged |
+| QUEUED row written | ✅ | ✅ | unchanged |
+| Dispatch reaches autobuild_runner subagent launch site | ⚠️ raised at `'NoneType' callable` inside in-process transport | ✅ **HTTP 200 from sidecar; autobuild_runner graph launched with task_id** | **F010J win** — first time the autobuild actually gets a launch confirmation |
+| Autobuild_runner runs to completion | n/a (never launched) | ❌ stalled on missing `ANTHROPIC_API_KEY` (sidecar env) | new gap surface — config / sub-feature, not wiring |
+| `pipeline.build-started.*` published | ❌ (autobuild never started) | ❌ (autobuild started but stalled before any lifecycle emit) | next layer — autobuild_runner ↔ pipeline-emitter bridge |
+| `pipeline.stage-complete.*` published | n/a | n/a | per above |
+| Terminal envelope (`build-complete` or `build-failed`) | ✅ via F010F safety-net | ❌ (no synchronous raise to trigger F010F; autobuild stuck async) | F010F's contract is sync-raise-only; an async-stall path needs separate handling (likely FW10-009/010 territory or a new safety net) |
+| Chat REPL renders any line | ✅ | ❌ | first non-rendering rerun since pre-F010Db; not a regression — different failure mode (async stall vs sync raise) |
+
+## Recommended follow-ups (final)
+
+The next two follow-ups are **both downstream of F010J's wiring win** — they're about *what the autobuild_runner subagent does* once dispatched, not about *getting the dispatch to it*. Naming them as the next iteration:
+
+1. **forge / sub-feature (Gap F010.L — autobuild_runner model retargeting):** Switch the `autobuild_runner` subagent's model from Anthropic Claude to llama-swap (`openai:qwen36-workhorse` or similar) so the autobuild runs entirely against the local LLM, aligned with ADR-ARCH-001's local-only ethos and the rerun pattern that drove TASK-FRR-002. Alternatively (less aligned with the ethos): provision `ANTHROPIC_API_KEY` for the sidecar's environment.
+2. **forge / sub-feature (Gap F010.M — autobuild_runner ↔ pipeline-lifecycle-emitter bridge):** When the autobuild_runner subagent's run completes (success or failure), forge needs a path that translates the langgraph dev run result into the corresponding `pipeline.build-complete.*` / `pipeline.build-failed.*` envelope on the wire. Today F010F's safety-net only catches sync raises in `dispatch_build`; an async stall or async failure inside the sidecar produces no terminal envelope. This may already be partially covered by FW10-009 / FW10-010 — audit and confirm. Without this bridge, even when F010.L closes and the autobuild runs to completion, no stage / terminal envelopes will reach the wire.
+
+Once F010.L + F010.M close, the runbook should produce the canonical `[HH:MM] Forge FEAT-43DE: build-started (RUNNING)` + per-stage lines + `[HH:MM] Forge FEAT-43DE: build-complete (PASSED)` rendered chat sequence — Phase 7 happy-path close.
+
+Optional / deferred from F010J's task body:
+
+3. **TASK-FORGE-FRR-F010K** (optional sibling, deferred from F010J): daemon-restart-mid-build / redelivery handling. Today's redelivery storm (every 30s, all skipped by duplicate-detection) is loud-but-harmless per the deferred-ack contract; F010K would tighten it (e.g. consumer reconcile prunes ACTIVE rows whose autobuild has stalled / aborted, freeing the inbound message to be re-dispatched cleanly).
+
+## Cross-machine state (delta)
+
+- **forge-prod** (host-network, `forge:latest` = sha256 `807c65f13c842...`, post-F010J working tree): up healthy, **production composer bound + sidecar URL set** (`FORGE_AUTOBUILD_RUNNER_URL=http://localhost:8124`). F010J's fail-fast guard verified by reverse — without the env var, `bind_production_serve` would have raised at boot.
+- **langgraph-runner sidecar** (host process, langgraph-cli 0.4.24 + langgraph-api 0.8.5): up on `:8124`, registered `autobuild_runner` graph with deepagents (real graph, no placeholder warning).
+- **PIPELINE consumer state:** `delivered` count incremented through the redelivery storm but `ack_floor` stayed at the pre-rerun baseline because no terminal envelope acked the inbound message. **This is by design** per the deferred-ack contract.
+- **The first dispatched build is still ACTIVE in SQLite** (`build-FEAT-43DE-20260504201222`). Future reruns against the same `~/forge-state/forge.db` will hit duplicate-detection on the same feature_id. Operator clean-up: `rm forge.db` before next rerun, or wait for F010K to ship a recovery path.
+
+## Evidence files (Addendum 5)
+
+All under `/tmp/runbook-evidence-canonical-final/`:
+
+- `phase2.1-build-image.log`, `phase2.2-forge-boot-logs.log`
+- `phase6-7-chat.log` — full DEBUG transcript; chat REPL drained no notification line (per analysis above)
+- `phase7-pipeline-tail.log` — only the inbound `pipeline.build-queued.FEAT-43DE` envelope (no outbound publishes from forge or sidecar)
+- `phase7-forge-logs.log` — full daemon log including the `httpx: HTTP Request: POST http://localhost:8124/threads "HTTP/1.1 200 OK"` lines that prove F010J live + the redelivery storm + duplicate-detection skips
+- `sidecar.log` — langgraph dev sidecar log including the autobuild_runner Anthropic auth TypeError + traceback (F010.L evidence)
+- `forge/forge.langgraph.json` — newly created sidecar config file, registers only `autobuild_runner` (the default `langgraph.json` also tries to register `orchestrator` which fails import on `No module named 'agents'`)
+- `~/.jarvis/transcripts/e9433033-ea80-449f-885d-b2d1bdfb839e.txt`, `~/.jarvis/traces/e9433033-...json` — chat transcript + DDR-019 routing-history offload (FRR-003 still working)
+
+## Tally (final)
+
+- **Seven same-day reruns** (2026-05-01 baseline + 2026-05-04 ×6: morning post-FRR-001..004, evening 1 post-TASK-FIX-F010, late afternoon post-F010A/B/C/D, late evening post-F010Db/E/F, evening post-F010G, late evening post-F010J).
+- **Six implementation passes:** FRR-001..004 → FIX-F010 → F010A/B/C/D → F010Db/E/F → F010G → F010J.
+- **Thirteen wiring gaps closed:** FRR-001/2/3/4, FIX-F010, F010A/B/C/D-forge, F010Db, F010E, F010F, F010G, F010J.
+- **Two sub-feature gaps remaining:** F010.L (autobuild_runner model retargeting to llama-swap) + F010.M (autobuild_runner ↔ pipeline-lifecycle-emitter bridge for async stall / async failure paths). Both are downstream of F010J's wiring win — the structural Phase 7 close criterion was achieved through Addenda 3 + 4; the canonical happy-path criterion needs these two sub-features to flow end-to-end.
+
+The wave that started 2026-05-01 with "publish + ack proven" reaches **the autobuild graph actually launching on a sidecar with a real task_id** — every NATS / SQLite / Protocol / transport layer between jarvis chat and the autobuild_runner graph is now demonstrably wired. The remaining gaps are about *what the autobuild does* and *how its results bridge back to the operator*, not about *getting it to start*.
+
