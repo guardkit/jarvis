@@ -2926,4 +2926,43 @@ Folded the three observational wave-3 candidates surfaced by the fresh-followup-
 **Note on the runbook's still-uncommitted in-flight polish.** The runbook also carries ~32 lines of uncommitted wave-2 layered polish in §2.0 (Pre-flight 1 langgraph-dev process-kill + `.langgraph_api/` clear, post-boot Queue stats verification, updated `LangSmith Deployment` openapi pass-criteria) and §6.x (Symptom-check callout for `qwen36-workhorse` slot saturation). That polish was filed under "W3-4 fold" in the prior history entry but has no dedicated tracking task; it was added directly during walkthroughs. Will be committed at operator's discretion alongside (or independent of) the W3-A/B/C fold.
 
 **Other housekeeping (same session):** [TASK-FRR-RUNBOOK-002](../../tasks/completed/feat-jarvis-internal-001-followups/TASK-FRR-RUNBOOK-002-gap-fold-runbook-for-post-pebr-wireup-topology.md) moved from `in_progress/` to `completed/` — the six in-scope wave-2 topology gap-folds (§2.0 sidecar, §2.2 `--config`, §2.2 host DB mount, §2.2 `FORGE_AUTOBUILD_RUNNER_URL`, §6.2 markdown-bullet shape, §4.2 graphiti probe Content-Type guard, §5.1 stale-warnings retirement) are all in the runbook and committed via `30e4ae4` "reviews, history tasks". The kanban file was simply not yet moved.
+
+---
+
+## 2026-05-08 — Runbook re-run: RUNBOOK-FEAT-JARVIS-INTERNAL-001-first-real-run.md (FOLLOWUP-B-FIX landed)
+
+**Machine:** GB10 (`promaxgb10-41b1`) — co-resident, executed directly on host (SSH prefix dropped per §0.2)
+**Forge HEAD:** `1b04b89` — includes FOLLOWUP-A (`55f7804`), PEBR-WIREUP (`1b82236`), and **FOLLOWUP-B-FIX (`b9e9585` — wire async_tasks channel into autobuild_runner StateGraph)**
+**Jarvis HEAD:** `5fb4159` (build(deps): bump nats-core floor to >=0.4 (v0.4.0))
+**Specialist-agent HEAD:** `82ce8a6` (nats-core 0.4 bump landed in main; running architect/PO containers still on pre-bump image — not exercised by mode B run)
+**Forge image:** `forge:latest` sha `c0275b3df2c8` (rebuilt fresh during this run from current main)
+**correlation_id:** `10c80f94-ce1f-41bf-97e5-50b5d67faba5`
+**Outcome:** ⏸ **Phases 0–6 GREEN; Phase 7 FAILs with a NEW "Signature C" not previously documented** — the join_stream race against placeholder-fast completion.
+
+**Teardown:** full state reset — `docker rm -f forge-prod`; `pkill langgraph dev` + `rm -rf ~/Projects/appmilla_github/forge/.langgraph_api/`; `nats consumer rm PIPELINE forge-serve -f`; `nats stream purge PIPELINE -f` (cleared 1 leftover redelivery, `delivered=385, ack_floor=0` from prior run); `rm -f ~/forge-prod-state/.forge/forge.db*`. **Forge image rebuilt** from current main `1b04b89` — this was the gate (the prior run's image `91ec9638963c` predated `b9e9585`).
+
+**Key findings:**
+- ✅ FOLLOWUP-A continues to hold post-rebuild — `applied 2 SQLite migration(s) at boot`; **0** `register_ack_handle raised (no such table)` warnings across 7 dispatch cycles.
+- ✅ **FOLLOWUP-B-FIX wiring is observably live** — boot log carries the unique fingerprint `composed PipelineConsumerDeps (async_task_starter=wired, ack_bridge=wired, terminal_publish_ledger=wired)` (introduced by `b9e9585`'s dep-composition path; absent in wave-2 logs).
+- ✅ **autobuild_runner StateGraph executes successfully** — langgraph dev sidecar reports `Background run succeeded run_completed_in_ms=936 run_exec_ms=16`. The 4-node placeholder StateGraph (`starting → planning_waves → running_wave → completed`) walks the full lifecycle in 16ms of node execution.
+- ✅ Phases 0–6 verbatim-runnable — zero manual gap-folds during execution.
+- ✅ Phase 6 supervisor narration: **inline-prose** ack rather than the documented bullet shape — `"FEAT-43DE is queued for build. Correlation ID:` `` `10c80f94-…` `` `. Forge will pick it up from the JetStream topic` `` `pipeline.build-queued.FEAT-43DE` `` `."` Both load-bearing strings present; bullet shape absent (third narration variant after the wave-2 `Target:` / `Publish target:` documented variants — wave-3 fold candidate W3-C).
+- ❌ **Phase 7 fails with new Signature C:** 1 inbound `BuildQueuedPayload`, **0** outbound `pipeline.build-started.*` / `stage-complete.*` / `build-complete.*` / `build-failed.*` envelopes after a 6m+ window. Final consumer state `delivered=14, ack_floor=0, redelivered=1`. Forge logs show 7 cycles each completing with `stream ended without a terminal envelope` ~1s after dispatch. AC-3 / AC-11 still NOT met.
+- 🔍 **Root-cause for Signature C** — race between langgraph dev's run completion and forge's bridge GET-ing `langgraph_sdk.runs.join_stream`. Placeholder bodies execute in 16ms; the bridge subscribes ~1s later and sees zero values events because `join_stream` is a **live** subscription, not a **replay** of completed-run history. Confirmed via direct curl probe of the same SSE URL post-completion (returned empty body, closed connection). The deadline timer at +5min did not fire because the SSE stream was technically *reachable* (just empty) — the unreachability gate is unchanged from wave-2.
+- 🔍 **Spike instrumentation gone** — `b9e9585` removed the FOLLOWUP-B SSE per-part visibility (`stream_part received n=N event='values' data_keys=…`, `parts_received=N`, `stream session open`/`stream exhausted`) that wave-2 captured. Wave-3 fold candidate W3-E flags this as a §7 framing-staleness item.
+- 🔍 **Runbook §1.3 / §6.3 / §7.2 docker-exec pattern is stale on this host** — the running NATS container (`ships-computer-nats`) has only `nats-server`, not the `nats` CLI. Host-side `nats` (v0.3.2) at `/usr/local/bin/nats` works without `docker exec`, and `verify-nats.sh` already uses host-side. Wave-3 fold candidate W3-D.
+
+**Full results:** [`docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-followup-b-landed.md`](../runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-followup-b-landed.md)
+
+**Evidence:** `/tmp/jarvis-runbook-evidence/` (phase1-verify-nats.log, phase5-boot.log, phase6-pre-{stream,consumer}-info.json, phase6-chat.log [382 KB], phase6-chat-narration.txt, phase7-pipeline-tap.log [760 B / 1 inbound], phase7-final-{stream,consumer}-info.json, phase7-forge-prod-logs-final.log [25 KiB / 111 lines], langgraph-sidecar.log [32 KiB]) + `~/.jarvis/transcripts/10c80f94-ce1f-41bf-97e5-50b5d67faba5.txt` + `~/.jarvis/traces/10c80f94-ce1f-41bf-97e5-50b5d67faba5.json`.
+
+**Wave-3 fold candidates surfaced (none blocking; all observational):**
+- **W3-A** (substantive, high severity): §7.1 / §7.3 fail-signature tables need a new **Signature C** entry covering the join_stream subscribe-after-completion race. Forward-references `TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-C-RACE` (or equivalent) on the forge side.
+- **W3-B** (carries forward from prior run): deadline-timer gate qualifier — gated on stream **unreachability**, not stream **silence** / empty-but-reachable.
+- **W3-C** (cosmetic): supervisor inline-prose narration is a third valid shape for §6.2 alongside the documented bullet variants.
+- **W3-D** (low): runbook's `docker exec ... nats` pattern in §1.3 / §6.3 / §7.2 fails on this host — fold to host-side `nats` (which `verify-nats.sh` already uses).
+- **W3-E** (medium, framing-staleness): §7 references to FOLLOWUP-B SSE per-part instrumentation are archeological now that `b9e9585` removed them. Sweep needed.
+- **W3-F** (low, additive): add the `composed PipelineConsumerDeps … wired` boot line to §2.2's "Pass" criteria — it's the clearest on-boot fingerprint that the FOLLOWUP-B-FIX surface is in the running image.
+
+**Recommended forge follow-up:** `TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-C-RACE` — close the join_stream subscribe-after-completion race. Most likely fix: subscribe the bridge to the SSE stream *before* triggering `dispatch_autobuild_async`, removing the race entirely. Once landed, the runbook should expect **2 envelopes** with the current placeholder bodies (`pipeline.build-started.*` from the `running_wave`-after-`starting/planning_waves` transition, then `pipeline.build-complete.*` from the `completed` terminal — per `LIFECYCLE_TO_PIPELINE_EMIT`). The runbook's documented full per-stage sequence (`build-started → stage-complete×N → build-complete/failed`) is gated on real autobuild orchestration landing inside the runner node bodies, which the FOLLOWUP-B-FIX commit explicitly deferred to a separate follow-up.
  
