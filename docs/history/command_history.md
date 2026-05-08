@@ -2654,3 +2654,146 @@ This is the deepest layer of FEAT-FORGE-010's wiring functioning correctly in pr
 - **13 wiring gaps closed** — FRR-001/2/3/4 → FIX-F010 → F010A/B/C/D-forge → F010Db-jarvis → F010E → F010F → F010G → F010J
 - **2 sub-feature gaps remaining** — F010.L (autobuild_runner model retargeting) + F010.M (autobuild_runner ↔ pipeline-lifecycle-emitter bridge)
 
+
+---
+
+## 2026-05-08 — RUNBOOK-FEAT-JARVIS-INTERNAL-001 walkthrough on GB10 (post-FEAT-PEBR merge)
+
+### Context
+
+User reported: *"we have implemented the two feature gaps from the last run … please work through the runbook to see if we have resolved the gaps."*
+
+The two gaps from Addendum 5 (2026-05-04 evening) were:
+
+1. **F010.L** — autobuild_runner LLM retargeting from Anthropic to local llama-swap → addressed by `forge` `378ccd6 fix(autobuild): retarget autobuild_runner LLM from anthropic to local llama-swap qwen36-workhorse (TASK-FORGE-FRR-F010L)`.
+2. **F010.M** — autobuild_runner ↔ pipeline-lifecycle-emitter bridge → addressed by `forge` `5d84d94 merge(FEAT-PEBR): autobuild_runner pipeline-emitter bridge — code-only` (closes F010J → F010M wire gap per merge message; PEB-001..014 all in `tasks/completed/`).
+
+This walkthrough is the verification rerun against `forge` HEAD `e50241e` (post-PEBR) and `jarvis` HEAD `ca2ba6b` (no functional jarvis changes since 2026-05-04 Addendum 5).
+
+### Verdict
+
+⏸ **Same overall shape as Addendum 5** — wire e2e proven up to `forge` consume + sidecar autobuild succeeds, but **no outbound lifecycle envelopes reach JetStream**. F010.L is verified live (sidecar drove 12 LLM calls against `qwen36-workhorse` on llama-swap, `Background run succeeded`). F010.M is **partially** closed — the bridge code shipped, but a fresh **production-composer wiring gap** was discovered: `forge.cli._serve_production.bind_production_serve` does not instantiate `LifecycleBridgeWireup`, so `register_ack_handle` and `terminal_publish_ledger` are passed as `None` to `build_pipeline_consumer_deps`. The daemon's runtime log openly states this on every boot:
+
+```
+build_pipeline_consumer_deps: composed PipelineConsumerDeps
+  (async_task_starter=wired,
+   ack_bridge=deferred (TASK-FRR-PEB-002),
+   terminal_publish_ledger=deferred (TASK-FRR-PEB-005))
+```
+
+### Headline run
+
+- correlation_id: `5673965b-e302-4a10-89cb-ceb430e64995`
+- queued_at: 2026-05-08T05:58:23Z
+- forge dispatch: HTTP POST http://localhost:8124/threads/.../runs → 200 OK → task_id `019e062a-6b8c-7be0-986c-ce9243734e22`
+- sidecar: `Background run succeeded run_completed_in_ms=37179` at 2026-05-08T05:59:01
+- wire (`nats sub "pipeline.>"` for 4 minutes): **exactly 1 envelope** captured — the inbound `build_queued`. Zero outbound lifecycle envelopes.
+- forge consumer state at end of rerun: `delivered=7277, redelivered=2, ack_floor=11` — inbound Msg never acked; redelivers every 30s; `dispatch_build: duplicate active build for feature_id=FEAT-43DE; skipping dispatch` warnings on every redelivery.
+
+### Operator-side prerequisites discovered (NEW — not in current runbook §2)
+
+1. **langgraph-runner sidecar must be running before `forge serve`**, on port 8124, against `forge.langgraph.json` (which registers only `autobuild_runner`; the default `langgraph.json` also registers `orchestrator` which fails to import on the canonical setup).
+2. **Forge venv must have `[providers]` extras** (`langchain-openai`, `langchain-google-genai`) — without them the sidecar exports a placeholder graph and silently no-ops on every dispatch.
+3. **`forge serve` Docker run needs `FORGE_AUTOBUILD_RUNNER_URL=http://localhost:8124`** — `bind_production_serve`'s F010J fail-fast guard will refuse to boot otherwise.
+
+### Documents updated
+
+- `docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08.md` (new RESULTS file — companion to the 2026-05-01 baseline + 2026-05-04 multi-addendum file)
+
+### Tally update
+
+- 13 wiring gaps closed in prior reruns
+- **2 sub-feature gaps from Addendum 5 (F010.L + F010.M):** F010.L verified live; F010.M partially closed (code merged, production composer not yet wired to it)
+- **1 new gap discovered (Gap PEBR-WIREUP):** `bind_production_serve` doesn't compose `LifecycleBridgeWireup`. One task deep — fix shape sketched in RESULTS file. Once closed, expect canonical `build-started + stage-complete*N + build-complete` sequence on the wire.
+
+
+
+please work through the runbook docs/runbooks/RUNBOOK-jarvis-architect-align-dddsw-demo.md
+
+Runbook execution: STOPPED at Phase 4 — Gap DISPATCH-STUB-RESOLVER
+Phases 0–3: all green. Pre-flight clean (jarvis HEAD ca2ba6b, specialist-agent image rebuilt today 07:06, llama-swap serving architect-agent + qwen36-workhorse, NATS up healthy, agent-registry KV publishing all 4 architect tools incl. architect_align, jarvis chat boots clean).
+
+Phase 4: blocked across three dispatch attempts. Wire taps captured zero envelopes; three FRR-003 traces all outcome_type: "unresolved".
+
+Root cause (one-step-deep wiring gap, same shape as Gap PEBR-WIREUP from yesterday's RESULTS):
+
+lifecycle.py:547 loads stub_capabilities.yaml into capability_registry (the stub list); lifecycle.py:628 constructs LiveCapabilitiesRegistry into a separate variable capabilities_registry. Both get passed to assemble_tool_list, which at tools/init.py:252-263 wires the Live registry into the catalogue prompt-tools but the stub list into _dispatch._capability_registry. The dispatch resolver at tools/dispatch.py:438 only consults the stub. The supervisor's prompt block correctly shows architect_align; the resolver doesn't know it exists.
+
+The runbook §2.5 "Catalogue-vs-stub note" is half-correct — live KV does hydrate the prompt block, but not the resolver.
+
+Demo-blocking? Yes for 2026-05-16 unless one of three workarounds (stub yaml patch, real lifecycle.py fix, or intent_pattern arg — last unreliable on qwen36-workhorse) is applied.
+
+Wrote: RESULTS-jarvis-architect-align-dddsw-demo-2026-05-08.md with full per-phase table, code-level root cause, fix shape, three workarounds, follow-ups for the runbook itself (§2.5 + §6 are misleading), and evidence snapshot at docs/runbooks/evidence/dddsw-demo-2026-05-08-blocked/ (one chat log + three traces).
+
+Dual-role stack and llama-swap left running for whichever fix path you choose next.
+
+
+
+/task-review TASK-REV-CB48
+
+
+All artifacts written. Final summary.
+
+Review complete — TASK-REV-CB48 marked review_complete (score 78/100, hybrid decision).
+
+Report: .claude/reviews/TASK-REV-CB48-review-report.md
+
+Implementation subfolder: tasks/backlog/dispatch-stub-resolver-fix/
+
+Task	Wave	Mode	Est.	Purpose
+TASK-DSR-001	1	direct	15m	W1 yaml patch — demo insurance, today
+TASK-DSR-002	1	direct	30m	Runbook §0 gate + §6 row (parallel with W1)
+TASK-DSR-003	2	task-work	3-4h	W2 wiring fix + F3 integration test + parity test (target 2026-05-15)
+TASK-DSR-004	3	task-work	1-2h	§2.5 rewrite + end-to-end runbook re-run + new RESULTS doc
+Key non-obvious finding (test-corpus audit): tests/test_assemble_tool_list.py:376-380 passes the same [descriptor_alpha] to both capability_registry (positional → stub slot) and capabilities_registry (kwarg → live slot). The wiring gap was invisible because the two inputs were never given divergent content. The TASK-DSR-003 F3 test (one stub-only descriptor + a different live-only descriptor, asserting the dispatch slot reflects the live registry) is the assertion the corpus needed and never had.
+
+Notes:
+
+Graphiti knowledge-graph capture skipped — MCP tools deferred and no .guardkit/graphiti.yaml present in this session. Review proceeded from direct codebase analysis only (documented in report's "Context Used" section).
+Stub-yaml deprecation (review R5) deferred to a post-demo follow-up; the recommendation is keep the yaml as the DDR-021 NATS-down fallback, rename its documented role, and add a CI drift lint.
+Demo-blocking risk: W1 (DSR-001) is the unconditional safety net. If W2 (DSR-003) slips past 2026-05-15, the demo still runs on W1 + Wave 1 runbook updates.
+Next step: start TASK-DSR-001 and TASK-DSR-002 today (parallel, no dependencies).
+
+
+
+implement TASK-DSR-001
+
+
+TASK-DSR-001 implemented. The four architect tool entries (architect_greenfield, architect_align,     
+  architect_explore, architect_feasibility) are added to src/jarvis/config/stub_capabilities.yaml
+  alongside the existing run_architecture_session and draft_adr. All six tools parse correctly with     
+  valid risk_level values.                                                                              
+  
+  AC status:                                                                                            
+  - AC-001 ✅ — six tool entries present with descriptions and risk_level
+  - AC-002 ⏳ — manual boot-time verification (requires running Jarvis with the dual-role stack and     
+  dispatching architect_align; out of scope for code change)                                       
+  - AC-003 ⚠️  — yaml load and structure validated; pytest collection blocked by an unrelated missing-dep
+   (asteval) in this environment, not caused by this change    
+
+
+   /task-complete TASK-DSR-001
+
+
+implement TASK-DSR-002
+
+
+TASK-DSR-002 implemented. Two edits to docs/runbooks/RUNBOOK-jarvis-architect-align-dddsw-demo.md:    
+                                                                                                        
+  - §0.5 (new) — Added "Stub ↔ Live alignment" pre-flight gate with verify command, references to       
+  TASK-DSR-001 (W1) and TASK-DSR-003 (W2), and a link to the TASK-REV-CB48 review report. Original §0.5 
+  (ADR pair decision) renumbered to §0.6.                                                               
+  - §6 unresolved row — Replaced the "restart jarvis chat" advice with the actionable cause/fix path:
+  edit stub_capabilities.yaml (W1) or land W2. Kept the agent-registry-empty/auth-violation guidance as 
+  a secondary check; left the exhausted and other rows untouched.
+                                                                                                        
+  §2.5 unchanged (deferred to TASK-DSR-004, AC-003 ✓). All three relative links (../../tasks/... × 2,   
+  ../../.claude/reviews/...) resolve from the runbook's location (AC-004 ✓). Task frontmatter updated to
+   status: completed with all four ACs marked passing.   
+
+
+  /task-complete TASK-DSR-002
+
+
+  
+   
