@@ -124,6 +124,30 @@ def descriptor_bravo() -> CapabilityDescriptor:
 
 
 @pytest.fixture()
+def descriptor_beta() -> CapabilityDescriptor:
+    """Return a descriptor that intentionally collides with neither alpha nor bravo.
+
+    Used by the TASK-DSR-003 / W2 divergent-registry regression to assert that
+    the dispatch resolver observes the live registry's content (``beta``)
+    rather than the stub-list positional argument (``alpha``).
+    """
+    from jarvis.tools.capabilities import CapabilityToolSummary
+
+    return CapabilityDescriptor(
+        agent_id="beta",
+        role="Beta Agent",
+        description="Handles beta capabilities for tests.",
+        capability_list=[
+            CapabilityToolSummary(
+                tool_name="beta_tool",
+                description="A tool exposed only by the live registry.",
+                risk_level="read_only",
+            ),
+        ],
+    )
+
+
+@pytest.fixture()
 def reset_tool_state() -> None:
     """Snapshot and restore tool-module state around each test.
 
@@ -451,3 +475,109 @@ class TestAC005NoSubmoduleImports:
             "Production modules must consume `jarvis.tools` only:\n"
             + "\n".join(f"  - {v}" for v in violations)
         )
+
+
+# ---------------------------------------------------------------------------
+# TASK-DSR-003 / W2 — dispatch resolver sources from the live registry
+# (closes the DISPATCH-STUB-RESOLVER gap surfaced by review TASK-REV-CB48 F2)
+# ---------------------------------------------------------------------------
+class _ListBackedRegistry:
+    """Test-local Protocol adapter — same shape as the helper inside
+    ``TestAC004SnapshotIsolation.test_list_available_capabilities_observes_snapshot``
+    (kept module-level here so multiple tests can reuse it).
+    """
+
+    def __init__(self, descriptors: list[CapabilityDescriptor]) -> None:
+        self._descriptors = descriptors
+
+    def snapshot(self) -> list[CapabilityDescriptor]:
+        return list(self._descriptors)
+
+    async def refresh(self) -> None:
+        return None
+
+    async def subscribe_updates(self, callback: object) -> None:
+        return None
+
+    async def close(self) -> None:
+        return None
+
+
+class TestDispatchResolverSourcesFromLiveRegistry:
+    """W2 regression: ``dispatch._capability_registry`` reflects the live
+    registry's content, not the stub-list positional argument.
+
+    Closes the DISPATCH-STUB-RESOLVER gap surfaced by TASK-REV-CB48 F2.
+    Structural twin of TASK-J004-FIX-001 (which closed the catalogue-tool
+    side of the same wiring inconsistency).
+    """
+
+    def test_dispatch_resolver_observes_live_registry_for_divergent_content(
+        self,
+        test_config: JarvisConfig,
+        descriptor_alpha: CapabilityDescriptor,
+        descriptor_beta: CapabilityDescriptor,
+        reset_tool_state: None,
+    ) -> None:
+        """Dispatch resolver MUST find tools published by the live registry
+        even when they are absent from the stub list.
+
+        F3 fixture from review TASK-REV-CB48: stub list contains alpha only;
+        live registry contains beta only. The dispatch slot must reflect the
+        LIVE registry (beta), not the stub list (alpha).
+        """
+        assemble_tool_list(
+            test_config,
+            [descriptor_alpha],
+            capabilities_registry=_ListBackedRegistry([descriptor_beta]),
+        )
+
+        snapshot = list(dispatch_module._capability_registry)
+        agent_ids = {d.agent_id for d in snapshot}
+        assert "beta" in agent_ids, (
+            "dispatch slot must reflect the live registry's content"
+        )
+        assert "alpha" not in agent_ids, (
+            "dispatch slot MUST NOT fall back to the stub list when a "
+            "live registry is supplied"
+        )
+
+    def test_dispatch_slot_falls_back_to_stub_list_when_registry_is_none(
+        self,
+        test_config: JarvisConfig,
+        descriptor_alpha: CapabilityDescriptor,
+        reset_tool_state: None,
+    ) -> None:
+        """FEAT-J002 / Phase 1 default path remains intact.
+
+        When ``capabilities_registry`` is omitted (None), the dispatch slot
+        falls back to ``list(capability_registry)`` so the FEAT-J002 unit
+        tests that pre-date the Protocol surface keep working.
+        """
+        assemble_tool_list(test_config, [descriptor_alpha])
+
+        snapshot = list(dispatch_module._capability_registry)
+        assert [d.agent_id for d in snapshot] == ["alpha"]
+
+    def test_dispatch_snapshot_is_decoupled_from_live_registry_internal_list(
+        self,
+        test_config: JarvisConfig,
+        descriptor_alpha: CapabilityDescriptor,
+        descriptor_beta: CapabilityDescriptor,
+        reset_tool_state: None,
+    ) -> None:
+        """ASSUM-006 snapshot isolation extends to the live-source path.
+
+        The dispatch slot stores a fresh ``list(...)`` copy of
+        ``snapshot()`` — mutating that list does not poison the live
+        registry's internal cache, and a subsequent rebind from a watch
+        event produces a fresh list.
+        """
+        live = _ListBackedRegistry([descriptor_alpha])
+        assemble_tool_list(test_config, [], capabilities_registry=live)
+
+        # Mutate the dispatch slot's list — must not poison the registry.
+        dispatch_module._capability_registry.clear()
+
+        # The live registry's snapshot remains intact.
+        assert [d.agent_id for d in live.snapshot()] == ["alpha"]

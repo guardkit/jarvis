@@ -517,6 +517,26 @@ capabilities:
         await stub.close()
         await stub.close()
 
+    def test_stub_registry_snapshot_matches_load_stub_registry_directly(
+        self, stub_yaml: Path
+    ) -> None:
+        """DDR-021 graceful degradation guarantee: ``StubCapabilitiesRegistry.snapshot()``
+        must return content equivalent to ``load_stub_registry(fallback_path)``.
+
+        TASK-DSR-003 / W2 regression — the new ``assemble_tool_list``
+        wiring sources ``_dispatch._capability_registry`` from
+        ``capabilities_registry.snapshot()``. This parity test is the
+        proof that the NATS-down path remains byte-equivalent to the
+        pre-W2 stub-list source: any divergence between the two readers
+        would cause silent dispatch drift on NATS-down boots.
+        """
+        from jarvis.tools.capabilities import load_stub_registry
+
+        direct = load_stub_registry(stub_yaml)
+        via_registry = StubCapabilitiesRegistry(stub_yaml).snapshot()
+
+        assert direct == via_registry
+
 
 # ---------------------------------------------------------------------------
 # AC-008 — JetStream-unavailable raises NATSConnectionError
@@ -564,3 +584,82 @@ async def _wait_until(predicate: Any, *, timeout: float = 1.0) -> None:
             return
         await asyncio.sleep(0.01)
     raise AssertionError(f"Timeout: predicate did not become true within {timeout}s")
+
+
+# ---------------------------------------------------------------------------
+# TASK-DSR-003 / W2 — dispatch slot rebinds when KV watch fires.
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchSlotRebindsOnKVWatch:
+    """W2 watch-callback regression — covers AC-002.
+
+    ``assemble_tool_list`` registers ``_refresh_dispatch_registry`` as a
+    ``subscribe_updates`` callback on the live registry. When a KV change
+    lands, the callback must rebind ``_dispatch._capability_registry`` so
+    dispatch resolution reflects the new fleet.
+
+    The test drives this end-to-end via the public ``assemble_tool_list``
+    surface so we exercise the real wiring path, not a hand-rolled
+    re-implementation of the closure.
+    """
+
+    async def test_dispatch_slot_rebinds_when_kv_watch_fires(
+        self,
+        patch_resolve_registry: MagicMock,
+        patch_resolve_watcher: _AsyncIterStub,
+    ) -> None:
+        """A KV update must rebind ``_dispatch._capability_registry``."""
+        from jarvis.config.settings import JarvisConfig
+        from jarvis.tools import assemble_tool_list
+        from jarvis.tools import dispatch as _dispatch_module
+        from unittest.mock import patch as _patch
+
+        # Cache TTL=30 so the only thing that can invalidate is a watch event.
+        patch_resolve_registry.list_all.return_value = [_make_manifest("agent-x")]
+
+        live = await LiveCapabilitiesRegistry.create(
+            client=MagicMock(), cache_ttl_seconds=30
+        )
+
+        # Build a minimal JarvisConfig — same env-clearing pattern the
+        # ``test_config`` conftest fixture uses.
+        with _patch.dict("os.environ", {}, clear=True):
+            cfg = JarvisConfig(llama_swap_base_url="http://fake-endpoint")
+        cfg.validate_provider_keys()
+
+        # Snapshot dispatch state so the test does not poison siblings.
+        saved_dispatch = list(_dispatch_module._capability_registry)
+        try:
+            # Wire the dispatch slot through assemble_tool_list — this is
+            # the path TASK-DSR-003 / W2 changed and is exactly what we
+            # want to exercise.
+            assemble_tool_list(cfg, [], capabilities_registry=live)
+
+            # Initial wireup: dispatch slot reflects the warmed cache.
+            await _wait_until(
+                lambda: {
+                    d.agent_id for d in _dispatch_module._capability_registry
+                }
+                == {"agent-x"},
+                timeout=2.0,
+            )
+
+            # Flip the KV side and push a watch event.
+            patch_resolve_registry.list_all.return_value = [
+                _make_manifest("agent-x"),
+                _make_manifest("agent-y"),
+            ]
+            patch_resolve_watcher.push(MagicMock(name="KvUpdate"))
+
+            # The dispatch slot must rebind to reflect the new snapshot.
+            await _wait_until(
+                lambda: {
+                    d.agent_id for d in _dispatch_module._capability_registry
+                }
+                == {"agent-x", "agent-y"},
+                timeout=2.0,
+            )
+        finally:
+            await live.close()
+            _dispatch_module._capability_registry = saved_dispatch

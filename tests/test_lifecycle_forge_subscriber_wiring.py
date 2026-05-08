@@ -107,6 +107,11 @@ class TestBuildAppStateForgeSubscriberHappyPath:
         fake_live_registry = MagicMock()
         fake_live_registry.snapshot = MagicMock(return_value=[])
         fake_live_registry.close = AsyncMock()
+        # TASK-DSR-003 / W2 — assemble_tool_list now schedules
+        # ``capabilities_registry.subscribe_updates(...)`` via
+        # ``asyncio.create_task``, so the Protocol-declared async method
+        # must be awaitable on the fake.
+        fake_live_registry.subscribe_updates = AsyncMock(return_value=None)
 
         fake_subscriber = MagicMock()
         fake_subscriber.start = AsyncMock()
@@ -448,6 +453,11 @@ class TestStartupOrdering:
         fake_live_registry = MagicMock()
         fake_live_registry.snapshot = MagicMock(return_value=[])
         fake_live_registry.close = AsyncMock()
+        # TASK-DSR-003 / W2 — assemble_tool_list now schedules
+        # ``capabilities_registry.subscribe_updates(...)`` via
+        # ``asyncio.create_task``, so the Protocol-declared async method
+        # must be awaitable on the fake.
+        fake_live_registry.subscribe_updates = AsyncMock(return_value=None)
 
         order: list[str] = []
 

@@ -30,6 +30,7 @@ boundary of ``jarvis.tools``. No domain package (``jarvis.agents``,
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from langchain_core.tools import BaseTool
@@ -130,12 +131,17 @@ def assemble_tool_list(
        sentinel semantics. Production wiring (``lifecycle.build_app_state``)
        always passes a Protocol-shaped registry; tests that exercise
        the catalogue tools must pass a Protocol-conformant fake.
-    3. ``dispatch._capability_registry = list(capability_registry)`` —
-       independent snapshot copy so :func:`dispatch_by_capability` can
-       resolve ``tool_name`` to ``agent_id`` deterministically. The
-       dispatch slot intentionally stays a ``list[CapabilityDescriptor]``
-       — the dispatch tool iterates the list and does not need the
-       Protocol surface.
+    3. ``dispatch._capability_registry`` — sourced from
+       ``capabilities_registry.snapshot()`` when a Protocol-shaped
+       registry is supplied (the production path), with a
+       ``subscribe_updates`` callback that rebinds the slot on KV
+       changes. Falls back to ``list(capability_registry)`` when
+       ``capabilities_registry is None`` (FEAT-J002 / Phase 1 default).
+       The dispatch slot intentionally stays a
+       ``list[CapabilityDescriptor]`` — the dispatch tool iterates the
+       list and does not need the Protocol surface (see TASK-DSR-003 /
+       review TASK-REV-CB48 F2 for why this slot diverged from the
+       catalogue-tool slot's Protocol object semantics).
 
     The dispatch snapshot is a fresh ``list(...)`` copy; mutating the
     operator's ``capability_registry`` argument after this call cannot
@@ -251,16 +257,58 @@ def assemble_tool_list(
     #    slot below stays a ``list[CapabilityDescriptor]``.
     _capabilities._capability_registry = capabilities_registry
 
-    # 3. Snapshot-copy the descriptor list into the dispatch module.
+    # 3. Snapshot-bind the dispatch slot to the live capabilities registry.
     #
-    # Use ``list(...)`` rather than ``capability_registry`` directly so
-    # the operator's outer list is decoupled from the in-process view
-    # the dispatch tool observes. ASSUM-006 mandates that a concurrent
-    # rebinding of the attribute (e.g. by a future Phase 3
-    # ``capabilities_refresh`` follow-up) replaces the list rather than
-    # mutating it in place; the in-flight tool calls capture a local
-    # reference at the start of each invocation so they remain consistent.
-    _dispatch._capability_registry = list(capability_registry)
+    # The Protocol-shaped ``capabilities_registry`` is the source of truth
+    # for both catalogue tools (slot 2 above) and the dispatch resolver
+    # (this slot). The stub-list ``capability_registry`` argument now
+    # feeds only the supervisor prompt block (via
+    # ``available_capabilities=`` at the build_supervisor call site) and
+    # the FEAT-J002 / Phase 1 default path where ``capabilities_registry``
+    # is ``None``.
+    #
+    # A subscribe_updates callback rebinds this slot whenever the Live
+    # registry's KV watch fires; the Stub registry's subscribe_updates is
+    # a documented no-op (DDR-021 NATS-down) so the wireup runs once and
+    # stays there. ASSUM-006: rebinding the attribute is atomic; the
+    # dispatch tool's per-call ``list(_capability_registry)`` snapshot at
+    # ``dispatch.py:438`` means in-flight calls remain consistent.
+    if capabilities_registry is not None:
+        _live_registry = capabilities_registry
+
+        def _refresh_dispatch_registry() -> None:
+            """Rebind ``_dispatch._capability_registry`` from the live snapshot.
+
+            Closure over ``_live_registry`` so each ``assemble_tool_list``
+            call binds its own callback target — re-wiring (e.g. tests)
+            cannot leak across calls. ``list(...)`` produces an
+            independent snapshot per invocation per ASSUM-006.
+            """
+            _dispatch._capability_registry = list(_live_registry.snapshot())
+
+        _refresh_dispatch_registry()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running event loop — synchronous test path or off-loop
+            # caller. The initial wireup already ran; KV-watch rebinds
+            # are not exercised in this context. Production startup
+            # (``lifecycle.build_app_state``) is async so the
+            # ``create_task`` branch below is the always-taken path.
+            pass
+        else:
+            loop.create_task(
+                _live_registry.subscribe_updates(_refresh_dispatch_registry),
+                name="dispatch_capability_kv_watch",
+            )
+    else:
+        # FEAT-J002 / Phase 1 default — no live registry supplied. Fall
+        # back to the stub-list snapshot so the catalogue-tool sentinel
+        # path (ADR-ARCH-021 ``ERROR: registry_unavailable``) does not
+        # accidentally crash the dispatch tool. Production wiring always
+        # supplies a Live or Stub registry; this branch is exercised by
+        # FEAT-J002 unit tests that pre-date the Protocol surface.
+        _dispatch._capability_registry = list(capability_registry)
 
     # 4. FEAT-JARVIS-004 — snapshot the dispatch dependencies into the
     # ``jarvis.tools.dispatch`` module attributes per ASSUM-006. ``None``
