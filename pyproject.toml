@@ -47,7 +47,7 @@ dependencies = [
     # BuildQueuedPayload shape compliance. NOTE: Phase 2 imports the data
     # classes ONLY — `nats-py` (the live client) is forbidden until Phase 4
     # per the phase2-dispatch-foundations-scope §Scope Invariants.
-    "nats-core>=0.2",
+    "nats-core>=0.4",
     # ---- Phase 3 (FEAT-J003-006) — Anthropic SDK -------------------------
     # `anthropic` is a base dependency so `python -m langgraph dev` (the
     # default Claude-backed orchestrator path) works without requiring
@@ -143,7 +143,7 @@ dev = [
 # preserve in-place developer iteration on `nats-core` from `appmilla_github/`
 # — when the team is ready to consume `nats-core` purely from PyPI, this
 # `[tool.uv.sources]` entry can be deleted and the runtime dep above
-# (`nats-core>=0.2`) will resolve from PyPI.
+# (`nats-core>=0.4`) will resolve from PyPI.
 #
 # The canonical layout assumes `nats-core` is a sibling of `jarvis`:
 #
