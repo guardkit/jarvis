@@ -1,5 +1,6 @@
 ---
 complexity: 3
+completed: 2026-05-08T00:00:00Z
 created: 2026-05-08 00:00:00+00:00
 dependencies: []
 discovered_on_machine: GB10 (promaxgb10-41b1)
@@ -14,7 +15,23 @@ id: TASK-FRR-RUNBOOK-002
 implementation_mode: direct
 parent_runbook_results: docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-post-pebr-wireup.md
 priority: medium
-status: in_progress
+status: completed
+completion_notes: |
+  All six in-scope wave-2 topology gap-folds landed in
+  docs/runbooks/RUNBOOK-FEAT-JARVIS-INTERNAL-001-first-real-run.md
+  and committed via 30e4ae4 "reviews, history tasks":
+    1. §2.0 langgraph-runner sidecar section (line 224)
+    2. §2.2 --config <path> requirement + minimal forge.yaml schema (line 320, 332)
+    3. §2.2 FORGE_AUTOBUILD_RUNNER_URL mandate (line 322, 366)
+    4. §2.2 host DB mount /home/forge/.forge with uid 1000 chown (line 324, 349, 368)
+    5. §6.2 markdown-bullet shape (replaces JSON-shape match; line 575-590)
+    6. §4.2 graphiti probe Content-Type guard against open-webui :8080 collision (line 458-468) + §5.1 stale-warnings retirement
+  Wave-3 successor [TASK-FRR-RUNBOOK-003] (in_review) folds W3-A/B/C cosmetic polish on top.
+  Note: ~32 lines of additional in-flight wave-2 polish (Pre-flight 1 langgraph-dev kill,
+  Queue stats verification, §6.x symptom-check callout — operator's "W3-4 fold" per
+  command_history) is layered on the runbook in the working tree but is NOT part of -002's
+  in-scope six gap-folds; tracked informally in command_history, not by a dedicated task.
+  Closing -002 on its in-scope work; the polish commits independently.
 tags:
 - jarvis
 - feat-jarvis-internal-001-followups

@@ -1,0 +1,94 @@
+{"supervisor_model": "openai:qwen36-workhorse", "event": "jarvis_startup_begin", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.116907Z"}
+/home/richardwoollcott/Projects/appmilla_github/jarvis/src/jarvis/infrastructure/lifecycle.py:531: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set — web search will be disabled.
+  config.validate_provider_keys()
+{"event": "web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled."}
+{"backend": "in_memory", "event": "jarvis_store_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.117411Z"}
+{"path": "src/jarvis/config/stub_capabilities.yaml", "count": 4, "event": "jarvis_capability_registry_loaded", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.120006Z"}
+{"base_url": "http://promaxgb10-41b1:9000", "event": "jarvis_llamaswap_adapter_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.120071Z"}
+{"openai_base_url": "http://promaxgb10-41b1:9000/v1", "event": "jarvis_openai_base_url_set", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.120111Z"}
+{"count": 1, "event": "jarvis_async_subagents_built", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.120142Z"}
+{"nats_url": "nats://rich:d45kGnbpgdF6hF6s@localhost:4222", "event": "nats_connect_success", "level": "info", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-08T13:51:11.122613Z"}
+{"graphiti_endpoint": null, "event": "graphiti_skipped_no_endpoint", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.122770Z"}
+{"graphiti_available": false, "event": "jarvis_routing_history_writer_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.122875Z"}
+{"agent_id": "jarvis", "version": "0.4.0", "event": "fleet_register_published", "level": "info", "logger": "jarvis.infrastructure.fleet_registration", "timestamp": "2026-05-08T13:51:11.124394Z"}
+{"cap": 8, "event": "jarvis_dispatch_semaphore_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.132287Z"}
+{"subjects": ["pipeline.build-started.>", "pipeline.stage-complete.>", "pipeline.build-complete.>", "pipeline.build-failed.>"], "correlation_cap": 1000, "event": "forge_notifications_subscribed", "level": "info", "logger": "jarvis.infrastructure.forge_notifications", "timestamp": "2026-05-08T13:51:11.136189Z"}
+{"queue_cap": 100, "correlation_cap": 1000, "event": "jarvis_forge_subscriber_started", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.136357Z"}
+{"count": 10, "event": "jarvis_tool_list_attended_assembled", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.136518Z"}
+{"count": 9, "event": "jarvis_tool_list_ambient_assembled", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.136676Z"}
+{"event": "Building supervisor graph with model=openai:qwen36-workhorse, tools=10, capabilities=4, async_subagents=1, ambient_tool_factory=supplied"}
+{"event": "Supervisor graph compiled successfully"}
+{"event": "jarvis_forge_subscriber_bound_session_manager", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.406316Z"}
+{"event": "jarvis_layer2_hooks_wired", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.406367Z"}
+{"nats_available": true, "graphiti_available": false, "capabilities_mode": "live", "event": "jarvis_startup_complete", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T13:51:11.406397Z"}
+{"session_id": "cli-85db08b3c1d447ba8dc9eb6bb6b037b8", "adapter": "cli", "user_id": "cli-user", "event": "session_started", "level": "info", "logger": "jarvis.sessions.manager", "timestamp": "2026-05-08T13:51:11.406449Z"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"event": "routing_history_offloaded_locally"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"event": "routing_history_offloaded_locally"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+Both architect dispatches timed out. Let me run a structured analysis directly, drawing on the ADR context and the capability descriptions already available.
+
+---
+
+## Architectural Alignment Analysis: Opus 4.7 Escalation vs. ADR-ARCH-001
+
+### The Tension
+
+ADR-ARCH-001's local-first invariant says: **cloud LLMs are out of the supervisor's hot path**. The proposal doesn't contradict this directly — it adds a **cold path**. The distinction matters:
+
+| Dimension | Local-first (ADR-ARCH-001) | Opus 4.7 Escalation |
+|---|---|---|
+| Path | Hot path (default, every request) | Cold path (explicit opt-in) |
+| Trigger | Automatic | User-explicit phrases only |
+| Budget | Near-zero marginal cost | £20-£50/month fleet-wide cap |
+| Context | Ambient, async, learning | **Attended-only** |
+| Error behavior | Standard | Never raises (structured fallback) |
+
+The proposal is **conditionally aligned** — it's architecturally defensible **if and only if** the guards are strict enough that the escalation never becomes a de facto hot path.
+
+### What Makes This Sound
+
+1. **Explicit user opt-in as a gate** — the supervisor must detect phrases like "ask Gemini" or "frontier opinion." This prevents the local model from reflexively escalating on its own judgment, which would undermine the local-first principle.
+
+2. **Attended-only enforcement** — TASK-J003-011/-012 enforce this at the executor and tool-registry layers. No background, no learning loops, no async subagents. The escalation is always visible to a human who can stop it.
+
+3. **Budget cap as a circuit breaker** — £20-£50/month is a real constraint, not aspirational. Once the budget burns through, the tool degrades gracefully (per ADR-ARCH-021). This prevents cost creep from silently eroding the local-first economics.
+
+4. **Instruction body never logged** — ADR-ARCH-029 protects privacy/security, which is a separate concern from the local-first invariant but relevant to the supervisor's trust boundary.
+
+### What's Still At Risk
+
+**The slippery slope problem.** Even with explicit user opt-in, there's a risk that:
+- The supervisor's reasoning model learns to associate "frontier" triggers with higher-quality outputs and starts suggesting them more aggressively.
+- Users who discover the escalation will expect it for *every* non-trivial request, making it functionally habitual.
+- The budget cap becomes a soft limit if the fleet grows or if Opus calls are more expensive than modeled.
+
+**The confidence signal is unmeasured.** The proposal mentions "low confidence on safety-critical requests" as a use case, but there's no defined mechanism for the supervisor to quantify its own confidence. This means the escalation trigger is effectively **only** the user's explicit phrase — which is good for governance but may miss genuinely risky cases where the user doesn't know to ask.
+
+### Required ADR Changes
+
+For this to be formally aligned with ADR-ARCH-001, you'd need:
+
+1. **ADR-ARCH-001 amendment** adding a "cold path exception" clause:
+   > Cloud inference is prohibited in the supervisor's hot path. A cold-path escalation mechanism may be introduced if it is (a) attended-only, (b) gated by explicit user opt-in, and (c) subject to a hard budget cap. This exception does not modify the local-first invariant for default reasoning.
+
+2. **A companion ADR** (e.g., ADR-ARCH-XXX) documenting:
+   - The specific threat this escalation addresses (e.g., "frontier-tier reasoning for safety-critical decisions where local models are demonstrably insufficient")
+   - The budget allocation model and who controls it
+   - The degradation path when the budget is exhausted
+   - Audit logging requirements (what gets logged, retention)
+
+3. **Supervisor contract update** clarifying:
+   - The exact trigger phrases that activate the escalation
+   - Whether the supervisor can *suggest* the escalation ("Would a frontier opinion be helpful?") without the user explicitly requesting it
+   - Behavior when the budget is exhausted (structured error message, fallback to local)
+
+### Verdict
+
+**Conditionally aligned.** The proposal doesn't violate ADR-ARCH-001's local-first invariant because it's a cold path with strict guards. But it needs an ADR amendment and a companion ADR to be formally aligned. Without those, it exists in a gray zone — architecturally defensible but governance-incomplete.
+
+The biggest open question: **who decides when the budget cap is reached, and what happens then?** If the tool just returns an error, that's clean. If it silently falls back to a weaker cloud model, the local-first invariant is compromised by the back door.
+{"session_id": "cli-85db08b3c1d447ba8dc9eb6bb6b037b8", "event": "session_ended", "level": "info", "logger": "jarvis.sessions.manager", "timestamp": "2026-05-08T13:51:45.324074Z"}
+session ended.
+{"agent_id": "jarvis", "event": "fleet_heartbeat_cancelled", "level": "info", "logger": "jarvis.infrastructure.fleet_registration", "timestamp": "2026-05-08T13:51:45.324241Z"}

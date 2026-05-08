@@ -2881,4 +2881,49 @@ Task Work Complete — TASK-DSR-003 (W2 Wiring Fix)
 **Recommended follow-up (jarvis side):**
 - TASK-FRR-RUNBOOK-002 — gap-fold the runbook for new deployment topology: `forge serve` now requires `--config <path>` + `FORGE_AUTOBUILD_RUNNER_URL` + a langgraph-runner sidecar (typically `langgraph dev`) + a host-mounted DB volume at `/home/forge/.forge`. The runbook §2.2 invocation and §2.0 (new) need rewrites.
 
+---
+
+## 2026-05-08 — Runbook re-run: RUNBOOK-FEAT-JARVIS-INTERNAL-001-first-real-run.md (fresh teardown, FOLLOWUP-A live, FOLLOWUP-B instrumented)
+
+**Machine:** GB10 (`promaxgb10-41b1`) — co-resident
+**Forge HEAD:** `e1eef81` (`chore(FEAT-PEBR): instrument lifecycle_bridge for FOLLOWUP-B silent-stream spike`) — includes FOLLOWUP-A migration patch (`55f7804`) and PEBR-WIREUP (`1b82236`)
+**Jarvis HEAD:** `30e4ae4`
+**Forge image:** `forge:latest` sha `91ec963896` (rebuilt by operator immediately before run)
+**correlation_id:** `1506e6c4-cc6a-4591-8dc0-d9258b231b11`
+**Outcome:** ⏸ **Phases 0–6 GREEN; Phase 7 FAILs with refined-Signature-B.** Operator-driven full teardown (forge-prod removed, forge.db wiped, langgraph sidecar killed, `.langgraph_api/` cleared, PIPELINE purged, forge-serve consumer deleted) preceded the run; forge image was NOT rebuilt (operator had just done so).
+
+**Key findings:**
+- ✅ FOLLOWUP-A confirmed live — boot log shows `applied 2 SQLite migration(s) at boot`; **0** `register_ack_handle raised (no such table)` warnings across 12 dispatch attempts (5 redelivery cycles).
+- ✅ Phases 0–6 verbatim-runnable — zero manual gap-folds during execution. The wave-2 §2.0 Pre-flight 1/2 + post-boot Queue stats verification (W3-4 fold) prevented the qwen36-workhorse contention failure mode that blocked the morning dryrun.
+- ✅ Phase 6 supervisor narration: `- **Correlation ID:**` `1506e6c4-…`, `- **Target:**` `pipeline.build-queued.FEAT-43DE`, `- **Queued at:**` `2026-05-08T13:19:45Z`. Wire-tap captured exactly one inbound `BuildQueuedPayload`.
+- ❌ Phase 7 fails as expected today: 1 inbound, 0 outbound envelopes; `delivered=12, ack_floor=0, redelivered=1` after 5m45s. AC-11 not met.
+- 🔍 **NEW finding** (vs documented Signature B): with `e1eef81`'s FOLLOWUP-B SSE instrumentation, cycle 1 produces `parts_received=30 event_types={'values'} terminal_seen=False` — the autobuild_runner IS streaming state updates but the bridge translator does not interpret deepagents' `event='values'` parts as stage transitions. Narrows FOLLOWUP-B's surface to either the translator's recognition logic or autobuild_runner's emission of named stage events.
+- 🔍 The 5-min observer deadline passed without a `build-failed` envelope being published — the deadline-driven failure path appears gated on stream unreachability, not on stream silence.
+
+**Full results:** [`docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-fresh-followup-b-instrumented.md`](../runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-fresh-followup-b-instrumented.md)
+
+**Evidence:** `/tmp/jarvis-runbook-evidence/` (phase1-verify-nats.log, phase5-boot.log, phase6-chat-narration.txt, phase7-pipeline-tap.log, phase7-final-{stream,consumer}-info.json, phase7-forge-prod-logs-final.log) + `~/.jarvis/transcripts/1506e6c4-cc6a-4591-8dc0-d9258b231b11.txt` + `~/.jarvis/traces/1506e6c4-cc6a-4591-8dc0-d9258b231b11.json`.
+
+**Wave-3 candidates (none blocking):**
+- W3-A: §7 expected-FAIL framing should reflect FOLLOWUP-B SSE-instrumented signature (`parts_received=N>0` cycle 1, `=0` cycles 2+).
+- W3-B: §7 deadline qualifier ("...if SSE stream itself fails, not merely silent").
+- W3-C: §6.2 supervisor narration variance (`Target:` vs `Publish target:`) — runbook already tolerates variance, just one more example.
+
+---
+
+## 2026-05-08 — Wave-3 runbook text fold (W3-A/B/C) — TASK-FRR-RUNBOOK-003
+
+**Task:** [`tasks/in_review/feat-jarvis-internal-001-followups/TASK-FRR-RUNBOOK-003-wave3-runbook-text-fold-w3abc.md`](../../tasks/in_review/feat-jarvis-internal-001-followups/TASK-FRR-RUNBOOK-003-wave3-runbook-text-fold-w3abc.md)
+**Mode:** direct (documentation-only) | **Complexity:** 1/10 | **Duration:** ~25 min
+**Source RESULTS:** [`RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-fresh-followup-b-instrumented.md`](../runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-fresh-followup-b-instrumented.md) — "Wave-3 candidates" table (the three rows folded by this task)
+
+Folded the three observational wave-3 candidates surfaced by the fresh-followup-b-instrumented walkthrough into [`docs/runbooks/RUNBOOK-FEAT-JARVIS-INTERNAL-001-first-real-run.md`](../runbooks/RUNBOOK-FEAT-JARVIS-INTERNAL-001-first-real-run.md):
+
+- **W3-A** (line 677): §7 Signature B now distinguishes the two-cycle fingerprint at forge HEAD `e1eef81`+ — cycle 1 produces `parts_received=N>0` (translator silent on producing stream), cycles 2+ produce `parts_received=0` (original run drained, *not* original run empty). Earlier framings conflated these.
+- **W3-B** (line 678): §7 Signature B now carries an explicit deferred-ack-deadline qualifier — the 5-min observer deadline path is gated on **SSE stream unreachability** (TCP reset / 5xx / connection refused), NOT on stream silence. Reachable-but-translator-silent streams will not trigger `build-failed` after the deadline expires.
+- **W3-C** (lines 586, 588): §6.2 prose-tolerance comment now documents `Target:` / `Publish target:` / `Publishing to:` as accepted label variances; the only load-bearing element is the subject string `pipeline.build-queued.FEAT-43DE`.
+
+**Note on the runbook's still-uncommitted in-flight polish.** The runbook also carries ~32 lines of uncommitted wave-2 layered polish in §2.0 (Pre-flight 1 langgraph-dev process-kill + `.langgraph_api/` clear, post-boot Queue stats verification, updated `LangSmith Deployment` openapi pass-criteria) and §6.x (Symptom-check callout for `qwen36-workhorse` slot saturation). That polish was filed under "W3-4 fold" in the prior history entry but has no dedicated tracking task; it was added directly during walkthroughs. Will be committed at operator's discretion alongside (or independent of) the W3-A/B/C fold.
+
+**Other housekeeping (same session):** [TASK-FRR-RUNBOOK-002](../../tasks/completed/feat-jarvis-internal-001-followups/TASK-FRR-RUNBOOK-002-gap-fold-runbook-for-post-pebr-wireup-topology.md) moved from `in_progress/` to `completed/` — the six in-scope wave-2 topology gap-folds (§2.0 sidecar, §2.2 `--config`, §2.2 host DB mount, §2.2 `FORGE_AUTOBUILD_RUNNER_URL`, §6.2 markdown-bullet shape, §4.2 graphiti probe Content-Type guard, §5.1 stale-warnings retirement) are all in the runbook and committed via `30e4ae4` "reviews, history tasks". The kanban file was simply not yet moved.
  

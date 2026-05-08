@@ -227,7 +227,22 @@ ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/nats-infrastructure && \
 >
 > **Caveat — `forge/langgraph.json` `orchestrator` graph fails to import (forge-followup-orchestrator-graph).** The canonical `langgraph.json` declares both an `orchestrator` graph (at `./src/forge/agent.py:agent`) and an `autobuild_runner` graph. The `orchestrator` graph's import path (`from agents import create_orchestrator` at `forge/src/forge/agent.py:23`) does not resolve — there is no `agents` package on the forge import path — so `langgraph dev` against the canonical config fails to load any graph. Until the forge follow-up lands, boot the sidecar with a **stripped** `langgraph.json` that contains only the `autobuild_runner` graph. The runbook does not need the `orchestrator` graph for FEAT-JARVIS-INTERNAL-001.
 
-**Pre-flight: write a stripped `langgraph.json`** alongside the forge repo (or anywhere — pass the path via `--config`):
+**Pre-flight 1: kill any pre-existing `langgraph dev` and clear stale in-memory queue state.**
+
+The runbook's interactive REPL phases (§5.1, §6.1) rely on the supervisor model (`qwen36-workhorse`) responding within seconds. On a stock `llama-server -np 1` fleet, the model has a single parallel slot — and if the `langgraph dev` sidecar has a backlog of `autobuild_runner` runs from a prior session (e.g. left-over un-acked redeliveries from FOLLOWUP-A/-B development, or a prior runbook execution), it will saturate that slot with continuous `POST /v1/responses` calls and **the §6.x interactive REPL will hang indefinitely** waiting for a model response.
+
+`langgraph dev` persists its in-memory queue across restarts via pickle files in `<cwd>/.langgraph_api/` — so simply restarting the sidecar process is **not** enough; the operator must also clear the persisted queue. **Skip this pre-flight only if you are actively using `langgraph dev` for forge dev work right now and need to preserve the in-flight runs** — in that case, set up a separate forge clone for the runbook walkthrough.
+
+```bash
+ssh promaxgb10-41b1 'pkill -f "langgraph dev" 2>/dev/null; \
+    sleep 1; \
+    rm -rf ~/Projects/appmilla_github/forge/.langgraph_api/ 2>/dev/null; \
+    ss -lntp 2>/dev/null | grep -q ":8124 " && echo "WARN: port 8124 still in use after pkill — investigate before continuing" || echo "OK: port 8124 free, .langgraph_api/ cleared"'
+```
+
+**Pass:** `OK: port 8124 free, .langgraph_api/ cleared`. If you see the WARN line, identify the process holding `:8124` (`lsof -i :8124` or `fuser 8124/tcp`) and stop it manually before continuing — a stale dev server from another shell session is the most common cause.
+
+**Pre-flight 2: write a stripped `langgraph.json`** alongside the forge repo (or anywhere — pass the path via `--config`):
 
 ```bash
 ssh promaxgb10-41b1 'cat > ~/forge-runner-only-langgraph.json <<EOF
@@ -259,9 +274,26 @@ ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/forge && \
 ssh promaxgb10-41b1 'sleep 3 && curl -sf http://localhost:8124/openapi.json | jq ".info.title // empty"'
 ```
 
-**Pass:** `curl` returns a non-empty title (`"LangGraph API"` or similar). The sidecar is now serving the `autobuild_runner` graph at `http://localhost:8124`. If the curl fails or returns nothing, tail `/tmp/langgraph-sidecar.log` — most likely cause is the import failure described in the caveat above (the stripped `langgraph.json` write above didn't land, or got pointed at the canonical config by mistake).
+**Pass:** `curl` returns a non-empty title (current `langgraph dev` returns `"LangSmith Deployment"`; older versions returned `"LangGraph API"`). The sidecar is now serving the `autobuild_runner` graph at `http://localhost:8124`. If the curl fails or returns nothing, tail `/tmp/langgraph-sidecar.log` — most likely cause is the import failure described in the caveat above (the stripped `langgraph.json` write above didn't land, or got pointed at the canonical config by mistake).
 
-> When `forge-followup-orchestrator-graph` lands (the `agents`-import path is fixed or the `orchestrator` graph is removed from `langgraph.json`), this whole stripped-config dance can be replaced with a plain `langgraph dev --host 127.0.0.1 --port 8124 --no-browser` from the forge repo root.
+**Verify the in-memory queue boots clean** (no carry-over backlog from a stale persistence file that pre-flight 1 missed):
+
+```bash
+ssh promaxgb10-41b1 'sleep 3 && \
+    PENDING=$(grep "Queue stats" /tmp/langgraph-sidecar.log | head -1 | grep -oE "n_pending=[0-9]+" | cut -d= -f2); \
+    if [ -z "$PENDING" ]; then \
+        echo "OK: no Queue stats line yet (queue is empty — no work has been enqueued)"; \
+    elif [ "$PENDING" -eq 0 ]; then \
+        echo "OK: queue starts clean (n_pending=0)"; \
+    else \
+        echo "FAIL: queue has $PENDING pending runs from a prior session — pre-flight 1 missed something"; \
+        echo "      stop the sidecar (pkill -f \"langgraph dev\"), remove .langgraph_api/, retry §2.0"; \
+    fi'
+```
+
+**Pass:** Either `OK` line. If `FAIL`, the operator's `.langgraph_api/` directory was not at the expected path under `~/Projects/appmilla_github/forge/.langgraph_api/` — find it (`find ~/Projects -maxdepth 4 -name ".langgraph_api" -type d 2>/dev/null`), remove it, restart the sidecar, and retry.
+
+> When `forge-followup-orchestrator-graph` lands (the `agents`-import path is fixed or the `orchestrator` graph is removed from `langgraph.json`), this whole stripped-config dance can be replaced with a plain `langgraph dev --host 127.0.0.1 --port 8124 --no-browser` from the forge repo root. Pre-flights 1 and 2 (process kill + state clear) remain relevant regardless.
 
 ### 2.1 Build (or pull) the forge production image on GB10
 
@@ -497,6 +529,8 @@ Hit Ctrl+C to exit (clean SIGINT, exit code 130).
 
 > **Operator decision:** Re-queueing FEAT-JARVIS-INTERNAL-001 (already merged to `jarvis` `main`) is a *wire test* — forge will receive the build-queued message and attempt to autobuild a feature whose work is already on main. Forge's exact behaviour in that case is part of what this runbook discovers. The alternative is to pick a small fresh feature; the trade-off is more work-in-flight to interpret. **Recommended: stick with FEAT-JARVIS-INTERNAL-001** — the e2e wire is what the Phase 3 close criterion measures, not the build outcome.
 
+> **Symptom check before booting:** if `jarvis chat` hangs at `session_started` and never gets to a model response, the most likely cause is that the §2.0 sidecar accumulated a backlog of `autobuild_runner` runs (e.g. from earlier dispatches in this same runbook session that the bridge couldn't terminal-ack — see Phase 7), and those runs are saturating the supervisor model's single `np=1` slot via continuous `POST /v1/responses` calls every ~5s. **Recovery:** stop the sidecar (`pkill -f "langgraph dev"`), clear the persisted queue (`rm -rf ~/Projects/appmilla_github/forge/.langgraph_api/`), restart §2.0 from pre-flight 1, then retry §6.1. (The wave-2 §2.0 pre-flights catch this on the *first* runbook execution; the symptom mostly recurs when re-running §6 in the same session.)
+
 ### 6.1 Boot a fresh chat REPL with full tracing
 
 Two equivalent patterns — pick whichever matches your harness:
@@ -549,9 +583,9 @@ Forge will pick it up from the JetStream topic. ...
 
 **Match these two lines** to confirm success:
 - A line beginning with `- **Correlation ID:**` carrying a UUID.
-- A line beginning with `- **Publish target:**` carrying `pipeline.build-queued.FEAT-43DE`.
+- A line beginning with `- **Publish target:**` (or `- **Target:**` — see prose-tolerance note below) carrying `pipeline.build-queued.FEAT-43DE`.
 
-The exact narration prose ("FEAT-43DE has been queued..." / "Forge will pick it up...") is generated by the supervisor's reasoner and may vary turn-to-turn; the **two bulleted lines above are the load-bearing evidence**.
+The exact narration prose ("FEAT-43DE has been queued..." / "Forge will pick it up...") is generated by the supervisor's reasoner and may vary turn-to-turn; the **two bulleted lines above are the load-bearing evidence**. The label on the second line in particular has been observed as both `- **Publish target:**` and `- **Target:**` (and may render with other near-equivalents like `- **Publishing to:**`); only the subject string `pipeline.build-queued.FEAT-43DE` is load-bearing — accept any reasonable label so long as that subject value is present.
 
 > **Why the bullets, not the JSON?** The underlying tool returns the canonical raw JSON via `json.dumps(ack)` at [`src/jarvis/tools/dispatch.py:1238`](../../src/jarvis/tools/dispatch.py#L1238) — the dict carries `status: "queued"`, `feature_id`, `correlation_id`, `publish_target`, `queued_at`. The markdown re-rendering happens in the supervisor's tool-result presentation layer (system prompt + reasoner narration), not in `dispatch.py` itself. A future, separate task may tighten the supervisor prompt to pass through the raw JSON unchanged for non-narrative tool results — if that lands, this section can be re-tightened back to a JSON-shape match. **Do not modify `dispatch.py` to "fix" this from inside this runbook**; the tool's contract is correct. (Tracked as an optional supervisor-prompt follow-up; not blocking.)
 
@@ -640,6 +674,8 @@ The chat REPL drains zero notifications and the reasoner narrates accordingly (e
     ```
   - **`nats sub "pipeline.>" --raw`** still shows zero outbound envelopes after the bridge attach.
   - **`nats consumer info PIPELINE forge-serve -j`** still shows `ack_floor` unchanged.
+  - **Refined two-cycle fingerprint** (forge HEAD `e1eef81`+ adds FOLLOWUP-B SSE instrumentation that exposes per-part bridge translator state — `parts_received=N` per cycle in `forge.lifecycle_bridge.translator` log lines): **cycle 1** produces `parts_received=N>0` (the autobuild_runner SSE stream IS producing `event='values'` parts; the bridge translator simply emits zero outbound lifecycle envelopes from them — that's the FOLLOWUP-B defect surface). **Cycles 2+** produce `parts_received=0` because the original autobuild run is already drained — *not* because the original run was empty. Earlier framings of Signature B conflated these two cases; the two-cycle fingerprint is the precise expected signature today.
+  - **The 5-min deferred-ack deadline does NOT publish `build-failed` in this signature.** The deadline path (`observer task scheduled (deadline_at=…)` on the wireup line above) is gated on **SSE stream unreachability** (TCP reset / 5xx / connection refused) — *not* on stream silence. With a reachable-but-translator-silent stream (today's signature), the deadline expires without any terminal envelope being published. This is correct contract behaviour (don't publish failure if we don't actually know the build failed), but worth knowing so the operator does not wait out the 5-min deadline expecting a `build-failed` to "rescue" Signature B — it won't. The terminal envelope only arrives once FOLLOWUP-B lands.
 
 **Either signature is "expected FAIL today" — do NOT treat as an operator setup mistake.** Capture which signature you're seeing in RESULTS along with verbatim log excerpts, and forward-reference FOLLOWUP-A or FOLLOWUP-B as the unblocker. Do **not** hot-fix the migration in-flight from inside the runbook execution — the hot-fix is documented in [RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-post-pebr-wireup.md](./RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-post-pebr-wireup.md) for forensic reference but the canonical fix lives in the forge follow-up.
 
