@@ -2857,4 +2857,28 @@ Task Work Complete — TASK-DSR-003 (W2 Wiring Fix)
  /task-work TASK-DSR-004
 
 
+---
+
+## 2026-05-08 — Runbook re-run: RUNBOOK-FEAT-JARVIS-INTERNAL-001-first-real-run.md (post-PEBR-WIREUP)
+
+**Machine:** GB10 (`promaxgb10-41b1`) — co-resident
+**Forge HEAD:** `1b82236` (`fix(FEAT-PEBR): compose LifecycleBridgeWireup in bind_production_serve`)
+**Jarvis HEAD:** `60cee6b`
+**Image rebuilt:** `forge:latest` = `forge:production-validation` sha `2705612d4635`, built 11:36 BST
+**correlation_ids:** `af772739-9ebf-473b-b8b7-32c234ccdb73` (queue 1), `7657ed5a-8d24-4c78-b615-aef7bf835b74` (queue 2)
+**Outcome:** ⏸ **Partial — Phase 7 FAIL.** Phases 0–6 green. Phase 7 fails on AC-11: zero outbound `pipeline.build-started.*` / `stage-complete.*` envelopes; `ack_floor=11` did not advance. Two distinct gaps caught:
+1. `lifecycle_bridge_registry` migration not wired into `bind_production_serve` boot path → `register_ack_handle` falls back to legacy ack_callback that never publishes (the AC-11 catch).
+2. After hot-fixing the migration on a host-mounted DB, the bridge attaches and opens an SSE stream against the autobuild_runner sidecar but **still publishes nothing** — autobuild_runner runs a 13+ min deepagents tool loop without driving the `_update_state` transitions the translator listens for.
+
+**Full results:** [`docs/runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-post-pebr-wireup.md`](../runbooks/RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-post-pebr-wireup.md)
+
+**Evidence:** `/tmp/jarvis-runbook-evidence/` (forge-prod logs, langgraph sidecar logs, wire-tap, stream/consumer info pre/post, DDR-019 offload traces).
+
+**Recommended follow-ups (forge side):**
+- TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-A — wire `lifecycle_bridge_registry.apply()` into `_serve_production.py` Step 3.5b (5-line patch)
+- TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-B — investigate why bridge attaches but never publishes `build-started` (placeholder `thread_id=pending-FEAT-43DE` may not get re-bound to real `task_id`)
+
+**Recommended follow-up (jarvis side):**
+- TASK-FRR-RUNBOOK-002 — gap-fold the runbook for new deployment topology: `forge serve` now requires `--config <path>` + `FORGE_AUTOBUILD_RUNNER_URL` + a langgraph-runner sidecar (typically `langgraph dev`) + a host-mounted DB volume at `/home/forge/.forge`. The runbook §2.2 invocation and §2.0 (new) need rewrites.
+
  

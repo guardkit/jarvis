@@ -31,18 +31,29 @@
 
 ## Known issues / forward-references
 
-This runbook has been gap-folded against the 2026-05-01 GB10 first-real-run RESULTS (correlation_id `a58ec9a7-27c6-485a-beac-e18675639a10`). Several of the underlying issues have source-code fixes tracked as follow-up tasks but not yet landed; the runbook documents the workaround inline and forward-references the fix here.
+This runbook has been gap-folded across two waves of GB10 first-real-run results:
+
+- **Wave 1** (2026-05-01, correlation_id `a58ec9a7-27c6-485a-beac-e18675639a10`) — original 13-gap fold. Resolved as of wave 2.
+- **Wave 2** (2026-05-08, correlation_ids `af772739-9ebf-473b-b8b7-32c234ccdb73` / `7657ed5a-8d24-4c78-b615-aef7bf835b74`, post-PEBR-WIREUP at forge HEAD `1b82236`) — the **current** state. PEBR-WIREUP composes `LifecycleBridgeWireup` into `bind_production_serve`, but two integration gaps land Phase 7 in a known-FAIL signature; the runbook forward-references them so the operator does not interpret the FAIL as their own setup mistake.
+
+The active forward-references for wave 2 are:
 
 | ID | Repo | Summary | Affects phase | Workaround in runbook? |
 |---|---|---|---|---|
-| [TASK-FRR-001](../../tasks/backlog/feat-jarvis-internal-001-followups/TASK-FRR-001-reconcile-nats-subscriptions-with-canonical-provisioning.md) | jarvis | Reconcile `JARVIS` stream / `agent-registry` KV / `forge_subscriber` consumer config with canonical `nats-infrastructure` provisioning. Until landed, jarvis cannot subscribe to stage-complete events at all (DDR-030 between-prompt notification path is dead). | §5.1 (boot warnings), §7 (notification render) | Yes — close criterion narrowed to "forge consumed and acked" until subscriptions reconcile |
-| [TASK-FRR-002](../../tasks/completed/feat-jarvis-internal-001-followups/TASK-FRR-002-drop-misleading-jarvis-openai-base-url-field.md) | jarvis | `lifecycle.py:569-570` unconditionally clobbers `OPENAI_BASE_URL` to llama-swap regardless of operator-set `JARVIS_OPENAI_BASE_URL`; the `.env.example` field is misleading. Local-only ethos = llama-swap is mandatory. | §0.4 (provider keys) | Yes — §0.4 documents the local-only mandate and llama-swap-served model list |
-| [TASK-FRR-003](../../tasks/completed/feat-jarvis-internal-001-followups/TASK-FRR-003-ddr-019-trace-offload-autocreate-and-non-silent-drop.md) | jarvis | DDR-019 soft-fail trace offload silently drops when `JARVIS_GRAPHITI_ENDPOINT` unset AND `~/.jarvis/traces/` doesn't exist. Should autocreate + log loudly. | §8.3 (offload trace capture) | Yes — §8.3 includes `mkdir -p` precondition and warns on empty offload dir |
-| forge-followup-1 | forge | Wire `forge serve`'s `dispatch_payload` to the real `pipeline_consumer` orchestrator + stage-complete publish path. Today's default is a receipt-only stub (`_serve_daemon.py:146-180`) — logs and returns, no autobuild, no publish-back. | §7.1 (close criterion) | Yes — close criterion narrowed to "forge consumed and acked" |
-| forge-followup-2 | forge | `forge serve` parses `FORGE_LOG_LEVEL` into `ServeConfig.log_level` but doesn't call `logging.basicConfig()`, so `_default_dispatch`'s `logger.info` calls go nowhere. `docker logs forge-prod` is empty even on successful consume. | §2.2 (forge logs), §7.2 (forge log tail) | Yes — §7.2 uses `nats consumer info -j` to prove consume+ack instead of trusting `docker logs` |
+| TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-A | forge | `bind_production_serve` calls `apply_at_boot` and `_bridge_coexistence.apply_migration` but does **not** call `forge.persistence.migrations.lifecycle_bridge_registry.apply()`. The bridge's `register_ack_handle` raises `no such table: lifecycle_bridge_registry` on first dispatch and silently degrades to a legacy ack_callback that doesn't translate SSE → envelope publishes. **Symptom on the wire:** every inbound `pipeline.build-queued.*` is dequeued but no `pipeline.build-started.*` / `stage-complete.*` envelope is ever published; JetStream `ack_floor` does not advance. **Symptom in `docker logs forge-prod`:** `pipeline_consumer: register_ack_handle raised (no such table: lifecycle_bridge_registry) for feature_id=… correlation_id=…; continuing with legacy ack_callback fallback` on every dispatch. ~5-line fix in `forge/src/forge/cli/_serve_production.py` Step 3.5b. | §7 (the whole phase will FAIL until landed) | No — runbook forward-references and the Phase 7 FAIL is **expected** today; do not hot-fix in-flight |
+| TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-B | forge | Even with FOLLOWUP-A applied, the bridge attaches cleanly per its own logs (`lifecycle_bridge.attach … observer task scheduled` + successful HTTP 200 on the SSE GET against the langgraph-runner sidecar) but **zero outbound envelopes** ever land on the wire. Hypothesis: the autobuild_runner subagent runs a long deepagents tool loop without producing the `_update_state` transitions the bridge translator looks for. Recommend structured logging in `forge.lifecycle_bridge.translator` + rerun of `tests/integration/test_lifecycle_bridge_sidecar_e2e.py`. | §7 (still FAILs after FOLLOWUP-A lands, until B lands) | No — runbook forward-references; expected FAIL until B lands |
+| forge-followup-2 | forge | `forge serve` parses `FORGE_LOG_LEVEL` into `ServeConfig.log_level` but historically did not call `logging.basicConfig()`, leaving `docker logs forge-prod` empty even on successful consume. **Status:** the 2026-05-08 wave-2 evidence (`/tmp/jarvis-runbook-evidence/phase7-forge-prod-logs.log`) shows `docker logs forge-prod` now has substantial content, suggesting this may already be partially or fully resolved at HEAD `1b82236`. Verification deferred to wave 3. Until verified, the runbook keeps the `nats consumer info -j` belt-and-braces pattern from wave 1. | §2.2 (forge logs), §7.2 (forge log tail) | Yes — §7.2 uses `nats consumer info -j` to prove consume+ack |
 | forge-followup-3 | forge | `scripts/build-image.sh` cd's to forge's parent and runs `--build-context nats-core=../nats-core`, which from the parent resolves to `~/Projects/nats-core` (does not exist on the canonical layout). | §2.1 (image build) | Yes — §2.1 invokes `docker buildx build` directly from inside `forge/` |
+| forge-followup-orchestrator-graph | forge | `forge/langgraph.json` declares an `orchestrator` graph at `./src/forge/agent.py:agent` whose import statement (`from agents import create_orchestrator`) fails to resolve — there is no `agents` Python package on the forge import path. Boots of `langgraph dev` against the canonical `langgraph.json` therefore fail to load any graph. | §2.0 (langgraph-runner sidecar) | Yes — §2.0 boots the sidecar with a stripped `langgraph.json` containing only `autobuild_runner` |
 
-**For the operator:** read this section before executing. None of the items above block the GB10 walkthrough (or the MacBook-over-Tailscale follow-up); they only narrow what "Phase 3 closed" can mean today. The close criterion that this runbook actually proves is **"forge consumed and acked"** — the structural roundtrip back into the chat REPL as between-prompt notifications is deferred to TASK-FRR-001 + forge-followup-1 landing.
+**Resolved follow-ups (no longer forward-referenced; demoted to "✅ resolved" footnotes here for archeology):**
+
+- ✅ **TASK-FRR-001** *(resolved 2026-05-08)* — `JARVIS` stream / `agent-registry` KV / `forge_subscriber` consumer reconciliation with canonical `nats-infrastructure` provisioning. Wave-2 evidence (`/tmp/jarvis-runbook-evidence/phase5-boot.log`) shows a clean `jarvis_startup_complete` with `nats_available=true, capabilities_mode=live` and **zero** of the documented wave-1 NATS subscription warnings. Removed from §5.1 expected-warnings (see wave-2 §5.1 below).
+- ✅ **TASK-FRR-002** *(resolved earlier; archived in `tasks/completed/`)* — `lifecycle.py` `OPENAI_BASE_URL` clobber + misleading `.env.example` field. Documented historically; §0.4's local-only mandate prose stands.
+- ✅ **TASK-FRR-003** *(resolved earlier; archived in `tasks/completed/`)* — DDR-019 trace-offload autocreate. §8.3's `mkdir -p` precondition still recommended for runbook discipline.
+- ✅ **forge-followup-1** *(superseded by PEBR-WIREUP at forge HEAD `1b82236`, 2026-05-08)* — wire `dispatch_payload` to the real `pipeline_consumer` orchestrator + stage-complete publish path. PEBR-WIREUP composed `LifecycleBridgeWireup` into `bind_production_serve` and rebound the dispatch chain; the wave-1 receipt-only-stub failure mode no longer reproduces. The new gating constraints are FOLLOWUP-A and FOLLOWUP-B (above).
+
+**For the operator:** read this section before executing. The wave-2 reality is that **Phases 0–6 should run cleanly with no manual gap-folds**, and **Phase 7 will FAIL with the FOLLOWUP-A symptom signature** (or, once FOLLOWUP-A lands, the FOLLOWUP-B signature) until those forge-side fixes ship. The Phase 7 FAIL is **expected** and is itself the evidence trail; do not interpret it as a setup mistake on your host. The close criterion that this runbook proves end-to-end **today** is *"forge consumed, ack tracked, and the FAIL signature matches FOLLOWUP-A or FOLLOWUP-B as documented"* — the structural roundtrip back into the chat REPL as between-prompt notifications becomes provable once both forge follow-ups land.
 
 ---
 
@@ -63,17 +74,17 @@ The dominant failure mode for first real runs is **integration drift between cod
 
 ---
 
-## Cross-repo state preconditions (verified 2026-05-01)
+## Cross-repo state preconditions (last refreshed 2026-05-08)
 
 Confirm the assumptions baked into this runbook still hold before executing:
 
 | Repo | Required state | Last verified |
 |---|---|---|
-| `jarvis` | `main` includes `2864173` (FEAT-JARVIS-INTERNAL-001 close) | 2026-05-01 |
-| `nats-infrastructure` | Has `docker-compose.yml` + `streams/provision-streams.sh` + `kv/provision-kv.sh`. Streams: PIPELINE, AGENTS, JARVIS, FLEET, NOTIFICATIONS, SYSTEM, FINPROXY. KV: agent-status, agent-registry, pipeline-state, jarvis-session. | 2026-05-01 |
-| `forge` | `main` includes `732408f` (FEAT-FORGE-009 production image + `forge serve`) and `225d279` (feat-complete chore). `pyproject.toml` declares `nats-core>=0.3.0,<0.4` but the active install resolves via `[tool.uv.sources] nats-core = "../nats-core"` (editable). **For Phase 7 to close, also requires the orchestrator-wiring feature merge** — see "FEAT-FORGE-010" predecessor row above. F009 alone ships only the daemon process; the orchestrator chain it hosts (Supervisor + dispatchers + autobuild_runner subagent + PipelineLifecycleEmitter) is wired by FEAT-FORGE-010. As of 2026-05-02 FEAT-FORGE-010 is filed (`forge/tasks/backlog/forge-serve-orchestrator-wiring/`) but not yet merged; until it merges, expect Phase 7 to fail in the way RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md captures (consumer info shows `delivered=N, acked=N`, but `pipeline.stage-complete.*` is empty and the chat REPL drains zero notifications). | 2026-05-01 (F009 portion); pending (FEAT-FORGE-010 merge) |
-| `nats-core` | Sibling of forge. Version `0.2.0`. `BuildQueuedPayload` defined at `src/nats_core/events/_pipeline.py:265`. **Note:** the formal schema does not declare `task_id`/`mode` — `ConfigDict(extra="allow")` permits them as untyped extras. **Not relevant for FEAT-JARVIS-INTERNAL-001 (Mode B).** | 2026-05-01 |
-| `specialist-agent` | Architect role NATS-callable (verified TASK-REV-B8E4). PO role recently fixed (TASK-MDF-PORT/POLR Apr 17) but **not required for this run** — FEAT-JARVIS-INTERNAL-001 is documentation-only and dispatches no PO work. | 2026-05-01 |
+| `jarvis` | `main` includes `2864173` (FEAT-JARVIS-INTERNAL-001 close). 2026-05-08 walkthrough exercised at HEAD `60cee6b`. | 2026-05-08 |
+| `nats-infrastructure` | Has `docker-compose.yml` + `streams/provision-streams.sh` + `kv/provision-kv.sh`. Streams: PIPELINE, AGENTS, JARVIS, FLEET, NOTIFICATIONS, SYSTEM, FINPROXY. KV: agent-status, agent-registry, pipeline-state, jarvis-session. | 2026-05-08 |
+| `forge` | `main` includes the PEBR-WIREUP commit `1b82236` (`fix(FEAT-PEBR): compose LifecycleBridgeWireup in bind_production_serve`). PEBR-WIREUP supersedes the wave-1 FEAT-FORGE-010 framing — the dispatch chain is now composed in `bind_production_serve` and the daemon's startup log line *"forge-serve: dispatch chain composed; `_serve_daemon.dispatch_payload` rebound to handle_message dispatcher (receipt-only stub no longer reachable)"* proves it. **However, two integration gaps land Phase 7 in a known-FAIL signature** — the missing `lifecycle_bridge_registry` migration (FOLLOWUP-A) and the bridge↔autobuild_runner state-update contract (FOLLOWUP-B). See the Known issues table above. `pyproject.toml` declares `nats-core>=0.3.0,<0.4` but the active install resolves via `[tool.uv.sources] nats-core = "../nats-core"` (editable). | 2026-05-08 (PEBR-WIREUP portion); pending (FOLLOWUP-A + FOLLOWUP-B for Phase 7 to close end-to-end) |
+| `nats-core` | Sibling of forge. Version `0.2.0`. `BuildQueuedPayload` defined at `src/nats_core/events/_pipeline.py:265`. **Note:** the formal schema does not declare `task_id`/`mode` — `ConfigDict(extra="allow")` permits them as untyped extras. **Not relevant for FEAT-JARVIS-INTERNAL-001 (Mode B).** | 2026-05-08 |
+| `specialist-agent` | Architect role NATS-callable (verified TASK-REV-B8E4). PO role recently fixed (TASK-MDF-PORT/POLR Apr 17) but **not required for this run** — FEAT-JARVIS-INTERNAL-001 is documentation-only and dispatches no PO work. | 2026-05-08 |
 
 If any row above has drifted, stop and resolve drift before proceeding.
 
@@ -210,6 +221,48 @@ ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/nats-infrastructure && \
 
 ## Phase 2: Forge `serve` daemon running and subscribed
 
+### 2.0 Start the `langgraph-runner` sidecar (NEW in wave 2)
+
+> **Why this is a separate phase now.** Post-PEBR-WIREUP (forge HEAD `1b82236`+), `bind_production_serve` requires `FORGE_AUTOBUILD_RUNNER_URL` pointing at a reachable `langgraph-runner` sidecar. With the env var unset, the daemon crashes on boot with `ValueError: bind_production_serve: 'autobuild_runner_url' is required but missing/empty` — there is no in-process ASGI fallback in production. The deployment topology is now: `forge-serve` container + `langgraph-runner` sidecar (typically `langgraph dev` against the forge repo). §2.0 brings the sidecar up before §2.2 boots `forge serve`.
+>
+> **Caveat — `forge/langgraph.json` `orchestrator` graph fails to import (forge-followup-orchestrator-graph).** The canonical `langgraph.json` declares both an `orchestrator` graph (at `./src/forge/agent.py:agent`) and an `autobuild_runner` graph. The `orchestrator` graph's import path (`from agents import create_orchestrator` at `forge/src/forge/agent.py:23`) does not resolve — there is no `agents` package on the forge import path — so `langgraph dev` against the canonical config fails to load any graph. Until the forge follow-up lands, boot the sidecar with a **stripped** `langgraph.json` that contains only the `autobuild_runner` graph. The runbook does not need the `orchestrator` graph for FEAT-JARVIS-INTERNAL-001.
+
+**Pre-flight: write a stripped `langgraph.json`** alongside the forge repo (or anywhere — pass the path via `--config`):
+
+```bash
+ssh promaxgb10-41b1 'cat > ~/forge-runner-only-langgraph.json <<EOF
+{
+    "dependencies": ["."],
+    "graphs": {
+        "autobuild_runner": "./src/forge/subagents/autobuild_runner.py:graph"
+    },
+    "env": ".env"
+}
+EOF'
+```
+
+**Boot the sidecar:**
+
+```bash
+ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/forge && \
+    nohup .venv/bin/langgraph dev \
+        --config ~/forge-runner-only-langgraph.json \
+        --host 127.0.0.1 \
+        --port 8124 \
+        --no-browser \
+        > /tmp/langgraph-sidecar.log 2>&1 &'
+```
+
+**Verify the sidecar is up before booting `forge serve`** (the daemon's fail-fast path will catch an unreachable sidecar later, but checking up-front saves a restart):
+
+```bash
+ssh promaxgb10-41b1 'sleep 3 && curl -sf http://localhost:8124/openapi.json | jq ".info.title // empty"'
+```
+
+**Pass:** `curl` returns a non-empty title (`"LangGraph API"` or similar). The sidecar is now serving the `autobuild_runner` graph at `http://localhost:8124`. If the curl fails or returns nothing, tail `/tmp/langgraph-sidecar.log` — most likely cause is the import failure described in the caveat above (the stripped `langgraph.json` write above didn't land, or got pointed at the canonical config by mistake).
+
+> When `forge-followup-orchestrator-graph` lands (the `agents`-import path is fixed or the `orchestrator` graph is removed from `langgraph.json`), this whole stripped-config dance can be replaced with a plain `langgraph dev --host 127.0.0.1 --port 8124 --no-browser` from the forge repo root.
+
 ### 2.1 Build (or pull) the forge production image on GB10
 
 > **Workaround for forge-followup-3:** `scripts/build-image.sh` cd's to forge's parent and runs `--build-context nats-core=../nats-core`, which from the parent resolves to `~/Projects/nats-core` (does not exist on the canonical layout). Until the forge follow-up lands, invoke `docker buildx build` directly from inside `forge/` so the relative `../nats-core` resolves to the correct sibling.
@@ -230,11 +283,44 @@ ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/forge && \
 
 ### 2.2 Start `forge serve` against canonical NATS
 
-> **Two daemon-config gotchas folded here:**
-> 1. **`FORGE_NATS_URL`, not `NATS_URL`.** The `forge serve` daemon reads `FORGE_NATS_URL` exclusively; a bare `NATS_URL` is silently ignored. Must include credentials per Phase 0.4.
-> 2. **`FORGE_HEALTHZ_PORT=8088`.** The daemon defaults to port 8080, but `open-webui` holds 8080 host-network on the GB10. Override to 8088 (or any free port) to avoid a bind conflict.
+> **Daemon-config gotchas folded here (wave 2):**
 >
-> Note that `FORGE_LOG_LEVEL=info` is accepted but currently has **no observable effect** — `forge serve` parses it into `ServeConfig.log_level` but doesn't call `logging.basicConfig()`, so `docker logs forge-prod` will be empty even on successful consume. Tracked as forge-followup-2; until it lands, use Phase 7.2's `nats consumer info -j` to prove consume+ack instead of trusting `docker logs`.
+> 1. **`forge serve` now requires `--config <path>`** between the `forge` parent group and the `serve` subcommand. The container ships without a default `forge.yaml`. With it missing, the daemon crashes immediately with `Error: forge serve requires a forge.yaml — pass --config <path> or run from a directory containing ./forge.yaml.` (`bind_production_serve` reads `approved_originators` and the filesystem allowlist from it.) Mount the operator's `forge.yaml` and pass `--config /var/forge/forge.yaml`.
+>
+> 2. **`FORGE_AUTOBUILD_RUNNER_URL` is mandatory.** Wave 2's `bind_production_serve` fails fast at boot with `ValueError: bind_production_serve: 'autobuild_runner_url' is required but missing/empty` when this env var is unset. Point it at the §2.0 sidecar (`http://localhost:8124` for the canonical co-resident layout).
+>
+> 3. **`/home/forge/.forge/forge.db` is not in the existing `~/forge-state` volume.** The forge daemon now persists its SQLite DB at `/home/forge/.forge/forge.db` inside the container's writable layer, **not** in the existing `-v ~/forge-state:/var/forge` mount. Without an additional `-v ~/forge-prod-state/.forge:/home/forge/.forge` bind-mount, every container restart is a fresh DB and any operator-applied migrations (or hot-fixes — see FOLLOWUP-A in the Known issues table) are lost. The host directory must be pre-created and chowned to **uid 1000** (the container's `forge` user, not necessarily the host operator's uid).
+>
+> 4. **`FORGE_NATS_URL`, not `NATS_URL`** (carried over from wave 1). The daemon reads `FORGE_NATS_URL` exclusively; a bare `NATS_URL` is silently ignored. Must include credentials per Phase 0.4.
+>
+> 5. **`FORGE_HEALTHZ_PORT=8088`** (carried over from wave 1). The daemon defaults to port 8080, but `open-webui` holds 8080 host-network on the GB10. Override to 8088 (or any free port) to avoid a bind conflict.
+>
+> Note that `FORGE_LOG_LEVEL=info` was historically a no-op (forge-followup-2). The 2026-05-08 walkthrough captured non-trivial `docker logs forge-prod` output across a 13-minute run, which suggests the issue may already be resolved at HEAD `1b82236` — but until verified, use Phase 7.2's `nats consumer info -j` belt-and-braces pattern.
+
+**Pre-flight 1 — write a minimal `forge.yaml`** for the daemon to read. The schema's only required block is `permissions.filesystem.allowlist` (absolute paths only; `forge/src/forge/config/models.py:209-243` rejects relatives at config-load time). All other blocks (`fleet`, `pipeline`, `approval`, `queue`) ship sensible defaults. A minimal `forge.yaml` is therefore literally:
+
+```bash
+ssh promaxgb10-41b1 'mkdir -p ~/forge-state && cat > ~/forge-state/forge.yaml <<EOF
+permissions:
+  filesystem:
+    allowlist:
+      - /home/forge/build-workspace
+      # Add any other absolute paths the daemon should be allowed to read or write
+EOF'
+```
+
+(The `/home/forge/build-workspace` path is a placeholder — set it to whatever the operator wants the daemon's filesystem footprint to be. The runbook does not exercise the autobuild filesystem path itself, so a single placeholder allowlist entry is enough to satisfy the schema.)
+
+**Pre-flight 2 — pre-create + chown the host DB directory.** The chown target is **uid 1000** (the container's `forge` user, fixed by the forge Dockerfile). On hosts where the operator's uid is also 1000 (the GB10 baseline), this is invisible; on Tailscale-walkthrough hosts where the operator's uid differs, this matters:
+
+```bash
+ssh promaxgb10-41b1 'mkdir -p ~/forge-prod-state/.forge && \
+    sudo chown -R 1000:1000 ~/forge-prod-state/.forge'
+```
+
+Without this mount, **every container restart is a fresh DB** and any operator-applied migrations (e.g. a FOLLOWUP-A hot-fix) are lost on the next `docker restart` / image rebuild.
+
+**Boot the daemon** (note `--config` between `forge:latest` and `serve`, and the new `FORGE_AUTOBUILD_RUNNER_URL` env var):
 
 ```bash
 ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/nats-infrastructure && \
@@ -245,19 +331,29 @@ ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/nats-infrastructure && \
         -e FORGE_NATS_URL="nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
         -e FORGE_HEALTHZ_PORT=8088 \
         -e FORGE_LOG_LEVEL=info \
+        -e FORGE_AUTOBUILD_RUNNER_URL="http://localhost:8124" \
         -v ~/forge-state:/var/forge \
-        forge:latest serve
+        -v ~/forge-prod-state/.forge:/home/forge/.forge \
+        forge:latest --config /var/forge/forge.yaml serve
     sleep 3
     docker logs --tail 30 forge-prod
 '
 ```
 
-**Pass (despite the empty `docker logs`):**
+**Pass:**
 - Container status `Up (healthy)` per `docker ps`
 - `/healthz` is green (verified in 2.3)
 - A `forge-serve` durable consumer is attached on stream `PIPELINE` (verified in 2.3 via `nats consumer info`)
+- `docker logs forge-prod` includes the wave-2 dispatch-chain composition signature: `forge-serve: dispatch chain composed; _serve_daemon.dispatch_payload rebound to handle_message dispatcher (receipt-only stub no longer reachable)`. Absence of this exact line means PEBR-WIREUP did not land in the image — rebuild §2.1 against the current forge `main`.
 
-If you do see log output, it should include JetStream connection success, durable-consumer attach, and HTTP listener up — but the absence of those lines is **not** a failure signal until forge-followup-2 lands.
+**Common boot failures (read the docker logs first):**
+
+| Error | Cause | Fix |
+|---|---|---|
+| `Error: forge serve requires a forge.yaml — pass --config <path>...` | Pre-flight 1 skipped, or `--config` not in the docker run command | Write the minimal `forge.yaml` per pre-flight 1; add `--config /var/forge/forge.yaml` between `forge:latest` and `serve` |
+| `ValueError: bind_production_serve: 'autobuild_runner_url' is required but missing/empty` | `FORGE_AUTOBUILD_RUNNER_URL` not exported, or §2.0 sidecar not running | Confirm §2.0 sidecar is up (`curl http://localhost:8124/openapi.json`); add `-e FORGE_AUTOBUILD_RUNNER_URL=http://localhost:8124` to the docker run command |
+| `pydantic.ValidationError: filesystem.allowlist entries must be absolute paths` | Pre-flight 1's `forge.yaml` has a relative path | Edit `forge.yaml` so every `allowlist` entry begins with `/` |
+| Container exits immediately, `docker logs forge-prod` empty | Most likely the image was built before PEBR-WIREUP landed | Re-run §2.1 to rebuild against the current forge `main`; verify `git log` includes commit `1b82236` |
 
 ### 2.3 Confirm `/healthz` reports JetStream subscription healthy
 
@@ -325,15 +421,27 @@ ssh promaxgb10-41b1 'docker ps --format "{{.Names}}\t{{.Status}}" | grep -E "gra
 
 **Pass:** A `graphiti-mcp` container is running. (FalkorDB may be local or on `whitestocks` per `FALKORDB_HOST` — local container not required.)
 
-> **As of 2026-05-01 the GB10 `graphiti-mcp` reports unhealthy.** That's not a blocker for this runbook — when `JARVIS_GRAPHITI_ENDPOINT` is unset (or the endpoint is unreachable), jarvis takes the DDR-019 trace-offload soft-fail path. Capture the offload trace in §8.3 instead of querying Graphiti, and note the unhealthy state in RESULTS.
+> **Health-state history.** The 2026-05-01 walkthrough reported `graphiti-mcp` unhealthy on GB10; the 2026-05-08 walkthrough reported it Up healthy. The runbook tolerates either state — when `JARVIS_GRAPHITI_ENDPOINT` is unset (or the endpoint is unreachable for any reason), jarvis takes the DDR-019 trace-offload soft-fail path. Capture the offload trace in §8.3 instead of querying Graphiti, and note the observed health state in RESULTS for the operator after you.
 
 ### 4.2 Probe the actual Graphiti HTTP endpoint
 
+> **Open-webui port-conflict caveat (wave 2).** On the GB10, host-network `open-webui` holds port 8080 and serves an HTML splash page that returns HTTP 200 — a naive `curl -sf` against `http://localhost:8080/healthz` looks like success but is **not** Graphiti. The probe below adds a Content-Type guard to reject HTML responses. Note also that `graphiti-mcp` on the GB10 lives on a docker-internal network only — it is not reachable from the host. Leave `JARVIS_GRAPHITI_ENDPOINT` unset on this box and rely on the §8.3 soft-fail offload; on Tailscale-walkthrough hosts where graphiti is exposed at a host-mapped endpoint, set `JARVIS_GRAPHITI_ENDPOINT` to that endpoint and the same probe just works.
+
 ```bash
-ssh promaxgb10-41b1 'curl -sf "${JARVIS_GRAPHITI_ENDPOINT:-http://localhost:8080}/healthz" || echo "graphiti unreachable"'
+ssh promaxgb10-41b1 'PROBE_URL="${JARVIS_GRAPHITI_ENDPOINT:-http://localhost:8080}/healthz"; \
+    RESP=$(curl -sf -i --max-time 5 "$PROBE_URL" 2>/dev/null || true); \
+    if [ -z "$RESP" ]; then \
+        echo "graphiti unreachable (curl failed)"; \
+    elif echo "$RESP" | grep -i "^Content-Type:" | grep -qi "text/html"; then \
+        echo "graphiti unreachable (got HTML — likely port hijack by another service such as open-webui)"; \
+    elif echo "$RESP" | head -1 | grep -q "^HTTP.*200"; then \
+        echo "graphiti probe OK"; \
+    else \
+        echo "graphiti unreachable (non-200 response)"; \
+    fi'
 ```
 
-**Pass:** A 200 response (any body). If you get `graphiti unreachable`, leave `JARVIS_GRAPHITI_ENDPOINT` unset and rely on the §8.3 soft-fail offload — the runbook still completes.
+**Pass:** Output is `graphiti probe OK`. Any of the three `unreachable` branches means leave `JARVIS_GRAPHITI_ENDPOINT` unset and rely on the §8.3 soft-fail offload — the runbook still completes. The HTML-splash branch in particular is a known operator hazard on the GB10; it's not a misconfiguration on the operator's part.
 
 ### 4.3 (Optional) llama-swap embeddings probe
 
@@ -362,9 +470,14 @@ ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/jarvis && \
     JARVIS_LOG_LEVEL=INFO .venv/bin/jarvis chat 2>&1 | tee /tmp/jarvis-chat-phase5.log'
 ```
 
-**Pass:** Banner prints, supervisor builds without error, prompt renders, tool list includes `queue_build` and `dispatch_by_capability`.
+**Pass:** Banner prints, supervisor builds without error, prompt renders, tool list includes `queue_build` and `dispatch_by_capability`. The boot log terminates with a clean `jarvis_startup_complete` line carrying `nats_available=true, capabilities_mode=live` and **zero** NATS subscription warnings — specifically, none of the historical wave-1 errors (fleet-register `stream name already in use with a different configuration`, agent-registry KV bind same, `forge_subscriber` attach `BadRequestError code=10101 description='consumer must be deliver all on workqueue stream'`) reproduce. TASK-FRR-001's reconciliation fully resolved this on 2026-05-08; see the Known Issues table for the resolution footnote.
 
-> **Expected boot warnings (not failures) until [TASK-FRR-001](../../tasks/backlog/feat-jarvis-internal-001-followups/TASK-FRR-001-reconcile-nats-subscriptions-with-canonical-provisioning.md) lands:** the boot log will show three NATS subscription failures: fleet register (`stream name already in use with a different configuration`), agent-registry KV bind (same), and `forge_subscriber` attach (`BadRequestError code=10101 description='consumer must be deliver all on workqueue stream'`). These are real DDR drift — the JARVIS stream / agent-registry KV / PIPELINE consumer config that jarvis tries to set up does not match what `nats-infrastructure` provisions. **Until TASK-FRR-001 lands, jarvis cannot subscribe to stage-complete events at all, and the DDR-030 between-prompt notification path is dead.** This runbook accommodates that by narrowing the Phase 7 close criterion to "forge consumed and acked"; do not treat the boot warnings as a stop signal.
+> **Two non-NATS boot lines you may see — these are operator-config-dependent, not failures:**
+>
+> - `web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set — web search will be disabled.` Reproduces on any host without `JARVIS_TAVILY_API_KEY` set; web search is optional and unrelated to the runbook's close criterion.
+> - `graphiti_skipped_no_endpoint` / `graphiti_available: false`. Expected DDR-019 path when `JARVIS_GRAPHITI_ENDPOINT` is unset (see §4.2). Soft-fail offload covered by §8.3.
+
+**If you see any `nats_*` warning that's not in the two-line list above** (fleet-register, agent-registry KV, `forge_subscriber` attach, or anything new), capture verbatim and treat as a regression — TASK-FRR-001's resolution should keep the boot clean across the full subscription set. Do not silently accept new NATS warnings as "expected"; the wave-2 baseline is a strictly clean boot.
 
 **If supervisor fails to build entirely** (no prompt renders): the most common cause is a missing or invalid `JARVIS_SUPERVISOR_MODEL` (must name a model llama-swap serves — see §0.4) or missing `JARVIS_NATS_URL` credentials. Hit Ctrl+C (exit code 130 expected) and resolve.
 
@@ -423,16 +536,30 @@ In the REPL (or piped via the non-interactive pattern in 6.1), type:
 
 > Adjust the YAML path / repo / branch arguments to match what `queue_build`'s docstring requires; the supervisor should fill these from your prompt. If it asks clarifying questions, answer them — and **note the questions in RESULTS** as a gap-fold candidate (the runbook's prompt above should have been complete enough).
 
-**Pass — the supervisor returns a JSON-shaped acknowledgement containing:**
-- `status: queued`
-- `feature_id: FEAT-43DE`
-- `correlation_id: <uuid>` ← **save this verbatim** — it threads through every subsequent stage event and the Graphiti trace dump
-- `publish_target: pipeline.build-queued.FEAT-43DE`
-- `queued_at: <ISO 8601>`
+**Pass — the supervisor returns a markdown-bullet acknowledgement** rendered roughly like:
 
-**If `status: validation_error`:** the most likely cause is the feature_id failing the `^FEAT-[A-Z0-9]{3,12}$` regex (hyphens or > 12 chars in the tail). Substitute the internal id and retry.
+```text
+FEAT-43DE has been queued for build.
 
-**If `status: degraded`:** NATS publish failed. Most likely Phase 1 isn't actually green — re-run 1.2 (with auth sourced!) and verify the PIPELINE stream is bound to `pipeline.build-queued.>`.
+- **Correlation ID:** `<uuid>`           ← save this verbatim — threads through every subsequent stage event and the Graphiti / offload trace
+- **Publish target:** `pipeline.build-queued.FEAT-43DE`
+
+Forge will pick it up from the JetStream topic. ...
+```
+
+**Match these two lines** to confirm success:
+- A line beginning with `- **Correlation ID:**` carrying a UUID.
+- A line beginning with `- **Publish target:**` carrying `pipeline.build-queued.FEAT-43DE`.
+
+The exact narration prose ("FEAT-43DE has been queued..." / "Forge will pick it up...") is generated by the supervisor's reasoner and may vary turn-to-turn; the **two bulleted lines above are the load-bearing evidence**.
+
+> **Why the bullets, not the JSON?** The underlying tool returns the canonical raw JSON via `json.dumps(ack)` at [`src/jarvis/tools/dispatch.py:1238`](../../src/jarvis/tools/dispatch.py#L1238) — the dict carries `status: "queued"`, `feature_id`, `correlation_id`, `publish_target`, `queued_at`. The markdown re-rendering happens in the supervisor's tool-result presentation layer (system prompt + reasoner narration), not in `dispatch.py` itself. A future, separate task may tighten the supervisor prompt to pass through the raw JSON unchanged for non-narrative tool results — if that lands, this section can be re-tightened back to a JSON-shape match. **Do not modify `dispatch.py` to "fix" this from inside this runbook**; the tool's contract is correct. (Tracked as an optional supervisor-prompt follow-up; not blocking.)
+
+**If you see no bullet lines at all** (the reasoner asked clarifying questions, or returned a free-form refusal): the prompt in 6.1 above was incomplete or the supervisor model is mis-configured. Re-prompt with the YAML path / repo / branch arguments inline.
+
+**If `status: validation_error` appears** (rare — usually surfaces inline rather than as a bullet): the most likely cause is the feature_id failing the `^FEAT-[A-Z0-9]{3,12}$` regex (hyphens or > 12 chars in the tail). Substitute the internal id and retry.
+
+**If `status: degraded` appears:** NATS publish failed. Most likely Phase 1 isn't actually green — re-run 1.2 (with auth sourced!) and verify the PIPELINE stream is bound to `pipeline.build-queued.>`.
 
 ### 6.3 Capture proof of publication on the wire
 
@@ -468,11 +595,18 @@ ssh promaxgb10-41b1 'cd ~/Projects/appmilla_github/nats-infrastructure && \
 
 ## Phase 7: Real per-stage lifecycle events arrive in chat as between-prompt notifications
 
-> **What this phase tests changed on 2026-05-02.** The 2026-05-01 walkthrough (results captured in `RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run.md`) failed Phase 7 because nothing on the forge side publishes any lifecycle envelope back today — F009 ships a receipt-only stub at `_serve_daemon._default_dispatch`. The follow-up forge-side task FRR-001 was filed assuming "wire dispatch_payload" was a one-day fix; Phase 2.8 design investigation discovered the entire orchestration chain is unwired in production and re-scoped the work to a feature (`forge/docs/research/forge-orchestrator-wiring-gap.md`). Phase 7 now tests for the **real per-stage envelope sequence** that feature delivers, not the receipt-only behaviour F009 actually shipped or the synthetic single-envelope FRR-001 was originally going to ship. **If FEAT-FORGE-010 (orchestrator wiring) has not merged, expect Phase 7 to fail in the same shape as the 2026-05-01 run** — capture verbatim and stop.
+> **What this phase tests in wave 2 (post-PEBR-WIREUP, forge HEAD `1b82236`).** PEBR-WIREUP composes `LifecycleBridgeWireup` into `bind_production_serve` and rebinds the dispatch chain — the wave-1 receipt-only stub (`_serve_daemon._default_dispatch`) is no longer reachable. **However, two integration gaps remain pending in the forge repo** and land Phase 7 in a known-FAIL signature today:
+>
+> 1. **FOLLOWUP-A** — `bind_production_serve` does not call `forge.persistence.migrations.lifecycle_bridge_registry.apply()` at boot, so `register_ack_handle` raises `no such table: lifecycle_bridge_registry` on every dispatch and the consumer falls back to a legacy ack_callback that does not publish lifecycle envelopes.
+> 2. **FOLLOWUP-B** — even with FOLLOWUP-A applied, the bridge attaches cleanly per its own logs and the SSE GET against the langgraph-runner sidecar returns HTTP 200, but **zero outbound envelopes** ever land on the wire. Hypothesis: the autobuild_runner subagent does not drive the `_update_state` transitions the bridge translator requires.
+>
+> **Phase 7 is therefore expected to FAIL today**, with one of two specific signatures depending on whether FOLLOWUP-A has landed. The runbook's job in this wave is to (a) make the FAIL **deterministic** (so the operator can recognise it on sight), and (b) make the **next** step (forge follow-up landing → rerun) clear. Do not interpret a Phase 7 FAIL today as an operator-side setup mistake.
+>
+> **Historical note** (kept for archeology): the wave-1 walkthrough failed Phase 7 because the daemon was on the receipt-only stub; the FEAT-FORGE-010 (orchestrator-wiring) framing was the contemporary explanation. PEBR-WIREUP at HEAD `1b82236` supersedes that framing; FEAT-FORGE-010 / abandoned-FRR-001 references are no longer load-bearing for this section.
 
-The REPL from 6.1 should still be open. Forge is now autobuilding (or short-circuiting cleanly via the supervisor's "no work to do" terminal path — see operator decision note in 6.1). Either way, the **full lifecycle envelope sequence** should flow back from `pipeline_consumer.handle_message` → `Supervisor.process_build` → `autobuild_runner` AsyncSubAgent → `PipelineLifecycleEmitter`, and the chat REPL drains `pending_notifications(session_id)` before each new input prompt.
+The REPL from 6.1 should still be open. With wave-2 forge HEAD `1b82236` running, the daemon dequeues the inbound `pipeline.build-queued.*` and dispatches autobuild via the SSE channel against the §2.0 sidecar — but, per FOLLOWUP-A / -B, no per-stage lifecycle envelopes flow back yet. The chat REPL still drains `pending_notifications(session_id)` before each new input prompt; in wave 2 that drain is empty, which is itself the evidence trail.
 
-### 7.1 Confirm forge consumed and acked
+### 7.1 Confirm forge consumed, acked, and that the FAIL signature matches
 
 In the REPL, type a small follow-up — anything that produces a new prompt cycle:
 
@@ -480,40 +614,42 @@ In the REPL, type a small follow-up — anything that produces a new prompt cycl
 > What's happening with that build?
 ```
 
-**Pass criteria — the rendered notification sequence must include all three of:**
+**Wave-2 expected outcome — Phase 7 FAILs deterministically with one of two signatures:**
 
-1. **At least one `build-started` line**, fired when the autobuild dispatch begins (one per build):
+The chat REPL drains zero notifications and the reasoner narrates accordingly (e.g. *"I haven't received any updates yet"*). This is **expected** in wave 2 until FOLLOWUP-A and FOLLOWUP-B both land. Hit Ctrl+C to exit the REPL cleanly, then capture the failure signature for the evidence trail using §7.2 + §7.3 below.
 
-   ```text
-   [HH:MM] Forge FEAT-JARVIS-INTERNAL-001: build-started (RUNNING)
-   ```
+**The two expected wave-2 FAIL signatures:**
 
-2. **One or more `stage-complete` lines**, one per real stage transition the autobuild orchestrator records in `stage_log`. The exact stage-label sequence depends on the build mode (Mode A / B / C) and what the autobuild actually does on this feature, but the format is:
+- **Signature A — FOLLOWUP-A not landed yet** (the most common state today):
+  - **`docker logs forge-prod`** (filtered to the correlation_id from 6.2) shows, on every dispatch:
+    ```text
+    pipeline_consumer: register_ack_handle raised
+      (no such table: lifecycle_bridge_registry)
+      for feature_id=FEAT-43DE correlation_id=…;
+      continuing with legacy ack_callback fallback
+    ```
+  - **`nats sub "pipeline.>" --raw`** shows the inbound `pipeline.build-queued.FEAT-43DE` only; no outbound `pipeline.build-started.*` / `stage-complete.*` / terminal envelope.
+  - **`nats consumer info PIPELINE forge-serve -j`** shows `ack_floor` did not advance (delivered increments, but `ack_floor` is unchanged from pre-publish baseline).
 
-   ```text
-   [HH:MM] Forge FEAT-JARVIS-INTERNAL-001: stage <stage_label> (<status>)
-   ```
+- **Signature B — FOLLOWUP-A landed, FOLLOWUP-B pending**:
+  - **`docker logs forge-prod`** is clean of the `register_ack_handle raised` warning and includes:
+    ```text
+    forge.lifecycle_bridge.bridge: lifecycle_bridge.attach feature_id=FEAT-43DE correlation_id=… thread_id=pending-FEAT-43DE run_id=pending-FEAT-43DE
+    forge.lifecycle_bridge.wireup: wireup.register_ack_handle: attached feature_id=FEAT-43DE correlation_id=…; observer task scheduled (deadline_at=…)
+    httpx: HTTP Request: GET http://localhost:8124/threads/<task_id>/runs/<run_id>/stream?cancel_on_disconnect=false&stream_mode=values "HTTP/1.1 200 OK"
+    ```
+  - **`nats sub "pipeline.>" --raw`** still shows zero outbound envelopes after the bridge attach.
+  - **`nats consumer info PIPELINE forge-serve -j`** still shows `ack_floor` unchanged.
 
-   Where `<stage_label>` is a `forge.pipeline.stage_taxonomy.StageClass` value (e.g. `PLAN`, `AUTOBUILD`, `PR_REVIEW`) and `<status>` is one of `PASSED`, `FAILED`, `GATED`, `SKIPPED` per the `StageCompletePayload` schema.
+**Either signature is "expected FAIL today" — do NOT treat as an operator setup mistake.** Capture which signature you're seeing in RESULTS along with verbatim log excerpts, and forward-reference FOLLOWUP-A or FOLLOWUP-B as the unblocker. Do **not** hot-fix the migration in-flight from inside the runbook execution — the hot-fix is documented in [RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-post-pebr-wireup.md](./RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-post-pebr-wireup.md) for forensic reference but the canonical fix lives in the forge follow-up.
 
-3. **One terminal line** — either `build-complete` (status `PASSED`) or `build-failed` (with `failure_reason`) — fired when the autobuild reaches a terminal lifecycle state. Format:
+**Hard rejects (capture verbatim and stop — these are NOT expected wave-2 signatures):**
 
-   ```text
-   [HH:MM] Forge FEAT-JARVIS-INTERNAL-001: build-complete (PASSED)
-   ```
-
-   or
-
-   ```text
-   [HH:MM] Forge FEAT-JARVIS-INTERNAL-001: build-failed (<failure_reason>)
-   ```
-
-**Capture every line verbatim, in order.** This is the sequence the new orchestrator-wiring feature commits the chat REPL to threading by `correlation_id` — anything other than this shape (e.g. only one envelope, or out-of-order envelopes, or the `build-started` envelope missing) is a regression worth folding to a follow-up.
-
-**Hard rejects (do NOT mark Phase 7 as passing if any of these is true):**
-- Only one `stage-complete` envelope arrives, with `stage_label="dispatch"` — that was the **synthetic placeholder** the abandoned FRR-001 design was going to ship. The real feature must publish per-stage transitions from inside the autobuild_runner subagent, not a single envelope from the daemon dispatcher. If you see only the dispatch-stage envelope, check that the merge actually included the orchestrator-wiring feature (not just a partial FRR-001 reset).
-- The `correlation_id` on any of the rendered envelopes does not equal the `correlation_id` jarvis published in 6.2 — breaks DDR-029's notification-thread contract.
+- Any rendered notification line whose `correlation_id` does not equal the `correlation_id` jarvis published in 6.2 — breaks DDR-029's notification-thread contract. (Note: in wave 2 there should be **no** rendered notifications at all, so any rendered line is itself worth investigating.)
 - Notifications arrive but are not drained before the supervisor's response — breaks the between-prompt rendering contract jarvis-side (see DDR-030).
+- A `register_ack_handle raised` warning that **persists across container restarts** even after the host-mounted `~/forge-prod-state/.forge/forge.db` has had `lifecycle_bridge_registry.apply()` run against it (per the §2.2 host DB mount). If the warning persists, the host DB mount is not actually reaching the container's `/home/forge/.forge/forge.db` — re-check the bind-mount and uid 1000 chown in §2.2 pre-flight 2.
+
+**Once both FOLLOWUP-A and FOLLOWUP-B land**, this section will need to be re-anchored again to the full per-stage envelope sequence (`build-started`, one or more `stage-complete`, terminal `build-complete` or `build-failed`) — that's the wave-3 success criterion. The historical wave-1 / FEAT-FORGE-010 framing of this section described that target shape; the language was correct for the eventual end-state but premature for today.
 
 ### 7.2 Verify the envelope sequence on the wire (forge side)
 
@@ -546,17 +682,23 @@ jq '{delivered: .delivered.consumer_seq, pending: .num_pending, redelivered: .nu
     /tmp/jarvis-forge-serve-consumer.json
 ```
 
-**Pass:** Forge logs show the correlation_id consuming from JetStream, the autobuild_runner subagent launch, each per-stage emit_stage_complete call, and the terminal build-complete/build-failed publish. Capture log tail.
+**Pass (when the runbook eventually goes green — wave 3):** Forge logs show the correlation_id consuming from JetStream, the autobuild_runner subagent launch, each per-stage `emit_stage_complete` call, and the terminal `build-complete`/`build-failed` publish. Capture log tail.
 
-**If the lifecycle envelope sequence is missing or incomplete after ~5 minutes**, the failure mode tells you where the gap is:
+**Wave-2 expected (FAIL signatures — these are the contemporary failure modes, not regressions):**
 
-| Symptom on the wire | Likely cause | Action |
+| Symptom | Cause | Action |
 |---|---|---|
-| **No envelopes at all**; consumer info shows `delivered=1, acked=1` (the F009-only baseline from 2026-05-01) | The orchestrator-wiring feature has not merged. The daemon is still on the receipt-only `_default_dispatch` stub. | Confirm `git log` on the forge image's source includes the FEAT-FORGE-010 commits. If not, the runbook's preconditions row was not satisfied; stop and re-build the image. |
-| **Only one `stage-complete` envelope** with `stage_label="dispatch"`, no `build-started`, no terminal | A stub of the abandoned FRR-001 design was deployed instead of the real feature. | Check the deployed image — should NOT contain the synthetic dispatch-stage publish. If it does, that's a misroll; redeploy with the real feature image. |
-| **`build-started` arrives but no per-stage `stage-complete`**; long delay then `build-failed` | The autobuild_runner subagent dispatched but failed internally. | Capture the forge container logs (Phase 7.3) for the autobuild traceback. Fold to a follow-up against the autobuild_runner. |
-| **Per-stage `stage-complete` arrives but no terminal** | The autobuild reached its terminal state but `emit_build_complete`/`emit_build_failed` did not fire. The deferred-ack contract means JetStream will redeliver the inbound `build-queued` message after `ack_wait` (1 hour). | Capture forge logs; the orchestrator's terminal-transition path is broken. Fold to a follow-up. |
-| **All envelopes arrive but `correlation_id` doesn't match what jarvis published** | The publisher is not threading `correlation_id` through the lifecycle emitter. | Capture both the inbound and outbound envelopes; reproduce the LES1 CMDW pattern. Stop and fix before re-running. |
+| **`register_ack_handle raised (no such table: lifecycle_bridge_registry)` on every dispatch**; no outbound envelopes; `nats consumer info` shows `ack_floor` stuck at the pre-publish baseline | **FOLLOWUP-A** not landed. `bind_production_serve` does not call `forge.persistence.migrations.lifecycle_bridge_registry.apply()` at boot. The bridge falls back to legacy ack_callback that doesn't translate SSE → envelope publishes. | **Expected FAIL today, do NOT treat as operator setup mistake.** Capture log excerpt + consumer-info JSON in RESULTS. Forward-reference TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-A. Rerun the runbook from §2.2 onwards once FOLLOWUP-A lands and the image is rebuilt. |
+| **`docker logs forge-prod` is clean of the `register_ack_handle` warning, shows `lifecycle_bridge.attach … observer task scheduled` followed by SSE GET HTTP 200**, but `nats sub "pipeline.>"` captures **zero outbound envelopes** for >5 minutes | **FOLLOWUP-B** not landed (FOLLOWUP-A has landed). Bridge attaches and opens the SSE stream cleanly, but the autobuild_runner subagent does not drive the `_update_state` transitions the bridge translator looks for. | **Expected FAIL today, do NOT treat as operator setup mistake.** Capture the bridge-attach + SSE-200 log excerpts and the empty wire-tap in RESULTS. Forward-reference TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-B. Rerun once FOLLOWUP-B lands. |
+
+**Wave-3+ failure modes (will be relevant once FOLLOWUP-A and FOLLOWUP-B both land — kept here so the operator after you can interpret them):**
+
+| Symptom | Likely cause | Action |
+|---|---|---|
+| **`build-started` arrives but no per-stage `stage-complete`**; long delay then `build-failed` | The autobuild_runner subagent dispatched but failed internally | Capture forge container logs for the autobuild traceback. Fold to a follow-up against the autobuild_runner. |
+| **Per-stage `stage-complete` arrives but no terminal `build-complete` / `build-failed`** | The autobuild reached its terminal state but `emit_build_complete` / `emit_build_failed` did not fire. The deferred-ack contract means JetStream will redeliver the inbound `build-queued` message after `ack_wait` (1 hour). | Capture forge logs; the orchestrator's terminal-transition path is broken. Fold to a follow-up. |
+| **All envelopes arrive but `correlation_id` does not match what jarvis published** | The publisher is not threading `correlation_id` through the lifecycle emitter | Capture both the inbound and outbound envelopes; reproduce the LES1 CMDW pattern. Stop and fix before re-running. |
+| **The wave-1 receipt-only-stub baseline reappears** (consumer info `delivered=1, acked=1`, no envelopes, no `lifecycle_bridge.attach` log lines at all, no `register_ack_handle` warnings — i.e. the dispatch chain is silently bypassing PEBR-WIREUP) | The deployed image was built before PEBR-WIREUP merged | Confirm `git log` on the forge image's source includes commit `1b82236`. If not, the runbook's preconditions row was not satisfied; stop and re-run §2.1 to rebuild the image. |
 
 ---
 
