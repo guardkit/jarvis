@@ -2965,4 +2965,37 @@ Folded the three observational wave-3 candidates surfaced by the fresh-followup-
 - **W3-F** (low, additive): add the `composed PipelineConsumerDeps … wired` boot line to §2.2's "Pass" criteria — it's the clearest on-boot fingerprint that the FOLLOWUP-B-FIX surface is in the running image.
 
 **Recommended forge follow-up:** `TASK-FORGE-FRR-PEBR-WIREUP-FOLLOWUP-C-RACE` — close the join_stream subscribe-after-completion race. Most likely fix: subscribe the bridge to the SSE stream *before* triggering `dispatch_autobuild_async`, removing the race entirely. Once landed, the runbook should expect **2 envelopes** with the current placeholder bodies (`pipeline.build-started.*` from the `running_wave`-after-`starting/planning_waves` transition, then `pipeline.build-complete.*` from the `completed` terminal — per `LIFECYCLE_TO_PIPELINE_EMIT`). The runbook's documented full per-stage sequence (`build-started → stage-complete×N → build-complete/failed`) is gated on real autobuild orchestration landing inside the runner node bodies, which the FOLLOWUP-B-FIX commit explicitly deferred to a separate follow-up.
- 
+
+---
+
+## 2026-05-08 — Runbook re-run: RUNBOOK-jarvis-architect-align-dddsw-demo.md (specialist-agent Bugs #1/#2/#3 fixes landed)
+
+**Machine:** GB10 (`promaxgb10-41b1`) — co-resident, executed directly on host
+**Jarvis HEAD:** `4c53e6c` (runbook results)
+**Specialist-agent HEAD:** `82ce8a6` (post `1979aa8` Bug #1 reply-via-inbox + `08a95fe` Bug #2 tool_to_command mapping + `4d80bd3` Bug #3 /v1 normalisation + `82ce8a6` nats-core>=0.4 floor)
+**nats-core HEAD:** `8f2c532` / tag `v0.4.0` (subscribe_with_reply + publish_raw)
+**Image:** `specialist-agent:latest` rebuilt fresh during this run from current main → image id `dc8d9e75d0da` (2026-05-08 18:01 BST). Prior image dated 2026-05-08 07:06 BST predated all three bug-fix commits at 16:33–16:36 BST.
+**ADR pair:** Option A — ADR-ARCH-001 vs Opus 4.7 escalation
+**correlation_id (success):** `8df345b4-7b47-4214-8ae3-959aac5252e4`
+**Outcome:** ✅ **DEMO PATH GREEN.** AlignmentJudgment lands end-to-end. Bugs #1/#2/#3 verified closed by both wire-level evidence and a direct `nats request` round-trip (rtt 3.6s).
+
+**Pre-flight unblock:** `nats-core/pyproject.toml` carried `version = "0.3.0"` despite the existing `v0.4.0` tag at HEAD and the `nats-core>=0.4` floor in `specialist-agent/pyproject.toml`. The unbumped version blocked the docker rebuild (`pip` fell through to PyPI's unrelated `nats-core` package). One-line bump to `0.4.0` (with user approval) unblocked the rebuild — worth committing in `nats-core` so the next rebuild doesn't trip the same trap.
+
+**Key findings:**
+- ✅ **Bug #1 (PubAck race) CLOSED.** Architect's `NATSAdapter` honours the inbound message's `reply` header (`subscribe_with_reply` + `publish_raw` from `nats-core` v0.4.0). Direct `nats request` returns the `AlignmentJudgment` ResultPayload in **3.6s** — not a 32-byte PubAck. Jarvis's `client.request(...)` future now resolves with the architect's actual reply.
+- ✅ **Bug #2 (`on_command` mapping miss) CLOSED.** `_dispatch_command` consults `self.tool_to_command` so `architect_align` → `align`. Architect dispatched without the previous "Command 'architect_align' not supported" rejection.
+- ✅ **Bug #3 (`OPENAI_BASE_URL` /v1 suffix) CLOSED.** `_resolve_agent_model("local")` appends `/v1` to `LLM_BASE_URL` before mirroring into `OPENAI_BASE_URL` via `setdefault`. Architect successfully invoked the `architect-agent` Gemma 4 model (no 404). Idempotent on `/v1`-suffixed inputs.
+- ✅ **AlignmentJudgment captured to slide artefact:** `judgment: "misaligned", confidence: 0.95, reasoning: "The proposal introduces a cloud-based LLM (Claude Opus) into the supervisor hot path, which directly contradicts the explicit prohibition in ADR-ARCH-001..."` — narrative-perfect for the talk's local-first / cloud-escalation tension.
+- ❌ **NEW Bug #5 surfaced (non-blocker for the talk if operator's prompt is explicit):** with a naturally phrased prompt, the supervisor (`qwen36-workhorse`) invents arg names like `{adr_id, adr_summary, proposal_summary, context}` instead of the manifest-required `{context, proposal, question}`. Architect rejects in 6ms with *"Missing required arguments for 'align': proposal, question"*. **Cause:** `CapabilityDescriptor.as_prompt_block()` in `jarvis/src/jarvis/tools/capabilities.py:135-164` formats catalogue entries as `tool_name (risk_level) — description` with **no parameter schema** — supervisor has to guess JSON shape. **Workaround used in run 2:** prompt explicitly listed the three required arg names; worked first try (trace `8df345b4`, success in 5.3s). **Fix-forward (~10 LOC):** extend `as_prompt_block()` to render `parameters.properties` keys + `parameters.required`.
+- 🔍 **Wire-tap on `agents.result.<agent_id>` is now a misleading expectation.** Bug #1 fix routes replies via `msg.reply` inbox; the `agents.result.<agent_id>` subject is **not** used for request/reply traffic in the demo path. Runbook §5.2 should be patched (drop or replace with an `_INBOX.>` tap).
+- 🔍 **Runbook docs gaps surfaced:** §0.5 yaml introspection one-liner uses key `agents:` but the file's top-level key is `capabilities:` (silently returns empty); §4.3 `judgment` Literal lists `"not_aligned"` but actual schema (`generation/types.py:147`) is `Literal["aligned", "misaligned", "needs_clarification"]`; §0.1 expected commit hash `ca2ba6b` is several commits stale.
+
+**Full results:** [`docs/runbooks/RESULTS-jarvis-architect-align-dddsw-demo-2026-05-08-postfix.md`](../runbooks/RESULTS-jarvis-architect-align-dddsw-demo-2026-05-08-postfix.md)
+
+**Evidence:** `docs/runbooks/evidence/dddsw-demo/` — `chat-2026-05-08-postfix-run{1,2}.log`, `wire-command-2026-05-08-postfix.log` (4 envelopes), `wire-result-2026-05-08-postfix.log` (0 by design), `trace-architect_align-8df345b4-success.json` (`outcome_type=success`, `wall_clock_ms=5354`), three Bug #5 traces, and **the slide artefact** `8df345b4-7b47-4214-8ae3-959aac5252e4.json` (clean `AlignmentJudgment` JSON). Live transcript also at `~/.jarvis/transcripts/8df345b4-7b47-4214-8ae3-959aac5252e4.txt`.
+
+**Next steps before 2026-05-16 (8 days):**
+- (Recommended) Fix Bug #5 by extending `as_prompt_block()` to expose parameter schemas — closes the on-stage prompt over-engineering need.
+- Patch runbook docs (§0.5 yaml key, §4.3 judgment Literal, §5.2 inbox-routing note, drop stale §0.1 commit hash, re-confirm Bug #4 wire-tap subject patch from prior RESULTS).
+- Commit `nats-core/pyproject.toml` v0.4.0 bump in the `nats-core` repo.
+- Dress rehearsal 2026-05-15 with one warmup `align` call before going on stage.

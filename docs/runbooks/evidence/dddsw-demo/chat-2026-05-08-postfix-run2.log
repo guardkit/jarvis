@@ -1,0 +1,42 @@
+{"supervisor_model": "openai:qwen36-workhorse", "event": "jarvis_startup_begin", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.744490Z"}
+/home/richardwoollcott/Projects/appmilla_github/jarvis/src/jarvis/infrastructure/lifecycle.py:531: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set — web search will be disabled.
+  config.validate_provider_keys()
+{"event": "web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled."}
+{"backend": "in_memory", "event": "jarvis_store_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.745079Z"}
+{"path": "src/jarvis/config/stub_capabilities.yaml", "count": 4, "event": "jarvis_capability_registry_loaded", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.747633Z"}
+{"base_url": "http://promaxgb10-41b1:9000", "event": "jarvis_llamaswap_adapter_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.747678Z"}
+{"openai_base_url": "http://promaxgb10-41b1:9000/v1", "event": "jarvis_openai_base_url_set", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.747711Z"}
+{"count": 1, "event": "jarvis_async_subagents_built", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.747744Z"}
+{"nats_url": "nats://rich:d45kGnbpgdF6hF6s@localhost:4222", "event": "nats_connect_success", "level": "info", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-08T17:06:56.750510Z"}
+{"graphiti_endpoint": null, "event": "graphiti_skipped_no_endpoint", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.750622Z"}
+{"graphiti_available": false, "event": "jarvis_routing_history_writer_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.750688Z"}
+{"agent_id": "jarvis", "version": "0.4.0", "event": "fleet_register_published", "level": "info", "logger": "jarvis.infrastructure.fleet_registration", "timestamp": "2026-05-08T17:06:56.754261Z"}
+{"cap": 8, "event": "jarvis_dispatch_semaphore_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.759864Z"}
+{"subjects": ["pipeline.build-started.>", "pipeline.stage-complete.>", "pipeline.build-complete.>", "pipeline.build-failed.>"], "correlation_cap": 1000, "event": "forge_notifications_subscribed", "level": "info", "logger": "jarvis.infrastructure.forge_notifications", "timestamp": "2026-05-08T17:06:56.760967Z"}
+{"queue_cap": 100, "correlation_cap": 1000, "event": "jarvis_forge_subscriber_started", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.761100Z"}
+{"count": 10, "event": "jarvis_tool_list_attended_assembled", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.761186Z"}
+{"count": 9, "event": "jarvis_tool_list_ambient_assembled", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:56.761252Z"}
+{"event": "Building supervisor graph with model=openai:qwen36-workhorse, tools=10, capabilities=4, async_subagents=1, ambient_tool_factory=supplied"}
+{"event": "Supervisor graph compiled successfully"}
+{"event": "jarvis_forge_subscriber_bound_session_manager", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:57.037667Z"}
+{"event": "jarvis_layer2_hooks_wired", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:57.037724Z"}
+{"nats_available": true, "graphiti_available": false, "capabilities_mode": "live", "event": "jarvis_startup_complete", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:06:57.037757Z"}
+{"session_id": "cli-309b0ac182c14df491dbdb3383cfd605", "adapter": "cli", "user_id": "cli-user", "event": "session_started", "level": "info", "logger": "jarvis.sessions.manager", "timestamp": "2026-05-08T17:06:57.037810Z"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"event": "routing_history_offloaded_locally"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+Here's the AlignmentJudgment returned by the architect:
+
+| Field | Value |
+|---|---|
+| **Judgment** | `misaligned` |
+| **Confidence** | `0.95` |
+| **Reasoning** | "The proposal introduces a cloud-based LLM (Claude Opus) into the supervisor hot path, which directly contradicts the explicit prohibition in ADR-ARCH-001. The ADR mandates that all reasoning must run locally on the GB10 box via the qwen36-workhorse model to maintain marginal-cost-zero economics." |
+| **Suggestions** | *(none returned)* |
+
+**My take:** The judgment is unsurprising but worth noting — the architect is flagging a direct contradiction between the proposal and the ADR's hard prohibition. However, the `escalate_to_frontier` tool already exists in the codebase, and its documented guardrails (attended-only, user-explicit trigger, budget-capped) are *not* the same as a supervisor-initiated escalation. The proposal as written uses the phrase "supervisor can invoke" and "when its local reasoner reports low confidence," which reads like an autonomous supervisor decision — hence the misalignment.
+
+If the intent is to keep this opt-in (user must explicitly ask for a frontier opinion), the proposal language should be tightened to reflect that the *supervisor doesn't decide* — it surfaces the option to the user, who then triggers it. That distinction might flip the judgment from `misaligned` to `aligned` (or at least `aligned-with-reservations`). Want me to re-dispatch with revised wording?
+{"session_id": "cli-309b0ac182c14df491dbdb3383cfd605", "event": "session_ended", "level": "info", "logger": "jarvis.sessions.manager", "timestamp": "2026-05-08T17:07:15.038072Z"}
+session ended.
+{"agent_id": "jarvis", "event": "fleet_heartbeat_cancelled", "level": "info", "logger": "jarvis.infrastructure.fleet_registration", "timestamp": "2026-05-08T17:07:15.038239Z"}

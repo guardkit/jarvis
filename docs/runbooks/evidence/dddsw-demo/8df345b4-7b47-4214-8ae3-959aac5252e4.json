@@ -1,0 +1,6 @@
+{
+  "judgment": "misaligned",
+  "confidence": 0.95,
+  "reasoning": "The proposal introduces a cloud-based LLM (Claude Opus) into the supervisor hot path, which directly contradicts the explicit prohibition in ADR-ARCH-001. The ADR states that cloud LLMs are prohibited from the supervisor hot path and mandates that all reasoning must run locally on the GB10 box using the qwen36-workhorse model.",
+  "suggestions": []
+}

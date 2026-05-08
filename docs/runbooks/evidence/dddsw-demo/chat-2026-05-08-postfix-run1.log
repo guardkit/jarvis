@@ -1,0 +1,74 @@
+{"supervisor_model": "openai:qwen36-workhorse", "event": "jarvis_startup_begin", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.533677Z"}
+/home/richardwoollcott/Projects/appmilla_github/jarvis/src/jarvis/infrastructure/lifecycle.py:531: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set — web search will be disabled.
+  config.validate_provider_keys()
+{"event": "web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled."}
+{"backend": "in_memory", "event": "jarvis_store_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.534893Z"}
+{"path": "src/jarvis/config/stub_capabilities.yaml", "count": 4, "event": "jarvis_capability_registry_loaded", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.543299Z"}
+{"base_url": "http://promaxgb10-41b1:9000", "event": "jarvis_llamaswap_adapter_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.543406Z"}
+{"openai_base_url": "http://promaxgb10-41b1:9000/v1", "event": "jarvis_openai_base_url_set", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.543483Z"}
+{"count": 1, "event": "jarvis_async_subagents_built", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.543545Z"}
+{"nats_url": "nats://rich:d45kGnbpgdF6hF6s@localhost:4222", "event": "nats_connect_success", "level": "info", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-08T17:04:09.548278Z"}
+{"graphiti_endpoint": null, "event": "graphiti_skipped_no_endpoint", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.548332Z"}
+{"graphiti_available": false, "event": "jarvis_routing_history_writer_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.548361Z"}
+{"agent_id": "jarvis", "version": "0.4.0", "event": "fleet_register_published", "level": "info", "logger": "jarvis.infrastructure.fleet_registration", "timestamp": "2026-05-08T17:04:09.549265Z"}
+{"cap": 8, "event": "jarvis_dispatch_semaphore_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.557640Z"}
+{"subjects": ["pipeline.build-started.>", "pipeline.stage-complete.>", "pipeline.build-complete.>", "pipeline.build-failed.>"], "correlation_cap": 1000, "event": "forge_notifications_subscribed", "level": "info", "logger": "jarvis.infrastructure.forge_notifications", "timestamp": "2026-05-08T17:04:09.562302Z"}
+{"queue_cap": 100, "correlation_cap": 1000, "event": "jarvis_forge_subscriber_started", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.562418Z"}
+{"count": 10, "event": "jarvis_tool_list_attended_assembled", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.562503Z"}
+{"count": 9, "event": "jarvis_tool_list_ambient_assembled", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.562575Z"}
+{"event": "Building supervisor graph with model=openai:qwen36-workhorse, tools=10, capabilities=4, async_subagents=1, ambient_tool_factory=supplied"}
+{"event": "Supervisor graph compiled successfully"}
+{"event": "jarvis_forge_subscriber_bound_session_manager", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.890618Z"}
+{"event": "jarvis_layer2_hooks_wired", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.890674Z"}
+{"nats_available": true, "graphiti_available": false, "capabilities_mode": "live", "event": "jarvis_startup_complete", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-08T17:04:09.890708Z"}
+{"session_id": "cli-ede704e436024a42b461e36cc416c5d7", "adapter": "cli", "user_id": "cli-user", "event": "session_started", "level": "info", "logger": "jarvis.sessions.manager", "timestamp": "2026-05-08T17:04:09.890769Z"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"event": "routing_history_offloaded_locally"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"event": "routing_history_offloaded_locally"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"event": "routing_history_offloaded_locally"}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+{"event": "HTTP Request: POST http://promaxgb10-41b1:9000/v1/chat/completions \"HTTP/1.1 200 OK\""}
+The architect-agent is online but its `last_heartbeat_at` is `null` and it's consistently timing out — likely the agent itself is unhealthy or the transport is degraded. Let me do this analysis myself directly, given the architect is unavailable.
+
+---
+
+Here's my direct architectural assessment of the proposal against ADR-ARCH-001:
+
+## Alignment Judgment: **Not aligned — requires ADR amendment**
+
+### The Core Tension
+
+ADR-ARCH-001's local-first invariant is categorical, not conditional. It says cloud LLMs are out of the **supervisor hot path**. The proposal wants to put cloud (Claude Opus 4.7) back into that exact path — just gated on a "low confidence" trigger. That's not a side-channel; it's still the supervisor making a routing decision through cloud.
+
+### What This Means
+
+1. **The "low confidence" trigger is the hard part.** How does the local reasoner determine its own confidence is too low? If it's a self-assessment, you're asking a local model to reason about when it shouldn't reason — a recursive trust problem. If it's an external signal (e.g. a safety classifier), that classifier itself becomes a new dependency with its own failure modes.
+
+2. **Safety-critical is the wrong gating criterion.** If the concern is safety, the local-first invariant is *most* important precisely because safety decisions shouldn't depend on external service availability, latency, or data exfiltration. Escalating safety-critical decisions to cloud is arguably the *highest* risk scenario for violating the ADR's intent.
+
+3. **Per-session budget caps don't address the architectural concern.** ADR-ARCH-001's motivation is likely about data sovereignty, latency predictability, and operational resilience — not cost. A budget cap is a financial guardrail; it doesn't fix the architectural deviation.
+
+### What Would Need to Change
+
+**For alignment, the architect would need to see:**
+
+1. **ADR-ARCH-001 amendment** — The local-first invariant needs a defined exception clause. Something like: *"Cloud LLMs may be invoked by the supervisor only when (a) explicitly requested by the user, (b) bound by a per-session budget cap, and (c) the response is never used to override a local safety-critical decision."*
+
+2. **Supervisor contract modification** — The proposal needs to define:
+   - What constitutes "low confidence" (measurable signal, not a heuristic)
+   - Whether the cloud response is advisory (human-in-the-loop) or authoritative
+   - Data handling: what context is sent to cloud (PII filtering? redaction?)
+   - Fallback behavior: what happens when the cloud service is unavailable?
+
+3. **A separation of concerns** — If the real goal is handling edge cases the local model can't, consider whether a **pre-flight classifier** (lightweight, local) could route to a **local fallback model** instead of cloud. This preserves the local-first invariant while still handling capability gaps.
+
+### My Assessment
+
+The proposal is **directionally reasonable** (having a frontier-tier option is useful) but **architecturally misaligned** with ADR-ARCH-001 as written. It would need the ADR amended to create an exception path, and the supervisor contract would need significant clarification on the trust boundary. The current framing — escalating *safety-critical* decisions to cloud — is the hardest case to justify under a local-first invariant.
+
+The architect agent isn't responding to tool calls (heartbeat is null, consistent timeouts), so this is my best judgment without the formal alignment review. If you want the formal process, the architect-agent may need to be restarted or its transport re-established.
+{"session_id": "cli-ede704e436024a42b461e36cc416c5d7", "event": "session_ended", "level": "info", "logger": "jarvis.sessions.manager", "timestamp": "2026-05-08T17:04:42.063187Z"}
+session ended.
+{"agent_id": "jarvis", "event": "fleet_heartbeat_cancelled", "level": "info", "logger": "jarvis.infrastructure.fleet_registration", "timestamp": "2026-05-08T17:04:42.063428Z"}
