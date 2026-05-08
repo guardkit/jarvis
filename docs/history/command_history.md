@@ -2795,5 +2795,66 @@ TASK-DSR-002 implemented. Two edits to docs/runbooks/RUNBOOK-jarvis-architect-al
   /task-complete TASK-DSR-002
 
 
-  
-   
+
+/task-work TASK-DSR-003
+
+Task Work Complete — TASK-DSR-003 (W2 Wiring Fix)                           
+                                                                
+  State: BACKLOG → IN_REVIEW                                                                            
+  Mode: Light intensity (standard mode)                     
+                                                                                                        
+  Summary                                                                                               
+                                                              
+  Closed the DISPATCH-STUB-RESOLVER gap surfaced by review TASK-REV-CB48 F2 —                           
+  _dispatch._capability_registry now sources from capabilities_registry.snapshot() with a               
+  KV-watch-driven rebind callback, instead of reading the W1 stub list.                                 
+                                                                                                        
+  Changes                                                                                               
+                                                                                                        
+  File: src/jarvis/tools/__init__.py                                                                    
+  Change: Added import asyncio. Replaced lines 254-263 with closure _refresh_dispatch_registry +        
+    subscribe_updates callback (named dispatch_capability_kv_watch); guarded for capabilities_registry  
+  is                                                                                                    
+     None (Phase 1 default) and missing event loop (sync test path). Updated function-docstring bullet  
+  3.                                                                                                    
+  ────────────────────────────────────────                  
+  File: tests/test_assemble_tool_list.py                                                                
+  Change: Added descriptor_beta fixture + TestDispatchResolverSourcesFromLiveRegistry class with three
+    tests (divergent-registry, None fallback, snapshot decoupling).                                     
+  ────────────────────────────────────────     
+  File: tests/test_capabilities_registry_unit.py                                                        
+  Change: Added test_stub_registry_snapshot_matches_load_stub_registry_directly (Step 4 parity, AC-005)
+    and TestDispatchSlotRebindsOnKVWatch::test_dispatch_slot_rebinds_when_kv_watch_fires (Step 5        
+  KV-watch                                     
+     rebind, AC-002).
+  ────────────────────────────────────────
+  File: tests/test_lifecycle_feat_j004_wiring.py                                                        
+  Change: Updated fake_live_registry to set subscribe_updates = AsyncMock(...) (Protocol-shape
+    compliance).                                                                                        
+  ────────────────────────────────────────     
+  File: tests/test_lifecycle_forge_subscriber_wiring.py                                                 
+  Change: Same fake-registry update (2 occurrences).        
+                                                                                                        
+  Quality Gates                                                                                         
+                                                            
+  - ✅ AC-001 (live-source dispatch slot), AC-002 (KV-watch rebind), AC-003 (NATS-down                  
+  byte-equivalence), AC-004 (divergent-registry test), AC-005 (Stub parity test), AC-006 (mypy clean on
+  touched production file), AC-007 (full pytest green) — all passed.                                    
+  - ⏳ AC-008 (manual smoke against GB10) — owned by TASK-DSR-004 runbook re-run.
+  - Pytest: 2165 passed, 1 skipped (excluding pre-existing failures in test_phase4_dependencies +       
+  test_stub_capabilities byte-equality — explicit out-of-scope per task Notes / review R5).             
+  - Mypy: zero new errors. src/jarvis/tools/__init__.py clean.                                          
+                                                                                                        
+  Next Steps                                                
+                                                                                                        
+  - Human review of the in_review task; merge once approved.                                            
+  - TASK-DSR-004 (runbook re-run + manual smoke) follows.
+
+
+/task-complete TASK-DSR-003
+
+
+ /task-work TASK-DSR-004
+
+
+ 
