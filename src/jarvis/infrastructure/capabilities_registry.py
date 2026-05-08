@@ -153,6 +153,12 @@ def _manifest_to_descriptor(manifest: AgentManifest) -> CapabilityDescriptor:
             tool_name=tool.name,
             description=tool.description or tool.name,
             risk_level=tool.risk_level,
+            # TASK-CAPS-PROMPT-001 — verbatim pass-through of the JSON-Schema
+            # parameters block so as_prompt_block() can render Args (required):
+            # for the supervisor (closes CAPS-PROMPT-SCHEMA gap from
+            # TASK-REV-9939). nats_core.ToolCapability.parameters is already a
+            # dict[str, Any] so no transformation is needed.
+            parameters=tool.parameters,
         )
         for tool in manifest.tools
     ]
