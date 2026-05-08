@@ -120,19 +120,20 @@ echo "NATS_USER=$NATS_USER  NATS_PASSWORD set: $([[ -n "$NATS_PASSWORD" ]] && ec
 
 > **First-run-symptom (operator already hit this):** without these exports, the architect/PO containers start but never register — the `agent-registry` KV stays empty and jarvis's `dispatch_by_capability` returns `ERROR: unresolved`. The fix is the export above, **then** `down + up -d` to re-substitute compose env. See `specialist-agent/scripts/nats-evidence-runbook.md` §1.1 for the canonical sequence.
 
-### 0.5 Stub ↔ Live alignment
+### 0.5 Stub ↔ Live alignment (advisory, post-W2)
 
-For every `tool_name` the supervisor will dispatch in this run, confirm the
-corresponding `agent_id` entry in `src/jarvis/config/stub_capabilities.yaml`
-includes that `tool_name` in its `capability_list`. The dispatch resolver
-iterates the stub yaml only — divergence between the live KV and the yaml
-causes `ERROR: unresolved` even when the prompt block (sourced from the live
-KV) shows the tool name. Until [TASK-DSR-003](../../tasks/backlog/dispatch-stub-resolver-fix/TASK-DSR-003-W2-wiring-fix-and-tests.md)
-(W2) ships, this is the single guard that saves a demo. Reference:
-[TASK-REV-CB48 review report](../../.claude/reviews/TASK-REV-CB48-review-report.md).
+*Optional sanity check.* Confirm `src/jarvis/config/stub_capabilities.yaml`
+matches the live KV's published surface for any agent the supervisor will
+dispatch to. The dispatch resolver now reads the live KV directly
+([TASK-DSR-003](../../tasks/completed/feat-dsr-dispatch-stub-resolver-fix/TASK-DSR-003-W2-wiring-fix-and-tests.md)
+W2), so divergence is operationally tolerated — the stub yaml is only used
+as the bootstrap surface and as the NATS-down soft-fail (DDR-021). A CI
+drift lint is a follow-up (see
+[TASK-REV-CB48](../../.claude/reviews/TASK-REV-CB48-review-report.md)
+review report R5).
 
 For this demo the supervisor will dispatch `architect_align` to
-`architect-agent`. Verify:
+`architect-agent`. To inspect the stub yaml directly:
 
 ```bash
 cd ~/Projects/appmilla_github/jarvis
@@ -140,9 +141,10 @@ python3 -c "import yaml; d=yaml.safe_load(open('src/jarvis/config/stub_capabilit
 ```
 
 **Pass:** the `architect-agent` row's `capability_list` contains
-`architect_align`. If it does not, land [TASK-DSR-001](../../tasks/backlog/dispatch-stub-resolver-fix/TASK-DSR-001-W1-stub-yaml-patch.md)
-(W1) before proceeding — the dispatch will return `ERROR: unresolved`
-otherwise, regardless of what the live KV publishes.
+`architect_align` (added by
+[TASK-DSR-001](../../tasks/completed/feat-dsr-dispatch-stub-resolver-fix/TASK-DSR-001-W1-stub-yaml-patch.md)
+W1). The live KV is the canonical guard; this yaml is the NATS-down
+fallback the resolver consults when the live registry is unavailable.
 
 ### 0.6 Pre-stage decision: which ADR + proposal pair?
 
@@ -272,7 +274,23 @@ tool count: 4
 
 **If `tool count: 0` or `architect_align` is missing:** the manifest the running container publishes does not include the align mode. This means either (a) the image is pre-MDF-PORT (rebuild per §0.2) or (b) the role config has been edited. Stop and resolve before §3.
 
-> **Catalogue-vs-stub note (informational):** Jarvis's `src/jarvis/config/stub_capabilities.yaml` declares the architect's capabilities as `run_architecture_session` and `draft_adr` — those names do **not** match what the live container publishes. **This is not a problem** because jarvis runs `capabilities_mode: live`: `jarvis.infrastructure.capabilities_registry.KVCapabilityRegistry` opens a `watchall()` on `agent-registry` at boot and replaces the stub entries with whatever the live containers advertise. The supervisor's session-start "Available Capabilities" injection therefore reflects `architect_align`/etc., not the stub. Verified at boot via the `jarvis_capability_registry_loaded` log event followed by the live KV watch.
+> **Catalogue-and-dispatch parity (post-W2):** Both the catalogue path
+> (`KVCapabilityRegistry.watchall()` per
+> `jarvis.infrastructure.capabilities_registry`) and the dispatch resolver
+> (`tools/dispatch.py` via the live registry per
+> [TASK-DSR-003](../../tasks/completed/feat-dsr-dispatch-stub-resolver-fix/TASK-DSR-003-W2-wiring-fix-and-tests.md)
+> W2) read the live `agent-registry` KV when jarvis runs
+> `capabilities_mode: live`. Post-[TASK-DSR-001](../../tasks/completed/feat-dsr-dispatch-stub-resolver-fix/TASK-DSR-001-W1-stub-yaml-patch.md)
+> W1, `src/jarvis/config/stub_capabilities.yaml` also publishes the
+> live-aligned `architect_align`/`architect_greenfield`/`architect_explore`/`architect_feasibility`
+> entries (alongside the legacy `run_architecture_session` / `draft_adr`),
+> so the stub serves as bootstrap surface and as the NATS-down soft-fail
+> (DDR-021); it is no longer a divergent source. Verified at boot via the
+> `jarvis_capability_registry_loaded` log event followed by the live KV
+> watch. Historical context — pre-W2 the resolver iterated the stub yaml
+> only, the divergence captured in
+> [TASK-REV-CB48](../../.claude/reviews/TASK-REV-CB48-review-report.md)
+> and closed by W2.
 
 ---
 
@@ -432,7 +450,7 @@ Use this as a checklist if the demo fails during rehearsal. Don't read this on s
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `dispatch_by_capability` returns `ERROR: unresolved` | The `tool_name` is not present in `stub_capabilities.yaml` for the matching `agent_id`. The dispatch resolver iterates the stub yaml only and returns `ERROR: unresolved` when no match exists, regardless of what the live KV publishes (see [TASK-REV-CB48 review report](../../.claude/reviews/TASK-REV-CB48-review-report.md)). | Add the `tool_name` to the agent's `capability_list` in `src/jarvis/config/stub_capabilities.yaml` ([TASK-DSR-001](../../tasks/backlog/dispatch-stub-resolver-fix/TASK-DSR-001-W1-stub-yaml-patch.md), W1), or land [TASK-DSR-003](../../tasks/backlog/dispatch-stub-resolver-fix/TASK-DSR-003-W2-wiring-fix-and-tests.md) (W2 — wires the live KV into the dispatch slot directly). Restarting jarvis chat without editing the yaml or shipping W2 will reproduce the same error. Also confirm `agent-registry` KV is non-empty via §2.5 — if registration failed (auth violation), redo §0.4 + §2.2. |
+| `dispatch_by_capability` returns `ERROR: unresolved` | Neither the live `agent-registry` KV nor the bootstrap stub yaml publishes the `tool_name` for the matching `agent_id`. Post-W2 ([TASK-DSR-003](../../tasks/completed/feat-dsr-dispatch-stub-resolver-fix/TASK-DSR-003-W2-wiring-fix-and-tests.md)) the resolver consults the live KV first; the stub yaml is the NATS-down soft-fail. Closure context: [TASK-REV-CB48 review report](../../.claude/reviews/TASK-REV-CB48-review-report.md). | First, confirm the live `agent-registry` KV is populated and contains the `tool_name` for the agent (§2.5). If the row is empty or missing tools, registration failed — most commonly `Authorization Violation` from skipped `NATS_USER` / `NATS_PASSWORD` exports — redo §0.4 + §2.2 in the same shell. If the live KV is fine and dispatch still fails, fall back to the bootstrap path: add the `tool_name` to the agent's `capability_list` in `src/jarvis/config/stub_capabilities.yaml` ([TASK-DSR-001](../../tasks/completed/feat-dsr-dispatch-stub-resolver-fix/TASK-DSR-001-W1-stub-yaml-patch.md), W1) — this is the NATS-down boot path the resolver reads when the live registry is unavailable. |
 | `dispatch_by_capability` returns `TIMEOUT` after 180s | Architect container is up but llama-swap is overloaded or the fine-tuned model is cold-loading | Check llama-swap logs for the request; the architect's first call to a cold model may exceed 180s. Bump `timeout_seconds` to 300 in the prompt instruction, or warm the model first (one prior call) |
 | Response `payload.success: false` with `error` mentioning Anthropic / `X-Api-Key` | Container has `AGENT_MODELS__REASONING_MODEL=claude` (the compose default if `.env` didn't override) | Stop, redo §2.1 — set `AGENT_MODELS__REASONING_MODEL=local` in `.env`, then `down + up -d` |
 | Response `payload.success: false` with `error` mentioning `model not found` | llama-swap doesn't have `architect-agent` alias loaded | Redo §0.3 — the model alias must match `LOCAL_MODEL=architect-agent` in the container env |

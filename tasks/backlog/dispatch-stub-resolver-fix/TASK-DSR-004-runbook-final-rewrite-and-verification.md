@@ -25,9 +25,17 @@ test_results:
   coverage: null
   last_run: null
 acceptance_criteria_status:
-  AC-001: pending  # §2.5 rewritten or deleted as appropriate post-W2
-  AC-002: pending  # End-to-end runbook re-run lands a real AlignmentJudgment
-  AC-003: pending  # New RESULTS-* doc captures the green run
+  AC-001: complete   # §2.5 divergence note replaced with post-W2 parity note (2026-05-08)
+  AC-002: complete   # §0.5 softened to advisory; §6 unresolved row reordered (2026-05-08)
+  AC-003: pending    # End-to-end runbook re-run on GB10 host (operator-driven, separate session)
+  AC-004: pending    # Real AlignmentJudgment in chat REPL (gated on AC-003)
+  AC-005: pending    # New RESULTS-*-{date}.md doc capturing green run (gated on AC-003)
+  AC-006: pending    # Wire-tap + FRR-003 trace evidence in dddsw-demo-{date}-green/ (gated on AC-003)
+session_log:
+  - date: 2026-05-08
+    scope: "Steps 1+2 only (doc edits) per operator clarification; Steps 3+4 (runbook re-run + RESULTS doc) deferred to separate session that requires GB10 host access"
+    files_touched:
+      - docs/runbooks/RUNBOOK-jarvis-architect-align-dddsw-demo.md  # §0.5, §2.5 callout, §6 unresolved row
 ---
 
 # Task: Runbook §2.5 final rewrite + end-to-end re-run verification
