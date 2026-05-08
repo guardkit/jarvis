@@ -14,6 +14,18 @@ capabilities:
       - tool_name: draft_adr
         description: Given a decision + context, emit a single ADR file.
         risk_level: mutating
+      - tool_name: architect_greenfield
+        description: Drive a greenfield architecture session for a new feature scope.
+        risk_level: read_only
+      - tool_name: architect_align
+        description: Align an existing design against the ADR set; emit an AlignmentJudgment.
+        risk_level: read_only
+      - tool_name: architect_explore
+        description: Explore design alternatives for an open architectural question.
+        risk_level: read_only
+      - tool_name: architect_feasibility
+        description: Assess feasibility of a proposed approach against current constraints.
+        risk_level: read_only
     cost_signal: "moderate (~$0.50-$2 per session)"
     latency_signal: "5-30 minutes per session"
     last_heartbeat_at: null
