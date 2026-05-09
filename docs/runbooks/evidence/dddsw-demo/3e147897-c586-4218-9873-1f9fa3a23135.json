@@ -1,0 +1,6 @@
+{
+  "judgment": "misaligned",
+  "confidence": 0.95,
+  "reasoning": "The proposal introduces a cloud LLM (Claude Opus) into the supervisor's reasoning path, which contradicts ADR-ARCH-001's explicit constraint that cloud LLMs are out of the hot path. The architecture context establishes a local-first inference commitment with llama-swap as the mechanism for local execution, and the proposal bypasses this invariant for high-stakes requests.",
+  "suggestions": []
+}
