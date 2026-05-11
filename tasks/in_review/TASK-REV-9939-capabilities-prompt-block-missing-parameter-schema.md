@@ -4,9 +4,21 @@ title: "Review: CAPS-PROMPT-SCHEMA — CapabilityDescriptor.as_prompt_block() om
 task_type: review
 review_mode: decision
 review_depth: standard
-status: backlog
+status: review_complete
 created: 2026-05-08T18:15:00Z
-updated: 2026-05-08T18:15:00Z
+updated: 2026-05-08T19:30:00Z
+review_results:
+  mode: decision
+  depth: standard
+  score: 78
+  findings_count: 6
+  recommendations_count: 6
+  decision: refactor
+  report_path: .claude/reviews/TASK-REV-9939-review-report.md
+  completed_at: 2026-05-08T19:30:00Z
+  chosen_render_shape: R2  # Typed Args block
+  go_no_go_date: 2026-05-13  # T-2 from dress rehearsal 2026-05-15
+  fallbacks: [R1-feature-branch, explicit-args-operator-script]
 priority: high
 tags: [jarvis, capabilities-registry, prompt-engineering, dispatch, dddsw-2026-05-16, supervisor-prompt, runbook-docs]
 complexity: 0

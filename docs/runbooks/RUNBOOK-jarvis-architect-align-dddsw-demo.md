@@ -10,7 +10,7 @@ human prompt in jarvis chat REPL
   → tool_name=architect_align dispatch via NATS agents.command.architect-agent
   → specialist-agent-architect-agent container on Docker
   → llama-swap on the host serving the fine-tuned `architect-agent` Gemma 4 26B-A4B MoE model
-  → structured AlignmentJudgment Pydantic returns via agents.result.architect-agent
+  → structured AlignmentJudgment Pydantic returns via the NATS msg.reply inbox (_INBOX.>)
   → supervisor renders judgment/confidence/reasoning to the human
 ```
 
@@ -70,7 +70,7 @@ git status -s -uno
 git log --oneline -5
 ```
 
-**Pass:** Working tree clean, branch `main` up-to-date with `origin/main`. Top of log includes `ca2ba6b` (history+results updated, 2026-05-08) or later, meaning `dcaa8eb` (lifecycle subscriber widening) and `6071fe0` (TASK-FRR-F010Db disjoint filter) are in. Without those two, the chat REPL's between-prompt notification rendering would be stale — they don't affect this demo's request-reply path, but you want them in for hygiene.
+**Pass:** Working tree clean, branch `main` up-to-date with `origin/main`. The runbook tracks `main`; the specific HEAD SHA is not load-bearing. The two commits this demo's hygiene assumes are in (and have been in `main` since well before 2026-05-08) are `dcaa8eb` (lifecycle subscriber widening) and `6071fe0` (TASK-FRR-F010Db disjoint filter); without those, the chat REPL's between-prompt notification rendering would be stale. They don't affect this demo's request-reply path, but you want them in for hygiene. If `git log --oneline | grep -E '(dcaa8eb|6071fe0)'` returns both, you're fine.
 
 ### 0.2 Confirm specialist-agent main + image freshness
 
@@ -137,7 +137,7 @@ For this demo the supervisor will dispatch `architect_align` to
 
 ```bash
 cd ~/Projects/appmilla_github/jarvis
-python3 -c "import yaml; d=yaml.safe_load(open('src/jarvis/config/stub_capabilities.yaml')); [print(a['agent_id'], '→', a.get('capability_list', [])) for a in d.get('agents', [])]"
+python3 -c "import yaml; d=yaml.safe_load(open('src/jarvis/config/stub_capabilities.yaml')); [print(a['agent_id'], '→', a.get('capability_list', [])) for a in d.get('capabilities', [])]"
 ```
 
 **Pass:** the `architect-agent` row's `capability_list` contains
@@ -152,7 +152,7 @@ Two recommended options for the demo. **Pick before stepping on stage.**
 
 | Option | ADR | Proposal | Why pick it |
 |---|---|---|---|
-| **A (recommended)** | `ADR-ARCH-001-local-first-inference-via-llama-swap.md` (jarvis) | "Add a Claude Opus 4.7 escalation path inside the supervisor for high-stakes reasoning." | **Narrative-perfect for the talk:** the local-first ADR being asked to evaluate a *cloud-escalation* proposal. The architect should return `needs_clarification` or `not_aligned` and cite the ADR's local-first invariant. **Live-loop closure** with the talk's central claim. |
+| **A (recommended)** | `ADR-ARCH-001-local-first-inference-via-llama-swap.md` (jarvis) | "Add a Claude Opus 4.7 escalation path inside the supervisor for high-stakes reasoning." | **Narrative-perfect for the talk:** the local-first ADR being asked to evaluate a *cloud-escalation* proposal. The architect should return `needs_clarification` or `misaligned` and cite the ADR's local-first invariant. **Live-loop closure** with the talk's central claim. |
 | **B (drift-rich)** | `ADR-ARCH-008-no-sqlite-graphiti-and-memory-store-sufficient.md` | "Forge has introduced `~/forge-state/forge.db` SQLite for build state. Should jarvis follow suit for routing-history offload?" | **Real architectural drift:** forge already broke ADR-008 with SQLite. The architect should detect the existing drift and judge whether the proposal compounds it. **Lands the point that fine-tuned local models can do real architectural reasoning.** Slightly riskier — the response shape is harder to predict without a dry-run. |
 
 Capture the chosen pair in your `RESULTS-…-<DATE>.md` so the talk can reference it.
@@ -339,26 +339,16 @@ In the REPL, type:
 In the chat REPL:
 
 ```text
-> I want the architect to align this proposal against ADR-ARCH-001:
->
-> ADR-ARCH-001 (jarvis) commits jarvis to local-first inference via llama-swap; cloud LLMs are explicitly out of the supervisor's hot path.
->
-> Proposal: add a Claude Opus 4.7 escalation tool that the supervisor can call when its local reasoner has low confidence on safety-critical or high-stakes user requests. Bound by a per-session budget cap.
->
-> Question: is this proposal architecturally sound given ADR-ARCH-001's local-first invariant? What changes to the ADR or the supervisor's contract would the architect need to see for this to be aligned?
+> I'd like the architect to evaluate whether adding a Claude Opus 4.7 escalation tool to the jarvis supervisor is architecturally sound. The escalation would only fire when the local reasoner has low confidence on safety-critical or high-stakes user requests, and would be bounded by a per-session budget cap. The relevant ADR is ADR-ARCH-001, which commits jarvis to local-first inference via llama-swap and explicitly keeps cloud LLMs out of the supervisor's hot path. Does this proposal align with ADR-ARCH-001's local-first invariant, or what would need to change in the ADR or the supervisor's contract for it to be aligned?
 ```
 
 **Operator-facing alternative (Option B — drift-rich):**
 
 ```text
-> I want the architect to align this proposal against ADR-ARCH-008:
->
-> ADR-ARCH-008 (jarvis) says no SQLite — Graphiti and the memory store are sufficient for jarvis's persistence needs.
->
-> Proposal: forge has introduced ~/forge-state/forge.db SQLite for build state, and jarvis's DDR-019 trace offload is currently writing JSON files to ~/.jarvis/traces/. Should jarvis adopt SQLite for the trace offload, mirroring forge's choice?
->
-> Question: does this proposal align with ADR-ARCH-008's no-SQLite stance, or does ADR-ARCH-008 itself need revisiting given the broader fleet's drift toward SQLite?
+> I'd like the architect to evaluate whether jarvis should adopt SQLite for its DDR-019 trace offload. Forge has already introduced ~/forge-state/forge.db SQLite for its build state, and jarvis currently writes JSON files to ~/.jarvis/traces/. The relevant ADR is ADR-ARCH-008, which says no SQLite — Graphiti and the memory store should be sufficient for jarvis's persistence needs. Does adopting SQLite align with ADR-ARCH-008's no-SQLite stance, or does ADR-ARCH-008 itself need revisiting given the broader fleet's drift toward SQLite?
 ```
+
+> Free-text framing (no explicit `Proposal: / Question:` labels) is sufficient post-TASK-CAPS-PROMPT-001 (commit `8db400d`). The supervisor's capability prompt block now renders the typed `Args (required):` schema for `architect_align`, so it constructs `{context, proposal, question}` from the prose first try. Verified end-to-end on 2026-05-08 (correlation_id `e6ba44e3-b385-4895-9df9-8552d06c6b62`).
 
 ### 4.2 What should happen (the supervisor's expected behaviour)
 
@@ -366,7 +356,7 @@ The supervisor should:
 
 1. Recognise this as architect-routable work (the prompt explicitly names the architect role).
 2. Resolve `architect_align` from the live capability catalogue (loaded from `agent-registry` KV in §3.1).
-3. Construct a `payload_json` matching the architect_align manifest — three required fields: `context`, `proposal`, `question` (per `specialist_agent/adapters/manifest.py:113-141`).
+3. Construct a `payload_json` matching the architect_align manifest — three required fields: `context`, `proposal`, `question` (per `specialist_agent/adapters/manifest.py:113-141`). The supervisor sees the typed schema for these fields in its capability prompt block (rendered by `as_prompt_block()` post-TASK-CAPS-PROMPT-001) and extracts the three values from the prose prompt.
 4. Call `dispatch_by_capability(tool_name="architect_align", payload_json="{...}", timeout_seconds=180)`.
 5. Wait for the response (typically 30–90s of architect llama-swap inference time).
 6. Render the returned `AlignmentJudgment` to the chat — judgment / confidence / reasoning / suggestions.
@@ -377,7 +367,7 @@ The supervisor should:
 
 ```json
 {
-  "judgment": "needs_clarification" | "aligned" | "not_aligned",
+  "judgment": "aligned" | "misaligned" | "needs_clarification",
   "confidence": 0.0,
   "reasoning": "Plain prose: where the proposal sits vs the ADR, what's missing, what's coherent...",
   "suggestions": [
@@ -387,13 +377,15 @@ The supervisor should:
 }
 ```
 
-**For Option A**, the most likely judgment is `needs_clarification` (the architect should want to see the budget cap details, the "low confidence" trigger threshold, and a cloud-escalation audit trail) or `not_aligned` (citing ADR-ARCH-001's invariant). Either is a winning demo outcome — both lead to a clear next-step conversation on stage.
+**For Option A**, the most likely judgment is `needs_clarification` (the architect should want to see the budget cap details, the "low confidence" trigger threshold, and a cloud-escalation audit trail) or `misaligned` (citing ADR-ARCH-001's invariant). Either is a winning demo outcome — both lead to a clear next-step conversation on stage.
 
-**For Option B**, the most likely judgment is `not_aligned` (ADR-ARCH-008 is explicit) or `needs_clarification` (the ADR may itself need revisiting given fleet drift). Either is a demo-able outcome.
+**For Option B**, the most likely judgment is `misaligned` (ADR-ARCH-008 is explicit) or `needs_clarification` (the ADR may itself need revisiting given fleet drift). Either is a demo-able outcome.
 
 ### 4.4 Capture the correlation_id and the JSON payload from the REPL
 
 The supervisor will print the response inline. Capture the `correlation_id` (it's threaded through the request and present in the response envelope) — you'll need it for §5 wire evidence and §7 transcript naming.
+
+> **Verified wire envelope shape:** the supervisor publishes a payload with three top-level args (`context`, `proposal`, `question`) at `agents.command.architect-agent`. The 2026-05-08 post-CAPS-PROMPT walkthrough verified this end-to-end with both the §4.1 prompt template (correlation_id `3e147897-c586-4218-9873-1f9fa3a23135`) and a fully free-text variant (correlation_id `e6ba44e3-b385-4895-9df9-8552d06c6b62`). See `docs/runbooks/evidence/dddsw-demo/wire-command-3e147897-c586-4218-9873-1f9fa3a23135.json` for the canonical envelope shape.
 
 ---
 
@@ -409,25 +401,37 @@ In a second pane:
 cd ~/Projects/appmilla_github/nats-infrastructure
 set -a && source .env && set +a
 nats --server "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
-    sub "agents.command.architect-agent.>" --raw \
+    sub "agents.command.architect-agent" --raw \
   | tee /tmp/dddsw-demo-architect-command.log
 ```
 
+> **Subject is exact-match, not wildcard.** `nats-core`'s `Topics.Agents.COMMAND` resolves to `agents.command.{agent_id}` with no trailing token, so the published subject for the architect is literally `agents.command.architect-agent` (verified at `nats-core` `v0.4.0` / commit `8f2c532`). Subscribing with a trailing `.>` wildcard captures **nothing** — the wildcard expects further tokens after `architect-agent` that are never published.
+
 **Pass during §4:** A single envelope arrives with `event_type` of dispatch shape, `correlation_id` matching §4.4, and a payload containing the `context` / `proposal` / `question` strings the supervisor extracted from your prompt. **This is the on-stage moment** — point at the wire envelope as it lands.
 
-### 5.2 Tail `agents.result.architect-agent`
+### 5.2 Tail the reply inbox (`_INBOX.>`) with a correlation-id filter
 
-In a third pane:
+In a third pane. Specialist replies route via the NATS request/reply inbox subject (`_INBOX.>`)[^bug1-reply-channel], **not** `agents.result.architect-agent` — that subject is reserved for fan-out events, not point-to-point replies. `_INBOX.>` is high-traffic across the cluster, so we filter on the `correlation_id` from §5.1 to pluck out just our envelope:
 
 ```bash
+# Capture the correlation_id from §5.1 once it lands (one of the visible fields
+# in the command envelope tee'd to /tmp/dddsw-demo-architect-command.log).
+# In this pane, set CID="<the correlation_id>" before subscribing — or pass it
+# inline as below.
 nats --server "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
-    sub "agents.result.architect-agent.>" --raw \
+    sub "_INBOX.>" --raw \
+  | tee /tmp/dddsw-demo-architect-result-raw.log \
+  | jq -c --arg cid "$CID" 'select(.correlation_id == $cid)' \
   | tee /tmp/dddsw-demo-architect-result.log
 ```
+
+If you want a no-filter pre-stage rehearsal capture (everything that lands on the inbox during the demo window), drop the `jq` filter — you'll see your reply alongside any other request/reply traffic on the cluster, and you can post-filter the tee'd raw log with `jq` after the fact.
 
 **Pass during §4:** A single response envelope arrives 30–90s after the command (architect inference time). The envelope's `correlation_id` matches §5.1's; `payload.success: true`; `payload.result` contains the `AlignmentJudgment` JSON.
 
 > **32-byte trap (per `nats-evidence-runbook.md`):** if the captured response file is exactly 32 bytes with `{"stream":"AGENTS","seq":N}` inside, you've subscribed wrong (you read a JetStream PubAck instead of the agent result). The `--raw` flag on `nats sub` does the right thing; only an issue if you use `nats request` interactively.
+
+[^bug1-reply-channel]: *Footnote (2026-05-08, post-Bug #1):* Specialist replies route via the NATS `msg.reply` inbox subject (typically `_INBOX.>`), **not** the previous `agents.result.<agent_id>` subject. The `subscribe_with_reply` / `publish_raw` change in `nats-core` v0.4.0 (`8f2c532` / specialist-agent `1979aa8`) closed the request/reply round-trip; the old `agents.result.*` subject is reserved for fan-out events, not point-to-point replies. Pre-Bug #1 versions of this runbook tailed `agents.result.architect-agent.>` for §5.2 — that pane will be empty after the fix.
 
 ### 5.3 Save the AlignmentJudgment for the talk slide
 
@@ -454,10 +458,12 @@ Use this as a checklist if the demo fails during rehearsal. Don't read this on s
 | `dispatch_by_capability` returns `TIMEOUT` after 180s | Architect container is up but llama-swap is overloaded or the fine-tuned model is cold-loading | Check llama-swap logs for the request; the architect's first call to a cold model may exceed 180s. Bump `timeout_seconds` to 300 in the prompt instruction, or warm the model first (one prior call) |
 | Response `payload.success: false` with `error` mentioning Anthropic / `X-Api-Key` | Container has `AGENT_MODELS__REASONING_MODEL=claude` (the compose default if `.env` didn't override) | Stop, redo §2.1 — set `AGENT_MODELS__REASONING_MODEL=local` in `.env`, then `down + up -d` |
 | Response `payload.success: false` with `error` mentioning `model not found` | llama-swap doesn't have `architect-agent` alias loaded | Redo §0.3 — the model alias must match `LOCAL_MODEL=architect-agent` in the container env |
-| `agents.result.architect-agent.>` tail captures a 32-byte JetStream PubAck instead of the response | `nats request` used instead of `sub` | Use `nats sub --raw` per §5.2 |
+| §5.2 `_INBOX.>` tail captures a 32-byte JetStream PubAck (`{"stream":"AGENTS","seq":N}`) instead of the AlignmentJudgment | `nats request` used instead of `sub`, or a stale subscriber attached to `agents.result.architect-agent.>` (which is JetStream-backed) | Use `nats sub --raw` on `_INBOX.>` per §5.2; the request/reply inbox is core NATS, not JetStream, so the PubAck does not apply once subscribed correctly |
+| §5.2 `_INBOX.>` filter returns nothing for the demo's `correlation_id` | Either `$CID` not exported in the §5.2 pane, or the envelope landed on the inbox before the subscription attached | Verify `$CID` matches §5.1's command envelope `correlation_id`; subscribe to `_INBOX.>` *before* §4 (per the pane order in §5); fall back to post-filtering the unfiltered tee'd raw log |
+| §5.2 pane stays empty during §4 even though the chat REPL renders an answer | Subscriber still tailing the legacy `agents.result.architect-agent.>` (pre-Bug #1 wiring) | Resubscribe to `_INBOX.>` per the post-Bug #1 §5.2; old subject is fan-out only |
 | `agent-registry` KV is empty after `up -d` | `NATS_USER` / `NATS_PASSWORD` not propagated into containers (most common cause: §0.4 skipped or done in a different shell) | Container logs will show `nats: 'Authorization Violation'`. Redo §0.4 (in the same shell), then §2.2 |
 | Boot log shows `JARVIS_OPENAI_BASE_URL` set but supervisor still routes to llama-swap | Working as designed — `lifecycle.py:569-570` unconditionally overrides to llama-swap (`JARVIS_OPENAI_BASE_URL` was retired by TASK-FRR-002, see jarvis/.env note) | Not a bug; ignore |
-| Supervisor reasons but never calls `dispatch_by_capability` | Supervisor model is too small or the catalogue injection didn't surface architect tools | If using `qwen36-workhorse` and it's struggling, swap to `gemma4-tutor` for the supervisor; or rephrase the prompt to be more explicit ("Use dispatch_by_capability with tool_name=architect_align...") |
+| Supervisor reasons but never calls `dispatch_by_capability` | Supervisor model is too small or the catalogue injection didn't surface architect tools (regression — post-TASK-CAPS-PROMPT-001 the rendered `Args (required):` block should make routing reliable from free-text prompts) | If using `qwen36-workhorse` and it's struggling, swap to `gemma4-tutor` for the supervisor. Last-resort: rephrase the prompt to name the tool explicitly (`"Use dispatch_by_capability with tool_name=architect_align..."`) — but treat that as a regression worth filing, since the post-R2 contract is that natural-language prompts route correctly without naming the tool. |
 | Response renders but the `reasoning` field is empty / generic | Fine-tuned model needs a warmup call on cold start | Run one throwaway architect_align call before the demo to warm the model; first call cold can underperform vs. second call warm |
 
 ---
@@ -502,7 +508,7 @@ This is for the post-talk write-up; not visible during the demo.
 Once §4 has rendered the `AlignmentJudgment` and §5 has captured the wire envelopes:
 
 - [ ] `agents.command.architect-agent` tail captured the inbound dispatch envelope with the same `correlation_id` jarvis published
-- [ ] `agents.result.architect-agent` tail captured the response envelope ~30–90s later, same `correlation_id`, `payload.success: true`
+- [ ] `_INBOX.>` tail (per §5.2) captured the response envelope ~30–90s later, same `correlation_id`, `payload.success: true`
 - [ ] Chat REPL rendered the `AlignmentJudgment` with judgment / confidence / reasoning / suggestions all populated
 - [ ] Routing-history trace landed at `~/.jarvis/traces/<correlation_id>.json` with `outcome_type=success`
 - [ ] Talk track delivered against the rolling demo (~5 minutes total)

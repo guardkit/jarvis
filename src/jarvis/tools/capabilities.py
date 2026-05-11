@@ -90,6 +90,14 @@ class CapabilityToolSummary(BaseModel):
         description: Human-readable description the reasoning model reads
                      at decision time.
         risk_level: Risk classification for approval gating.
+        parameters: JSON-Schema-shaped parameter dict from
+                    ``nats_core.ToolCapability.parameters``. ``None`` when
+                    the upstream manifest carries no schema (older
+                    specialists, stub yaml without the parameters block).
+                    Pre-wired sentinel — :meth:`CapabilityDescriptor.as_prompt_block`
+                    omits the ``Args (required):`` block when this is
+                    ``None``, matching the existing tolerance pattern
+                    (``last_heartbeat_at: None``, ``cost_signal: "unknown"``).
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -97,6 +105,61 @@ class CapabilityToolSummary(BaseModel):
     tool_name: str = Field(min_length=1)
     description: str = Field(min_length=1)
     risk_level: Literal["read_only", "mutating", "destructive"] = "read_only"
+    parameters: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "JSON-Schema-shaped parameter dict from "
+            "nats_core.ToolCapability.parameters. None when the upstream "
+            "manifest carries no schema (older specialists, stub yaml "
+            "without the parameters block)."
+        ),
+    )
+
+
+def _render_required_args(parameters: dict[str, Any] | None) -> list[str]:
+    """Render the per-arg lines for a tool's ``Args (required):`` block.
+
+    Returns an empty list when no block should be emitted (parameters absent,
+    or ``required`` empty/missing) so callers can decide whether to also emit
+    the header.
+
+    Iterates ``parameters["required"]`` so the order matches the upstream
+    manifest declaration. For each required name, looks up
+    ``parameters["properties"][name]`` for ``type`` and ``description``.
+    Defensive fallback: if a required key is absent from ``properties``, the
+    arg renders as ``- {name} (unknown):`` so the supervisor still sees the
+    key and the manifest hygiene gap is operator-visible.
+
+    Args:
+        parameters: JSON-Schema-shaped dict from
+            ``CapabilityToolSummary.parameters``, or ``None``.
+
+    Returns:
+        List of indented ``      - {name} ({type}): {description}`` lines,
+        or an empty list when no block should be emitted.
+    """
+    if parameters is None:
+        return []
+    required = parameters.get("required") or []
+    if not required:
+        return []
+    properties: dict[str, Any] = parameters.get("properties") or {}
+    rendered: list[str] = []
+    for name in required:
+        prop = properties.get(name)
+        if not isinstance(prop, dict):
+            # Manifest hygiene gap — required key with no property schema.
+            # Emit the bare key so the supervisor still constructs payload
+            # with it; operator sees the missing description in the prompt.
+            rendered.append(f"      - {name} (unknown):")
+            continue
+        type_ = prop.get("type", "unknown")
+        # 6-space + 4-space-continuation indent so multi-line descriptions
+        # nest cleanly under their bullet (matches the existing tool-line
+        # continuation pattern).
+        description = str(prop.get("description", "")).replace("\n", "\n        ")
+        rendered.append(f"      - {name} ({type_}): {description}")
+    return rendered
 
 
 class CapabilityDescriptor(BaseModel):
@@ -146,6 +209,17 @@ class CapabilityDescriptor(BaseModel):
         * ``Tools:``
         * One line per capability ``  - {tool_name} ({risk_level}) —
           {description}`` with continuation lines indented 4 spaces
+        * Optionally, when the capability carries a ``parameters`` schema
+          with at least one ``required`` key, a ``    Args (required):``
+          subheader followed by ``      - {name} ({type}): {description}``
+          lines — one per ``required`` key in manifest-declared order.
+
+        The ``Args (required):`` block (TASK-CAPS-PROMPT-001 / R2) lets the
+        supervisor construct ``payload_json`` for ``dispatch_by_capability``
+        from declared keys rather than guessing them. Optional (non-required)
+        parameters are deliberately not rendered — the reasoning model needs
+        the must-have args; nice-to-haves bloat the prompt and invite
+        hallucinated optional fields.
 
         Joining multiple descriptor blocks with ``"\\n\\n"`` produces the
         ``{available_capabilities}`` prompt fragment.
@@ -161,6 +235,15 @@ class CapabilityDescriptor(BaseModel):
             # block remains visually clean when consumed by the model.
             indented_description = cap.description.replace("\n", "\n    ")
             lines.append(f"  - {cap.tool_name} ({cap.risk_level}) — {indented_description}")
+
+            # Args (required): block — TASK-CAPS-PROMPT-001 R2 (Typed Args).
+            # Render only when (a) parameters carries a schema and (b) the
+            # schema declares at least one required key. Iterate `required`
+            # so the order matches the upstream manifest declaration.
+            args_lines = _render_required_args(cap.parameters)
+            if args_lines:
+                lines.append("    Args (required):")
+                lines.extend(args_lines)
         return "\n".join(lines)
 
 

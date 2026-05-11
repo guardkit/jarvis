@@ -633,6 +633,14 @@ class TestJ003014AdditiveAboveInsertionPoint:
     # Pre-FEAT-J003 substring of SUPERVISOR_SYSTEM_PROMPT, ending at the close
     # of the FEAT-J002 ``## Tool Usage`` section.  Built via concatenation so
     # this test reads as a literal byte-for-byte assertion.
+    #
+    # Amended 2026-05-13 (TASK-CAPS-PROMPT-001 / TASK-REV-9939 Decision D3):
+    # the ``list_available_capabilities`` bullet was reframed from a single
+    # sentence ("the catalogue injected above is authoritative for the rest
+    # of the conversation") to a single-sentence-with-trailing-clause that
+    # also names the ``Args (required):`` block as authoritative and
+    # instructs against argument-name invention. This is intentional, not
+    # accidental drift; the rest of the head remains additive-only.
     PRE_J003_HEAD: ClassVar[str] = (
         "You are **Jarvis** — a general-purpose reasoning agent built on the DeepAgents\n"
         "framework.  You operate as an attended conversation partner: there is always a\n"
@@ -660,7 +668,10 @@ class TestJ003014AdditiveAboveInsertionPoint:
         "- Prefer the `calculate` tool over mental arithmetic for any non-trivial\n"
         "  numeric work.\n"
         "- Call `list_available_capabilities` at most once per session — the catalogue\n"
-        "  injected above is authoritative for the rest of the conversation.\n"
+        "  injected above is authoritative for the rest of the conversation, including\n"
+        "  the `Args (required):` block under each tool. Construct `payload_json` for\n"
+        "  `dispatch_by_capability` from those declared keys; do not invent argument\n"
+        "  names.\n"
         "- Prefer `dispatch_by_capability` over repeating specialist work in-process\n"
         "  when the request matches a registered capability.\n"
         "- Use `queue_build` only when the user's request explicitly names a feature\n"

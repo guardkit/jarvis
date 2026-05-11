@@ -80,7 +80,10 @@ Follow these preferences when selecting and invoking tools:
 - Prefer the `calculate` tool over mental arithmetic for any non-trivial
   numeric work.
 - Call `list_available_capabilities` at most once per session — the catalogue
-  injected above is authoritative for the rest of the conversation.
+  injected above is authoritative for the rest of the conversation, including
+  the `Args (required):` block under each tool. Construct `payload_json` for
+  `dispatch_by_capability` from those declared keys; do not invent argument
+  names.
 - Prefer `dispatch_by_capability` over repeating specialist work in-process
   when the request matches a registered capability.
 - Use `queue_build` only when the user's request explicitly names a feature
