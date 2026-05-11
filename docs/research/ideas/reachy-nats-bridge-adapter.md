@@ -1,50 +1,347 @@
-# Reachy NATS Bridge Adapter — Design Document
+# Reachy Jarvis Bridge — Design Document
 
 ## For: `/system-design` session · Jarvis · May 2026
+
+> **Revision history:**
+> - v1 (8 May 2026) — Initial NATS-first design
+> - v2 (8 May 2026) — Two-phase approach after Pollen "Building Apps" video review.
+>   Phase 1: scaffolded app + custom tools + cloud voice (this weekend).
+>   Phase 2: NATS backend swap + local Parakeet/Kokoro (post-DDD).
 
 ---
 
 ## Overview
 
-The NATS bridge adapter is a lightweight Python process that runs on the Reachy Mini's
-onboard Raspberry Pi. It bridges the Reachy daemon's audio/sensor capabilities with
-the Jarvis agent fleet via NATS JetStream on the GB10.
+The Reachy Jarvis Bridge connects the Reachy Mini robots (Scholar and Bridge) to the
+Jarvis agent fleet. The integration follows a **two-phase approach** informed by
+Pollen Robotics' official app development pattern (confirmed via their "Building Apps
+for Reachy Mini" video, May 2026).
 
-The adapter is the **only custom code** that runs on the Pi. Everything else — the
-Reachy daemon, Tailscale, and the OS — is standard. All AI compute (STT, LLM, TTS)
-runs on the GB10.
+**Phase 1 (This weekend — hackathon deadline 18 May):**
+Scaffolded conversation app via `reachy-mini-app-assistant create --template conversation`.
+Custom tools query GB10 services over Tailscale. Voice pipeline uses OpenAI Realtime
+API (cloud). Fast to build, zero changes to Pollen's audio/LLM pipeline.
 
----
+**Phase 2 (Post-DDD — dark factory target):**
+Replace the OpenAI Realtime backend with local Parakeet STT + NATS routing + Kokoro TTS
+on the GB10. Zero marginal cost. Tool code unchanged — only the voice backbone swaps.
 
-## Design Principles
-
-1. **Thin adapter** — ~150-200 lines of Python. No AI inference on the Pi.
-2. **Daemon-first** — Uses the Reachy SDK to interact with the daemon, never bypasses it.
-3. **Network-resilient** — NATS reconnection with backoff; daemon reconnection on timeout.
-4. **Unit-configurable** — Single codebase, configured via env vars (`UNIT_NAME=scholar`
-   or `UNIT_NAME=bridge`) to set NATS topics and behaviour defaults.
-5. **Reusable STT/TTS** — Calls Parakeet and Kokoro HTTP APIs on the GB10, same
-   containers used by any other Jarvis service.
+Both phases share the same profile system (Scholar/Bridge personas), the same custom
+tools, and the same Tailscale network topology. The upgrade from Phase 1 to Phase 2
+is isolated to the voice/LLM backend layer.
 
 ---
 
-## Architecture
+# PHASE 1 — Scaffolded App with Custom Tools
+
+## The Pollen Pattern
+
+Pollen's official app development workflow (from their video and AGENTS.md):
+
+1. Scaffold: `reachy-mini-app-assistant create --template conversation`
+2. Customise the profile folder: `instruction.txt` + `tools.txt` + Python tool files
+3. Test locally: `python -m your_app --gradio` (or `--sim` for simulation)
+4. Publish: `reachy-mini-app-assistant publish`
+
+The scaffold gives you a **complete standalone copy** of the conversation app — you
+own the codebase, can modify internals later (Phase 2), but start by customising
+on top of the working pipeline. The audio streaming, tool dispatch, camera, and
+motion system are all pre-built.
+
+> "You don't have to understand the inner workings — the whole pipeline is already
+> there." — Pollen Robotics, Building Apps for Reachy Mini
+
+## Phase 1 Architecture
 
 ```
 ┌─────────────────────────── Reachy Mini (Pi) ──────────────────────────┐
 │                                                                       │
 │  ┌──────────────┐         ┌──────────────────────────────────┐        │
-│  │ Reachy Daemon │◄───────►│       NATS Bridge Adapter        │        │
+│  │ Reachy Daemon │◄───────►│   Scaffolded Conversation App    │        │
 │  │  (port 8000)  │  SDK    │                                  │        │
-│  │               │  calls  │  - Audio capture (mic via SDK)   │        │
-│  │  Motors       │◄────────│  - Audio playback (spkr via SDK) │        │
-│  │  Camera       │         │  - Expression commands           │        │
-│  │  Mic/Speaker  │         │  - NATS pub/sub (nats-py)        │        │
-│  │  LEDs         │         │  - HTTP calls to STT/TTS on GB10 │        │
+│  │               │         │  Voice pipeline:                 │        │
+│  │  Motors       │         │    OpenAI Realtime API (cloud)   │        │
+│  │  Camera       │         │                                  │        │
+│  │  Mic/Speaker  │         │  Custom tools:                   │        │
+│  │  LEDs         │         │    HTTP → GB10 services           │        │
 │  └──────────────┘         └──────────────┬───────────────────┘        │
 │                                           │                           │
 └───────────────────────────────────────────┼───────────────────────────┘
-                                            │ Tailscale
+                                            │ Tailscale (tools only)
+                                            ▼
+┌─────────────────────────── GB10 ──────────────────────────────────────┐
+│                                                                       │
+│  ┌───────────────────────┐  ┌──────────────┐  ┌───────────────────┐   │
+│  │ Graphiti + FalkorDB   │  │ NATS Server  │  │ llama-swap :9000  │   │
+│  │ (student model,       │  │ :4222        │  │ (LLM, future)     │   │
+│  │  fleet state)         │  │              │  │                   │   │
+│  └───────────────────────┘  └──────────────┘  └───────────────────┘   │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+
+          ┌──────────────────────────────────────┐
+          │ OpenAI Realtime API (cloud)          │
+          │  STT + LLM + TTS                     │
+          │  Voice pipeline (Phase 1 only)       │
+          └──────────────────────────────────────┘
+```
+
+Key: voice goes through cloud, but **tool intelligence is local**. The LLM decides
+when to call tools; the tools query GB10 services over Tailscale.
+
+## App Structure (Phase 1)
+
+```
+guardkit/reachy-jarvis-bridge/               # Scaffolded from conversation app
+├── pyproject.toml                            # Add aiohttp, nats-py to deps
+├── .env                                      # OPENAI_API_KEY, GB10_HOST
+├── profiles/
+│   ├── scholar/
+│   │   ├── instructions.txt                  # GCSE tutor persona
+│   │   ├── tools.txt                         # query_student_progress, celebrate, ...
+│   │   ├── query_student_progress.py          # Graphiti HTTP query tool
+│   │   ├── get_revision_recommendations.py    # Graphiti → recommended topics
+│   │   └── celebrate_achievement.py           # Trigger celebration animation
+│   └── bridge/
+│       ├── instructions.txt                   # Ship's Computer persona
+│       ├── tools.txt                          # agent_status, build_status, approve, ...
+│       ├── agent_status.py                    # NATS request-reply → fleet status
+│       ├── build_status.py                    # HTTP → forge API on GB10
+│       └── approve_reject.py                  # NATS pub → HITL response
+├── src/
+│   └── ... (scaffolded conversation app code, untouched in Phase 1)
+└── README.md
+```
+
+## Custom Tool Implementations (Phase 1)
+
+### Scholar Tools
+
+**query_student_progress** — Queries Graphiti on GB10 for Lilymay's study state:
+
+```python
+from core_tools import Tool
+import aiohttp
+import os
+
+class QueryStudentProgressTool(Tool):
+    name = "query_student_progress"
+    description = (
+        "Query the student's revision progress including completed sessions, "
+        "confidence scores by topic, streak data, and XP level. Use this when "
+        "the student asks about their progress or when you need to personalise "
+        "your tutoring approach."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "subject": {
+                "type": "string",
+                "description": "Subject to query, e.g. 'english', 'maths'",
+                "default": "english"
+            }
+        }
+    }
+
+    async def call(self, subject="english"):
+        gb10 = os.getenv("GB10_HOST", "promaxgb10-41b1")
+        graphiti_url = f"http://{gb10}:8000"  # Graphiti HTTP API
+
+        async with aiohttp.ClientSession() as session:
+            # Search Graphiti for student progress nodes
+            async with session.post(
+                f"{graphiti_url}/search",
+                json={
+                    "query": f"{subject} revision progress",
+                    "group_ids": ["study_tutor__student_model"]
+                }
+            ) as resp:
+                results = await resp.json()
+
+        # Format for the LLM to narrate naturally
+        return f"Student progress data: {results}"
+```
+
+**celebrate_achievement** — Triggers a celebration animation when milestones are hit:
+
+```python
+class CelebrateAchievementTool(Tool):
+    name = "celebrate_achievement"
+    description = (
+        "Celebrate when the student reaches a milestone — completing a session, "
+        "earning XP, maintaining a streak, or unlocking an achievement. Triggers "
+        "a physical celebration animation (antenna spin, head nod)."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "achievement_type": {
+                "type": "string",
+                "enum": ["session_complete", "streak", "level_up", "badge"],
+                "description": "Type of achievement to celebrate"
+            }
+        },
+        "required": ["achievement_type"]
+    }
+
+    async def call(self, achievement_type):
+        # The conversation app's motion system handles this via the
+        # built-in 'dance' and 'emotion' tools. We queue a celebration
+        # dance and return text for the LLM to narrate.
+        return f"[CELEBRATE: {achievement_type}] Celebration queued!"
+```
+
+### Bridge Tools
+
+**agent_status** — Queries fleet status via NATS request-reply:
+
+```python
+import nats
+
+class AgentStatusTool(Tool):
+    name = "agent_status"
+    description = (
+        "Query the status of the Jarvis agent fleet. Returns which agents are "
+        "online, their current tasks, and any pending notifications. Use when "
+        "asked about build status, fleet health, or what's happening."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "agent": {
+                "type": "string",
+                "description": "Specific agent to query, or 'all' for fleet-wide",
+                "default": "all"
+            }
+        }
+    }
+
+    async def call(self, agent="all"):
+        gb10 = os.getenv("GB10_HOST", "promaxgb10-41b1")
+        nc = await nats.connect(f"nats://{gb10}:4222")
+        try:
+            # NATS request-reply to Jarvis supervisor
+            response = await nc.request(
+                "jarvis.status.query",
+                json.dumps({"agent": agent}).encode(),
+                timeout=5.0
+            )
+            return response.data.decode()
+        finally:
+            await nc.close()
+```
+
+## Profile: Scholar (instructions.txt)
+
+```
+You are Scholar, a friendly and encouraging GCSE English tutor embodied in a
+Reachy Mini robot. You help Lilymay revise for her GCSEs using Socratic questioning
+— never give answers directly, always guide her to discover them herself.
+
+Your personality:
+- Warm, patient, and encouraging — celebrate every small win
+- British English, natural and conversational
+- Use the student's name when appropriate
+- Reference her past progress to show you remember and care
+
+Tools available to you:
+- query_student_progress: Check how revision is going before giving advice
+- get_revision_recommendations: Suggest what to revise next based on gaps
+- celebrate_achievement: Physically celebrate milestones (use sparingly, make it special)
+
+Always query student progress at the start of a session so you can personalise
+your approach. If confidence is low on a topic, gently steer revision toward it.
+If she's on a streak, acknowledge it enthusiastically.
+```
+
+## Profile: Bridge (instructions.txt)
+
+```
+You are Bridge, the Ship's Computer — the embodied interface to the Jarvis
+software factory fleet. You speak with calm authority and provide clear,
+concise status reports.
+
+Your personality:
+- Authoritative but approachable — think LCARS computer with warmth
+- British English, slightly formal
+- Lead with the most important information
+- Use precise numbers and status indicators
+
+Tools available to you:
+- agent_status: Query fleet health and current tasks
+- build_status: Check the forge pipeline for active builds
+- approve_reject: Respond to human-in-the-loop checkpoints
+
+When asked for a status report, query agent_status first and present a
+structured summary: what's running, what completed recently, what needs
+attention. For build requests, provide progress updates with stage names.
+```
+
+## Implementation Sequence (Phase 1 — This Weekend)
+
+| Step | When | What | Go/no-go |
+|------|------|------|-----------|
+| 1 | Fri 8 May evening | Build robots, connect to WiFi, verify dashboard | — |
+| 2 | Sat 9 May morning | SDK hello world: antenna wiggle from MacBook | ✅/❌ |
+| 3 | Sat 9 May afternoon | `reachy-mini-app-assistant create --template conversation` | — |
+| 4 | Sat 9 May evening | Create Scholar profile + `query_student_progress` tool | — |
+| 5 | Sun 10 May | Test Scholar end-to-end: voice → tool calls GB10 → response | ✅/❌ |
+| 6 | Sun 10 May | Create Bridge profile + `agent_status` tool | — |
+| 7 | Mon–Wed 11–13 May | Video shoot: Scholar in hackathon video, Bridge clip for DDD | — |
+
+**If step 2 fails:** Stop. Fall back to pre-recorded future-vision segment.
+**If step 5 fails:** Debug or simplify. MuJoCo sim is the fallback green criterion.
+
+## What Phase 1 Costs
+
+- OpenAI API key required (cloud voice). Acceptable for hackathon.
+- Voice latency depends on OpenAI Realtime API (~500ms-1s typical).
+- Cloud dependency on the voice path contradicts dark factory economics.
+  This is explicitly temporary — Phase 2 removes it.
+
+## What Phase 1 Gets You
+
+- Full conversation pipeline: audio streaming, VAD, tool dispatch, motion
+- Head tracking, face detection, dances, emotions — all free
+- Gradio web UI for development and debugging
+- Simulation mode for development without hardware
+- Custom tools calling GB10 services — the intelligence is local
+- Two profiles serving both DDD and hackathon contexts
+- Publishable to Hugging Face Spaces app store
+
+---
+
+# PHASE 2 — NATS Backend Swap (Post-DDD)
+
+## Motivation
+
+Phase 1 uses cloud voice (OpenAI Realtime). Phase 2 replaces it with fully local
+inference: Parakeet STT + NATS agent routing + Kokoro TTS, all on the GB10.
+This achieves the dark factory zero-marginal-cost target.
+
+Because `reachy-mini-app-assistant create` gave us the full conversation app source,
+we can modify the voice pipeline internals. The Phase 1 profile and tool code
+remains unchanged — only the audio/LLM backbone swaps.
+
+## Phase 2 Architecture
+
+```
+┌─────────────────────────── Reachy Mini (Pi) ──────────────────────────┐
+│                                                                       │
+│  ┌──────────────┐         ┌──────────────────────────────────┐        │
+│  │ Reachy Daemon │◄───────►│   Conversation App (modified)    │        │
+│  │  (port 8000)  │  SDK    │                                  │        │
+│  │               │  calls  │  Voice pipeline:                 │        │
+│  │  Motors       │◄────────│    Parakeet STT (GB10, local)    │        │
+│  │  Camera       │         │    NATS routing (GB10, local)    │        │
+│  │  Mic/Speaker  │         │    Kokoro TTS (GB10, local)      │        │
+│  │  LEDs         │         │                                  │        │
+│  └──────────────┘         │  Custom tools: (unchanged)       │        │
+│                            │    HTTP/NATS → GB10 services     │        │
+│                            └──────────────┬───────────────────┘        │
+│                                           │                           │
+└───────────────────────────────────────────┼───────────────────────────┘
+                                            │ Tailscale (everything)
                                             ▼
 ┌─────────────────────────── GB10 ──────────────────────────────────────┐
 │                                                                       │
@@ -56,11 +353,10 @@ runs on the GB10.
 │         │                                                             │
 │  ┌──────▼──────────────────────────────────────────────────────────┐  │
 │  │  Jarvis Intent Router / Agent Fleet                             │  │
-│  │  Subscribes: jarvis.voice.{scholar|bridge}                      │  │
-│  │  Publishes:  jarvis.speech.{scholar|bridge}                     │  │
-│  │              notifications.{scholar|bridge}                     │  │
 │  └─────────────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────────────┘
+
+          No cloud dependency. Zero marginal cost.
 ```
 
 ---
@@ -427,139 +723,84 @@ dependencies = [
 
 ---
 
-## Fork Strategy: reachy_mini_conversation_app
-
-### Decision: Fork the Conversation App
-
-The `pollen-robotics/reachy_mini_conversation_app` is broadly compatible with our
-NATS bridge architecture. Forking it gives us a substantial feature set for free,
-and the changes required are well-isolated to the voice/LLM backend layer.
-
-### What We Get for Free
-
-| Feature | How it works | Value |
-|---------|-------------|-------|
-| Real-time audio loop | `fastrtc` for low-latency streaming | Handles VAD, chunking, streaming — no custom audio code |
-| Head tracking | YOLO or MediaPipe face detection | Scholar tracks Lilymay's face during tutoring |
-| Motion system | Layered: primary moves + speech-reactive wobble + tracking | Natural, alive feel without manual animation coding |
-| Dances & emotions | Pre-recorded choreography library via HF datasets | Celebration animations, idle behaviours |
-| Profile system | `profiles/<name>/instructions.txt` | Maps directly to Scholar/Bridge persona config |
-| Gradio web UI | Optional `--gradio` flag, live transcripts | Debug UI during development, console mode for production |
-| Camera integration | Vision via backend or local SmolVLM2 | Future: Scholar recognises who's in the room |
-| Wireless support | `uv sync --extra wireless` adds GStreamer deps | Already handles Pi ↔ remote audio streaming |
-| App framework | Extends `ReachyMiniApp` base class | Installable via Reachy app store / HF Spaces |
-
-### What We Change
+## Phase 2 Backend Swap Points
 
 The conversation app has **pluggable voice backends**: Hugging Face (default),
-OpenAI Realtime (`gpt-realtime`), and Gemini Live. We add a fourth backend:
-`nats-local` that routes to our Parakeet STT + Kokoro TTS on the GB10 via NATS.
-
-**Backend swap points:**
+OpenAI Realtime (`gpt-realtime`), and Gemini Live. Phase 2 adds a fourth backend:
+`nats-local` that routes to Parakeet STT + NATS agent routing + Kokoro TTS on the GB10.
 
 1. **STT path** — Currently: audio → fastrtc → cloud STT (via selected backend).
-   Fork: audio → fastrtc → HTTP POST to Parakeet on GB10 → transcript text.
-   The `fastrtc` layer handles VAD and audio chunking for us — we only replace
+   Phase 2: audio → fastrtc → HTTP POST to Parakeet on GB10 → transcript text.
+   The `fastrtc` layer handles VAD and audio chunking — we only replace
    the transcription endpoint.
 
 2. **LLM path** — Currently: transcript → cloud LLM (OpenAI/HF/Gemini) → response.
-   Fork: transcript → NATS publish `jarvis.voice.{unit}` → Jarvis intent router
+   Phase 2: transcript → NATS publish `jarvis.voice.{unit}` → Jarvis intent router
    → agent fleet → response text on NATS `jarvis.speech.{unit}`.
    This is the core change: replacing a synchronous LLM call with async NATS
-   pub/sub. The adapter subscribes to the response topic and feeds text back
-   into the conversation loop.
+   pub/sub. Bridge with `asyncio.Event` that the NATS subscription handler
+   signals when response arrives. Supports streaming partial responses.
 
 3. **TTS path** — Currently: response text → cloud TTS (via selected backend) → audio.
-   Fork: response text → HTTP POST to Kokoro on GB10 → WAV audio → play via daemon.
-   Again, Kokoro exposes an OpenAI-compatible `/v1/audio/speech` endpoint, so the
-   integration is minimal.
+   Phase 2: response text → HTTP POST to Kokoro on GB10 → WAV audio → play via daemon.
+   Kokoro exposes an OpenAI-compatible `/v1/audio/speech` endpoint.
 
-**New tools to register:**
+## Phase 2 Implementation Sequence
 
-- `agent_status` — Query Jarvis fleet status via NATS request-reply
-- `approve` / `reject` — Human-in-the-loop responses to pending agent actions
-- `student_progress` (Scholar only) — Query Graphiti for Lilymay's study state
-- `notify_list` — Read back pending notifications
+1. **Add `nats-local` backend** — New Python module alongside existing backends.
+   Wire STT to Parakeet, TTS to Kokoro, LLM path to NATS pub/sub.
+2. **Add CLI flag** — `--backend nats-local` to select the new backend.
+3. **Deploy Parakeet + Kokoro Docker containers** on GB10 (see STT/TTS section below).
+4. **Test round-trip** — Voice → Parakeet → NATS → agent → NATS → Kokoro → speaker.
+5. **Remove OpenAI dependency** — Scholar and Bridge profiles no longer need API key.
 
-These are registered as tools in the conversation app's tool dispatch system,
-which already supports async tool calls with motion blending.
-
-### What We Don't Change
-
-- Motion system (wobble, breathing, head tracking, dances, emotions)
-- Camera pipeline and face detection
-- Daemon connection and error handling
-- App lifecycle (`ReachyMiniApp` base class)
-- Gradio UI (useful for development, optional in production)
-- Profile system (Scholar/Bridge profiles with custom instructions)
-
-### Fork Repo Structure
-
-```
-guardkit/reachy-jarvis-bridge/          # Fork of reachy_mini_conversation_app
-├── pyproject.toml                       # Add nats-py, aiohttp deps
-├── .env.example                         # GB10_HOST, NATS_URL, STT_URL, TTS_URL
-├── profiles/
-│   ├── scholar/
-│   │   └── instructions.txt             # GCSE tutor persona, Lilymay context
-│   └── bridge/
-│       └── instructions.txt             # Ship's Computer / Jarvis persona
-├── src/
-│   ├── backends/
-│   │   └── nats_local.py                # NEW: NATS + Parakeet STT + Kokoro TTS
-│   ├── tools/
-│   │   ├── agent_status.py              # NEW: Fleet status via NATS
-│   │   ├── approve_reject.py            # NEW: HITL approval via NATS
-│   │   └── student_progress.py          # NEW: Graphiti query (Scholar only)
-│   └── ... (existing conversation app code)
-└── README.md
-```
-
-### Implementation Sequence
-
-1. **Fork and verify** — Clone conversation app, run in simulation mode (`--sim`)
-   with existing OpenAI backend. Confirm motion, tools, Gradio UI all work.
-2. **Add NATS backend** — Implement `nats_local.py` backend. Wire STT to Parakeet,
-   TTS to Kokoro, LLM path to NATS pub/sub. Test against GB10 via Tailscale.
-3. **Create profiles** — Write Scholar and Bridge persona instructions.
-   Configure voice packs (Kokoro `bf_emma` for Scholar, `bm_daniel` for Bridge).
-4. **Add custom tools** — Register `agent_status`, `approve_reject`,
-   `student_progress` in the tool dispatch system.
-5. **Test on hardware** — Deploy to Pi via SSHFS editable install. Verify
-   audio round-trip, head tracking, motion blending, NATS connectivity.
-6. **Package as app** — Register as Reachy Mini app installable from dashboard.
-
-### Compatibility Risks
-
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| `fastrtc` audio loop tightly coupled to cloud backends | Low | The backend is selected via CLI flag; adding a new one follows established pattern |
-| Pi CM4 too slow for face detection (YOLO/MediaPipe) | Medium | Use `--no-camera` flag initially; add face detection later when confirmed |
-| `nats-py` async loop conflicts with `fastrtc` event loop | Low | Both are asyncio-native; test early in step 2 |
-| Conversation app updates diverge from fork | Medium | Pin to known-good commit; periodically rebase. Upstream changes unlikely to touch backend abstraction layer |
-| Kokoro/Parakeet Docker containers contend with llama-swap | Low | Kokoro is 82M params, Parakeet is 1.1B — both tiny vs main LLM. Monitor with `nvidia-smi` |
+Phase 1 profiles and tools are **completely unchanged**. Only `.env` loses
+`OPENAI_API_KEY` and gains `STT_URL` + `TTS_URL`.
 
 ---
 
 ## Remaining Design Questions
 
 1. **Concurrent audio** — Can the Reachy daemon handle simultaneous mic capture and
-   speaker playback (full-duplex)? Need to test. If half-duplex, implement
-   barge-in detection (stop TTS playback when user starts speaking).
-2. **NATS async response pattern** — The conversation app expects synchronous
+   speaker playback (full-duplex)? Need to test on hardware (Saturday 9 May).
+   If half-duplex, implement barge-in detection.
+2. **NATS async response pattern (Phase 2)** — The conversation app expects synchronous
    request/response from the LLM backend. NATS pub/sub is async. Options:
    (a) Use NATS request-reply for synchronous flow, or (b) bridge with an
    `asyncio.Event` that the NATS subscription handler signals when response arrives.
    Option (b) is more natural for NATS and allows streaming partial responses.
 3. **Profile hot-switching** — Can we switch between Scholar and Bridge profiles
-   at runtime (e.g. if the same physical unit needs to serve both roles)?
-   Low priority but nice-to-have.
+   at runtime? Low priority but nice-to-have.
+4. **Pi CM4 vs Pi 5** — Sources conflict on which Pi ships in the Wireless version.
+   Confirm on hardware arrival. Both support Tailscale; Pi 5 would be better for
+   local face detection.
+5. **Tool description quality** — From the Pollen video: tool descriptions are
+   critical because the LLM reads them to decide when to invoke. Invest time in
+   clear, specific descriptions for `query_student_progress` etc.
+6. **Celebrate animation mapping** — The `celebrate_achievement` tool needs to map
+   to specific Reachy SDK dances/emotions. Inventory the built-in library during
+   step 2 (Saturday SDK exploration).
+
+---
+
+## Key Sources
+
+- **Pollen video:** "Building Apps for Reachy Mini — Fork the Conversation App and
+  Add Custom Tools" (youtube.com/watch?v=h2lyqR2eMyM) — confirmed the scaffolding
+  pattern and profile-first approach. Directly influenced Phase 1 design.
+- **NVIDIA Photo Booth:** `github.com/NVIDIA/spark-reachy-photo-booth` (Apache 2.0) —
+  validated service decomposition pattern. STT/TTS containers reusable in Phase 2.
+- **Pollen AGENTS.md:** `github.com/pollen-robotics/reachy_mini/blob/develop/AGENTS.md` —
+  AI agent onboarding guide. Recommended starting prompt for Claude Code threads.
 
 ---
 
 ## Related Documents
 
 - Reachy Mini integration outline: `jarvis/docs/research/ideas/reachy-mini-integration.md`
+- Reachy integration conversation starter: `study-tutor/docs/research/ideas/reachy-integration-conversation-starter.md`
+- DDD Southwest demo strategy: `study-tutor/docs/talks/ddd-southwest-demo-strategy.md` (v4)
+- Pollen video insights: `YouTube Channel/insights/Building Apps for Reachy Mini - Fork the Conversation App and Add Custom Tools.md`
 - NVIDIA Photo Booth: `github.com/NVIDIA/spark-reachy-photo-booth`
 - Kokoro on GB10: `forums.developer.nvidia.com/t/running-kokoro-tts-on-nvidia-dgx-spark-arm64-gb10/368846`
 - Parakeet on GB10: `forums.developer.nvidia.com/t/multilingual-speech-to-text-stt-asr-with-nvidia-parakeet-tdt-0-6b-v3-for-the-dgx-spark/365554`
