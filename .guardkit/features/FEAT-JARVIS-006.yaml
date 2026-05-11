@@ -1,0 +1,75 @@
+id: FEAT-JARVIS-006
+name: NATS Chat Gateway
+description: 'jarvis serve-nats subscriber on agents.command.jarvis with dual-publish
+  reply (Bug #1) and forge notification drain (Risk #3). DEMO-CRITICAL for 16 May
+  DDD Southwest.'
+created: '2026-05-11T22:13:30.387942'
+status: planned
+complexity: 5
+estimated_tasks: 5
+tasks:
+- id: TASK-J006-001
+  name: Manifest factory
+  file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-001-manifest-factory.md
+  complexity: 3
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 33
+- id: TASK-J006-002
+  name: NATSClient subscribe_with_reply and drain counter
+  file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-002-extend-natsclient-subscribe-with-reply.md
+  complexity: 4
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 50
+- id: TASK-J006-003
+  name: chat_handler module
+  file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-003-chat-handler.md
+  complexity: 6
+  dependencies:
+  - TASK-J006-001
+  - TASK-J006-002
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 113
+- id: TASK-J006-004
+  name: serve_nats CLI command with integration test
+  file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-004-serve-nats-cli.md
+  complexity: 6
+  dependencies:
+  - TASK-J006-003
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 113
+- id: TASK-J006-005
+  name: Live Open WebUI demo verification
+  file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-005-live-openwebui-demo-verification.md
+  complexity: 2
+  dependencies:
+  - TASK-J006-004
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+orchestration:
+  parallel_groups:
+  - - TASK-J006-001
+    - TASK-J006-002
+  - - TASK-J006-003
+  - - TASK-J006-004
+  - - TASK-J006-005
+  estimated_duration_minutes: 331
+  recommended_parallel: 2
+smoke_gates:
+  after_wave: 3
+  command: |
+    set -e
+    pytest tests/ -x --timeout=60 -q
+  expected_exit: 0
+  timeout: 300
