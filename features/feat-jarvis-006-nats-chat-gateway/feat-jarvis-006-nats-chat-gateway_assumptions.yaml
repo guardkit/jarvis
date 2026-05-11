@@ -92,8 +92,8 @@ assumptions:
     human_response: "confirmed"
 
   - id: "ASSUM-013"
-    scenario: "A chat payload that exceeds the broker's max message size never reaches the gateway"
-    assumption: "A chat payload too large for the broker to deliver is reported by the broker, not by Jarvis; Jarvis never observes the message and the gateway keeps running"
-    confidence: low
-    basis: "Broker-side contract (typically 1 MB on JetStream defaults) — Jarvis does not enforce a size limit of its own, so this assumption rides on the broker's configuration rather than Jarvis code"
+    scenario: "A chat request whose payload cannot be decoded as a command envelope is dropped without crashing the gateway"
+    assumption: "An inbound message whose bytes do not decode into a valid CommandPayload envelope is dropped at the gateway's parse boundary — the failure is recorded, the supervisor is never invoked, and the run-forever loop continues"
+    confidence: medium
+    basis: "Scope doc §What Jarvis MUST replicate — Bug-#1 dual-publish + study-tutor template's _safe_invoke exception boundary; pydantic-side envelope validation is the natural enforcement point and CommandPayload decode failures are catchable above the supervisor invocation"
     human_response: "confirmed"

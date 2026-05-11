@@ -4,8 +4,8 @@
 **Generated**: 2026-05-11T17:00:00Z
 **Scenarios**: 26 total
 **Smoke**: 5 · **Regression**: 1
-**Assumptions**: 13 total (7 high / 5 medium / 1 low)
-**Review required**: Yes (1 low-confidence assumption — broker-side max message size contract)
+**Assumptions**: 13 total (7 high / 6 medium / 0 low)
+**Review required**: No
 
 ## Scope
 
@@ -33,9 +33,7 @@ None. All four proposed groups (A–D) were accepted in full and the Phase-4 exp
 
 ## Open Assumptions (low confidence)
 
-| ID | Anchor |
-|---|---|
-| ASSUM-013 | Broker-side max message size — Jarvis does not enforce a size limit of its own; rides on broker JetStream configuration. Worth Coach verification because the gateway behaviour under an overlarge payload depends on a contract Jarvis does not control. |
+None. All thirteen assumptions resolved at `medium` or `high` confidence with explicit scope-doc, lifecycle-code, or template anchors.
 
 ## Cross-Reference: Scope-Doc Anchors Exercised
 

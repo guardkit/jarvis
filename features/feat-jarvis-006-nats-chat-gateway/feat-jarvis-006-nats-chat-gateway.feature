@@ -228,13 +228,14 @@ Feature: NATS Chat Gateway
     And the reply should indicate the request did not succeed
     And the supervisor should not have been invoked
 
-  # Why: Bounded payload — a single overlarge request must not poison the run-forever loop
-  # [ASSUMPTION: confidence=low] A chat payload too large for the broker to deliver is reported by the broker, not by Jarvis; Jarvis never observes the message and the gateway keeps running
+  # Why: The run-forever loop must survive an inbound payload that fails envelope decoding
+  # [ASSUMPTION: confidence=medium] An inbound message whose bytes do not decode into a valid CommandPayload envelope is dropped at the gateway's parse boundary — the failure is recorded, the supervisor is never invoked, and the run-forever loop continues
   @edge-case @security
-  Scenario: A chat payload that exceeds the broker's max message size never reaches the gateway
-    Given Rich attempts to send a chat request whose payload exceeds the broker's max message size
-    When the broker rejects the publish
-    Then the chat gateway should never observe the request
+  Scenario: A chat request whose payload cannot be decoded as a command envelope is dropped without crashing the gateway
+    Given a message arrives on the Jarvis command subject whose bytes are not a valid command envelope
+    When the chat gateway tries to decode the message
+    Then the chat gateway should record the decode failure
+    And the chat gateway should not invoke the supervisor for that message
     And the chat gateway should remain subscribed and able to handle further requests
 
   # ─── Concurrency ──────────────────────────────────────────────────────
