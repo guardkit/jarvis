@@ -248,7 +248,7 @@ curl -sS http://localhost:9000/v1/chat/completions \
 
 **Pass (AC-005-01 ✅):** Response returns within ~10s on a warm load (first invocation may take 30-60s). Any non-empty text in `.choices[0].message.content` means the model is loaded and ready. Record the wall-clock latency in the Phase 4 RESULTS file.
 
-**Fail:** llama-swap returns 5xx or empty response — check `docker logs llama-swap` for missing model file / OOM / GPU issues before continuing to Phase 2.
+**Fail:** llama-swap returns 5xx or empty response — check `docker logs llama-swap` for the containerised deployment, or `journalctl --user -u llama-swap -n 200 --no-pager` / process log (e.g. `ps -ef | grep llama-swap` then read its log path) when llama-swap runs as a native process. On GB10 (May 2026), llama-swap is a native process on port 9000 (`pgrep -a llama-swap` to find pid), not a container — adapt the diagnostic command accordingly.
 
 ---
 
@@ -284,9 +284,22 @@ JARVIS_LOG_LEVEL=INFO .venv/bin/jarvis serve-nats \
 **Pass (AC-005-02 ✅):**
 - Boot log shows `nats_connect_success`
 - Boot log shows `jarvis_startup_complete` with `nats_available=true`
-- Boot log shows `fleet.register` published + subscription to `agents.command.jarvis`
-- Heartbeat fires within 30s on `fleet.heartbeat.jarvis`
+- Boot log shows `fleet_register_published` (from logger `jarvis.infrastructure.fleet_registration`) + a `jarvis_serve_nats_subscribed` line naming subject `agents.command.jarvis`
+- Heartbeat fires within `JARVIS_HEARTBEAT_INTERVAL_SECONDS` (default 30s) — **verified by KV revision tick, not a subject publish**
 - Process stays running (run-forever loop)
+
+> **Heartbeat verification recipe (KV-only, not subject):** Jarvis's heartbeat re-publishes the manifest to the `agent-registry` KV bucket; it is *not* sent on `fleet.heartbeat.jarvis` (see `src/jarvis/infrastructure/fleet_registration.py` module docstring: *"never published as `fleet.heartbeat...`"*). The log line is DEBUG-level `fleet_heartbeat_published`, so it does **not** appear at INFO. To evidence the tick, snapshot the KV revision number twice with the configured interval in between:
+>
+> ```bash
+> source ~/Projects/appmilla_github/nats-infrastructure/.env
+> nats --server "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+>     kv get agent-registry jarvis 2>&1 | head -1    # snapshot A: revision: <N>
+> # wait for at least one heartbeat_interval_seconds tick (default 30s)
+> nats --server "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
+>     kv get agent-registry jarvis 2>&1 | head -1    # snapshot B: revision: <N+1 or higher>
+> ```
+>
+> A monotonic increase in `revision:` between snapshot A and B (with no nats-cli writes between) evidences the heartbeat re-register firing. Alternatively, restart serve-nats with `JARVIS_LOG_LEVEL=DEBUG` and grep the smoke log for `fleet_heartbeat_published`.
 
 Leave the process running for the rest of Phases 2-3.
 
@@ -334,7 +347,32 @@ If `ModuleNotFoundError`: `docker exec open-webui pip install nats-py`
 
 ### 3.2 Confirm the deploy pipe is pasted and enabled
 
-Open `http://promaxgb10-41b1:3000/admin/functions` in a browser. Verify the Jarvis pipe is listed and toggled on.
+Open `http://promaxgb10-41b1:8080/admin/functions` in a browser. Verify the Jarvis pipe is listed and toggled on, **and that the `NATS_URL` Valve includes the broker credentials**.
+
+> **GB10 port note:** OpenWebUI on GB10 runs with `network: host` and listens on port **8080**, not the upstream OpenWebUI default of 3000. Confirm with `docker inspect open-webui --format '{{.HostConfig.NetworkMode}}'` (expect `host`) and `ss -ltn | grep :8080`. If you find a bridge-network deployment on `:3000` somewhere else, substitute that port instead.
+
+> **Pipe deployment + Valve credentials (load-bearing):** The deployable pipe file is `fleet-gateway/openwebui/nats_fleet_pipe.deploy.py` — paste its full contents into Admin → Functions → New Function and toggle on. Then **click the function row's ⚙ Valves icon** and set `NATS_URL` to the authenticated broker URL (e.g. `nats://rich:${RICH_NATS_PASSWORD}@localhost:4222`). The pipe's default Valve value is `nats://localhost:4222` (no credentials), which the broker rejects with `nats: 'Authorization Violation'` — the chat reply will silently spin and time out at 120s.
+>
+> Verify the install by running, inside the open-webui container:
+>
+> ```bash
+> docker exec open-webui python -c "
+> import sqlite3
+> con = sqlite3.connect('/app/backend/data/webui.db')
+> cur = con.cursor()
+> cur.execute(\"SELECT id, name, type, is_active FROM function WHERE type='pipe'\")
+> print(cur.fetchall())
+> "
+> # Expect: [('nats_gateway', 'nats-gateway', 'pipe', 1, 0)] (or equivalent with is_active=1)
+> ```
+>
+> If `nats-py` isn't installed in the container, the pipe import will fail silently in Admin UI. Install with:
+>
+> ```bash
+> docker exec open-webui pip install nats-py
+> ```
+>
+> (Effect is lost on container restart — for a permanent fix, fold into the open-webui image. See FEAT-JARVIS-006 RESULTS for the May 2026 first-run gap.)
 
 ### 3.3 Open a wire-tap on command + result subjects
 
@@ -358,7 +396,7 @@ nats --server "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
 
 ### 3.4 Post a multi-turn chat in Open WebUI (AC-005-03 + AC-005-04)
 
-In the browser at `http://promaxgb10-41b1:3000/`, select **Jarvis** from the model dropdown and stay within a single chat session for all three turns below — per-gateway session retention (Phase 1 single-shared-session trade-off) is part of the verification.
+In the browser at `http://promaxgb10-41b1:8080/` (port :8080 on GB10, see §3.2 GB10 port note), select **Jarvis** from the model dropdown and stay within a single chat session for all three turns below — per-gateway session retention (Phase 1 single-shared-session trade-off) is part of the verification.
 
 #### Turn 1 (AC-005-03)
 
@@ -448,7 +486,7 @@ grep -E '(unsubscribe|drain|heartbeat|deregister|disconnect)' /tmp/jarvis-serve-
 
 1. `unsubscribe` (subscription torn down first, no new commands accepted)
 2. `drain` (active in-flight commands allowed to complete; typically a 30s budget)
-3. `heartbeat` (cancelled — `fleet.heartbeat.jarvis` stops ticking)
+3. `heartbeat` (cancelled — `state.fleet_heartbeat_task` cancelled, KV-revision tick on `agent-registry` stops)
 4. `deregister` (KV `agent-registry` entry for jarvis removed)
 5. `disconnect` (NATS client connection closed cleanly)
 
@@ -466,12 +504,18 @@ Verify the broker-as-hard-dependency posture: jarvis MUST exit non-zero with a c
 Stop the NATS broker, then attempt to start `serve-nats`:
 
 ```bash
-docker stop nats
+# Container name may vary by deployment. On GB10 (May 2026) the broker is `ships-computer-nats`;
+# in older single-tenant deployments it was `nats`. Confirm with:
+#   docker ps --format '{{.Names}}' | grep -i nats
+NATS_CONTAINER=${NATS_CONTAINER:-ships-computer-nats}
+docker stop "$NATS_CONTAINER"
 JARVIS_LOG_LEVEL=INFO .venv/bin/jarvis serve-nats \
     --nats "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
     2>&1 | tee /tmp/jarvis-serve-nats-broker-down.log
 echo "exit=$?"
 ```
+
+> **⚠ Blast-radius note (GB10):** Stopping `ships-computer-nats` takes the entire NATS-dependent fleet down for the duration of the test — specialist-agents (architect-agent, product-owner-agent), fleet-gateway pipe traffic, and any other consumers will all be disconnected until `docker start` completes. Coordinate this with anyone else using the box. The hard-fail probe itself only needs ~10s; total broker downtime is dominated by the `docker start` + healthcheck wait (~20s).
 
 **Pass (AC-005-08 ✅):**
 - Process exits within ~10s (no indefinite hang)
@@ -482,9 +526,9 @@ echo "exit=$?"
 Restart the broker before continuing:
 
 ```bash
-docker start nats
+docker start "$NATS_CONTAINER"
 # wait for healthy
-until docker exec nats nats-server --version >/dev/null 2>&1; do sleep 1; done
+until docker exec "$NATS_CONTAINER" nats-server --version >/dev/null 2>&1; do sleep 1; done
 ```
 
 **Fail modes:**
