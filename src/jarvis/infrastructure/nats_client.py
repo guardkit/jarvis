@@ -45,6 +45,7 @@ References
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -55,7 +56,7 @@ from nats_core.envelope import MessageEnvelope
 from nats_core.events import CommandPayload
 
 from jarvis.config.settings import JarvisConfig
-from jarvis.shared.exceptions import NATSConnectionError
+from jarvis.shared.exceptions import BrokerUnreachableError, NATSConnectionError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.client import Client as _NatsClient
@@ -82,7 +83,7 @@ _nats_connect = nats.connect
 logger = structlog.get_logger(__name__)
 
 
-__all__ = ["NATSClient", "NATSConnectionError"]
+__all__ = ["BrokerUnreachableError", "NATSClient", "NATSConnectionError"]
 
 
 class NATSClient:
@@ -121,20 +122,52 @@ class NATSClient:
     async def connect(cls, config: JarvisConfig) -> NATSClient | None:
         """Connect to NATS using ``config.nats_url`` (and credentials).
 
-        DDR-021 soft-fail: any failure during connect (resolution,
-        TLS, auth, or transport) is caught, logged at ERROR with the
-        URL we tried and the exception class, and the method returns
-        ``None``. The supervisor lifecycle treats ``None`` as
-        ``transport_unavailable`` and falls through to the stub
-        capability registry.
+        Two posture lanes at the boot boundary:
+
+        * **Hard-fail (TASK-J006-010 / runbook §3.8 / AC-005-08):**
+          when the broker is physically unreachable — the initial
+          ``nats.connect()`` either hangs past
+          ``config.startup_connect_timeout_seconds`` (default 10s) and
+          ``asyncio.wait_for`` raises ``TimeoutError``, or
+          ``nats.connect()`` raises ``ConnectionRefusedError`` directly
+          — a single terminal ``nats_connect_failed`` event is logged
+          at ERROR and :class:`BrokerUnreachableError` is raised so the
+          CLI exits non-zero via the standard ``asyncio.run`` error
+          path. The per-retry ``nats_error`` warnings emitted by the
+          underlying ``error_cb`` are capped by the bounded wait — they
+          stop firing once the budget expires.
+
+        * **Soft-fail (DDR-021):** any other connect failure
+          (``NoServersError``, auth, TLS, DNS, ``OSError``) is caught,
+          logged at ERROR with the URL and exception class, and the
+          method returns ``None``. The supervisor lifecycle treats
+          ``None`` as ``transport_unavailable`` and falls through to
+          the stub capability registry.
+
+        The narrow hard-fail trigger surface (``TimeoutError`` +
+        ``ConnectionRefusedError``) is intentional: only the two
+        "broker physically unreachable at boot" signals flip the boot
+        path from soft-fail to hard-fail. Steady-state reconnect after
+        a successful boot is unchanged — once :meth:`connect` returns,
+        nats-py's own reconnect loop continues to absorb transient
+        broker hiccups via the ``reconnected_cb`` / ``disconnected_cb``
+        hooks.
 
         Args:
             config: The validated :class:`JarvisConfig`. Reads
-                ``config.nats_url`` and ``config.nats_credentials_path``.
+                ``config.nats_url``, ``config.nats_credentials_path``,
+                and ``config.startup_connect_timeout_seconds``.
 
         Returns:
-            A connected :class:`NATSClient` on success; ``None`` on any
-            connect failure. Never raises.
+            A connected :class:`NATSClient` on success; ``None`` on
+            DDR-021 soft-fail failures (auth, TLS, ``NoServersError``,
+            …).
+
+        Raises:
+            BrokerUnreachableError: When the broker is unreachable at
+                boot — either the bounded wait
+                (``startup_connect_timeout_seconds``) expires or
+                ``nats.connect()`` raises ``ConnectionRefusedError``.
         """
         kwargs: dict[str, Any] = {
             "servers": config.nats_url,
@@ -152,13 +185,47 @@ class NATSClient:
         if config.nats_credentials_path is not None:
             kwargs["user_credentials"] = str(config.nats_credentials_path)
 
+        budget_seconds = config.startup_connect_timeout_seconds
+        started_at = time.monotonic()
         try:
-            client = await _nats_connect(**kwargs)
+            client = await asyncio.wait_for(
+                _nats_connect(**kwargs),
+                timeout=budget_seconds,
+            )
+        except (TimeoutError, ConnectionRefusedError) as exc:
+            # TASK-J006-010 hard-fail at boot. ``TimeoutError`` covers
+            # nats-py's internal reconnect loop exhausting the bounded
+            # wait (the real-world GB10 evidence path —
+            # ``ConnectionRefusedError`` raised from ``error_cb`` is
+            # absorbed by nats-py's retry, so the outer ``connect()``
+            # only ever times out). ``ConnectionRefusedError`` covers
+            # immediate TCP refusal (the unit-test path where
+            # ``nats.connect`` is monkeypatched to raise directly).
+            # Either way the operator sees one terminal log line and the
+            # process exits non-zero via the CLI's ``asyncio.run``
+            # boundary.
+            elapsed = round(time.monotonic() - started_at, 3)
+            logger.error(
+                "nats_connect_failed",
+                nats_url=config.nats_url,
+                startup_connect_timeout_seconds=budget_seconds,
+                elapsed_seconds=elapsed,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            raise BrokerUnreachableError(
+                f"NATS broker unreachable at {config.nats_url} "
+                f"after {elapsed}s "
+                f"(startup_connect_timeout_seconds={budget_seconds}): "
+                f"{type(exc).__name__}"
+            ) from exc
         except Exception as exc:
-            # Catch-all is intentional: DDR-021 mandates soft-fail on
-            # ANY connect failure so the supervisor stays up. The log
-            # event names the URL and exception class so an operator
-            # can diagnose without re-running with DEBUG enabled.
+            # DDR-021 soft-fail for non-unreachable failures
+            # (``NoServersError``, auth, TLS, DNS, bare ``OSError``).
+            # The log event names the URL and exception class so an
+            # operator can diagnose without re-running with DEBUG
+            # enabled. The supervisor stays up; dispatch tools surface
+            # ``DEGRADED: transport_unavailable`` per ADR-ARCH-021.
             logger.error(
                 "nats_connect_failed",
                 nats_url=config.nats_url,

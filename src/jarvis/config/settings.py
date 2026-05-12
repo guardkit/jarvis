@@ -109,6 +109,12 @@ class JarvisConfig(BaseSettings):
     # JARVIS_HEARTBEAT_INTERVAL_SECONDS — fleet heartbeat cadence per
     # DDR-021/heartbeat. Constrained to 5..300 seconds.
     heartbeat_interval_seconds: int = Field(default=30, ge=5, le=300)
+    # JARVIS_STARTUP_CONNECT_TIMEOUT_SECONDS — bounded wait for the initial
+    # NATS connect at process boot per TASK-J006-010 (hard-dependency
+    # posture per runbook §3.8 / AC-005-08). Once connected, steady-state
+    # reconnect uses nats-py's default loop unchanged. Constrained to
+    # 1..60 seconds; default 10s matches the runbook AC.
+    startup_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
 
     # ── Graphiti ────────────────────────────────────────
     # JARVIS_GRAPHITI_ENDPOINT — Graphiti service endpoint. ``None`` triggers

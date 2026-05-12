@@ -8,11 +8,15 @@ wave: 5
 implementation_mode: task-work
 complexity: 2
 priority: critical
-status: backlog
+status: completed
 dependencies:
   - TASK-J006-005
 created: 2026-05-12 00:00:00+00:00
 updated: 2026-05-12 00:00:00+00:00
+completed: 2026-05-12
+completed_location: tasks/completed/feat-jarvis-006-nats-chat-gateway/
+previous_state: in_review
+state_transition_reason: "Bounded-startup fix landed and verified by tests/test_nats_client_startup_timeout.py (AC-010-01/02/05). AC-010-06 still pending: re-run runbook §3.8 on GB10 against next jarvis serve-nats build to flip AC-005-08 ✅ in the next RESULTS doc."
 tags:
   - nats
   - infrastructure
@@ -20,9 +24,11 @@ tags:
   - demo-blocker
   - hard-dependency-posture
 test_results:
-  status: pending
+  status: passing
   coverage: null
-  last_run: null
+  last_run: 2026-05-12
+  command: ".venv/bin/python -m pytest tests/test_nats_client_startup_timeout.py tests/test_nats_client.py tests/test_lifecycle_feat_j004_wiring.py tests/test_lifecycle_partial_failure.py tests/test_lifecycle_startup_phase3.py tests/test_serve_nats_cli.py tests/test_nats_client_docstring.py"
+  summary: "105 passed in 6.74s — 7 new boot-path tests + 28 existing NATSClient tests (DDR-021 soft-fail surface unchanged) + 70 lifecycle / serve-nats tests"
 ---
 
 # Task: Bound startup reconnect — fail fast when broker is unreachable at boot
