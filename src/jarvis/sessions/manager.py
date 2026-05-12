@@ -103,7 +103,9 @@ class SessionManager:
     def start_session(self, adapter: Adapter, user_id: str) -> Session:
         """Create a new session for the given adapter and user.
 
-        Phase 1 only supports :attr:`Adapter.CLI`. All other adapters are
+        Phase 1 supports :attr:`Adapter.CLI` (interactive REPL) and
+        :attr:`Adapter.NATS` (FEAT-JARVIS-006 fleet gateway — single shared
+        session bound to ``agents.command.jarvis``). All other adapters are
         refused with a :class:`JarvisError` (ASSUM-006).
 
         Args:
@@ -114,11 +116,13 @@ class SessionManager:
             A new :class:`Session` with a unique adapter-prefixed session_id.
 
         Raises:
-            JarvisError: If the adapter is not :attr:`Adapter.CLI`.
+            JarvisError: If the adapter is not one of :attr:`Adapter.CLI` or
+                :attr:`Adapter.NATS`.
         """
-        if adapter != Adapter.CLI:
+        if adapter not in (Adapter.CLI, Adapter.NATS):
             msg = (
-                f"Adapter '{adapter}' is not supported in Phase 1. Only '{Adapter.CLI}' is allowed."
+                f"Adapter '{adapter}' is not supported in Phase 1. "
+                f"Only '{Adapter.CLI}' and '{Adapter.NATS}' are allowed."
             )
             raise JarvisError(msg)
 

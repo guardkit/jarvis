@@ -342,6 +342,35 @@ def _emit_queue_build_envelope() -> MessageEnvelope:
     )
 
 
+def _emit_chat_result_envelope() -> MessageEnvelope:
+    """Build the chat_handler-side ``MessageEnvelope`` (ResultPayload).
+
+    Reconstructs the envelope that
+    :func:`jarvis.infrastructure.chat_handler._dual_publish` emits on the
+    canonical ``agents.result.jarvis`` subject (Bug #1 second publish,
+    TASK-J006-003). Keeping this builder isomorphic to the runtime call
+    keeps the API-events §5 ``source_id='jarvis'`` invariant covered.
+    """
+    from nats_core.events._agent import ResultPayload as _ResultPayload
+
+    payload = _ResultPayload(
+        command="chat",
+        result={
+            "response": "ok",
+            "tools_called": [],
+            "correlation_id": "00000000-0000-4000-8000-00000000000c",
+        },
+        correlation_id="00000000-0000-4000-8000-00000000000c",
+        success=True,
+    )
+    return MessageEnvelope(
+        source_id="jarvis",
+        event_type=EventType.RESULT,
+        correlation_id=payload.correlation_id,
+        payload=payload.model_dump(mode="json"),
+    )
+
+
 # Every ``MessageEnvelope(source_id=...)`` construction site under
 # ``src/jarvis/`` is replayed here. The grep below the parametrisation pins
 # the count — adding a new emit site without registering it triggers a hard
@@ -349,6 +378,7 @@ def _emit_queue_build_envelope() -> MessageEnvelope:
 _EMIT_SITES: tuple[tuple[str, Any], ...] = (
     ("dispatch.py:_build_command_envelope", _emit_command_envelope),
     ("dispatch.py:queue_build", _emit_queue_build_envelope),
+    ("chat_handler.py:_dual_publish", _emit_chat_result_envelope),
 )
 
 

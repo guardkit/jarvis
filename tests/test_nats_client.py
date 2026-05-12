@@ -89,6 +89,30 @@ class _FakeJetStream:
     """Stand-in for ``nats.js.JetStreamContext``."""
 
 
+class _FakeSubscription:
+    """Stand-in for ``nats.aio.subscription.Subscription``.
+
+    The wrapper only forwards this object to the caller — it does not
+    consume any attributes of it. A bare sentinel is sufficient.
+    """
+
+
+class _FakeMsg:
+    """Stand-in for ``nats.aio.msg.Msg``.
+
+    Only the two attributes the wrapper reads (``data`` and ``reply``)
+    are populated. Other attribute access raises ``AttributeError`` so
+    the tests notice if the wrapper grows an unexpected dependency on
+    the Msg surface (e.g. headers, sid, metadata).
+    """
+
+    __slots__ = ("data", "reply")
+
+    def __init__(self, data: bytes, reply: str = "") -> None:
+        self.data = data
+        self.reply = reply
+
+
 class _FakeClient:
     """Mimics the public surface of ``nats.aio.client.Client`` enough to
     drive the wrapper code under test without touching the network.
@@ -101,6 +125,7 @@ class _FakeClient:
         self.drain = mock.AsyncMock(name="drain")
         self.close = mock.AsyncMock(name="close")
         self.request = mock.AsyncMock(name="request")
+        self.subscribe = mock.AsyncMock(name="subscribe", return_value=_FakeSubscription())
         self._jetstream = _FakeJetStream()
         self.is_connected = True
 
@@ -423,6 +448,229 @@ class TestAC006ReconnectEventLogging:
 
         out = capsys.readouterr().out
         assert "nats_error" in out, f"expected nats_error record; got {out!r}"
+
+
+# ===========================================================================
+# TASK-J006-002 — subscribe_with_reply + in-flight drain counter
+# ===========================================================================
+
+
+class TestSubscribeWithReply:
+    """``subscribe_with_reply`` registers a flat subject and propagates the
+    raw ``reply_to`` inbox alongside the decoded ``CommandPayload``
+    (Bug #1). The in-flight counter wraps every handler invocation so
+    ``drain`` can wait for graceful completion (Bug #1-adjacent — closing
+    the connection mid-handler would silently drop the reply).
+    """
+
+    async def test_subscribe_with_reply_registers_subject_with_underlying_client(
+        self, patched_connect: mock.AsyncMock, fake_client: _FakeClient
+    ) -> None:
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+
+        async def handler(payload: Any, reply_to: str) -> None:
+            pass
+
+        sub = await wrapper.subscribe_with_reply("agents.command.jarvis", handler)
+
+        # Returns whatever the underlying subscribe returned (the
+        # wrapper does not own subscription lifecycle).
+        assert sub is fake_client.subscribe.return_value
+        fake_client.subscribe.assert_awaited_once()
+        args, kwargs = fake_client.subscribe.call_args
+        subject = args[0] if args else kwargs.get("subject")
+        assert subject == "agents.command.jarvis"
+
+    async def test_subscribe_with_reply_rejects_wildcard_subject(
+        self, patched_connect: mock.AsyncMock, fake_client: _FakeClient
+    ) -> None:
+        # Bug #4: a wildcard subject would collect commands intended
+        # for other agents and our handler would publish ResultPayload
+        # envelopes back to mismatched correlation IDs.
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+
+        async def handler(payload: Any, reply_to: str) -> None:
+            pass
+
+        with pytest.raises(ValueError, match="wildcard"):
+            await wrapper.subscribe_with_reply("agents.command.*", handler)
+        with pytest.raises(ValueError, match="wildcard"):
+            await wrapper.subscribe_with_reply("agents.>", handler)
+
+        # The underlying client must NOT have been called for an
+        # invalid subject — the wrapper rejects before touching nats-py.
+        fake_client.subscribe.assert_not_awaited()
+
+    async def test_subscribe_with_reply_handler_receives_payload_and_reply_to(
+        self, patched_connect: mock.AsyncMock, fake_client: _FakeClient
+    ) -> None:
+        """Bug #1 contract: handler signature is ``(payload, reply_to)``."""
+        from nats_core.events import CommandPayload
+
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+
+        seen: list[tuple[CommandPayload, str]] = []
+
+        async def handler(payload: CommandPayload, reply_to: str) -> None:
+            seen.append((payload, reply_to))
+
+        await wrapper.subscribe_with_reply("agents.command.jarvis", handler)
+
+        # Recover the callback the wrapper registered with the client
+        # so we can drive it with a synthetic Msg.
+        kwargs = fake_client.subscribe.call_args.kwargs
+        assert "cb" in kwargs, "wrapper must register the handler via cb="
+        cb = kwargs["cb"]
+
+        payload = CommandPayload(command="ping", args={"k": "v"})
+        msg = _FakeMsg(
+            data=payload.model_dump_json().encode(),
+            reply="_INBOX.abc.42",
+        )
+        await cb(msg)
+
+        assert len(seen) == 1
+        delivered_payload, delivered_reply = seen[0]
+        assert isinstance(delivered_payload, CommandPayload)
+        assert delivered_payload.command == "ping"
+        assert delivered_payload.args == {"k": "v"}
+        # Bug #1: handler must receive the raw reply inbox so it can
+        # publish the ResultPayload back to the requester's future.
+        assert delivered_reply == "_INBOX.abc.42"
+
+    async def test_in_flight_counter_increments_during_handler_execution(
+        self, patched_connect: mock.AsyncMock, fake_client: _FakeClient
+    ) -> None:
+        from nats_core.events import CommandPayload
+
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+        assert wrapper.in_flight == 0
+
+        gate = asyncio.Event()
+        observed_counter_inside: list[int] = []
+
+        async def handler(payload: CommandPayload, reply_to: str) -> None:
+            observed_counter_inside.append(wrapper.in_flight)
+            await gate.wait()
+
+        await wrapper.subscribe_with_reply("agents.command.jarvis", handler)
+        cb = fake_client.subscribe.call_args.kwargs["cb"]
+
+        msg = _FakeMsg(
+            data=CommandPayload(command="ping").model_dump_json().encode(),
+            reply="_INBOX.r",
+        )
+
+        handler_task = asyncio.create_task(cb(msg))
+
+        # Yield enough times for the handler to reach ``gate.wait()``.
+        for _ in range(50):
+            await asyncio.sleep(0)
+            if observed_counter_inside:
+                break
+
+        assert observed_counter_inside == [1], (
+            "in-flight counter must be incremented BEFORE the handler runs"
+        )
+        assert wrapper.in_flight == 1
+
+        gate.set()
+        await asyncio.wait_for(handler_task, timeout=1.0)
+
+        assert wrapper.in_flight == 0, "counter must decrement after handler completes"
+
+    async def test_in_flight_counter_decrements_when_handler_raises(
+        self, patched_connect: mock.AsyncMock, fake_client: _FakeClient
+    ) -> None:
+        from nats_core.events import CommandPayload
+
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+
+        async def boom(payload: CommandPayload, reply_to: str) -> None:
+            raise RuntimeError("handler exploded")
+
+        await wrapper.subscribe_with_reply("agents.command.jarvis", boom)
+        cb = fake_client.subscribe.call_args.kwargs["cb"]
+
+        msg = _FakeMsg(
+            data=CommandPayload(command="ping").model_dump_json().encode(),
+            reply="_INBOX.r",
+        )
+
+        # The wrapper absorbs handler exceptions (logged) so the
+        # nats-py reader task is not torn down by a faulty handler.
+        await cb(msg)
+
+        # The try/finally must have run regardless of the exception.
+        assert wrapper.in_flight == 0
+
+
+class TestDrainInFlightCounter:
+    """``drain()`` waits for in-flight handlers to finish before tearing
+    down the underlying connection, and times out softly (warning +
+    return) when handlers refuse to complete.
+    """
+
+    async def test_drain_waits_for_in_flight_counter_to_reach_zero(
+        self, patched_connect: mock.AsyncMock, fake_client: _FakeClient
+    ) -> None:
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+
+        # Simulate a single in-flight handler; the underlying drain MUST
+        # NOT fire until the counter goes back to zero.
+        wrapper._in_flight = 1  # type: ignore[attr-defined]
+
+        drain_task = asyncio.create_task(wrapper.drain(timeout=5.0))
+
+        # Yield so the drain coroutine can poll the counter a few times.
+        for _ in range(5):
+            await asyncio.sleep(0.02)
+
+        assert not drain_task.done(), "drain must block while in_flight > 0; it returned early"
+        fake_client.drain.assert_not_awaited()
+
+        # Release the in-flight slot — drain should now complete.
+        wrapper._in_flight = 0  # type: ignore[attr-defined]
+        await asyncio.wait_for(drain_task, timeout=1.0)
+
+        fake_client.drain.assert_awaited_once()
+
+    async def test_drain_timeout_logs_warning_and_returns(
+        self,
+        patched_connect: mock.AsyncMock,
+        fake_client: _FakeClient,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+        capsys.readouterr()  # drop the connect-success line
+
+        # Three handlers stuck in-flight that never complete.
+        wrapper._in_flight = 3  # type: ignore[attr-defined]
+
+        # AC: drain returns without raising when the in-flight counter
+        # never reaches zero — the lifecycle layer is responsible for
+        # deciding whether to escalate to ``close()``.
+        await wrapper.drain(timeout=0.05)
+
+        out = capsys.readouterr().out
+        # AC: warning is logged.
+        assert "nats_drain_timeout" in out, (
+            f"expected nats_drain_timeout warning record; got {out!r}"
+        )
+        # AC: the warning NAMES the count of in-flight tasks.
+        assert "in_flight=3" in out, (
+            f"warning must name the in-flight count (in_flight=3); got {out!r}"
+        )
+        # The underlying drain MUST NOT be called while handlers are
+        # still active — that would close the connection mid-reply.
+        fake_client.drain.assert_not_awaited()
 
 
 # ===========================================================================

@@ -1,59 +1,42 @@
 ---
-id: TASK-J006-003
-title: "chat_handler module \u2014 extract \u2192 invoke \u2192 drain notifications\
-  \ \u2192 dual-publish"
-task_type: feature
-parent_review: TASK-REV-JV06
-feature_id: FEAT-JARVIS-006
-wave: 2
-implementation_mode: direct
 complexity: 6
-priority: high
-status: completed
+consumer_context:
+- consumes: AgentManifest
+  driver: nats_core.manifest.AgentManifest
+  format_note: Manifest passed by reference into handler; consumed for capability
+    lookup only
+  framework: nats-core manifest types
+  task: TASK-J006-001
+- consumes: subscribe_with_reply
+  driver: asyncio handler
+  format_note: 'Handler signature must be `async def handler(payload: CommandPayload,
+    reply_to: str)`'
+  framework: nats-py subscription
+  task: TASK-J006-002
+created: 2026-05-11 00:00:00+00:00
 dependencies:
 - TASK-J006-001
 - TASK-J006-002
-created: 2026-05-11 00:00:00+00:00
-updated: 2026-05-12 00:00:00+00:00
+feature_id: FEAT-JARVIS-006
+id: TASK-J006-003
+implementation_mode: task-work
+parent_review: TASK-REV-JV06
+priority: high
+status: design_approved
 tags:
 - nats
 - chat
 - session-manager
 - bug-1
 - risk-3
-consumer_context:
-- task: TASK-J006-001
-  consumes: AgentManifest
-  framework: nats-core manifest types
-  driver: nats_core.manifest.AgentManifest
-  format_note: Manifest passed by reference into handler; consumed for capability
-    lookup only
-- task: TASK-J006-002
-  consumes: subscribe_with_reply
-  framework: nats-py subscription
-  driver: asyncio handler
-  format_note: 'Handler signature must be `async def handler(payload: CommandPayload,
-    reply_to: str)`'
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-autobuild_state:
-  current_turn: 1
-  max_turns: 5
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-JARVIS-006
-  base_branch: main
-  started_at: '2026-05-12T10:46:45.047351'
-  last_updated: '2026-05-12T10:55:54.588001'
-  turns:
-  - turn: 1
-    decision: approve
-    feedback: null
-    timestamp: '2026-05-12T10:46:45.047351'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+  status: pending
+title: chat_handler module — extract → invoke → drain notifications → dual-publish
+updated: 2026-05-11 00:00:00+00:00
+wave: 2
 ---
 
 # Task: chat_handler module

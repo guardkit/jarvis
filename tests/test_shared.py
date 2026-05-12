@@ -75,7 +75,10 @@ class TestAdapter:
     def test_adapter_members_count(self) -> None:
         from jarvis.shared.constants import Adapter
 
-        assert len(Adapter) == 4
+        # FEAT-JARVIS-006 added ``NATS`` as a fifth member (the fleet
+        # gateway adapter for ``agents.command.jarvis``); the original
+        # four (CLI, TELEGRAM, DASHBOARD, REACHY) remain.
+        assert len(Adapter) == 5
 
     def test_default_adapter_is_cli(self) -> None:
         from jarvis.shared.constants import DEFAULT_ADAPTER, Adapter

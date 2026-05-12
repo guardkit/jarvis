@@ -22,11 +22,14 @@ VERSION: str = "0.1.0"
 class Adapter(StrEnum):
     """Adapter types supported by Jarvis.
 
-    Phase 1 only supports CLI; the remaining members are reserved
-    for future features (Telegram FEAT-006, Dashboard/Reachy FEAT-009).
+    Phase 1 only supports CLI; ``NATS`` is the FEAT-JARVIS-006 fleet
+    gateway adapter (single shared session for ``agents.command.jarvis``).
+    The remaining members are reserved for future features (Telegram
+    FEAT-006, Dashboard/Reachy FEAT-009).
     """
 
     CLI = "cli"
+    NATS = "nats"
     TELEGRAM = "telegram"
     DASHBOARD = "dashboard"
     REACHY = "reachy"

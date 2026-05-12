@@ -45,11 +45,13 @@ References
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 import nats
 import structlog
 from nats.errors import TimeoutError as _NatsTimeoutError
+from nats_core.events import CommandPayload
 
 from jarvis.config.settings import JarvisConfig
 from jarvis.shared.exceptions import NATSConnectionError
@@ -57,7 +59,15 @@ from jarvis.shared.exceptions import NATSConnectionError
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.client import Client as _NatsClient
     from nats.aio.msg import Msg
+    from nats.aio.subscription import Subscription
     from nats.js import JetStreamContext
+
+# Type alias for the user-facing handler signature. The handler receives
+# both the decoded ``CommandPayload`` AND the raw NATS ``reply`` inbox so
+# the caller can publish the ``ResultPayload`` back to the requester
+# (Bug #1 fix — a plain ``subscribe(payload)`` shape drops the reply
+# inbox and the requester's request-future never resolves).
+CommandReplyHandler = Callable[[CommandPayload, str], Awaitable[None]]
 
 # ---------------------------------------------------------------------------
 # Module-level seam: tests patch this in place of ``nats.connect`` so the
@@ -86,13 +96,21 @@ class NATSClient:
             via :attr:`client`.
         _drained: Latch flipped by :meth:`drain` so subsequent calls
             are no-ops (AC-005 idempotency).
+        _in_flight: Number of currently-executing
+            :meth:`subscribe_with_reply` handler invocations. Used by
+            :meth:`drain` to wait for graceful handler completion before
+            tearing down the underlying nats-py connection (Bug #1
+            related — without the counter the broker would close mid-
+            handler and the ``ResultPayload`` reply would never be
+            published).
     """
 
-    __slots__ = ("_client", "_drained")
+    __slots__ = ("_client", "_drained", "_in_flight")
 
     def __init__(self, client: _NatsClient) -> None:
         self._client = client
         self._drained = False
+        self._in_flight = 0
 
     # ------------------------------------------------------------------
     # Construction
@@ -181,6 +199,110 @@ class NATSClient:
         """
         return self._client.jetstream()
 
+    @property
+    def in_flight(self) -> int:
+        """Number of currently-executing reply-handler invocations.
+
+        Bumped by :meth:`subscribe_with_reply` before each handler call
+        and decremented (in a ``try``/``finally``) once the handler
+        completes or raises. :meth:`drain` reads this to decide whether
+        it is safe to close the underlying connection.
+        """
+        return self._in_flight
+
+    # ------------------------------------------------------------------
+    # Subscription (CommandPayload + reply-to inbox)
+    # ------------------------------------------------------------------
+
+    async def subscribe_with_reply(
+        self,
+        subject: str,
+        handler: CommandReplyHandler,
+    ) -> Subscription:
+        """Subscribe to ``subject`` with a handler that receives ``(payload, reply_to)``.
+
+        The wrapper:
+
+        1. Validates ``subject`` is **flat** — wildcard tokens (``*``,
+           ``>``) are rejected with :class:`ValueError` (Bug #4: a
+           wildcard subscription would collect commands intended for
+           other agents and break the per-agent routing contract).
+        2. Registers an internal callback against the underlying
+           ``nats-py`` client. The callback decodes the raw bytes into a
+           :class:`CommandPayload`, extracts the ``msg.reply`` inbox,
+           bumps :attr:`in_flight`, invokes ``handler(payload, reply_to)``,
+           and decrements the counter in a ``try``/``finally``. Handler
+           exceptions are logged and absorbed so the nats-py reader
+           task is not torn down by a faulty handler.
+
+        Args:
+            subject: NATS subject to subscribe on. Must be a flat
+                subject string with no ``*`` or ``>`` tokens.
+            handler: Async callable receiving the decoded
+                :class:`CommandPayload` and the raw ``reply_to`` inbox
+                string (Bug #1 — the reply inbox is required for the
+                ``ResultPayload`` to reach the requester's future).
+
+        Returns:
+            The :class:`~nats.aio.subscription.Subscription` object
+            returned by the underlying client so the caller can manage
+            unsubscribe / drain lifecycle.
+
+        Raises:
+            ValueError: When ``subject`` contains wildcard tokens.
+        """
+        if "*" in subject or ">" in subject:
+            # Bug #4: only flat subjects — wildcards would collect
+            # commands intended for other agents and the handler would
+            # publish ``ResultPayload`` envelopes with mismatched
+            # correlation IDs back to the wrong inbox.
+            raise ValueError(
+                "subscribe_with_reply requires a flat subject; "
+                f"wildcard tokens are forbidden (Bug #4). got: {subject!r}"
+            )
+
+        client = self._client
+
+        async def _on_message(msg: Msg) -> None:
+            # Decode bytes -> CommandPayload at the wrapper boundary so
+            # the handler stays domain-typed. Bad envelopes are logged
+            # and dropped — the alternative (raising) would kill the
+            # subscription's reader task.
+            try:
+                payload = CommandPayload.model_validate_json(msg.data)
+            except Exception as exc:
+                logger.error(
+                    "nats_subscribe_decode_failed",
+                    subject=subject,
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                )
+                return
+
+            # ``msg.reply`` is the raw NATS inbox; nats-py uses the
+            # empty string (not ``None``) when no reply was set. Pass
+            # through verbatim so callers can detect a fire-and-forget
+            # command by checking ``reply_to == ""``.
+            reply_to = msg.reply or ""
+
+            self._in_flight += 1
+            try:
+                await handler(payload, reply_to)
+            except Exception as exc:
+                # Handler exceptions MUST NOT propagate into the nats-py
+                # reader coroutine — that would tear down the
+                # subscription and silently drop subsequent commands.
+                logger.error(
+                    "nats_handler_exception",
+                    subject=subject,
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                )
+            finally:
+                self._in_flight -= 1
+
+        return await client.subscribe(subject, cb=_on_message)
+
     # ------------------------------------------------------------------
     # Request/reply
     # ------------------------------------------------------------------
@@ -240,39 +362,76 @@ class NATSClient:
             # error from the supervisor's point of view. Wrap once so
             # callers don't have to know the nats-py error hierarchy.
             raise NATSConnectionError(
-                f"NATS request failed on subject={subject!r}: "
-                f"{type(exc).__name__}: {exc}"
+                f"NATS request failed on subject={subject!r}: {type(exc).__name__}: {exc}"
             ) from exc
 
     # ------------------------------------------------------------------
     # Drain (idempotent shutdown)
     # ------------------------------------------------------------------
 
-    async def drain(self, *, timeout: float = 5.0) -> None:
-        """Drain in-flight messages, then close. Idempotent.
+    async def drain(self, *, timeout: float = 30.0) -> None:
+        """Drain in-flight handlers, then the underlying connection. Idempotent.
 
-        The first call invokes the underlying client's ``drain()``
-        bounded by ``timeout`` and emits an INFO ``nats_drain_complete``
-        event. Subsequent calls are silent no-ops — no second log line,
-        no second underlying drain, no exception.
+        Two-phase shutdown bounded by a single ``timeout`` budget:
+
+        1. **Handler drain** — poll :attr:`in_flight` until it reaches
+           zero. This lets active :meth:`subscribe_with_reply` handlers
+           finish publishing their ``ResultPayload`` reply before the
+           NATS connection goes away (Bug #1 related — closing the
+           connection mid-handler drops the reply silently). If the
+           counter does not reach zero within the timeout budget, a
+           ``nats_drain_timeout`` warning is logged with the count of
+           still-running handlers and the method **returns** without
+           tearing down the connection — the lifecycle can decide
+           whether to escalate to ``close()``.
+
+        2. **Connection drain** — invoke the underlying client's
+           ``drain()`` with the remaining budget. On underlying timeout
+           a ``nats_drain_timeout`` warning is logged and the
+           ``asyncio.TimeoutError`` is **re-raised** so the lifecycle
+           shutdown path can decide whether to escalate.
+
+        The default timeout (30.0s) matches the study-tutor adapter
+        template. Subsequent calls after a successful drain are silent
+        no-ops — no second log line, no second underlying drain, no
+        exception.
 
         Args:
-            timeout: Maximum seconds to wait for the drain to
-                complete. ``asyncio.TimeoutError`` is raised if the
-                drain doesn't finish in time so the lifecycle's
-                shutdown path can decide whether to escalate to
-                ``close()``.
+            timeout: Maximum seconds to wait across both phases. The
+                handler drain consumes part of this budget; the
+                remainder is forwarded to the underlying ``drain()``.
 
         Raises:
-            asyncio.TimeoutError: When the underlying drain doesn't
-                complete within ``timeout`` (only on the first call —
-                subsequent calls remain silent no-ops).
+            asyncio.TimeoutError: When the **underlying** drain (phase
+                2) doesn't complete within the remaining budget. Phase
+                1 (handler drain) timeout is soft — logs a warning and
+                returns.
         """
         if self._drained:
             return
 
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+
+        # Phase 1: wait for active subscribe_with_reply handlers.
+        # Poll cadence is small (10 ms) so the wait wakes promptly when
+        # the last handler decrements the counter.
+        while self._in_flight > 0:
+            if loop.time() >= deadline:
+                logger.warning(
+                    "nats_drain_timeout",
+                    timeout=timeout,
+                    in_flight=self._in_flight,
+                )
+                return
+            await asyncio.sleep(0.01)
+
+        # Phase 2: drain the underlying nats-py connection with the
+        # remaining budget. ``remaining`` may be ~timeout (no in-flight
+        # tasks) or noticeably smaller (we just spent budget waiting).
+        remaining = max(0.0, deadline - loop.time())
         try:
-            await asyncio.wait_for(self._client.drain(), timeout=timeout)
+            await asyncio.wait_for(self._client.drain(), timeout=remaining)
         except TimeoutError:
             # We do NOT mark drained on timeout — the connection is in
             # an unknown state and a follow-up close() may still be
@@ -280,6 +439,7 @@ class NATSClient:
             logger.warning(
                 "nats_drain_timeout",
                 timeout=timeout,
+                in_flight=self._in_flight,
             )
             raise
 

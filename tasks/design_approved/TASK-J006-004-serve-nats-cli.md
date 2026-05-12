@@ -1,51 +1,35 @@
 ---
-id: TASK-J006-004
-title: serve_nats CLI command with signal handling + integration test
-task_type: feature
-parent_review: TASK-REV-JV06
-feature_id: FEAT-JARVIS-006
-wave: 3
-implementation_mode: direct
 complexity: 6
-priority: high
-status: completed
+consumer_context:
+- consumes: handle_chat_command
+  driver: functools.partial bound to AppState
+  format_note: Handler bound with session_manager, session, nats_client, agent_id;
+    subscribe registers it against agents.command.jarvis
+  framework: asyncio handler invoked from NATSClient.subscribe_with_reply
+  task: TASK-J006-003
+created: 2026-05-11 00:00:00+00:00
 dependencies:
 - TASK-J006-003
-created: 2026-05-11 00:00:00+00:00
-updated: 2026-05-12 00:00:00+00:00
+feature_id: FEAT-JARVIS-006
+id: TASK-J006-004
+implementation_mode: task-work
+parent_review: TASK-REV-JV06
+priority: high
+status: design_approved
 tags:
 - nats
 - cli
 - serve-nats
 - risk-5
 - signal-handling
-consumer_context:
-- task: TASK-J006-003
-  consumes: handle_chat_command
-  framework: asyncio handler invoked from NATSClient.subscribe_with_reply
-  driver: functools.partial bound to AppState
-  format_note: Handler bound with session_manager, session, nats_client, agent_id;
-    subscribe registers it against agents.command.jarvis
+task_type: feature
 test_results:
-  status: pending
   coverage: null
   last_run: null
-autobuild_state:
-  current_turn: 1
-  max_turns: 5
-  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-JARVIS-006
-  base_branch: main
-  started_at: '2026-05-12T10:55:54.654041'
-  last_updated: '2026-05-12T11:14:22.214034'
-  turns:
-  - turn: 1
-    decision: approve
-    feedback: null
-    timestamp: '2026-05-12T10:55:54.654041'
-    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
-      actual: 0'
-    player_success: true
-    coach_success: true
+  status: pending
+title: serve_nats CLI command with signal handling + integration test
+updated: 2026-05-11 00:00:00+00:00
+wave: 3
 ---
 
 # Task: serve_nats CLI command + integration test
