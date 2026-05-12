@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Any
 import nats
 import structlog
 from nats.errors import TimeoutError as _NatsTimeoutError
+from nats_core.envelope import MessageEnvelope
 from nats_core.events import CommandPayload
 
 from jarvis.config.settings import JarvisConfig
@@ -265,11 +266,31 @@ class NATSClient:
 
         async def _on_message(msg: Msg) -> None:
             # Decode bytes -> CommandPayload at the wrapper boundary so
-            # the handler stays domain-typed. Bad envelopes are logged
-            # and dropped — the alternative (raising) would kill the
-            # subscription's reader task.
+            # the handler stays domain-typed. Two wire shapes are
+            # accepted (TASK-J006-009):
+            #
+            #   1. ``MessageEnvelope`` wrapping a ``CommandPayload`` — the
+            #      production wire format published by fleet-gateway and
+            #      every other agent (matches the study-tutor
+            #      ``command_router`` template).
+            #   2. Flat ``CommandPayload`` bytes — the runbook §2.3
+            #      ``nats request`` smoke contract, preserved
+            #      intentionally so operators can probe the bus without
+            #      hand-building an envelope.
+            #
+            # Bad envelopes are logged and dropped — the alternative
+            # (raising) would kill the subscription's reader task.
             try:
-                payload = CommandPayload.model_validate_json(msg.data)
+                envelope = MessageEnvelope.model_validate_json(msg.data)
+            except Exception:
+                envelope = None
+
+            try:
+                if envelope is not None:
+                    payload = CommandPayload.model_validate(envelope.payload)
+                else:
+                    # Fallback: flat CommandPayload (runbook §2.3 smoke contract).
+                    payload = CommandPayload.model_validate_json(msg.data)
             except Exception as exc:
                 logger.error(
                     "nats_subscribe_decode_failed",

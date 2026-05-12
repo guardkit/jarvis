@@ -8,11 +8,19 @@ wave: 5
 implementation_mode: task-work
 complexity: 2
 priority: critical
-status: backlog
+status: completed
 dependencies:
   - TASK-J006-005
 created: 2026-05-12 00:00:00+00:00
 updated: 2026-05-12 00:00:00+00:00
+completed: 2026-05-12 00:00:00+00:00
+completed_location: tasks/completed/feat-jarvis-006-nats-chat-gateway/
+previous_state: in_review
+state_transition_reason: |
+  Code-complete: AC-009-01/02/03 unit-green; AC-009-04 (live GB10 rerun) is
+  operator action and remains pending. See "Operator follow-up" section below
+  — the demo-blocker won't fully clear until AC-009-04 is observed on the
+  GB10 build that has this patch applied.
 tags:
   - nats
   - infrastructure
@@ -20,9 +28,16 @@ tags:
   - demo-blocker
   - wire-contract
 test_results:
-  status: pending
+  status: passing
   coverage: null
-  last_run: null
+  last_run: 2026-05-12
+  notes: |
+    tests/test_nats_client.py — 28 passed in 0.69s
+    New unit tests:
+      TestSubscribeEnvelopeUnwrap::test_envelope_wrapped_command_payload_is_unwrapped_and_delivered  (AC-009-01)
+      TestSubscribeEnvelopeUnwrap::test_undecodable_bytes_are_logged_and_absorbed                    (AC-009-03)
+    Pre-existing flat-payload regression coverage:
+      TestSubscribeWithReply::test_subscribe_with_reply_handler_receives_payload_and_reply_to        (AC-009-02)
 ---
 
 # Task: Fix `subscribe_with_reply` to unwrap `MessageEnvelope` before `CommandPayload` validation
@@ -167,6 +182,67 @@ sibling modules).
 - Touching `chat_handler.py` — the handler signature already takes a
   `CommandPayload`, which is what `_on_message` will continue to deliver.
 - Anything in `fleet-gateway` — the pipe's wire format is correct.
+
+## Implementation summary (2026-05-12)
+
+**Patch landed.** `src/jarvis/infrastructure/nats_client.py` (`_on_message`
+inside `subscribe_with_reply`) now:
+
+1. Imports `MessageEnvelope` from `nats_core.envelope`.
+2. Tries `MessageEnvelope.model_validate_json(msg.data)` first; on success,
+   validates `envelope.payload` as `CommandPayload` (production wire format
+   — fleet-gateway and other agents, study-tutor template).
+3. Falls back to flat `CommandPayload.model_validate_json(msg.data)` when
+   the envelope shape doesn't parse (runbook §2.3 smoke contract).
+4. Logs and absorbs failures of *both* paths via the existing
+   `nats_subscribe_decode_failed` event — the subscription reader task is
+   not torn down.
+
+Total change: +24 / −5 LOC in `nats_client.py` (one import + a rewritten
+decode block with one comment block citing TASK-J006-009 and the runbook).
+Handler signature and the `in_flight` accounting downstream are unchanged.
+
+### AC verification status
+
+| AC | Status | Evidence |
+|---|---|---|
+| AC-009-01 envelope-wrapped decode | ✅ green | `tests/test_nats_client.py::TestSubscribeEnvelopeUnwrap::test_envelope_wrapped_command_payload_is_unwrapped_and_delivered` — synthesises a byte-for-byte `build_command_envelope` wire (correlation_id `422a025f-…001e` from the GB10 repro) and asserts the inner `CommandPayload` reaches the handler with `_INBOX.envelope.42` as `reply_to`. |
+| AC-009-02 flat decode unchanged | ✅ green | `TestSubscribeWithReply::test_subscribe_with_reply_handler_receives_payload_and_reply_to` continues to pass without modification (runbook §2.3 contract). |
+| AC-009-03 decode failure absorbed | ✅ green | `TestSubscribeEnvelopeUnwrap::test_undecodable_bytes_are_logged_and_absorbed` — drives `b"this is not json"` through the registered callback and asserts (a) handler not invoked, (b) `in_flight == 0`, (c) `nats_subscribe_decode_failed` on stdout. |
+| AC-009-04 live GB10 verification | ⏳ pending operator | Requires rerunning runbook Phase 3.4 Turn 1 from OpenWebUI on GB10 against the patched build. Will produce `docs/runbooks/RESULTS-FEAT-JARVIS-006-serve-nats-first-run-<DATE>.md` and flip AC-005-03 of TASK-J006-005. |
+
+### Test run (2026-05-12)
+
+```
+$ .venv/bin/python -m pytest tests/test_nats_client.py -q
+............................                                             [100%]
+28 passed in 0.69s
+```
+
+Adjacent NATS suites (`test_lifecycle_nats_subscriptions.py`,
+`test_contract_nats_core.py`) also stay green — 60 tests pass across the
+three files.
+
+Two unrelated pre-existing failures elsewhere in the repo
+(`test_capabilities_real.py`, `test_phase4_dependencies.py` graphiti-core
+version-pin tests) were confirmed present on the un-patched tree as well
+and are tracked separately.
+
+## Operator follow-up (AC-009-04, post-completion)
+
+Closing this task as **code-complete** with one acceptance criterion still
+gated by hardware:
+
+- **AC-009-04** requires running the patched `jarvis serve-nats` on GB10
+  against the live OpenWebUI pipe and capturing the wire-tap evidence into
+  `docs/runbooks/RESULTS-FEAT-JARVIS-006-serve-nats-first-run-<DATE>.md`.
+  That observation flips AC-005-03 on TASK-J006-005 (parent demo task)
+  and is the final gate before the 2026-05-16 DDD Southwest demo can be
+  declared safe.
+
+If the GB10 run surfaces a regression that contradicts the unit tests in
+this task, **reopen this task**; do not silently let the demo-block leak
+into TASK-J006-005's verification window.
 
 ## See also
 

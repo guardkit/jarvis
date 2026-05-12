@@ -610,6 +610,133 @@ class TestSubscribeWithReply:
         assert wrapper.in_flight == 0
 
 
+# ===========================================================================
+# TASK-J006-009 — envelope-unwrap on the subscribe decode path
+# ===========================================================================
+
+
+class TestSubscribeEnvelopeUnwrap:
+    """``subscribe_with_reply`` decodes both wire shapes (TASK-J006-009):
+
+      AC-009-01: ``MessageEnvelope`` wrapping a ``CommandPayload`` —
+                 the production wire format published by fleet-gateway
+                 and every other agent.
+      AC-009-02: flat ``CommandPayload`` bytes — the runbook §2.3
+                 ``nats request`` smoke contract (covered by
+                 ``test_subscribe_with_reply_handler_receives_payload_and_reply_to``).
+      AC-009-03: decode failures (neither shape valid) are
+                 logged-and-absorbed via ``nats_subscribe_decode_failed``;
+                 the subscription's reader task is not torn down.
+    """
+
+    async def test_envelope_wrapped_command_payload_is_unwrapped_and_delivered(
+        self, patched_connect: mock.AsyncMock, fake_client: _FakeClient
+    ) -> None:
+        """AC-009-01: byte-for-byte output of fleet-gateway's
+        ``build_command_envelope`` is unwrapped and the inner
+        ``CommandPayload`` is delivered to the registered handler.
+        """
+        import json
+
+        from nats_core.events import CommandPayload
+
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+
+        seen: list[tuple[CommandPayload, str]] = []
+
+        async def handler(payload: CommandPayload, reply_to: str) -> None:
+            seen.append((payload, reply_to))
+
+        await wrapper.subscribe_with_reply("agents.command.jarvis", handler)
+        cb = fake_client.subscribe.call_args.kwargs["cb"]
+
+        # Build an envelope shaped exactly like fleet-gateway's
+        # ``build_command_envelope`` output — the bug repro on GB10
+        # (2026-05-12) used this exact wire. The inner CommandPayload
+        # carries ``command="chat"`` and the conversation history args.
+        correlation_id = "422a025f-3961-4bc2-bcf7-2b816012001e"
+        inner_payload = CommandPayload(
+            command="chat",
+            args={
+                "message": "hello jarvis",
+                "conversation_history": [
+                    {"role": "user", "content": "hello jarvis"}
+                ],
+                "adapter": "openwebui",
+            },
+            correlation_id=correlation_id,
+        )
+        envelope_wire = {
+            "version": "1.0",
+            "event_type": "command",
+            "source_id": "openwebui-gateway",
+            "correlation_id": correlation_id,
+            "payload": inner_payload.model_dump(),
+        }
+        msg = _FakeMsg(
+            data=json.dumps(envelope_wire).encode(),
+            reply="_INBOX.envelope.42",
+        )
+
+        await cb(msg)
+
+        assert len(seen) == 1, (
+            "envelope-wrapped payload must reach the handler exactly once "
+            "(see TASK-J006-009 — production wire was being dropped)"
+        )
+        delivered_payload, delivered_reply = seen[0]
+        assert isinstance(delivered_payload, CommandPayload)
+        assert delivered_payload.command == "chat"
+        assert delivered_payload.args["message"] == "hello jarvis"
+        assert delivered_payload.correlation_id == correlation_id
+        assert delivered_reply == "_INBOX.envelope.42"
+
+    async def test_undecodable_bytes_are_logged_and_absorbed(
+        self,
+        patched_connect: mock.AsyncMock,
+        fake_client: _FakeClient,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """AC-009-03: bytes that match neither envelope nor flat
+        ``CommandPayload`` are logged via ``nats_subscribe_decode_failed``
+        and absorbed — the handler is not invoked and the in-flight
+        counter is unchanged.
+        """
+        from nats_core.events import CommandPayload
+
+        wrapper = await NATSClient.connect(_make_config())
+        assert wrapper is not None
+        capsys.readouterr()  # drop the connect-success line
+
+        seen: list[tuple[CommandPayload, str]] = []
+
+        async def handler(payload: CommandPayload, reply_to: str) -> None:
+            seen.append((payload, reply_to))
+
+        await wrapper.subscribe_with_reply("agents.command.jarvis", handler)
+        cb = fake_client.subscribe.call_args.kwargs["cb"]
+
+        # Junk bytes — not valid JSON for either envelope or
+        # ``CommandPayload``. The wrapper must log-and-absorb so the
+        # subscription's reader task is not torn down by a single bad
+        # message.
+        msg = _FakeMsg(data=b"this is not json", reply="_INBOX.junk")
+
+        await cb(msg)
+
+        # Handler never invoked.
+        assert seen == []
+        # In-flight counter untouched — the failure happened before the
+        # try/finally that wraps handler invocation.
+        assert wrapper.in_flight == 0
+
+        out = capsys.readouterr().out
+        assert "nats_subscribe_decode_failed" in out, (
+            f"expected nats_subscribe_decode_failed log; got {out!r}"
+        )
+
+
 class TestDrainInFlightCounter:
     """``drain()`` waits for in-flight handlers to finish before tearing
     down the underlying connection, and times out softly (warning +
