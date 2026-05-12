@@ -8,15 +8,38 @@ wave: 1
 implementation_mode: direct
 complexity: 3
 priority: high
-status: backlog
+status: in_review
 dependencies: []
-created: 2026-05-11T00:00:00Z
-updated: 2026-05-11T00:00:00Z
-tags: [nats, manifest, declarative]
+created: 2026-05-11 00:00:00+00:00
+updated: 2026-05-11 00:00:00+00:00
+tags:
+- nats
+- manifest
+- declarative
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 5
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-JARVIS-006
+  base_branch: main
+  started_at: '2026-05-11T22:34:56.827905'
+  last_updated: '2026-05-11T22:48:03.034797'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-05-11T22:34:56.827905'
+    player_summary: 'Added a new declarative manifest factory at src/jarvis/infrastructure/manifest.py
+      exposing build_manifest(config: JarvisConfig) -> AgentManifest. The factory
+      composes the manifest from two private helpers (_build_chat_tool, _build_general_intent)
+      so each shape can be reviewed in isolation. ToolCapability `chat` documents
+      a JSON-Schema parameter object with `message` required (string), `conversation_history`
+      optional (array of objects), and `adapter` optional (string), matching CommandPayload.arg'
+    player_success: true
+    coach_success: true
 ---
 
 # Task: Manifest factory for jarvis

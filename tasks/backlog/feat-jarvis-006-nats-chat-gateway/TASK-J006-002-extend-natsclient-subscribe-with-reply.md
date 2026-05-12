@@ -8,15 +8,34 @@ wave: 1
 implementation_mode: task-work
 complexity: 4
 priority: high
-status: backlog
+status: in_review
 dependencies: []
-created: 2026-05-11T00:00:00Z
-updated: 2026-05-11T00:00:00Z
-tags: [nats, infrastructure, bug-1]
+created: 2026-05-11 00:00:00+00:00
+updated: 2026-05-11 00:00:00+00:00
+tags:
+- nats
+- infrastructure
+- bug-1
 test_results:
   status: pending
   coverage: null
   last_run: null
+autobuild_state:
+  current_turn: 1
+  max_turns: 5
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-JARVIS-006
+  base_branch: main
+  started_at: '2026-05-11T22:34:56.828166'
+  last_updated: '2026-05-11T22:48:38.311852'
+  turns:
+  - turn: 1
+    decision: approve
+    feedback: null
+    timestamp: '2026-05-11T22:34:56.828166'
+    player_summary: 'Implementation via task-work delegation. Files planned: 0, Files
+      actual: 0'
+    player_success: true
+    coach_success: true
 ---
 
 # Task: Extend NATSClient with subscribe_with_reply + drain counter

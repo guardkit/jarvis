@@ -2999,3 +2999,21 @@ Folded the three observational wave-3 candidates surfaced by the fresh-followup-
 - Patch runbook docs (§0.5 yaml key, §4.3 judgment Literal, §5.2 inbox-routing note, drop stale §0.1 commit hash, re-confirm Bug #4 wire-tap subject patch from prior RESULTS).
 - Commit `nats-core/pyproject.toml` v0.4.0 bump in the `nats-core` repo.
 - Dress rehearsal 2026-05-15 with one warmup `align` call before going on stage.
+
+
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-006 --verbose
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-006 --verbose

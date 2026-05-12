@@ -4,7 +4,7 @@ description: 'jarvis serve-nats subscriber on agents.command.jarvis with dual-pu
   reply (Bug #1) and forge notification drain (Risk #3). DEMO-CRITICAL for 16 May
   DDD Southwest.'
 created: '2026-05-11T22:13:30.387942'
-status: planned
+status: failed
 complexity: 5
 estimated_tasks: 5
 tasks:
@@ -13,19 +13,37 @@ tasks:
   file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-001-manifest-factory.md
   complexity: 3
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: direct
   estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-05-11T22:34:56.812926'
+  completed_at: '2026-05-11T22:48:38.314439'
 - id: TASK-J006-002
   name: NATSClient subscribe_with_reply and drain counter
   file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-002-extend-natsclient-subscribe-with-reply.md
   complexity: 4
   dependencies: []
-  status: pending
-  description: ''
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 50
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-05-11T22:34:56.816394'
+  completed_at: '2026-05-11T22:48:38.317350'
 - id: TASK-J006-003
   name: chat_handler module
   file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-003-chat-handler.md
@@ -33,20 +51,38 @@ tasks:
   dependencies:
   - TASK-J006-001
   - TASK-J006-002
-  status: pending
-  description: ''
-  implementation_mode: task-work
+  status: completed
+  implementation_mode: direct
   estimated_minutes: 113
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-05-12T10:46:45.034610'
+  completed_at: '2026-05-12T10:55:54.591242'
 - id: TASK-J006-004
   name: serve_nats CLI command with integration test
   file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-004-serve-nats-cli.md
   complexity: 6
   dependencies:
   - TASK-J006-003
-  status: pending
-  description: ''
-  implementation_mode: task-work
+  status: completed
+  implementation_mode: direct
   estimated_minutes: 113
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-05-12T10:55:54.643598'
+  completed_at: '2026-05-12T11:14:22.218303'
 - id: TASK-J006-005
   name: Live Open WebUI demo verification
   file_path: tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-005-live-openwebui-demo-verification.md
@@ -54,9 +90,14 @@ tasks:
   dependencies:
   - TASK-J006-004
   status: pending
-  description: ''
   implementation_mode: direct
   estimated_minutes: 22
+  requires_infrastructure: []
+  result: null
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: null
 orchestration:
   parallel_groups:
   - - TASK-J006-001
@@ -68,8 +109,27 @@ orchestration:
   recommended_parallel: 2
 smoke_gates:
   after_wave: 3
-  command: |
-    set -e
+  command: 'set -e
+
     pytest tests/ -x --timeout=60 -q
+
+    '
   expected_exit: 0
   timeout: 300
+  exit5_is_hard_fail: false
+preflight_strict: false
+execution:
+  started_at: '2026-05-11T22:34:55.565383'
+  completed_at: '2026-05-12T11:14:22.873358'
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-JARVIS-006
+  total_turns: 4
+  tasks_completed: 4
+  tasks_failed: 0
+  current_wave: 3
+  completed_waves:
+  - 1
+  - 2
+  - 3
+  last_updated: '2026-05-12T11:14:22.222139'
+  archived_at: null
+  archived_to: null
