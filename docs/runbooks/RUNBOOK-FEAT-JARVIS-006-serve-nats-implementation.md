@@ -311,15 +311,22 @@ In a second terminal:
 source ~/Projects/appmilla_github/nats-infrastructure/.env
 nats --server "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" \
     kv get agent-registry jarvis --raw 2>/dev/null \
-  | python3 -c "import sys, json; d=json.load(sys.stdin); print('agent_id:', d['agent_id']); print('tool count:', len(d['tools'])); [print('  -', t['name']) for t in d['tools']]"
+  | python3 -c "import sys, json; d=json.load(sys.stdin); print('agent_id:', d['agent_id']); print('template:', d.get('template')); print('tool count:', len(d['tools'])); [print('  tool -', t['name']) for t in d['tools']]; print('intent count:', len(d['intents'])); [print('  intent -', i['pattern']) for i in d['intents']]"
 ```
 
 **Pass:**
 ```
 agent_id: jarvis
-tool count: 1
-  - chat
+template: general_purpose_agent
+tool count: 0
+intent count: 4
+  intent - conversational.gpa
+  intent - dispatch.by_capability
+  intent - meta.dispatch
+  intent - memory.recall
 ```
+
+> **Note on manifest shape (load-bearing):** The published manifest comes from `src/jarvis/infrastructure/fleet_registration.py:build_jarvis_manifest()`, which publishes an **intents-only** manifest (4 generic intents, 0 tools, `template=general_purpose_agent`). A separate factory at `src/jarvis/infrastructure/manifest.py:build_manifest()` exists with a `chat` `ToolCapability` shape but is **not** wired into the publish path. Earlier versions of this runbook expected `tool count: 1 (chat)` — that was incorrect. The intents-only shape is the source-of-truth for FEAT-JARVIS-006 and matches ADR-ARCH-026 + API-internal §2. The supervisor's full tool surface remains reachable via the chat command — the manifest is for fleet discovery, not invocation.
 
 ### 2.3 Send a test command via `nats request`
 
@@ -482,20 +489,34 @@ Then immediately inspect the smoke log for the ordered shutdown phrases:
 grep -E '(unsubscribe|drain|heartbeat|deregister|disconnect)' /tmp/jarvis-serve-nats-smoke.log | tail -20
 ```
 
-**Pass (AC-005-07 ✅):** All five phrases appear in the log, in this order:
+**Pass (AC-005-07 ✅):** The shutdown sequence completes within a few milliseconds and the smoke log shows these events (event names from `src/jarvis/cli/main.py` + `src/jarvis/infrastructure/fleet_registration.py` + `src/jarvis/infrastructure/nats_client.py`), in this order:
 
-1. `unsubscribe` (subscription torn down first, no new commands accepted)
-2. `drain` (active in-flight commands allowed to complete; typically a 30s budget)
-3. `heartbeat` (cancelled — `state.fleet_heartbeat_task` cancelled, KV-revision tick on `agent-registry` stops)
-4. `deregister` (KV `agent-registry` entry for jarvis removed)
-5. `disconnect` (NATS client connection closed cleanly)
+1. `jarvis_serve_nats_signal_received` (SIGINT received)
+2. `jarvis_serve_nats_shutdown_begin`
+3. `fleet_heartbeat_cancelled` (heartbeat task cancelled — KV-revision tick on `agent-registry` stops)
+4. `fleet_deregister_published` (KV `agent-registry` entry for jarvis removed)
+5. `nats_disconnect` (NATS client transport closed; warning-level by design)
+6. `nats_closed` (client wrapper acknowledges closed state)
+7. `nats_drain_complete` (with `timeout=5.0` — drains any in-flight publishes; typically completes in <1 ms when idle)
+8. `jarvis_serve_nats_shutdown_complete`
 
-Process exit code is 0 (`echo $?` immediately after Ctrl-C exits).
+Process exits within ~1 s wall-clock (the SIGINT loop iteration). Total signal→shutdown_complete is typically <10 ms.
+
+> **Note on order:** Earlier versions of this runbook documented the expected order as `unsubscribe → drain → heartbeat → deregister → disconnect` (copied verbatim from a study-tutor-style adapter docstring). Jarvis's lifecycle is structured differently — `cli/main.py` cancels the heartbeat task and publishes the deregister event **before** tearing down the NATS handle, so the KV state is consistent even if NATS close fails. There is no explicit "unsubscribe" log line because the subscription is torn down implicitly by `nats_closed`. Both orderings are correct for their respective designs; only this runbook section was stale.
+>
+> Grep recipe (post-fix, matches actual jarvis lifecycle):
+>
+> ```bash
+> grep -E '(signal_received|shutdown_begin|heartbeat_cancelled|deregister_published|nats_disconnect|nats_closed|drain_complete|shutdown_complete)' /tmp/jarvis-serve-nats-smoke.log | tail -12
+> ```
+
+> **Exit code caveat:** if you run serve-nats under `nohup` or any harness that detaches the process from the shell that issued the SIGINT (a common pattern when capturing stdout to `tee`), `wait $!` will return 127 (not-a-child). In that case the clean exit is evidenced by (a) the trailing `jarvis_serve_nats_shutdown_complete` log line and (b) `kill -0 <pid>` returning non-zero shortly after SIGINT. If you need the exit code, run serve-nats in the foreground (no `nohup`, no `&`) and capture `echo $?` immediately after Ctrl-C.
 
 **Fail modes to watch for:**
-- Phrases out of order — indicates the lifecycle.stop() sequence is wrong
-- A phrase missing — indicates a step was skipped (e.g., never deregistered, so KV still shows jarvis → next boot will conflict)
-- Exit code non-zero — indicates an exception during teardown; capture stderr
+- Events out of order — indicates the `cli/main.py` shutdown sequence regressed (heartbeat must cancel before deregister to avoid a final spurious re-register)
+- An event missing — indicates a step was skipped (e.g., no `fleet_deregister_published` means the KV still shows jarvis → next boot will conflict)
+- Process hangs past ~10 s post-SIGINT — indicates an unawaited task or a stuck drain
+- Exit code non-zero (when readable) — indicates an exception during teardown; capture stderr
 
 ### 3.8 Broker-down hard-fail (AC-005-08)
 

@@ -1,0 +1,17 @@
+{"supervisor_model": "openai:qwen36-workhorse", "event": "jarvis_startup_begin", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-12T14:40:31.081282Z"}
+/home/richardwoollcott/Projects/appmilla_github/jarvis/src/jarvis/infrastructure/lifecycle.py:531: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set — web search will be disabled.
+  config.validate_provider_keys()
+{"event": "web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled."}
+{"backend": "in_memory", "event": "jarvis_store_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-12T14:40:31.081768Z"}
+{"path": "src/jarvis/config/stub_capabilities.yaml", "count": 4, "event": "jarvis_capability_registry_loaded", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-12T14:40:31.088373Z"}
+{"base_url": "http://promaxgb10-41b1:9000", "event": "jarvis_llamaswap_adapter_ready", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-12T14:40:31.088418Z"}
+{"openai_base_url": "http://promaxgb10-41b1:9000/v1", "event": "jarvis_openai_base_url_set", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-12T14:40:31.088450Z"}
+{"count": 1, "event": "jarvis_async_subagents_built", "level": "info", "logger": "jarvis.infrastructure.lifecycle", "timestamp": "2026-05-12T14:40:31.088474Z"}
+{"error_class": "ConnectionRefusedError", "error": "[Errno 111] Connect call failed ('127.0.0.1', 4222)", "event": "nats_error", "level": "warning", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-12T14:40:31.089363Z"}
+{"error_class": "ConnectionRefusedError", "error": "[Errno 111] Connect call failed ('127.0.0.1', 4222)", "event": "nats_error", "level": "warning", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-12T14:40:33.092712Z"}
+{"error_class": "ConnectionRefusedError", "error": "[Errno 111] Connect call failed ('127.0.0.1', 4222)", "event": "nats_error", "level": "warning", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-12T14:40:35.094454Z"}
+{"error_class": "ConnectionRefusedError", "error": "[Errno 111] Connect call failed ('127.0.0.1', 4222)", "event": "nats_error", "level": "warning", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-12T14:40:37.097506Z"}
+{"error_class": "ConnectionRefusedError", "error": "[Errno 111] Connect call failed ('127.0.0.1', 4222)", "event": "nats_error", "level": "warning", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-12T14:40:39.100960Z"}
+{"nats_url": "nats://rich:REDACTED@localhost:4222", "startup_connect_timeout_seconds": 10, "elapsed_seconds": 10.003, "error_class": "TimeoutError", "error": "", "event": "nats_connect_failed", "level": "error", "logger": "jarvis.infrastructure.nats_client", "timestamp": "2026-05-12T14:40:41.091406Z"}
+{"error": "NATS broker unreachable at nats://rich:REDACTED@localhost:4222 after 10.003s (startup_connect_timeout_seconds=10): TimeoutError", "event": "jarvis_serve_nats_startup_failed", "level": "error", "logger": "jarvis.cli.main", "timestamp": "2026-05-12T14:40:41.091569Z"}
+[error] startup failed: NATS broker unreachable at nats://rich:REDACTED@localhost:4222 after 10.003s (startup_connect_timeout_seconds=10): TimeoutError
