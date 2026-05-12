@@ -57,9 +57,18 @@ during the live demo runbook.
 
 ## Implementation Notes
 
-This task does not modify the codebase. Outputs are:
-- A short runbook entry under `docs/runbooks/` recording the demo session
-- The `/task-complete` invocation flipping this task to completed status
+This task does not modify the codebase. Execute the verification by running
+[`docs/runbooks/RUNBOOK-FEAT-JARVIS-006-serve-nats-implementation.md`](../../../docs/runbooks/RUNBOOK-FEAT-JARVIS-006-serve-nats-implementation.md)
+Phases 0–4 on the GB10 — the runbook's "Acceptance Criteria coverage" table
+maps each of the 8 ACs above to a specific runbook phase, and the Phase 4.2
+RESULTS file template generates the evidence artifact this task closes against.
+
+Outputs are:
+- `docs/runbooks/RESULTS-FEAT-JARVIS-006-serve-nats-first-run-YYYY-MM-DD.md` —
+  populated using the template at runbook §4.2
+- Log + screenshot evidence under `docs/runbooks/evidence/feat-jarvis-006-first-run/`
+- The `/task-complete TASK-J006-005` invocation flipping this task to completed
+  status (only when all 8 ACs are ✅ in the RESULTS file)
 
 If any AC fails, file a follow-up task referencing this one and re-run the
 demo against the fix.
