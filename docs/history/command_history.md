@@ -3009,7 +3009,7 @@ GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-006 --verbose
 
 
 
-
+o my mind rather than executiing /Users/richardwoollcott/Projects/appmilla_github/jarvis/tasks/backlog/feat-jarvis-006-nats-chat-gateway/TASK-J006-005-live-openwebui-demo-verification.md shouldn't we be executing the runbook /Users/richardwoollcott/Projects/appmilla_github/jarvis/docs/runbooks/RUNBOOK-FEAT-JARVIS-006-serve-nats-implementation.md on the GB10?
 
 
 
