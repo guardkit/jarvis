@@ -1,0 +1,19 @@
+{
+  "message_id": "7c82bb01-91ba-428a-9e06-e6940080f37d",
+  "timestamp": "2026-05-13T06:08:11.449552Z",
+  "version": "1.0",
+  "source_id": "jarvis",
+  "event_type": "result",
+  "project": null,
+  "correlation_id": "c017fecc-bb45-4845-9385-0b4bf42647b3",
+  "payload": {
+    "command": "chat",
+    "result": {
+      "response": "The architect's judgment is clear:\n\n**Verdict: Misaligned (95% confidence)**\n\nThe proposal would violate ADR-ARCH-001's local-first invariant because:\n\n1. **Automatic escalation bypasses the attended-only gate.** ADR-ARCH-001 explicitly requires explicit user request for cloud escalation. A confidence-triggered programmatic trigger removes that human-in-the-loop requirement.\n\n2. **The invariant is about architecture, not cost.** A per-session budget cap constrains financial risk but doesn't address the architectural concern: cloud LLMs would be in the supervisor's autonomous decision loop, which is exactly what \"hot path\" means.\n\n3. **It changes the supervisor contract.** The supervisor's contract under ADR-ARCH-001 is \"local reasoning for all inference.\" Adding a conditional cloud path means the contract becomes \"local reasoning with automatic cloud fallback\" \u2014 a materially different guarantee.\n\n**What would need to change:**\n\n- **ADR-ARCH-001** would need to be amended to explicitly permit confidence-triggered escalation under defined safety-critical conditions, replacing the attended-only gate with an autonomous escalation policy.\n- **The supervisor contract** would need to be redefined to allow conditional cloud inference rather than guaranteeing purely local inference.\n\n**Alternatives that preserve the local-first invariant:**\n\n- **Pre-computed safety guardrails:** Use the local reasoner with stricter safety prompting or a separate local safety classifier (no cloud involved).\n- **Human-in-the-loop escalation:** When the local reasoner flags low confidence on safety-critical requests, pause and ask the user whether to escalate \u2014 keeping cloud out of the autonomous path but preserving the safety net.\n- **Dual local models:** Run a second, more capable local model (or ensemble) as a confidence check, keeping everything on-prem.\n\nThe core tension: you want the safety net of Opus for edge cases, but ADR-ARCH-001's invariant exists precisely to avoid cloud dependency in the supervisor's decision loop. The question is whether the safety benefit justifies amending the ADR or whether the alternatives above can close the gap.",
+      "tools_called": [],
+      "correlation_id": "c017fecc-bb45-4845-9385-0b4bf42647b3"
+    },
+    "correlation_id": "c017fecc-bb45-4845-9385-0b4bf42647b3",
+    "success": true
+  }
+}
