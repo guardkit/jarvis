@@ -1,0 +1,19 @@
+{
+  "message_id": "f61ba05b-3464-4f8f-8bd6-343610fd524a",
+  "timestamp": "2026-05-13T11:23:21.493558Z",
+  "version": "1.0",
+  "source_id": "jarvis",
+  "event_type": "result",
+  "project": null,
+  "correlation_id": "c30f8b2c-e4f3-4764-9018-5ee0573d560e",
+  "payload": {
+    "command": "chat",
+    "result": {
+      "response": "## Alignment Judgment: **Misaligned** (confidence: 95%)\n\n### Why\n\nADR-ARCH-001's core invariant is that **cloud LLMs are kept out of the supervisor's hot path entirely**. The existing design allows cloud escalation only through the `escalate_to_frontier` tool \u2014 which is **user-initiated and attended-only**. This is a deliberate boundary: the supervisor never makes autonomous decisions to route user requests to cloud models.\n\nThe proposed change introduces **supervisor-initiated automatic escalation** driven by the local reasoner's confidence score. This directly contradicts two parts of ADR-ARCH-001:\n\n1. **The local-first hot-path invariant** \u2014 the supervisor would no longer be the sole decision-maker in the hot path for safety-critical requests; a cloud model would be invoked automatically without user consent.\n2. **The attended-only constraint** \u2014 cloud escalation would become an internal mechanism rather than an explicit user choice, removing the human-in-the-loop gate.\n\n### What would need to change\n\n- **ADR-ARCH-001** would need to be amended (or a new ADR created) to redefine the \"attended-only\" boundary \u2014 explicitly permitting supervisor-triggered cloud escalation under bounded, auditable conditions (e.g., confidence thresholds, budget caps, safety-critical classification).\n- **The supervisor's contract** would need to be updated to define:\n  - What constitutes \"low confidence\" (measurable signal from the local reasoner?).\n  - What qualifies as \"safety-critical\" or \"high-stakes\" (classification taxonomy?).\n  - How the per-session budget cap is enforced and audited.\n  - Whether the user is notified before the escalation fires (partial attended-ness).\n\nWithout these changes, the proposal sits outside ADR-ARCH-001's design envelope. The architect's judgment is clear: **this is a design-level change, not a small tweak** \u2014 it would require an ADR update before implementation.",
+      "tools_called": [],
+      "correlation_id": "c30f8b2c-e4f3-4764-9018-5ee0573d560e"
+    },
+    "correlation_id": "c30f8b2c-e4f3-4764-9018-5ee0573d560e",
+    "success": true
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "message_id": "bff947d2-fa42-48e5-a196-52262a8e8ea3",
+  "timestamp": "2026-05-13T11:23:49.227755Z",
+  "version": "1.0",
+  "source_id": "jarvis",
+  "event_type": "result",
+  "project": null,
+  "correlation_id": "4bfffecf-a443-4149-bd85-ac799e966c06",
+  "payload": {
+    "command": "chat",
+    "result": {
+      "response": "Here's the tutor's response:\n\n---\n\n> That's a fantastic soliloquy to analyse! It's one of Shakespeare's most powerful moments, and there's so much to explore here. Let's take this step by step.\n>\n> First, let's focus on **AO1 \u2014 the text itself**. Before we look at language techniques, what do you notice about what Macbeth is actually seeing? What is the dagger doing, and what's happening around it? Try to describe the scene in your own words.\n\n---\n\nThe tutor is starting with AO1 (knowledge of the text) before moving into AO2 (language analysis). Reply with your description of the scene \u2014 what Macbeth sees, what the dagger does, the context \u2014 and I'll pass it on.",
+      "tools_called": [],
+      "correlation_id": "4bfffecf-a443-4149-bd85-ac799e966c06"
+    },
+    "correlation_id": "4bfffecf-a443-4149-bd85-ac799e966c06",
+    "success": true
+  }
+}
