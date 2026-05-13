@@ -3016,4 +3016,118 @@ GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-006 --verbose
 
 
 
+
+
+What jarvis uses from nats-core (data schemas & types)
+infrastructure/manifest.py:50:
+
+
+from nats_core.manifest import AgentManifest, IntentCapability, ToolCapability
+infrastructure/nats_client.py:55-56:
+
+
+from nats_core.envelope import MessageEnvelope
+from nats_core.events import CommandPayload
+infrastructure/fleet_registration.py:82:
+
+
+from nats_core import (...)  # Topics, schemas, etc.
+So jarvis depends on nats-core for the wire-format types (MessageEnvelope, payload models, Topics registry, AgentManifest). That's the contract that makes the fleet a fleet — without it, jarvis wouldn't be able to talk to specialist-agent or study-tutor.
+
+What jarvis does NOT use from nats-core (the client wrapper)
+jarvis defines its own NATSClient class at jarvis/infrastructure/nats_client.py:89 — same class name, completely separate implementation. It calls nats.connect(...) directly via nats.aio.client.Client:
+
+
+# jarvis/infrastructure/nats_client.py:81
+_nats_connect = nats.connect  # Module-level seam, patched by tests
+
+class NATSClient:
+    """Thin async wrapper around nats.aio.client.Client."""
+This is where it wires reconnected_cb / disconnected_cb / closed_cb directly into the underlying nats-py client — bypassing the layer that nats_core.client.NATSClient provides.
+
+So the correct framing
+What	Source	Affected by TASK-NC10?
+MessageEnvelope, CommandPayload, AgentManifest, Topics, event schemas	nats_core.* (the library)	No — TASK-NC10 doesn't touch these files
+The client wrapper that calls nats.connect() and would receive callbacks	jarvis's own jarvis.infrastructure.nats_client.NATSClient	No — TASK-NC10 modifies a different class jarvis doesn't use
+Same client wrapper, for specialist-agent	nats_core.client.NATSClient	Yes — needs TASK-NC10's new kwargs
+Same client wrapper, for study-tutor	nats_core.client.NATSClient	Yes — needs TASK-NC10's new kwargs
+Why this matters for the plan
+Nothing changes about the three-task plan, but the reasoning for "jarvis doesn't need a parallel consumer task" is sharper:
+
+It's not that jarvis is unrelated to nats-core. It is related.
+It's that the specific change in TASK-NC10 (adding kwargs to nats_core.client.NATSClient.__init__) is in a class jarvis never instantiates.
+jarvis already solved the same fleet-hygiene problem inside its own client wrapper in TASK-J006-010, so the gap on the jarvis side is already closed by a different fix shape.
+My earlier wording ("jarvis bypasses nats-core entirely") was wrong — it bypasses only the client wrapper. I should update the related_work sections in the three task drafts to reflect this more precisely if it matters; the substantive conclusion holds. Want me to tighten that wording in the drafts?
+
+to late they are in progress
+Understood — leaving the drafts as-is. The imprecision is in a Related-work note, not in any acceptance criterion or scope decision, so it won't mislead implementers.
+
+longer term we should get jarvis to use thr nats-core client wrapper?
+Yes, ideally — single client wrapper across the fleet means one place to fix bugs, instrument observability, and evolve the API (the fact that TASK-NC10 is converging on jarvis's exact callback shape is evidence the two are already drifting toward the same design).
+
+The catch is jarvis's wrapper isn't a pure drop-in candidate: it has a classmethod connect() factory that returns None on failure, its own BrokerUnreachableError taxonomy, a module-level _nats_connect seam that the test suite patches everywhere, and probably structlog-style logging conventions that nats_core may not match. So the migration is "first make nats_core.NATSClient capable enough that jarvis's callers don't notice the swap, then port jarvis tests off the _nats_connect seam" — probably a 1-2 week initiative, not a single PR.
+
+A pragmatic intermediate is to keep jarvis.infrastructure.NATSClient as the public surface but have it delegate to nats_core.NATSClient internally — gets you the shared implementation without a wholesale rewrite of jarvis's call sites or tests. Worth a post-demo design task? I can file one in jarvis (or nats-core, depending on which side you'd want to lead) if you want it on the radar.
+
+
+
+/task-create please create a review task to analyse the gap from a test conversation:
+ 
+
+Of those agents, which one would you escalate to if a runtime quality gate failed during an autobuild turn? Walk me through how that handoff would work.
+ 
+ 
+  
+  
+  
+profile
+Jarvis
+Today at 3:37 PM
+    
+
+That's a good question, but none of the registered agents are designed for runtime quality-gate failures during autobuild. Let me walk through what each would actually do:
+
+Architect — Could assess whether the failure indicates a drift from documented architecture, but that's a post-mortem analysis, not a runtime intervention. It doesn't have the authority or mechanism to stop or redirect a build.
+
+Product Owner — Could evaluate whether the failure changes the priority or scope of the feature, but again, that's a planning-level concern. It doesn't handle runtime build failures.
+
+Forge — This is the build pipeline itself. The quality gate failure would surface to Forge as an event, not through another agent. Forge is where the build runs; it's the source of the failure signal, not the resolver.
+
+Ideation — Could brainstorm workarounds, but has no integration with the build system to apply them.
+
+The honest answer: There's no handoff because there's no agent designed for this. A runtime quality-gate failure is an operational event, not an architectural or product question. The current agent fleet treats builds as fire-and-forget (queue and wait for notifications).
+
+What would actually need to happen:
+
+     The quality gate failure emits an event (e.g., pipeline.build-stage-failed.{feature_id})
+     Jarvis receives it and assesses severity
+     If it's a transient failure (flaky test, infra issue) → retry
+     If it's a real defect → stop the build, notify the user, and then potentially route to the right agent:
+        Architect if the failure suggests an architectural contradiction
+        Product Owner if the failure changes acceptance criteria or scope
+        Ideation if we need alternative approaches to unblock
+
+But that's a new capability — a build incident responder — that doesn't exist in the current fleet. The closest thing is Jarvis itself handling it, since I'm the general-purpose agent and the event lands in my context.
+
+Want me to flag this as a gap? It feels like there should be a forge_monitor or build_responder capability that sits between the pipeline events and the specialist agents, deciding which path to take when things go wrong.
+
+Yes — the task file was created successfully. It's on disk at:
+
+tasks/backlog/TASK-REV-A4E2-build-incident-responder-capability-gap.md
+
+15 KB, written 2026-05-12 19:44.
+
+TASK-REV-A4E2 — Review: Build-incident responder capability gap — no fleet agent owns runtime quality-gate failures during AutoBuild
+
+Type: review (task_type: review, review_mode: decision, decision_required: true)
+Status: backlog
+Priority: normal
+The task captures the verbatim probe + Jarvis's full self-assessment, grounds the analysis in the real pipeline subjects (pipeline.{build-started,stage-complete,build-complete,build-failed}.>) and the PASSED | FAILED | GATED | SKIPPED status enum from forge_notifications.py:148, cross-links the three precedent post-mortems (TASK-REV-E73C, J6F1, J6F2) as the regression corpus, and frames four candidate shapes (in-process callback / Jarvis tool / new build-responder-agent core-tier specialist / hybrid) with six required decisions.
+
+Next step: /task-review TASK-REV-A4E2 when you're ready to execute it.
+
+
+
+
+
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-006 --verbose
