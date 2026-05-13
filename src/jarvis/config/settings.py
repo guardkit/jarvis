@@ -66,7 +66,15 @@ class JarvisConfig(BaseSettings):
 
     # -- Phase 2: web search + workspace settings ----------------------------
     web_search_provider: Literal["tavily", "none"] = "tavily"
-    tavily_api_key: SecretStr | None = None
+    # The langchain-tavily SDK natively reads `TAVILY_API_KEY`, so we honour
+    # the un-prefixed variable as well as the `JARVIS_TAVILY_API_KEY` form —
+    # same precedent as `gemini_api_key` (GOOGLE_API_KEY / JARVIS_GEMINI_API_KEY).
+    # TASK-REV-RM01: without this alias the bare `.env` line was silently
+    # ignored and `search_web` returned `ERROR: config_missing` at runtime.
+    tavily_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("TAVILY_API_KEY", "JARVIS_TAVILY_API_KEY"),
+    )
     stub_capabilities_path: Path = Path("src/jarvis/config/stub_capabilities.yaml")
     workspace_root: Path = Path(".").resolve()
 

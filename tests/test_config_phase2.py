@@ -117,6 +117,23 @@ class TestAC002JarvisEnvPrefix:
         assert isinstance(cfg.tavily_api_key, SecretStr)
         assert cfg.tavily_api_key.get_secret_value() == "tvly-from-env-1234"
 
+    def test_tavily_api_key_reads_unprefixed_tavily_api_key(self) -> None:
+        """TASK-REV-RM01: un-prefixed `TAVILY_API_KEY` populates the field.
+
+        The langchain-tavily SDK natively reads `TAVILY_API_KEY`; the alias
+        on `JarvisConfig.tavily_api_key` lets the same `.env` line satisfy
+        both consumers. Without this, `search_web` returned
+        `ERROR: config_missing` from Reachy on 2026-05-13.
+        """
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict(
+            "os.environ", {"TAVILY_API_KEY": "tvly-from-bare-env"}, clear=True
+        ):
+            cfg = JarvisConfig()
+        assert isinstance(cfg.tavily_api_key, SecretStr)
+        assert cfg.tavily_api_key.get_secret_value() == "tvly-from-bare-env"
+
     def test_jarvis_stub_capabilities_path_env_var(self, tmp_path: Path) -> None:
         from jarvis.config.settings import JarvisConfig
 
