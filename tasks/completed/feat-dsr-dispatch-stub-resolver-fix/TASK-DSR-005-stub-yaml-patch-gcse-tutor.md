@@ -2,9 +2,10 @@
 id: TASK-DSR-005
 title: "W1' — Patch stub_capabilities.yaml to mirror live KV gcse-tutor tools"
 task_type: bugfix
-status: backlog
+status: completed
 created: 2026-05-13T11:00:00Z
 updated: 2026-05-13T11:00:00Z
+completed: 2026-05-13T11:08:00Z
 priority: critical
 complexity: 1
 wave: 1

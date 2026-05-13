@@ -139,6 +139,121 @@ capabilities:
     last_heartbeat_at: null
     trust_tier: specialist
 
+  - agent_id: gcse-tutor
+    role: GCSE Tutor
+    description: >
+      Interactive GCSE-level tutoring sessions across English Literature, English
+      Language, Maths, Sciences, History, and other secondary-school subjects.
+      Uses Socratic dialogue scaffolded against AO1/AO2/AO3/AO4 assessment
+      objectives. Best for "tutor me on", "GCSE revision", "explain this passage",
+      "walk me through this poem/equation/concept", and any learner-style
+      coaching exchange at GCSE level. Multi-turn — start a session, take
+      turns, end the session. Not for adult/academic-level research.
+    capability_list:
+      - tool_name: tutor_start_session
+        description: >-
+          Start an interactive GCSE-level tutoring session. Covers English
+          Literature, English Language, Maths, Sciences, History, and other
+          GCSE subjects using Socratic dialogue scaffolded against
+          AO1/AO2/AO3/AO4 assessment objectives. Use whenever a learner asks
+          for tutoring, revision, or subject-specific coaching at GCSE level.
+          Sync; returns session_id immediately; LLM model is warmed up in the
+          background as fire-and-forget. Topic and player_model are optional
+          overrides.
+        risk_level: mutating
+        # Source: study-tutor/src/study_tutor/adapters/manifest.py
+        # _TUTOR_TOOLS[0] tutor_start_session. Parameters mirrored
+        # byte-equivalent per TASK-DSR-005 AC-DSR-005-02 (same contract as
+        # TASK-DSR-001 enforced for architect tools).
+        parameters:
+          type: object
+          properties:
+            student_id:
+              type: string
+              description: >-
+                Stable learner identifier (e.g. "lilymay" or "gcse-user-001").
+                If the caller has no learner ID in context (e.g. an OpenWebUI
+                session without a logged-in learner profile), use a plausible
+                placeholder such as "openwebui-learner" or "gcse-user-001"
+                — gcse-tutor does NOT require the learner to be pre-registered.
+                Do not ask the user for this; pick a sensible default.
+            topic_override:
+              type: string
+              description: >-
+                Optional override for the planned topic; defaults to the
+                student's current curriculum step.
+            player_model:
+              type: string
+              description: "Optional LLM model override (e.g. for A/B experiments)."
+          required:
+            - student_id
+      - tool_name: tutor_turn
+        description: >-
+          Take one teaching turn in an active GCSE tutoring session. Submits
+          the learner's response and returns a Socratic coaching reply that
+          scaffolds the learner toward grade-level analysis using AO1 (text
+          knowledge), AO2 (language and structure), and where appropriate AO3
+          (context) and AO4 (comparison). Use after tutor_start_session
+          whenever the learner sends a new response in an ongoing English
+          Literature, English Language, Maths, Sciences, or History tutoring
+          exchange. Sync, typically returns within 15s.
+        risk_level: mutating
+        # Source: study-tutor/.../manifest.py _TUTOR_TOOLS[1] tutor_turn.
+        parameters:
+          type: object
+          properties:
+            session_id:
+              type: string
+              description: "Session identifier from tutor_start_session."
+            user_message:
+              type: string
+              description: "The learner's message for this turn."
+            player_model:
+              type: string
+              description: "Optional LLM model override for this turn."
+          required:
+            - session_id
+            - user_message
+      - tool_name: tutor_session_status
+        description: >-
+          Check the current state of an active GCSE tutoring session — turn
+          count, current plan step, coaching progress, and AO coverage so
+          far. Use to verify a session is healthy before submitting more
+          learner responses. Sync; read-only; returns current session state
+          for the given session_id.
+        risk_level: read_only
+        # Source: study-tutor/.../manifest.py _TUTOR_TOOLS[2] tutor_session_status.
+        parameters:
+          type: object
+          properties:
+            session_id:
+              type: string
+              description: "Session identifier."
+          required:
+            - session_id
+      - tool_name: tutor_session_end
+        description: >-
+          End an active GCSE tutoring session — captures a final session
+          summary covering AO1/AO2/AO3/AO4 progress and releases planner/LLM
+          resources. Use when a learner indicates they are finished revising
+          or want to wrap up the English Literature, Maths, or other GCSE
+          subject tutoring exchange. Sync; mutating; marks the session ended
+          and releases resources.
+        risk_level: mutating
+        # Source: study-tutor/.../manifest.py _TUTOR_TOOLS[3] tutor_session_end.
+        parameters:
+          type: object
+          properties:
+            session_id:
+              type: string
+              description: "Session identifier."
+          required:
+            - session_id
+    cost_signal: "low (~$0.10/turn — local llama-swap gemma4-tutor)"
+    latency_signal: "10-30s per turn"
+    last_heartbeat_at: null
+    trust_tier: specialist
+
   - agent_id: product-owner-agent
     role: Product Owner
     description: >
