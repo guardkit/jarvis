@@ -3130,4 +3130,190 @@ Next step: /task-review TASK-REV-A4E2 when you're ready to execute it.
 
 
 
+
+
+
+
+
+
+
+/task-create please create the output from the reachy mini conversation in /home/richardwoollcott/Projects/appmilla_github/jarvis/docs/history/reachy-run-1-history.md for two issues. the first is that web search from jarvis via tavily isn't working and the second is that the list of available agents has some that I wasn't expecting - the ideation and the Frontier Escalation agents. Please check if these are real things or just some hard coded valuse
+
+
+
+Both tasks created.
+
+✅ Tasks Created
+TASK-REV-RM01 — Tavily web search not working via Jarvis
+tasks/backlog/TASK-REV-RM01-tavily-web-search-not-working-via-jarvis.md
+
+Priority: high
+Likely root cause: src/jarvis/config/settings.py:69 — tavily_api_key has no AliasChoices, so env_prefix="JARVIS_" means only JARVIS_TAVILY_API_KEY is read. The repo's .env sets bare TAVILY_API_KEY, which is silently ignored.
+Fix pattern already exists at settings.py:85-88 (the gemini_api_key field uses AliasChoices("GOOGLE_API_KEY", "JARVIS_GEMINI_API_KEY")).
+TASK-REV-RM02 — Audit 'Ideation' and 'Frontier Escalation' in the agent list
+tasks/backlog/TASK-REV-RM02-investigate-ideation-and-frontier-escalation-in-agent-list.md
+
+Priority: normal
+Pre-triaged findings embedded:
+Ideation is a real stub at stub_capabilities.yaml:301-345, added intentionally in FEAT-JARVIS-002 — but no live fleet ideation-agent exists, so dispatch would fail unresolved (same shape as TASK-REV-CB48).
+Frontier Escalation is not an agent — it's the escalate_to_frontier tool described at supervisor_prompt.py:122-141. Jarvis's actual response (history line 64) didn't call it an agent; the Reachy realtime LLM mis-labelled it in its spoken summary (line 66).
+Both tasks include decision options and acceptance criteria. Next steps: /task-work TASK-REV-RM01 or /task-work TASK-REV-RM02 when you're ready.
+
+
+
+
+
+/task-work TASK-REV-RM01
+
+Task Work Complete — TASK-REV-RM01
+  
+  🔍 Stack: python
+  ⚙️  Decision: Option C (alias + document)
+
+  Files changed (this task only)
+
+  - src/jarvis/config/settings.py — tavily_api_key wrapped in
+  Field(validation_alias=AliasChoices("TAVILY_API_KEY", "JARVIS_TAVILY_API_KEY")), comment cites the
+  gemini_api_key precedent and task ID.
+  - .env.example — new # ---- Tavily web-search API key ---- block alongside the other provider keys,
+  documents bare TAVILY_API_KEY with JARVIS_TAVILY_API_KEY fallback.
+  - tests/test_config_phase2.py — added test_tavily_api_key_reads_unprefixed_tavily_api_key next to the
+  existing JARVIS-prefixed test, mirroring tests/test_config_feat_j003.py:123-141.
+  - tasks/in_review/TASK-REV-RM01-...md — moved from backlog, frontmatter updated (status: in_review,
+  decision: option_c), full Review Decision write-up + test execution log appended.
+
+  Test results
+
+  - uv run pytest tests/test_config_phase2.py -v → 19 passed (incl. new regression test).
+  - uv run pytest tests/test_config.py tests/test_config_settings.py tests/test_config_feat_j003.py
+  tests/test_search_web.py tests/test_tools_general.py → 234 passed, no regressions. The UserWarning from
+   validate_provider_keys() at settings.py:258-273 still fires when no form of the key resolves —
+  preserving the AC requirement.
+  - Repro against this checkout's .env: bare TAVILY_API_KEY now resolves to a SecretStr (prefix
+  tvly-dev), repr(cfg) does not leak — masking constraint preserved.
+
+  Acceptance criteria status
+
+  - ☑ Hypothesis confirmed (env-name resolution, not missing key / broken install)
+  - ☑ Option C picked with written justification
+  - ☑ AliasChoices added following gemini precedent
+  - ☑ .env.example documents the supported env-var names
+  - ☑ Regression test added next to gemini's test pair
+  - ☐ Live Reachy smoke-test — out of scope here, flagged in the Out-of-Scope/Follow-Ups section for the
+  next attended-surface session.
+
+  Out-of-scope follow-ups (recorded in task body)
+
+  1. Promoting settings.py:258-273 warn → hard-fail on GB10 (needs a DDR).
+  2. Explicit langchain-tavily import smoke check in tests/test_phase*_dependencies.py.
+  3. Live Reachy "search for Talk Factory" repro to close the last AC.
+
+  Note: git status also shows pre-existing modifications to docs/history/command_history.md,
+  src/jarvis/prompts/supervisor_prompt.py, and tests/test_prompts.py — those are not part of this task
+  and were not touched. No commit was made; the user did not ask for one.
+
+
+
+
+
+/task-work TASK-REV-RM02
+
+
+Pre-triaged findings confirmed against source:
+
+  1. Ideation — stub_capabilities.yaml:301-345 declares ideation-agent with generate_alternatives +
+  steelman tools, trust_tier: specialist (not marked stub). Advertised via {available_capabilities} at
+  supervisor_prompt.py:74. No live specialist exists — would hit the same unresolved failure mode as
+  TASK-REV-CB48.
+  2. Frontier Escalation — supervisor_prompt.py:122 is a section heading for the escalate_to_frontier
+  tool, not an agent. History line 64 (Jarvis output) lists "Ideation" but not "Frontier Escalation" —
+  the conflation appears only at line 66 (Reachy realtime LLM rephrasing).
+
+  Now the decision part of the task — I shouldn't pick these unilaterally since the task is flagged
+  decision_required: true and the DDDSW demo is 3 days away (2026-05-16).
+
+● User answered Claude's questions:
+  ⎿  · Ideation stub: which option for the unbuilt ideation-agent advertised via 
+     {available_capabilities}? → A1 — Leave as-is
+     · Frontier Escalation mis-narration: which option for the section heading at 
+     supervisor_prompt.py:122? → B2 — Rename section heading to 'Frontier Escalation Tool' (Recommended)
+ 
+● Decisions captured. Plan: apply B2 (rename section heading to "Frontier Escalation Tool"), keep A1 (no
+  code change for Ideation, just documented justification). Let me check existing supervisor-prompt tests
+   and then make the change.
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+  ⎿  Loaded .claude/rules/patterns/tool-delegation.md
+  ⎿  Loaded .claude/rules/testing.md
+
+● Good — existing assertions use substring matching ("## Frontier Escalation" in ...), so renaming to "##
+   Frontier Escalation Tool" keeps them passing. I'll add a new assertion that locks in the "Tool"
+  suffix.
+
+  Plan:
+  1. Move task: backlog/ → in_progress/
+  2. Rename heading at supervisor_prompt.py:122 (## Frontier Escalation → ## Frontier Escalation Tool)
+  3. Add prompt-content assertion test for the renamed heading
+  4. Run targeted tests
+  5. Update task file with decisions, justifications, AC ticks
+  6. Move to in_review/
+
+
+Task Work Complete — TASK-REV-RM02
+
+  🔍 Stack: python (jarvis DeepAgents project)
+  🎯 Mode: decision task (complexity 0, decision_required: true)
+  ⏱️  Duration: ~10 minutes (audit + one-line prompt rename + two new test assertions)
+
+  Decisions taken (with your input):
+  - Ideation → A1 (leave as-is; the "advertised but unresolved" gap will be lifted by TASK-REV-CB48;
+  minimise churn 3 days before the DDDSW demo)
+  - Frontier Escalation → B2 (rename ## Frontier Escalation → ## Frontier Escalation Tool at
+  src/jarvis/prompts/supervisor_prompt.py:122)
+
+  Code changes:
+  - src/jarvis/prompts/supervisor_prompt.py:122 — section heading renamed
+  - tests/test_prompts.py — new TestRevRm02FrontierEscalationToolHeading class (two assertions: renamed
+  heading present, bare heading absent as regression guard)
+
+  Tests:
+  - tests/test_prompts.py → 85/85 passed
+  - tests/test_capability_descriptor_prompt_block.py → 7/7 passed (sanity-check the
+  {available_capabilities} block still advertises the ideation stub unchanged under A1)
+
+  State transition: backlog/ → in_review/ (all ACs ticked, justifications written into the task file,
+  decisions captured in YAML frontmatter under decisions:).
+
+✻ Brewed for 3m 17s
+
+※ recap: We finished the TASK-REV-RM02 audit: kept the Ideation stub as-is (A1) and renamed the
+  supervisor-prompt heading to "Frontier Escalation Tool" (B2), tests green, task now in in_review. Next:
+   hand it off for human review or move on to TASK-REV-RM01. (disable recaps in /config)
+
+
+
+
+
+
+
+
+
+Done — Tavily is live now. Summary:
+
+Root cause of why your retry still failed: the running Jarvis was a long-lived systemd service (jarvis-serve-nats.service, started ~8 hours ago) holding the pre-fix JarvisConfig instance with tavily_api_key=None. Pulling the code didn't help because JarvisConfig() only constructs once at process startup.
+
+What I did:
+
+Verified jarvis-serve-nats.service was the live process (PID 3712876), launched by user-systemd from this repo's venv with WorkingDirectory = repo root.
+Pre-flight: ran JarvisConfig() standalone under a clean env → resolved tavily_api_key with prefix tvly-dev, length 58. Fix confirmed effective before touching the service.
+systemctl --user restart jarvis-serve-nats.service → new PID 443445, clean boot.
+Confirmed the previously-expected boot warning (web_search_provider='tavily' but TAVILY_API_KEY ... is not set — web search will be disabled., per runbook §5.1 line 509) is absent from the new boot's journal.
+Try your "search for X" prompt again now — search_web should resolve instead of returning config_missing.
+
+One follow-up worth noting for later (not urgent): the systemd EnvironmentFile (~/.config/guardkit/jarvis.env) only carries JARVIS_NATS_URL. The Tavily key resolves because pydantic-settings ALSO loads the repo-local .env from cwd. That's fine but a bit implicit — if jarvis-serve-nats.service's WorkingDirectory ever moves off the repo root, Tavily silently breaks again. The cleaner long-term home for TAVILY_API_KEY is ~/.config/guardkit/jarvis.env alongside JARVIS_NATS_URL, so the service is self-contained. Happy to add it there if you want.
+
+
+
+
+
 GUARDKIT_LOG_LEVEL=DEBUG guardkit autobuild feature FEAT-JARVIS-006 --verbose
