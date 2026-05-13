@@ -119,7 +119,7 @@ tools above (`calculate`, `dispatch_by_capability`, file/IO tools).  The
 reasoner is for posture-driven thinking, not for work the rest of the
 toolbox already does cheaper and faster.
 
-## Frontier Escalation
+## Frontier Escalation Tool
 
 The `escalate_to_frontier` tool is available **only when Rich asks for it
 explicitly** — phrases such as "ask Gemini", "frontier opinion", "second

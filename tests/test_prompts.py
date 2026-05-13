@@ -812,3 +812,28 @@ class TestJ003014RenderedPromptIncludesNewSections:
         assert "## Frontier Escalation" in captured["system_prompt"]
         assert "jarvis-reasoner" in captured["system_prompt"]
         assert "escalate_to_frontier" in captured["system_prompt"]
+
+
+# ---------------------------------------------------------------------------
+# TASK-REV-RM02 (Decision B2) — section heading explicitly frames
+# escalate_to_frontier as a *tool*, not a specialist, to reduce surface for
+# consumer-LLM mis-labelling (e.g. Reachy realtime LLM listing it alongside
+# the specialist roster in docs/history/reachy-run-1-history.md:66).
+# ---------------------------------------------------------------------------
+class TestRevRm02FrontierEscalationToolHeading:
+    """TASK-REV-RM02 B2 — heading reads 'Frontier Escalation Tool', not bare
+    'Frontier Escalation', to make tool-vs-agent disambiguation explicit."""
+
+    def test_frontier_escalation_heading_includes_tool_suffix(self) -> None:
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        assert "## Frontier Escalation Tool" in SUPERVISOR_SYSTEM_PROMPT
+
+    def test_no_bare_frontier_escalation_heading(self) -> None:
+        """The bare heading without the Tool suffix must not appear, so the
+        section can't be misread as a specialist-roster entry."""
+        from jarvis.prompts.supervisor_prompt import SUPERVISOR_SYSTEM_PROMPT
+
+        # Look for the heading-followed-by-newline shape so we don't match the
+        # 'Tool'-suffixed heading as a false positive (substring overlap).
+        assert "## Frontier Escalation\n" not in SUPERVISOR_SYSTEM_PROMPT
