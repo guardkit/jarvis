@@ -1,0 +1,34 @@
+{
+  "task": "TASK-LCA-006",
+  "fix_commit_study_tutor": "3ad9abd",
+  "verified_at_utc": "2026-05-13T08:37:53.327498Z",
+  "verification_method": "CLI smoke via nats request agents.command.jarvis (two prompts)",
+  "container_image": "study-tutor:dev (rebuilt 2026-05-13 ~08:29 UTC)",
+  "smokes": [
+    {
+      "id": "lca-006-smoke-001",
+      "rtt_seconds": 22.66,
+      "summary": "tutor_start_session + first tutor_turn \u2014 Socratic prompt on dagger soliloquy",
+      "success": true
+    },
+    {
+      "id": "lca-006-smoke-002",
+      "rtt_seconds": 38.19,
+      "summary": "second tutor_turn with deliberately-flawed student response (witches-controlled-Macbeth misconception) \u2014 tutor pushed back on agency/AO3",
+      "success": true
+    }
+  ],
+  "container_log_signals": {
+    "coach_unreachable_count": 0,
+    "MalformedCoachOutputError_count": 0,
+    "orchestrator_turn_flagged_count": 0,
+    "orchestrator_turn_completed_count": 3,
+    "coach_misconception_coerced_count": 0
+  },
+  "unit_tests": {
+    "path": "tests/unit/tutoring/coach/test_factory.py",
+    "passed": 61,
+    "elapsed_seconds": 0.09
+  },
+  "verdict": "fix verified \u2014 TASK-LCA-006 regression resolved"
+}

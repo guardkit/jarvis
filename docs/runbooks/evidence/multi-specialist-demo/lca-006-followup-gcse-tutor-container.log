@@ -1,0 +1,20 @@
+2026-05-13 08:29:37,783 INFO study_tutor.cli.rag_wiring: event=rag_wiring_resolved persist_dir=data/chroma collection=gcse-english-v1
+2026-05-13 08:29:37,783 WARNING study_tutor.cli.rag_wiring: event=rag_disabled reason=chromadb_missing
+2026-05-13 08:29:38,060 INFO graphiti_core.driver.falkordb_driver: Index already exists: Attribute 'uuid' is already indexed
+2026-05-13 08:29:38,060 INFO study_tutor.knowledge.graphiti_client: graphiti client ready in 276ms
+2026-05-13 08:29:38,061 WARNING study_tutor.mcp.adapter: event=rag_disabled reason=collection_provider_unwired
+2026-05-13 08:29:38,061 INFO study_tutor.adapters.nats_adapter: Starting NATSAdapter for agent 'gcse-tutor'
+2026-05-13 08:29:38,063 INFO study_tutor.adapters.nats_adapter: Registered agent 'gcse-tutor' to fleet.register
+2026-05-13 08:29:38,063 INFO study_tutor.adapters.nats_adapter: Subscribed (with reply) to command subject 'agents.command.gcse-tutor'
+2026-05-13 08:29:38,064 INFO study_tutor.adapters.nats_adapter: NATSAdapter ready for agent 'gcse-tutor'
+[study-tutor] Serving via NATS as agent_id=gcse-tutor url=nats://host.docker.internal:4222. Press Ctrl+C to stop.
+2026-05-13 08:33:34,915 INFO httpx: HTTP Request: POST http://host.docker.internal:9000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-13 08:33:36,863 INFO httpx: HTTP Request: POST http://host.docker.internal:9000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-13 08:33:36,864 INFO study_tutor.cli.main: event=orchestrator_turn_completed text_name= retrieval_mode=skipped reason=no_text_name
+2026-05-13 08:33:46,078 INFO httpx: HTTP Request: POST http://host.docker.internal:9000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-13 08:34:05,353 INFO httpx: HTTP Request: POST http://host.docker.internal:9000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-13 08:34:05,354 INFO study_tutor.cli.main: event=orchestrator_turn_completed text_name= retrieval_mode=skipped reason=no_text_name
+2026-05-13 08:34:18,012 INFO httpx: HTTP Request: POST http://host.docker.internal:9000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-13 08:34:21,543 INFO httpx: HTTP Request: POST http://host.docker.internal:9000/v1/chat/completions "HTTP/1.1 200 OK"
+2026-05-13 08:34:21,544 INFO study_tutor.cli.main: event=orchestrator_turn_completed text_name= retrieval_mode=skipped reason=no_text_name
+2026-05-13 08:34:30,090 INFO httpx: HTTP Request: POST http://host.docker.internal:9000/v1/chat/completions "HTTP/1.1 200 OK"
