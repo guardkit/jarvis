@@ -224,3 +224,101 @@ So: the *code* is fine. The Coach wrapper's SDK invocation has a transport issue
 ### Out of scope
 
 - Fixing the underlying 8 pre-existing test failures (DB connection refused on 127.0.0.1:5432). Those are environment setup issues, not FEAT-9E59-related.
+
+---
+
+## TASK-ABW-006 — Forge lifecycle events share a workqueue stream; jarvis can't subscribe
+
+**Severity:** high (notification drain into the chat surface is 100% broken)
+**Complexity:** 3
+**Estimated:** 2-4 hours
+**Depends on:** none
+**Implementation mode:** plan-first (a stream-topology decision precedes the change)
+**Repo target:** spans `nats-infrastructure` (stream/consumer config) and `forge`
+(lifecycle-bridge publish target); minor or no change in `jarvis`.
+
+### Context
+
+`jarvis serve-nats` (the OpenWebUI-facing gateway) is supposed to subscribe to
+forge lifecycle events — `pipeline.build-started.>`, `pipeline.stage-complete.>`,
+`pipeline.build-complete.>`, `pipeline.build-failed.>` — via
+`ForgeNotificationsSubscriber`, so build progress drains back into the chat
+turn (`ForgeNotification.render_line()`).
+
+On the 2026-05-15 demo host this subscription **fails at every serve-nats
+startup**:
+
+```
+jarvis_forge_subscriber_start_failed
+nats: BadRequestError: code=400 err_code=10100
+  description='filtered consumer not unique on workqueue stream'
+```
+
+Root cause: the `PIPELINE` JetStream stream is a **workqueue**-retention
+stream. Workqueue streams forbid overlapping filtered consumers — each message
+is delivered to exactly one consumer. `forge-prod` already owns the
+`forge-serve` consumer on `PIPELINE`; jarvis's attempt to add a second
+filtered consumer is rejected. The subscriber soft-fails (DDR-021) and
+`forge_subscriber` is set to `None`, so **every chat turn logs
+`notifications_drained: 0`** — no forge event ever reaches the chat.
+
+This worked on 2026-05-13 (`RESULTS-jarvis-multi-specialist-openwebui-dddsw-demo-2026-05-13.md`
+recorded `notifications_drained=2`). It regressed sometime after — either
+`PIPELINE` was switched to workqueue retention, or `forge-serve`'s filter
+subject was widened to overlap the lifecycle subjects.
+
+Note this is **distinct from** the bridge fast-fail bug (TASK-ABW-003/004):
+ABW-003/004 is about forge-prod *publishing* lifecycle envelopes late/batched;
+ABW-006 is about jarvis being structurally unable to *consume* them at all.
+Both must be fixed for live chat notifications to work.
+
+### Decision needed
+
+Lifecycle/notification events should not share a workqueue stream with the
+`build-queued` work items. Options:
+
+**Path A — dedicated notifications stream (preferred).** Route
+`pipeline.build-started/stage-complete/build-complete/build-failed` to a
+separate stream with `limits` or `interest` retention (multiple overlapping
+consumers allowed). An idle `NOTIFICATIONS` stream already exists on the host
+and looks built for exactly this. `pipeline.build-queued.>` stays on the
+`PIPELINE` workqueue (its once-only dispatch semantics are correct).
+
+**Path B — change `PIPELINE` retention.** Switch `PIPELINE` to `interest`/
+`limits` retention so multiple filtered consumers are allowed. Simpler config
+change but loses the workqueue once-only delivery guarantee that the
+build-queued dispatch path may rely on — needs checking against the
+forge-prod consumer's assumptions.
+
+Path A is the cleaner separation of concerns.
+
+### Scope (Path A)
+
+1. Confirm the `NOTIFICATIONS` stream's subjects/retention; decide whether to
+   reuse it or add a `LIFECYCLE` stream.
+2. Update forge's lifecycle bridge to publish `build-started/stage-complete/
+   build-complete/build-failed` to the notifications stream's subject space
+   (may just be a stream-binding change if subjects stay `pipeline.*`, or a
+   subject rename).
+3. Point jarvis's `ForgeNotificationsSubscriber` (`_get_lifecycle_subjects`)
+   at the new stream/subjects.
+4. Leave `pipeline.build-queued.>` on `PIPELINE`.
+5. Verify end-to-end: a wire-mediated build drains `notifications_drained >= 1`
+   into a serve-nats chat turn.
+
+### Acceptance criteria
+
+- **AC-ABW-006-01:** `jarvis serve-nats` startup logs `jarvis_forge_subscriber_started`
+  and `forge_notifications_subscribed` — no `forge_subscriber_start_failed`.
+- **AC-ABW-006-02:** A wire-mediated FEAT-9E59 build produces at least one
+  chat turn with `notifications_drained >= 1`.
+- **AC-ABW-006-03:** `pipeline.build-queued.>` dispatch still works — forge-prod
+  consumes and builds (no regression to the queue path).
+- **AC-ABW-006-04:** The stream topology (which stream carries which subjects,
+  retention rationale) is documented in `nats-infrastructure`.
+
+### Out of scope
+
+- The bridge fast-fail / batched-envelope behaviour (TASK-ABW-003/004) — a
+  separate fix; ABW-006 only restores jarvis's ability to *consume* lifecycle
+  events.

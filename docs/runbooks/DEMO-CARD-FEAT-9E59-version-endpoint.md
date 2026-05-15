@@ -4,7 +4,7 @@
 
 For the deeper "why" + topology + talk track, see the parent runbook: [RUNBOOK-jarvis-forge-autobuild-version-endpoint-demo.md](RUNBOOK-jarvis-forge-autobuild-version-endpoint-demo.md). For the most recent preflight evidence: [RESULTS-jarvis-forge-autobuild-version-endpoint-demo-2026-05-14-preflight.md](RESULTS-jarvis-forge-autobuild-version-endpoint-demo-2026-05-14-preflight.md).
 
-**Status (2026-05-14):** preflight green, ~18 min end-to-end. Wire-mediated rehearsal still pending. **One known caveat:** if anything in the Player turn fast-fails (< ~2 s), forge-prod's bridge will miss the snapshot, hit the JetStream redelivery loop, and only emit a synthetic `build-failed` after a 5-min deadline timer. For an 18-min happy-path build this does not bite. See [TASKS-ABW-002-005-DRAFT.md](TASKS-ABW-002-005-DRAFT.md) §ABW-003/004 for the architectural follow-up.
+**Status (2026-05-14):** preflight green, ~18 min end-to-end. Wire-mediated rehearsal still pending. **One known caveat:** if anything in the Player turn fast-fails (< ~2 s), forge-prod's bridge will miss the snapshot, hit the JetStream redelivery loop, and only emit a synthetic `build-failed` after a 5-min deadline timer. For an 18-min happy-path build this does not bite. See [TASKS-ABW-002-006-DRAFT.md](TASKS-ABW-002-006-DRAFT.md) §ABW-003/004 for the architectural follow-up.
 
 ---
 

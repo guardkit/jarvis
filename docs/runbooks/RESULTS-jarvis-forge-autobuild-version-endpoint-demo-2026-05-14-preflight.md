@@ -158,7 +158,7 @@ jarvis:
 | ABW-004 | high       | DRAFT  | Langgraph `--allow-blocking` in-memory backend evicts thread state on run end → bridge can't fetch post-run snapshot → un-acked redelivery loop |
 | ABW-005 | low/cosmetic | DRAFT | Coach's SDK test execution wrapper errors with exit code 1, then Coach approves anyway. Tests actually pass when run directly via pytest. |
 
-Draft task descriptions: see [`TASKS-ABW-002-005-DRAFT.md`](TASKS-ABW-002-005-DRAFT.md) (created in this session).
+Draft task descriptions: see [`TASKS-ABW-002-006-DRAFT.md`](TASKS-ABW-002-006-DRAFT.md) (TASK-ABW-006, the forge-lifecycle workqueue-stream bug, was appended 2026-05-15 after the demo-recording sessions surfaced it).
 
 ---
 
