@@ -70,8 +70,10 @@ already carries the two env vars `autobuild_runner` needs (`FORGE_CONFIG_PATH`,
 boot alongside `llama-swap` and `jarvis-serve-nats`.
 
 ```bash
-# 1. Restart the sidecar (one command — systemd handles port release + relaunch).
-systemctl --user restart forge-langgraph-sidecar
+# 1. Restart the sidecar — explicit stop → wait → start (see quirk note below).
+systemctl --user stop forge-langgraph-sidecar
+sleep 5
+systemctl --user start forge-langgraph-sidecar
 sleep 10
 
 # 2. Verify it is up and the autobuild_runner graph imported.
@@ -85,6 +87,22 @@ Expected output:
 - `is-active` returns `active`
 - `curl` returns `LangSmith Deployment`
 - The grep shows both `Importing graph profiling … graph_id=autobuild_runner` and `Application started up in 0.2xx s`
+
+> **Known quirk — `systemctl --user restart` port-8124 race.** A plain
+> `restart` can crash-loop: the outgoing process has not released port 8124
+> before the new one tries to bind, so the new one dies with
+> `OSError: Port 8124 is already in use` and (via `Restart=on-failure`) keeps
+> retrying — `is-active` shows `activating`, never `active`. The explicit
+> **stop → `sleep 5` → start** above sidesteps it. If you ran a bare
+> `restart` and it is stuck `activating`:
+> ```bash
+> systemctl --user stop forge-langgraph-sidecar
+> sleep 5
+> ss -lntp | grep ":8124 " || echo "port free"
+> systemctl --user start forge-langgraph-sidecar
+> ```
+> Post-demo fix: add a post-stop settle delay to the unit so plain `restart`
+> is reliable (not done pre-demo to avoid touching a working service).
 
 ---
 

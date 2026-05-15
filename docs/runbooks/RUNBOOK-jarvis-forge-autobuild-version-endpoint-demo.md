@@ -172,16 +172,24 @@ reads two env vars its parent forge-prod does not yet plumb — both are set as
   to base-dir-only).
 
 **After any `autobuild_runner.py` code change** — `langgraph dev` runs with
-`--no-reload`, so restart the service to pick it up:
+`--no-reload`, so restart the service to pick it up. Use an explicit
+stop → wait → start: a bare `systemctl --user restart` can crash-loop on a
+port-8124 release race (the outgoing process holds the port past the new
+one's bind attempt; the service then stays `activating`, never `active`).
 
 ```bash
-systemctl --user restart forge-langgraph-sidecar
+systemctl --user stop forge-langgraph-sidecar
+sleep 5
+systemctl --user start forge-langgraph-sidecar
 sleep 10
 systemctl --user is-active forge-langgraph-sidecar
 curl -sf http://localhost:8124/openapi.json | jq -r '.info.title'
 journalctl --user -u forge-langgraph-sidecar --since "1 min ago" \
     | grep "Application started up" | head -1
 ```
+
+If a bare `restart` left it stuck `activating`: `stop`, confirm port 8124
+is free (`ss -lntp | grep :8124`), then `start`.
 
 ### 0.7 Confirm forge filesystem allowlist covers api_test
 
