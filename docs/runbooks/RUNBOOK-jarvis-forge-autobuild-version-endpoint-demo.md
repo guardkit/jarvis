@@ -36,7 +36,7 @@ The autobuild is **estimated at 33 minutes** of wall-clock. A stage demo cannot 
 2. **"Pre-warm the autobuild before stage, drain on stage"**. Run `queue_build` from a rehearsal session ~25 min before the talk; the actual chat turn on stage drains the `build-complete` envelope that arrived during the pre-warm window. Tight to coordinate, but lands the "look, forge built it" reveal in a single stage minute.
 3. **"Just show the queue, narrate the rest"**. ~1 min on stage: paste the prompt, point at the wire envelope on a second screen, narrate "this will take ~30 min, the rendered diff will be on the blog post tomorrow." Lowest stage cost; weakest payoff.
 
-Pick framing in §0.7 before stepping on stage. **Recommended: framing 1.**
+Pick framing in §0.9 before stepping on stage. **Recommended: framing 1.**
 
 **Expected wall-clock for a clean rehearsal (full path, off-stage):** ~45-60 min including the 33-min build window.
 
