@@ -1,0 +1,44 @@
+
+Ask Jarvis what agents are available?
+
+I'd like the architect to evaluate whether adding a Claude Opus 4.7 escalation tool to the jarvis supervisor is architecturally sound. The escalation would only fire when the local reasoner has low confidence on safety-critical or high-stakes user requests, and would be bounded by a per-session budget cap. The relevant ADR is ADR-ARCH-001, which commits jarvis to local-first inference via llama-swap and explicitly keeps cloud LLMs out of the supervisor's hot path. Does this proposal align with ADR-ARCH-001's local-first invariant, or what would need to change in the ADR or the supervisor's contract for it to be aligned?
+
+
+Queue a forge build for FEAT-9E59 from `.guardkit/features/FEAT-9E59.yaml` in `appmilla/api_test` on the `ddd-demo` branch. I want to walk through the autobuild end-to-end and see notifications come back through this chat.
+
+
+What's happening with that build?
+
+
+While that's running, can you ask the architect to sanity-check whether exposing GET /version conflicts with anything in our ADRs?
+
+
+
+Anything new from forge yet?
+
+
+Now please start a GCSE English Literature tutoring session on Macbeth, focused on AO1 and AO2 (knowledge of the text and language analysis), then ask the tutor to walk me through how Shakespeare uses imagery to characterise Macbeth in his "Is this a dagger which I see before me" soliloquy.
+
+
+
+
+
+
+
+
+
+Reachy Mini is on 192.168.1.80
+
+
+
+Recommended — single terminal
+This tails the entire forge pipeline lifecycle (build-queued → build-started → stage-complete → build-complete). It's the only pane you actually need on tape for the demo:
+
+
+cd ~/Projects/appmilla_github/nats-infrastructure && set -a && source .env && set +a && nats --server "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" sub "pipeline.>" --raw | tee /tmp/version-demo-pipeline.log
+Optional second terminal (only on the OpenWebUI path)
+Tails the inbound prompt envelope on the fleet pipe — useful if you want to prove the user's chat message hit NATS before jarvis published. Skip it if you're on the CLI path:
+
+
+cd ~/Projects/appmilla_github/nats-infrastructure && set -a && source .env && set +a && nats --server "nats://rich:${RICH_NATS_PASSWORD}@localhost:4222" sub "agents.command.jarvis" --raw | tee /tmp/version-demo-command.log
+Run these before pasting the §4.1 demo prompt — the envelopes land within ~1s of the queue and you want them captured from the start.
