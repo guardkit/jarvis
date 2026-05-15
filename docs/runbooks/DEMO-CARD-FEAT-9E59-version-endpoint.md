@@ -65,9 +65,13 @@ curl -sf http://localhost:8088/healthz
 
 The sidecar runs as a **user systemd service** — `forge-langgraph-sidecar.service`
 (unit: `~/.config/systemd/user/forge-langgraph-sidecar.service`). The unit
-already carries the two env vars `autobuild_runner` needs (`FORGE_CONFIG_PATH`,
-`FORGE_DEFAULT_REPO`) — there is no shell-export dance, and it auto-starts at
-boot alongside `llama-swap` and `jarvis-serve-nats`.
+carries everything `autobuild_runner` needs as `Environment=` lines —
+`FORGE_CONFIG_PATH`, `FORGE_DEFAULT_REPO`, `FORGE_GUARDKIT_PATH`, and a `PATH`
+that includes `~/.agentecflow/bin` + `~/.local/bin` (systemd's default PATH
+omits these — without `FORGE_GUARDKIT_PATH` the build fast-fails on
+`guardkit binary not found`). No shell-export dance; auto-starts at boot
+alongside `llama-swap` and `jarvis-serve-nats`. See RUNBOOK §0.6 for the full
+env-var contract.
 
 ```bash
 # 1. Restart the sidecar — explicit stop → wait → start (see quirk note below).

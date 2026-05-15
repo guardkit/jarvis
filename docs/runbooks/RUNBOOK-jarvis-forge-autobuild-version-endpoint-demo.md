@@ -158,8 +158,8 @@ inactive: `systemctl --user restart forge-langgraph-sidecar`, then
 `journalctl --user -u forge-langgraph-sidecar -n 30` for the cause.
 
 **Env-var contract (baked into the unit):** the sidecar's `autobuild_runner`
-reads two env vars its parent forge-prod does not yet plumb — both are set as
-`Environment=` lines in the service unit, so there is no shell-export step:
+needs the following, all set as `Environment=` lines in the service unit —
+there is no shell-export step:
 
 - `FORGE_DEFAULT_REPO=appmilla/api_test` — the temporary fallback added in
   forge.git commit `7006c7d`; the resolver uses it when `payload.repo` is
@@ -170,6 +170,18 @@ reads two env vars its parent forge-prod does not yet plumb — both are set as
 - `FORGE_CONFIG_PATH=~/forge-state/forge.yaml` — makes the resolver's
   allowlist check read the same config as forge-prod (rather than falling back
   to base-dir-only).
+- `FORGE_GUARDKIT_PATH=~/.agentecflow/bin/guardkit` — the absolute path to the
+  `guardkit` binary. **Required under systemd:** a user service gets systemd's
+  minimal PATH (`/usr/local/bin:/usr/bin:/bin`), which does *not* include
+  `~/.agentecflow/bin`, so the runner's `shutil.which("guardkit")` fallback
+  fails. Without this var the build fast-fails on `guardkit binary not found`
+  and produces no files. (This bit on 2026-05-15 when the sidecar first moved
+  to a systemd service — it had worked previously only because a shell-launched
+  sidecar inherited the operator's rich PATH.)
+- `PATH=~/.agentecflow/bin:~/.local/bin:/usr/local/bin:/usr/bin:/bin` — the
+  `autobuild_runner` spawns `guardkit` with `env=os.environ.copy()`, so the
+  guardkit subprocess inherits this PATH for its own tool calls (git, the
+  bundled claude CLI, etc.).
 
 **After any `autobuild_runner.py` code change** — `langgraph dev` runs with
 `--no-reload`, so restart the service to pick it up. Use an explicit
