@@ -61,33 +61,28 @@ docker ps --filter name=forge-prod --format '{{.Names}}\t{{.Status}}'
 curl -sf http://localhost:8088/healthz
 ```
 
-### A.3 Restart the langgraph sidecar with the required env vars
+### A.3 Restart the langgraph sidecar
 
-The `autobuild_runner` subagent reads two env vars that forge-prod doesn't currently plumb. These MUST be exported in the shell that launches the sidecar.
+The sidecar runs as a **user systemd service** — `forge-langgraph-sidecar.service`
+(unit: `~/.config/systemd/user/forge-langgraph-sidecar.service`). The unit
+already carries the two env vars `autobuild_runner` needs (`FORGE_CONFIG_PATH`,
+`FORGE_DEFAULT_REPO`) — there is no shell-export dance, and it auto-starts at
+boot alongside `llama-swap` and `jarvis-serve-nats`.
 
 ```bash
-# 1. Kill any existing sidecar process and wait for the port to release.
-pkill -f "langgraph dev"
-sleep 5
-ss -lntp 2>/dev/null | grep -q ":8124 " && echo "WARN: port 8124 still bound" || echo "OK: port free"
-
-# 2. Clean persistent queue + relaunch with the env-var contract in place.
-rm -rf ~/Projects/appmilla_github/forge/.langgraph_api/
-cd ~/Projects/appmilla_github/forge
-export FORGE_CONFIG_PATH=/home/richardwoollcott/forge-state/forge.yaml
-export FORGE_DEFAULT_REPO=appmilla/api_test
-(nohup .venv/bin/langgraph dev --config forge.langgraph.json \
-    --port 8124 --host 127.0.0.1 --no-browser --no-reload --allow-blocking \
-    > /tmp/langgraph-sidecar.log 2>&1 &)
+# 1. Restart the sidecar (one command — systemd handles port release + relaunch).
+systemctl --user restart forge-langgraph-sidecar
 sleep 10
 
-# 3. Verify the sidecar is up and the autobuild_runner graph imported.
+# 2. Verify it is up and the autobuild_runner graph imported.
+systemctl --user is-active forge-langgraph-sidecar
 curl -sf http://localhost:8124/openapi.json | jq -r '.info.title'
-grep -E "Application started up|Importing graph profiling.*autobuild_runner" \
-    /tmp/langgraph-sidecar.log | head -3
+journalctl --user -u forge-langgraph-sidecar --since "1 min ago" \
+    | grep -E "Application started up|Importing graph profiling.*autobuild_runner" | head -3
 ```
 
 Expected output:
+- `is-active` returns `active`
 - `curl` returns `LangSmith Deployment`
 - The grep shows both `Importing graph profiling … graph_id=autobuild_runner` and `Application started up in 0.2xx s`
 
@@ -112,7 +107,8 @@ echo '--- forge-prod ---'
 docker ps --filter name=forge-prod --format '{{.Names}} {{.Status}}'
 curl -sf http://localhost:8088/healthz
 
-echo '--- sidecar (must show FORGE_DEFAULT_REPO inherited) ---'
+echo '--- sidecar service ---'
+systemctl --user is-active forge-langgraph-sidecar
 curl -sf http://localhost:8124/openapi.json | jq -r '.info.title'
 
 echo '--- allowlist (must contain api_test path) ---'
@@ -143,7 +139,7 @@ nats --server "$NATS_URL" sub "pipeline.>" --raw | tee /tmp/demo-pipeline.log
 nats --server "$NATS_URL" sub "agents.command.jarvis" --raw | tee /tmp/demo-command.log
 
 # Pane 3 (optional) — sidecar log tail (autobuild_runner messages)
-tail -F /tmp/langgraph-sidecar.log | grep --line-buffered \
+journalctl --user -u forge-langgraph-sidecar -f | grep --line-buffered \
     -E "autobuild_runner|FORGE_DEFAULT_REPO|launching subprocess|guardkit|transitioning"
 ```
 
@@ -252,8 +248,9 @@ mkdir -p "$EVIDENCE"
 cp /tmp/demo-pipeline.log "$EVIDENCE/${DATE}-pipeline.log"
 
 # 2. Sidecar autobuild trace.
-grep -E "autobuild_runner|guardkit|launching subprocess|transitioning|stage_complete" \
-    /tmp/langgraph-sidecar.log > "$EVIDENCE/${DATE}-sidecar-autobuild.log"
+journalctl --user -u forge-langgraph-sidecar --since "60 min ago" \
+    | grep -E "autobuild_runner|guardkit|launching subprocess|transitioning|stage_complete" \
+    > "$EVIDENCE/${DATE}-sidecar-autobuild.log"
 
 # 3. Chat transcript (CLI path only — OpenWebUI keeps it in its own DB).
 [ -f /tmp/demo-jarvis-chat.log ] && \
@@ -278,11 +275,12 @@ Wire-tap shows only `pipeline.build-queued.FEAT-9E59` — no `build-started`. Mo
 
 ```bash
 # Check sidecar is alive
-pgrep -af "langgraph dev"
+systemctl --user is-active forge-langgraph-sidecar
 curl -sf http://localhost:8124/openapi.json | jq -r '.info.title'
 
 # Check sidecar log for the dispatched run
-grep -E "autobuild_runner|graph_id=autobuild_runner" /tmp/langgraph-sidecar.log | tail -10
+journalctl --user -u forge-langgraph-sidecar --since "5 min ago" \
+    | grep -E "autobuild_runner|graph_id=autobuild_runner" | tail -10
 
 # Check forge-prod for the dispatch attempt
 docker logs forge-prod --since 5m 2>&1 | grep -E "FEAT-9E59|dispatch_build|build-queued" | tail -10
@@ -308,7 +306,19 @@ docker ps --filter name=forge-prod --format '{{.Names}} {{.Status}}'
 
 ### G.3 `missing repo in launch payload` in sidecar log
 
-`FORGE_DEFAULT_REPO` is not set in the sidecar's env. Re-run Phase A.3 — make sure `export FORGE_DEFAULT_REPO=appmilla/api_test` is in the shell **before** the `langgraph dev` launch.
+`FORGE_DEFAULT_REPO` is not reaching the sidecar. It is baked into the
+`forge-langgraph-sidecar.service` unit (`Environment=FORGE_DEFAULT_REPO=...`),
+so this should not happen — if it does, the unit was edited or the sidecar
+is being run outside systemd. Check:
+
+```bash
+systemctl --user show forge-langgraph-sidecar -p Environment
+systemctl --user restart forge-langgraph-sidecar
+```
+
+If the env line is missing, re-add it to
+`~/.config/systemd/user/forge-langgraph-sidecar.service`, then
+`systemctl --user daemon-reload && systemctl --user restart forge-langgraph-sidecar`.
 
 ### G.4 Drop to framing 3 (narration only)
 

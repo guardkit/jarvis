@@ -139,43 +139,48 @@ nats --server "$NATS_URL" consumer info PIPELINE forge-serve -j \
 
 > **If `forge-prod` is Exited:** consult the multi-specialist runbook §1.4 for the canonical bring-up. The most common cause is a NATS broker bounce; `docker start forge-prod` usually recovers it. If it crash-loops, the FOLLOWUP-A `lifecycle_bridge_registry` migration may have been lost on a container restart — see [`RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-followup-b-landed.md`](RESULTS-FEAT-JARVIS-INTERNAL-001-first-real-run-2026-05-08-followup-b-landed.md) for the symptom signature.
 
-### 0.6 Confirm langgraph-runner sidecar is reachable + env-var contract
+### 0.6 Confirm langgraph-runner sidecar is reachable
 
 The autobuild_runner subagent runs on the sidecar, not inside forge-prod itself.
+Since 2026-05-15 the sidecar is a **user systemd service** —
+`forge-langgraph-sidecar.service` (unit:
+`~/.config/systemd/user/forge-langgraph-sidecar.service`). It is `enabled`, so
+it auto-starts at boot alongside `llama-swap` and `jarvis-serve-nats`, and
+`Restart=on-failure` self-heals a crash.
 
 ```bash
+systemctl --user is-active forge-langgraph-sidecar
 curl -sf http://localhost:8124/openapi.json | jq -r '.info.title // empty'
 ```
 
-**Pass:** Non-empty title. If empty, redo the multi-specialist runbook §1.5 sidecar boot (the stripped `langgraph.json` dance until forge-followup-orchestrator-graph lands).
+**Pass:** `is-active` returns `active`; `curl` returns a non-empty title. If
+inactive: `systemctl --user restart forge-langgraph-sidecar`, then
+`journalctl --user -u forge-langgraph-sidecar -n 30` for the cause.
 
-**REQUIRED env vars (TASK-ABW-001 hotfix landed 2026-05-14):** the sidecar's `autobuild_runner` reads two env vars its parent forge-prod does not currently plumb. Both MUST be set in the shell that launches the sidecar (langgraph dev inherits the parent env):
+**Env-var contract (baked into the unit):** the sidecar's `autobuild_runner`
+reads two env vars its parent forge-prod does not yet plumb — both are set as
+`Environment=` lines in the service unit, so there is no shell-export step:
+
+- `FORGE_DEFAULT_REPO=appmilla/api_test` — the temporary fallback added in
+  forge.git commit `7006c7d`; the resolver uses it when `payload.repo` is
+  missing, which it currently always is because `dispatch_autobuild_async`
+  doesn't yet forward `repo`/`branch`/`feature_yaml_path` from
+  `BuildQueuedPayload`. Tracked as TASK-ABW-002 (proper plumbing). Without it,
+  every wire-mediated dispatch fast-fails on `missing repo in launch payload`.
+- `FORGE_CONFIG_PATH=~/forge-state/forge.yaml` — makes the resolver's
+  allowlist check read the same config as forge-prod (rather than falling back
+  to base-dir-only).
+
+**After any `autobuild_runner.py` code change** — `langgraph dev` runs with
+`--no-reload`, so restart the service to pick it up:
 
 ```bash
-export FORGE_CONFIG_PATH=/home/richardwoollcott/forge-state/forge.yaml
-export FORGE_DEFAULT_REPO=appmilla/api_test
-```
-
-`FORGE_DEFAULT_REPO` is the temporary fallback added in [forge.git commit 7006c7d](https://_) — the resolver uses it when `payload.repo` is missing, which it currently always is because `dispatch_autobuild_async` doesn't yet forward `repo`/`branch`/`feature_yaml_path` from `BuildQueuedPayload`. Tracked as TASK-ABW-002 (proper plumbing). Without `FORGE_DEFAULT_REPO`, every wire-mediated dispatch fast-fails on `missing repo in launch payload`.
-
-`FORGE_CONFIG_PATH` makes the resolver's allowlist check read the same `~/forge-state/forge.yaml` as forge-prod (rather than falling back to base-dir-only).
-
-**Restart the sidecar after any `autobuild_runner.py` code change** — `langgraph dev` runs with `--no-reload`:
-
-```bash
-pkill -f "langgraph dev"
-sleep 5  # let the port release
-ss -lntp | grep ":8124 " && echo "WARN: port still bound, wait longer"
-rm -rf ~/Projects/appmilla_github/forge/.langgraph_api/
-cd ~/Projects/appmilla_github/forge
-export FORGE_CONFIG_PATH=/home/richardwoollcott/forge-state/forge.yaml
-export FORGE_DEFAULT_REPO=appmilla/api_test
-(nohup .venv/bin/langgraph dev --config forge.langgraph.json \
-    --port 8124 --host 127.0.0.1 --no-browser --no-reload --allow-blocking \
-    > /tmp/langgraph-sidecar.log 2>&1 &)
+systemctl --user restart forge-langgraph-sidecar
 sleep 10
+systemctl --user is-active forge-langgraph-sidecar
 curl -sf http://localhost:8124/openapi.json | jq -r '.info.title'
-grep "Application started up" /tmp/langgraph-sidecar.log | head -1
+journalctl --user -u forge-langgraph-sidecar --since "1 min ago" \
+    | grep "Application started up" | head -1
 ```
 
 ### 0.7 Confirm forge filesystem allowlist covers api_test
