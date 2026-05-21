@@ -30,6 +30,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from deepagents import create_deep_agent
+from langchain.agents.middleware import SummarizationMiddleware
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -50,6 +51,24 @@ logger = logging.getLogger(__name__)
 # Phase 1 domain prompt — no domain file wired yet (FEAT-004+).
 # ---------------------------------------------------------------------------
 _PHASE1_DOMAIN_PROMPT = "No domain-specific instructions configured (Phase 1)."
+
+# ---------------------------------------------------------------------------
+# Conversation summarisation thresholds.
+#
+# The supervisor's InMemorySaver checkpointer accumulates the full message
+# history per session and replays it to the model every turn. A long-running
+# session (e.g. an extended study-tutor dialogue) would otherwise grow past
+# the model's input window and hard-fail with a 400 "exceeds context size".
+#
+# SummarizationMiddleware monitors the accumulated token count; once it
+# crosses _SUMMARY_TRIGGER_TOKENS it replaces older messages with an
+# LLM-generated summary, keeping the most recent _SUMMARY_KEEP_MESSAGES
+# verbatim (the middleware preserves AI/Tool message pairs). The trigger
+# sits well below qwen36-workhorse's 131072-token window so the summary
+# call itself — plus the next reply — always fit.
+# ---------------------------------------------------------------------------
+_SUMMARY_TRIGGER_TOKENS = 90000
+_SUMMARY_KEEP_MESSAGES = 20
 
 # ---------------------------------------------------------------------------
 # Default capability-catalogue text injected when the registry is None or
@@ -335,6 +354,19 @@ def build_supervisor(
         tools=tools if tools is not None else [],
         system_prompt=system_prompt,
         subagents=list(async_subagents) if async_subagents else [],
+        # Bounds the per-session context so a long conversation cannot
+        # overflow the model's input window — older turns collapse into an
+        # LLM summary while recent turns stay verbatim. ``trim_tokens_to_summarize=None``
+        # feeds the full older block to the summary call (the 131072-token
+        # window has room); the summary model is the supervisor model itself.
+        middleware=[
+            SummarizationMiddleware(
+                model=model,
+                trigger=("tokens", _SUMMARY_TRIGGER_TOKENS),
+                keep=("messages", _SUMMARY_KEEP_MESSAGES),
+                trim_tokens_to_summarize=None,
+            ),
+        ],
         checkpointer=InMemorySaver(),
     )
 
