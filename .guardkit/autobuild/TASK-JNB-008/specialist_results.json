@@ -1,18 +1,18 @@
 {
   "phase_4": {
     "status": "passed",
-    "duration_seconds": 41.539540583995404,
+    "duration_seconds": 41.600645541009726,
     "error": null,
     "tests_run": 21,
     "tests_failed": 0,
     "coverage_pct": 0.0,
-    "output_summary": "Result:\ntests/test_v1_scenario_matrix.py .....................                   [100%]\n============================= 21 passed in 40.70s ==============================",
+    "output_summary": "Result:\ntests/test_v1_scenario_matrix.py .....................                   [100%]\n============================= 21 passed in 40.81s ==============================",
     "quality_gates_passed": true
   },
   "phase_5": {
     "status": "failed",
-    "duration_seconds": 150.24557649999042,
-    "error": "SDKTimeoutError: Agent invocation exceeded 145s timeout",
+    "duration_seconds": 65.25112966698362,
+    "error": "SDKTimeoutError: Agent invocation exceeded 60s timeout",
     "issues": [],
     "quality_score": 0.0,
     "recommendations": [],

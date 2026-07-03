@@ -1,0 +1,86 @@
+{
+  "task_id": "TASK-JNB-008",
+  "turn": 5,
+  "decision": "feedback",
+  "issues": [
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file tests/test_v1_scenario_matrix.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file tests/test_v1_scenario_matrix.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "type": "test_failure",
+      "severity": "critical",
+      "description": "The full test suite fails when running `.venv/bin/python -m pytest tests -x -q` from the repo root (exit code 1). While the new test_v1_scenario_matrix.py file passes in isolation (21/21 tests), AC-010 requires the entire repository test suite to be green. The runtime_parity check confirms the full suite failure.",
+      "requirement": "AC-010",
+      "suggestion": "Run `.venv/bin/python -m pytest` from the jarvis repo root to identify which tests are failing outside the new matrix file. Fix any test failures, ensuring the new tests don't break existing tests and that the full suite passes."
+    },
+    {
+      "type": "code_quality",
+      "severity": "minor",
+      "description": "Player claimed files_modified: ['tests/test_v1_scenario_matrix.py'] but git status shows no changes to this file in the current turn. This appears to be inaccurate self-reporting rather than actual work performed this turn.",
+      "requirement": "Accurate reporting",
+      "suggestion": "Ensure files_modified only includes files actually modified in the current turn, not files from previous turns or orchestrator-managed paths."
+    }
+  ],
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "result": "verified",
+      "notes": "Independent tests collected 21 items including 20 scenario test classes plus 1 collect-only assertion test. Evidence shows all required scenario classes implemented."
+    },
+    {
+      "criterion_id": "AC-002",
+      "result": "verified",
+      "notes": "Evidence describes _make_subscriber() helper creating real ForgeNotificationsSubscriber and SlackNotifier instances with only AsyncWebClient mocked. Tests drive synthetic MessageEnvelopes through real components."
+    },
+    {
+      "criterion_id": "AC-003",
+      "result": "verified",
+      "notes": "Evidence confirms plain pytest only - no pytest-bdd imports, no .feature files, no @scenario decorators. All tests use standard pytest.mark.asyncio."
+    },
+    {
+      "criterion_id": "AC-004",
+      "result": "verified",
+      "notes": "TestCollectOnlyCountAssertion class implemented with test_collect_only_count_matches_expected() asserting >=21 tests to prevent collection regression."
+    },
+    {
+      "criterion_id": "AC-005",
+      "result": "verified",
+      "notes": "TestMalformedDrop (scenario 11) and TestUnrecognisedSourceDrop (scenario 12) verify malformed/unrecognised envelopes drop without Slack calls or exceptions."
+    },
+    {
+      "criterion_id": "AC-006",
+      "result": "verified",
+      "notes": "TestDeliveryFailureOutcomePreservation (scenario 13) mocks chat_postMessage to raise SlackApiError and verifies _handle_message() completes without propagating exception, satisfying DDR-007."
+    },
+    {
+      "criterion_id": "AC-007",
+      "result": "verified",
+      "notes": "TestDuplicateTerminalDedup (scenario 10) delivers same build_complete envelope twice and verifies exactly one Slack call (first-wins) with dedup log entry."
+    },
+    {
+      "criterion_id": "AC-008",
+      "result": "verified",
+      "notes": "TestThrottlingBurst (scenario 16) sends burst of 3 notifications, mocks 429 with Retry-After on first call, verifies worker pacing and retry behavior."
+    },
+    {
+      "criterion_id": "AC-009",
+      "result": "verified",
+      "notes": "TestNoReplayOnRestart (scenario 18) creates subscriber, delivers notification, stops, creates new subscriber, verifies no replay - confirming in-memory posture per DDR-027."
+    },
+    {
+      "criterion_id": "AC-010",
+      "result": "rejected",
+      "notes": "FAILED - Runtime parity check shows full test suite fails (exit code 1) when running `.venv/bin/python -m pytest tests -x -q` from repo root. While the new test_v1_scenario_matrix.py passes in isolation (21/21), AC-010 requires the ENTIRE suite to be green. The Player's evidence only demonstrates the isolated file passing, not the full suite."
+    }
+  ],
+  "rationale": "AC-010 is not satisfied - the runtime_parity check definitively shows the full test suite fails (exit code 1) when running pytest from the repo root. While AC-001 through AC-009 are verified based on the successful isolated test run (21/21 tests), the requirement explicitly states the full suite must be green via `.venv/bin/python -m pytest` from the jarvis repo root. The Player must investigate and fix whatever is causing the full suite failure."
+}
