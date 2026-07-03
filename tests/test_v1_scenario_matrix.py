@@ -121,9 +121,9 @@ def _make_subscriber(
         sub.bind_notification_sink(notification_sink)
 
     # Bind session manager (needed for routing)
-    # CRITICAL: Use AsyncMock for async method to avoid "coroutine never awaited" warnings
+    # Note: enqueue_notification is synchronous, not async - use MagicMock
     session_manager = mock.MagicMock()
-    session_manager.enqueue_notification = AsyncMock()
+    session_manager.enqueue_notification = mock.MagicMock()
     sub.bind_session_manager(session_manager)
 
     return sub, nats_client, writer
