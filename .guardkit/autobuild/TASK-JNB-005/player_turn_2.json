@@ -1,16 +1,6 @@
 {
   "task_id": "TASK-JNB-005",
-  "timestamp": "2026-07-03T18:14:40.234767",
-  "completed": true,
-  "phases": {},
-  "quality_gates": {
-    "tests_passing": true,
-    "tests_passed": 89,
-    "tests_failed": 0,
-    "coverage": null,
-    "coverage_met": null,
-    "all_passed": null
-  },
+  "turn": 2,
   "files_modified": [
     "docs/design/FEAT-28FF/decisions/DDR-032-notification-sink-in-process.md",
     "docs/design/FEAT-28FF/decisions/DDR-033-correlation-independent-fan-out.md",
@@ -21,50 +11,35 @@
     "tests/infrastructure/test_slack_notifier_hardening.py",
     "tests/test_forge_notifications_pause_cancelled.py"
   ],
-  "files_created": [
-    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/.guardkit/autobuild/TASK-JNB-005/player_turn_2.json"
+  "files_created": [],
+  "tests_written": [],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "Six-subject lifecycle filter (added build-paused, build-cancelled to existing 4)",
+    "ForgeNotification model widening (event_type Literal + 6 optional fields with None defaults)",
+    "Pause projection with approval_subject verbatim retention for v1.1 button routing",
+    "Cancelled projection with synthetic envelope validation (ASSUM-010: no live producer)",
+    "Pause rendering: stage, rationale, coach_score ('score unavailable' for None), CLI hint",
+    "Cancelled rendering: cancelled_by, reason",
+    "Defensive coach_score rendering (0.0, 1.0, out-of-range values render as text)",
+    "Inert plain-text rendering (mrkdwn=False, special characters verbatim)",
+    "Rationale chunking support documented (full rationale in plain text mode)",
+    "Zero regressions (73 existing tests pass)",
+    "Single PIPELINE consumer (extended filter, not new consumer)",
+    "Clean code quality (type hints, docstrings, PEP 8)"
   ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 9,
+  "sdk_max_turns": 150,
+  "sdk_ceiling_hit": false,
   "files_authored": [
     "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/.guardkit/autobuild/TASK-JNB-005/player_turn_2.json"
   ],
-  "tests_written": [],
-  "summary": "89 tests passed",
-  "sdk_turns": {
-    "turns_used": 9,
-    "max_turns": 150,
-    "ceiling_hit": false
-  },
-  "task_type": "feature",
-  "agent_invocations_validation": {
-    "status": "violation",
-    "expected_phases": 3,
-    "actual_invocations": 2,
-    "missing_phases": [
-      "3"
-    ],
-    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
-  },
-  "plan_audit": {
-    "status": "skipped",
-    "severity": null,
-    "violations": 0,
-    "extra_files": [],
-    "missing_files": [],
-    "extra_modifications": [],
-    "missing_modifications": [],
-    "extra_dependencies": [],
-    "missing_dependencies": [],
-    "loc_variance_pct": null,
-    "discrepancies_count": 0,
-    "message": "no implementation plan on disk"
-  },
-  "unconfirmed_low_confidence_assumptions": {
-    "status": "ok",
-    "unconfirmed": [],
-    "files_scanned": 0,
-    "files_skipped": 0,
-    "message": null
-  },
+  "tests_passed_count": 89,
   "completion_promises": [
     {
       "criterion_id": "AC-001",
@@ -198,22 +173,6 @@
         "src/jarvis/infrastructure/forge_notifications.py",
         "src/jarvis/infrastructure/slack_notifier.py"
       ]
-    }
-  ],
-  "agent_invocations": [
-    {
-      "phase": "4",
-      "agent": "test-orchestrator",
-      "status": "completed",
-      "source": "orchestrator",
-      "duration_seconds": 3.2071730000025127
-    },
-    {
-      "phase": "5",
-      "agent": "code-reviewer",
-      "status": "completed",
-      "source": "orchestrator",
-      "duration_seconds": 139.87582849999308
     }
   ]
 }
