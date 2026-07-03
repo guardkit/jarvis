@@ -1,0 +1,9 @@
+{
+  "turn": 2,
+  "feedback_from_turn": 1,
+  "feedback_summary": "- Direct-mode evidence gate blocked the turn (direct_mode_ac_unverified). Direct mode relaxes coverage/arch gates but still requires verifiable AC delivery, resolved wiring, and runnable registered producers:\n- [direct_mode_ac_unverified] Direct mode: 8/9 acceptance criteria have no disk evidence (unmet: ['AC-001', 'AC-002', 'AC-003', 'AC-004', 'AC-006', 'AC-007', 'AC-008', 'AC-009']). Direct mode relaxes coverage/arch but NOT AC delivery.",
+  "must_fix": [],
+  "should_fix": [],
+  "validation_results": {},
+  "raw_feedback": "- Direct-mode evidence gate blocked the turn (direct_mode_ac_unverified). Direct mode relaxes coverage/arch gates but still requires verifiable AC delivery, resolved wiring, and runnable registered producers:\n- [direct_mode_ac_unverified] Direct mode: 8/9 acceptance criteria have no disk evidence (unmet: ['AC-001', 'AC-002', 'AC-003', 'AC-004', 'AC-006', 'AC-007', 'AC-008', 'AC-009']). Direct mode relaxes coverage/arch but NOT AC delivery."
+}

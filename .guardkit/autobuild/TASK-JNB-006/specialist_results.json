@@ -1,19 +1,18 @@
 {
   "phase_4": {
-    "status": "failed",
-    "duration_seconds": 60.35806595798931,
-    "error": "absent test signal (deterministic Phase 4): Isolated test execution timed out after 60s",
-    "signal_absent": true,
-    "tests_run": 0,
+    "status": "passed",
+    "duration_seconds": 12.64890674999333,
+    "error": null,
+    "tests_run": 25,
     "tests_failed": 0,
     "coverage_pct": 0.0,
-    "output_summary": "Isolated test execution timed out after 60s",
-    "quality_gates_passed": false
+    "output_summary": "Result:\ntests/test_slack_notifier.py .........................                   [100%]\n============================= 25 passed in 11.56s ==============================",
+    "quality_gates_passed": true
   },
   "phase_5": {
-    "status": "skipped",
-    "duration_seconds": 0.0,
-    "error": "phase_4 status=failed",
+    "status": "passed",
+    "duration_seconds": 164.5198783329979,
+    "error": null,
     "issues": [],
     "quality_score": 0.0,
     "recommendations": [],

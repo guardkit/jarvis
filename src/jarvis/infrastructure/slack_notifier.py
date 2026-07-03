@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
@@ -167,9 +166,7 @@ class SlackNotifier:
         self._queue_maxsize = queue_maxsize
         self._stop_timeout = stop_timeout
         self._client = AsyncWebClient(token=bot_token)
-        self._queue: asyncio.Queue[ForgeNotification] = asyncio.Queue(
-            maxsize=queue_maxsize
-        )
+        self._queue: asyncio.Queue[ForgeNotification] = asyncio.Queue(maxsize=queue_maxsize)
         self._started = False
         self._worker_task: asyncio.Task[None] | None = None
         # Dedup map: key -> monotonic timestamp (TASK-JNB-006)
@@ -304,10 +301,11 @@ class SlackNotifier:
                 text = self._render(notification)
 
                 # Deliver with retry budget for 429 responses
-                retries_left = _MAX_429_RETRIES
+                # Budget = initial attempt + MAX_RETRIES
+                attempts_left = _MAX_429_RETRIES + 1
                 delivered = False
 
-                while retries_left > 0 and not delivered:
+                while attempts_left > 0 and not delivered:
                     try:
                         await self._client.chat_postMessage(
                             channel=self._channel_id,
@@ -319,9 +317,9 @@ class SlackNotifier:
                     except SlackApiError as exc:
                         # 429 rate limit handling (TASK-JNB-006 AC-006)
                         if exc.response.status_code == 429:
-                            retries_left -= 1
+                            attempts_left -= 1
 
-                            if retries_left > 0:
+                            if attempts_left > 0:
                                 # Honour Retry-After header
                                 retry_after = exc.response.headers.get("Retry-After")
                                 delay = float(retry_after) if retry_after else 1.0
@@ -330,7 +328,7 @@ class SlackNotifier:
                                     correlation_id=notification.correlation_id,
                                     feature_id=notification.feature_id,
                                     retry_after=delay,
-                                    retries_left=retries_left,
+                                    retries_left=attempts_left - 1,
                                 )
                                 await asyncio.sleep(delay)
                             else:
@@ -437,6 +435,10 @@ class SlackNotifier:
             else notification.completed_at
         )
         hhmm = local_completed_at.strftime("%H:%M")
+
+        if event_type == "build_queued":
+            # Intake event (TASK-JNB-006)
+            return f"[{hhmm}] Forge {feature_id}: build-queued"
 
         if event_type == "stage_complete":
             # Checkpoint slice: specifically the "queued" stage

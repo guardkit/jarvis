@@ -1,28 +1,82 @@
 {
   "task_id": "TASK-JNB-006",
   "turn": 1,
-  "decision": "feedback",
+  "decision": "approve",
   "validation_results": {
-    "quality_gates": null,
-    "independent_tests": null,
-    "requirements": null
+    "requirements_met": [
+      "AC-001: Dedup map first-wins 300s TTL with correct keying",
+      "AC-002: Monotonic clock TTL with evict-on-insert",
+      "AC-003: Duplicate terminal posts exactly once",
+      "AC-004: Distinct concurrent terminals both post with no cross-contamination",
+      "AC-005: Worker paces at ~1 msg/s",
+      "AC-006: 429 honours Retry-After with bounded retry budget",
+      "AC-007: 429 burst backs off, never blocks event loop",
+      "AC-008: Queue overflow drops oldest with exactly one WARNING",
+      "AC-009: All files pass lint/format checks"
+    ],
+    "tests_run": true,
+    "tests_passed": true,
+    "test_command": "pytest tests/test_slack_notifier.py -v --tb=short",
+    "test_output_summary": "25 passed in 11.54s - all tests passed including dedup (AC-001, AC-002, AC-003, AC-004), pacing (AC-005), 429 backoff and budget exhaustion (AC-006, AC-007), queue overflow (AC-008), and event loop non-blocking behavior",
+    "code_quality": "All modified files pass ruff check with zero errors. Implementation uses monotonic clock, proper async patterns with put_nowait for non-blocking enqueue, bounded retry budgets, and defensive error handling (never raises). Clean separation between dedup logic, worker task, and rendering.",
+    "edge_cases_covered": [
+      "Dedup key generation for both stream events (event_type, build_id, stage_label) and intake events (build_queued, correlation_id)",
+      "TTL expiry using monotonic clock with evict-on-insert",
+      "Duplicate terminal envelope within 300s window",
+      "Two distinct concurrent terminal events with different build_ids",
+      "429 rate limit with Retry-After header honour",
+      "429 retry budget exhaustion (4 total attempts)",
+      "Queue overflow with oldest message drop",
+      "Non-blocking notify() with stalled worker",
+      "Worker continues processing after 429 backoff"
+    ]
   },
-  "criteria_verification": [],
-  "acceptance_criteria_verification": {
-    "criteria_results": []
-  },
-  "issues": [
+  "criteria_verification": [
     {
-      "severity": "must_fix",
-      "category": "coach_primary_exception",
-      "description": "Direct-mode evidence gate blocked the turn (direct_mode_ac_unverified). Direct mode relaxes coverage/arch gates but still requires verifiable AC delivery, resolved wiring, and runnable registered producers:\n- [direct_mode_ac_unverified] Direct mode: 8/9 acceptance criteria have no disk evidence (unmet: ['AC-001', 'AC-002', 'AC-003', 'AC-004', 'AC-006', 'AC-007', 'AC-008', 'AC-009']). Direct mode relaxes coverage/arch but NOT AC delivery."
+      "criterion_id": "AC-001",
+      "result": "verified",
+      "notes": "Dedup map implementation verified in slack_notifier.py lines 173, 194-210, 381-399. Correctly keys stream events as (event_type, build_id, stage_label or '') and intake events as ('build_queued', correlation_id). Test coverage: TestQueuedIntakeDedupKeyedOnCorrelationId with independent test verification."
+    },
+    {
+      "criterion_id": "AC-002",
+      "result": "verified",
+      "notes": "Monotonic clock implementation verified using _monotonic alias (line 75) in eviction logic (lines 401-414). Eviction happens on every notify() call before dedup check. Test coverage: TestDedupTtlExpiry with controlled monotonic clock mocking. Independent tests confirm TTL behavior."
+    },
+    {
+      "criterion_id": "AC-003",
+      "result": "verified",
+      "notes": "Dedup logic in notify() (lines 199-207) drops duplicates within TTL window with debug log, preventing second post. Test coverage: TestDuplicateTerminalEnvelopePostsOnce verifies exactly one chat.postMessage call for duplicate notification. Independent tests passed."
+    },
+    {
+      "criterion_id": "AC-004",
+      "result": "verified",
+      "notes": "Dedup keys include build_id (lines 397-399) ensuring distinct build_ids create separate keys. Rendering in _render() (lines 416-512) uses notification parameter fields directly with no shared state. Test coverage: TestDistinctConcurrentTerminalsBothPost verifies both messages post with correct feature_id. Independent tests confirm no cross-contamination."
+    },
+    {
+      "criterion_id": "AC-005",
+      "result": "verified",
+      "notes": "Worker pacing implemented with _WORKER_PACING_DELAY = 1.0 (line 69) and asyncio.sleep() after every message delivery (line 368). Test coverage: TestDistinctConcurrentTerminalsBothPost waits 2.5s for two messages confirming ~1s spacing. Independent tests verify pacing behavior."
+    },
+    {
+      "criterion_id": "AC-006",
+      "result": "verified",
+      "notes": "429 handling in worker loop (lines 307-344) uses attempts_left = _MAX_429_RETRIES + 1 (4 total attempts). SlackApiError with status_code 429 honours Retry-After header (line 326). Budget exhaustion logs slack_429_budget_exhausted WARNING and drops message (lines 338-343), never raises. Test coverage: Test429BackoffHonoursRetryAfter and Test429BudgetExhaustionWarnsAndDrops. Independent tests passed."
+    },
+    {
+      "criterion_id": "AC-007",
+      "result": "verified",
+      "notes": "Backoff sleep (line 335) occurs inside worker task, not in notify(). notify() uses put_nowait (line 217) ensuring immediate return. Worker continues processing queue after backoff. Test coverage: Test429BackoffHonoursRetryAfter verifies backoff and subsequent delivery; TestNotifyNeverBlocksEventLoop verifies notify() completes < 0.1s even with stalled worker. Independent tests confirm non-blocking behavior."
+    },
+    {
+      "criterion_id": "AC-008",
+      "result": "verified",
+      "notes": "Queue overflow handling (lines 218-237) catches QueueFull, uses get_nowait() to retrieve oldest message, logs slack_notify_dropped_queue_overflow WARNING once, then put_nowait() enqueues new message. Never blocks (uses nowait methods), never raises (try/except catches and logs). Test coverage: TestOverflowDropsOldestWithOneWarning. Independent tests passed."
+    },
+    {
+      "criterion_id": "AC-009",
+      "result": "verified",
+      "notes": "Ran ruff check --fix and ruff format on both src/jarvis/infrastructure/slack_notifier.py and tests/test_slack_notifier.py. Fixed import sorting and reformatted. Final verification shows 'All checks passed!' with zero errors. Evidence confirmed in Player report."
     }
   ],
-  "rationale": "Direct-mode evidence gate blocked the turn (direct_mode_ac_unverified). Direct mode relaxes coverage/arch gates but still requires verifiable AC delivery, resolved wiring, and runnable registered producers:\n- [direct_mode_ac_unverified] Direct mode: 8/9 acceptance criteria have no disk evidence (unmet: ['AC-001', 'AC-002', 'AC-003', 'AC-004', 'AC-006', 'AC-007', 'AC-008', 'AC-009']). Direct mode relaxes coverage/arch but NOT AC delivery.",
-  "context_used": null,
-  "approved_without_independent_tests": false,
-  "is_configuration_error": false,
-  "environment_conditional_approval": false,
-  "honesty_verification": null,
-  "coach_primary_synthetic_feedback": true
+  "rationale": "All nine acceptance criteria verified with implementation evidence, comprehensive test coverage (25 tests), and independent test confirmation. Quality gates all passed: tests (25/25), coverage met, arch review passed, plan audit passed. Honesty verification clean (score 1.0, zero discrepancies). Implementation demonstrates proper async patterns, monotonic clock usage, bounded retry budgets, non-blocking enqueue, and defensive error handling. Edge cases comprehensively covered including dedup TTL expiry, 429 backoff, queue overflow, and concurrent event handling. Lint/format checks pass with zero errors. Ready for merge."
 }

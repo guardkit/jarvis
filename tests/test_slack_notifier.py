@@ -118,9 +118,7 @@ class TestNotifyNeverRaises:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """SlackApiError is caught and logged; notify() returns normally."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
 
@@ -161,9 +159,7 @@ class TestNotifyNeverRaises:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Full queue is handled gracefully; notify() does not raise."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
 
@@ -203,9 +199,7 @@ class TestDeliveryFailureLogsWarning:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """SlackApiError triggers WARNING log."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
 
@@ -251,9 +245,7 @@ class TestCheckpointRenderShapes:
     @pytest.mark.asyncio
     async def test_render_build_started(self) -> None:
         """build-started renders with RUNNING status."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -288,9 +280,7 @@ class TestCheckpointRenderShapes:
     @pytest.mark.asyncio
     async def test_render_build_complete_with_pr_url_and_summary(self) -> None:
         """build-complete includes pr_url and summary when present."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -326,9 +316,7 @@ class TestCheckpointRenderShapes:
     @pytest.mark.asyncio
     async def test_render_build_failed_with_reason(self) -> None:
         """build-failed includes failure_reason."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -363,9 +351,7 @@ class TestCheckpointRenderShapes:
     @pytest.mark.asyncio
     async def test_render_stage_complete_queued(self) -> None:
         """Checkpoint slice includes 'queued' event."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -408,21 +394,15 @@ class TestWorkerSurvivesSlackApiError:
     """Worker continues after SlackApiError; subsequent messages deliver."""
 
     @pytest.mark.asyncio
-    async def test_worker_continues_after_error(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_worker_continues_after_error(self, caplog: pytest.LogCaptureFixture) -> None:
         """First message raises SlackApiError; second message delivers."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
 
             # First call raises; second succeeds
             mock_client.chat_postMessage.side_effect = [
-                SlackApiError(
-                    message="first_error", response={"error": "first_error"}
-                ),
+                SlackApiError(message="first_error", response={"error": "first_error"}),
                 {"ok": True},
             ]
 
@@ -489,13 +469,9 @@ class TestSecretTokenNeverLogged:
         assert "**********" in config_repr or "SecretStr" in config_repr
 
     @pytest.mark.asyncio
-    async def test_token_not_in_log_output(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_token_not_in_log_output(self, caplog: pytest.LogCaptureFixture) -> None:
         """Raw token string is absent from all captured log output."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
 
@@ -539,9 +515,7 @@ class TestLifecycle:
     @pytest.mark.asyncio
     async def test_start_is_idempotent(self) -> None:
         """Second call to start() is a no-op."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
 
@@ -559,9 +533,7 @@ class TestLifecycle:
     @pytest.mark.asyncio
     async def test_stop_does_not_hang_on_full_queue(self) -> None:
         """stop() completes within timeout even with full queue."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
 
@@ -610,9 +582,7 @@ class TestPlainTextMrkdwnDisabled:
     @pytest.mark.asyncio
     async def test_mrkdwn_disabled_in_post_message(self) -> None:
         """chat.postMessage called with mrkdwn=False."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -654,9 +624,7 @@ class TestDuplicateTerminalEnvelopePostsOnce:
     @pytest.mark.asyncio
     async def test_duplicate_terminal_posts_once(self) -> None:
         """Same build_complete delivered twice within 300s posts once."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -693,23 +661,19 @@ class TestDedupTtlExpiry:
     @pytest.mark.asyncio
     async def test_dedup_ttl_expiry_evicts_and_reposts(self) -> None:
         """Same key after 300s+ posts again; evict-on-insert works."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls, patch(
-            "jarvis.infrastructure.slack_notifier._monotonic"
-        ) as mock_monotonic:
+        with (
+            patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls,
+            patch("jarvis.infrastructure.slack_notifier._monotonic") as mock_monotonic,
+        ):
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
 
-            # Track call count and return appropriate time
-            call_count = {"count": 0}
+            # Control time progression: start at 0.0, advance to 301.0 after first message
+            current_time = {"value": 0.0}
 
             def monotonic_side_effect() -> float:
-                call_count["count"] += 1
-                # First few calls (first notify): return 0.0
-                # Later calls (second notify after TTL): return 301.0
-                return 0.0 if call_count["count"] <= 10 else 301.0
+                return current_time["value"]
 
             mock_monotonic.side_effect = monotonic_side_effect
 
@@ -728,13 +692,16 @@ class TestDedupTtlExpiry:
                 completed_at=datetime.now(UTC),
             )
 
-            # First delivery
+            # First delivery at time 0.0
             await sink.notify(notification)
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(1.5)  # Wait for worker + pacing
 
-            # Second delivery after TTL expiry (mock advances time)
+            # Advance time past TTL (300s)
+            current_time["value"] = 301.0
+
+            # Second delivery after TTL expiry (time is now 301.0)
             await sink.notify(notification)
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(1.5)  # Wait for worker + pacing
 
             # Should have posted twice (expired entry evicted)
             assert mock_client.chat_postMessage.call_count == 2
@@ -748,9 +715,7 @@ class TestDistinctConcurrentTerminalsBothPost:
     @pytest.mark.asyncio
     async def test_distinct_build_ids_both_post(self) -> None:
         """Two different build_ids post twice; each has correct fields."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -805,9 +770,7 @@ class TestQueuedIntakeDedupKeyedOnCorrelationId:
     @pytest.mark.asyncio
     async def test_queued_intake_dedup_on_correlation_id(self) -> None:
         """Two build_queued with same correlation_id posts once."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -846,9 +809,7 @@ class TestQueuedIntakeDedupKeyedOnCorrelationId:
     @pytest.mark.asyncio
     async def test_queued_different_correlation_ids_both_post(self) -> None:
         """Two build_queued with different correlation_ids post twice."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
             mock_client.chat_postMessage.return_value = {"ok": True}
@@ -876,7 +837,8 @@ class TestQueuedIntakeDedupKeyedOnCorrelationId:
 
             await sink.notify(notification1)
             await sink.notify(notification2)
-            await asyncio.sleep(0.2)
+            # Wait for both messages to be processed (1s pacing between them)
+            await asyncio.sleep(2.5)
 
             # Both post (different correlation_ids)
             assert mock_client.chat_postMessage.call_count == 2
@@ -1040,9 +1002,7 @@ class TestNotifyNeverBlocksEventLoop:
     @pytest.mark.asyncio
     async def test_notify_never_blocks_event_loop(self) -> None:
         """notify() completes immediately even with worker stalled."""
-        with patch(
-            "slack_sdk.web.async_client.AsyncWebClient"
-        ) as mock_client_cls:
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
 
