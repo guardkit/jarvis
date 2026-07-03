@@ -717,3 +717,92 @@ class TestStartupOrdering:
             state.fleet_heartbeat_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await state.fleet_heartbeat_task
+
+
+# ---------------------------------------------------------------------------
+# AC-008 — Synthetic queued + started + complete sequence produces three
+# chat.postMessage calls
+# ---------------------------------------------------------------------------
+class TestSyntheticNotificationSequence:
+    """AC-008: Full wired path from notifications to Slack client."""
+
+    @pytest.mark.asyncio
+    async def test_three_events_produce_three_slack_messages(self) -> None:
+        """A synthetic queued + started + complete sequence produces exactly
+        three chat.postMessage calls on a mocked Slack client."""
+        from datetime import UTC, datetime
+
+        from jarvis.infrastructure.forge_notifications import ForgeNotification
+        from jarvis.infrastructure.slack_notifier import SlackNotifier
+
+        # Create a mock Slack client that tracks postMessage calls
+        mock_slack_client = MagicMock()
+        mock_slack_client.chat_postMessage = AsyncMock()
+
+        # Create a real SlackNotifier with the mocked Slack client
+        notifier = SlackNotifier(
+            bot_token="xoxb-test-token",
+            channel_id="C12345678",
+            queue_maxsize=10,
+            stop_timeout=1.0,
+        )
+        # Replace the client with our mock
+        notifier._client = mock_slack_client
+
+        # Start the notifier so the worker begins draining the queue
+        await notifier.start()
+
+        try:
+            # Create three synthetic notifications
+            now = datetime.now(UTC)
+
+            notification_queued = ForgeNotification(
+                event_type="build_queued",
+                correlation_id="corr-123",
+                feature_id="FEAT-TEST",
+                completed_at=now,
+            )
+
+            notification_started = ForgeNotification(
+                event_type="build_started",
+                correlation_id="corr-123",
+                feature_id="FEAT-TEST",
+                completed_at=now,
+            )
+
+            notification_complete = ForgeNotification(
+                event_type="build_complete",
+                correlation_id="corr-123",
+                feature_id="FEAT-TEST",
+                completed_at=now,
+                pr_url="https://github.com/test/repo/pull/123",
+                summary="Test build completed successfully",
+            )
+
+            # Send all three notifications through the notifier
+            await notifier.notify(notification_queued)
+            await notifier.notify(notification_started)
+            await notifier.notify(notification_complete)
+
+            # Give the worker task time to process the queue
+            await asyncio.sleep(0.2)
+
+            # AC-008: Verify exactly three chat.postMessage calls
+            assert mock_slack_client.chat_postMessage.await_count == 3, (
+                f"Expected 3 Slack messages, got {mock_slack_client.chat_postMessage.await_count}"
+            )
+
+            # Verify the calls were made with correct parameters
+            calls = mock_slack_client.chat_postMessage.await_args_list
+            assert len(calls) == 3
+
+            # Each call should have channel, text, and mrkdwn=False
+            for call in calls:
+                kwargs = call.kwargs
+                assert kwargs["channel"] == "C12345678"
+                assert "text" in kwargs
+                assert kwargs["mrkdwn"] is False
+
+        finally:
+            # Stop the notifier
+            await notifier.stop()
