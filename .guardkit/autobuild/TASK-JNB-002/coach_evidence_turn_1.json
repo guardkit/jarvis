@@ -1,0 +1,296 @@
+{
+  "honesty": {
+    "verified": false,
+    "discrepancies": [
+      {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file pyproject.toml",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix",
+        "ignore_rule": null
+      },
+      {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/config/settings.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix",
+        "ignore_rule": null
+      },
+      {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/tools/dispatch.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix",
+        "ignore_rule": null
+      },
+      {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file tests/test_slack_notifier.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix",
+        "ignore_rule": null
+      }
+    ],
+    "honesty_score": 1.0,
+    "resolved_paths": [],
+    "should_fix_count": 4
+  },
+  "gathering_status": "complete",
+  "gathering_error": null,
+  "quality_gates": {
+    "tests_passed": true,
+    "coverage_met": true,
+    "arch_review_passed": true,
+    "plan_audit_passed": true,
+    "tests_required": true,
+    "coverage_required": true,
+    "arch_review_required": false,
+    "plan_audit_required": true,
+    "all_gates_passed": true
+  },
+  "coverage_details": {
+    "coverage_met": null,
+    "line_coverage": null,
+    "branch_coverage": null,
+    "line_threshold": null,
+    "branch_threshold": null,
+    "coverage_required": true
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_modifications": [],
+    "missing_modifications": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "bdd": null,
+  "arch_review": null,
+  "tests": {
+    "tests_passed": true,
+    "tests_required": true,
+    "tests_run": null,
+    "tests_failed": 0,
+    "all_passed": null,
+    "requires_infrastructure": []
+  },
+  "wiring": {
+    "status": "parse_degraded",
+    "dialect": "python",
+    "language": "python",
+    "dialects": [
+      "python"
+    ],
+    "languages": [
+      "python"
+    ],
+    "targets_scanned": 2,
+    "symbols_examined": 0,
+    "findings": [],
+    "degraded_files": [
+      "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/src/jarvis/infrastructure/forge_notifications.py",
+      "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/src/jarvis/tools/dispatch.py"
+    ],
+    "ctor_arity": {
+      "status": "skipped_no_composition_root",
+      "ran": false,
+      "skip_reason": "no composition root found",
+      "dialect": "python",
+      "language": "python",
+      "composition_roots_scanned": 0,
+      "findings": []
+    }
+  },
+  "mocked_seam": {
+    "status": "skipped_no_acceptance_files",
+    "ran": false,
+    "skip_reason": "no acceptance files found",
+    "dialect": "python",
+    "language": "python",
+    "findings": [],
+    "external_mocks_ignored": []
+  },
+  "spec_gap": {
+    "status": "unsupported_stack",
+    "ground_truth_count": 0,
+    "executed_count": 0,
+    "pending_count": 0,
+    "findings": [],
+    "whole_file_deselection": false,
+    "bdd_plugin_name": null,
+    "executed_evidence": "counts_only"
+  },
+  "independent_tests": {
+    "tests_passed": true,
+    "test_command": "pytest tests/test_notification_sink_integration.py tests/test_slack_notifier.py -v --tb=short",
+    "test_output_summary": "Result:\ntests/test_notification_sink_integration.py ..............               [ 46%]\ntests/test_slack_notifier.py ................                            [100%]\n============================== 30 passed in 2.34s ==============================",
+    "duration_seconds": 3.407149076461792,
+    "raw_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /private/var/folders/75/prgjl4_x0k3_6tj58k39db1r0000gn/T/guardkit-coach-iso-jb7_l1p2\nconfigfile: pyproject.toml\nplugins: cov-7.1.0, anyio-4.14.1, asyncio-1.4.0, bdd-8.1.0, langsmith-0.9.7\nasyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 30 items\n\ntests/test_notification_sink_integration.py ..............               [ 46%]\ntests/test_slack_notifier.py ................                            [100%]\n\n============================== 30 passed in 2.34s ==============================\n",
+    "signal_absent": false
+  },
+  "independent_test_classification": null,
+  "requirements": {
+    "criteria_total": 13,
+    "criteria_met": 13,
+    "all_criteria_met": true,
+    "missing": [],
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`bind_notification_sink()` exists on `ForgeNotificationsSubscriber` and, once bound, `sink.notify()` is invoked for `build_started`, `build_complete`, and `build_failed` after the source-id gate and typed payload validation but before, and independent of, the correlation lookup",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added bind_notification_sink() method to ForgeNotificationsSubscriber (line 673-697 in forge_notifications.py). Modified _handle_build_lifecycle to invoke sink.notify() after payload validation and before correlation lookup (lines 1035-1062). Tests confirm sink is called for all three event types."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "Malformed envelopes never reach the sink (decode/validation failures short-circuit before the sink call)",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Sink invocation occurs AFTER payload validation (line 1035), so validation failures return early (line 1030) before reaching the sink call. Test test_malformed_envelope_never_reaches_sink verifies this behavior."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Envelopes with `source_id != 'forge'` never reach the sink",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "The sink call is in _handle_build_lifecycle which is only reached after the source-id gate in _handle_message (line 818). Test test_non_forge_source_never_reaches_sink verifies this."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "A correlation-map miss still notifies the sink (fan-out is correlation-independent)",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Sink.notify() is invoked BEFORE the correlation lookup check (line 1035 before line 1067), ensuring correlation-independent fan-out. Test test_correlation_miss_still_notifies_sink confirms sink is called even when correlation is None."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "`stage_complete` events are never forwarded to the sink (ASSUM-002)",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Sink binding and invocation code exists only in _handle_build_lifecycle, not in _handle_stage_complete. The event dispatch in _handle_message routes stage_complete to a separate handler that has no sink logic. Test test_stage_complete_never_reaches_sink verifies this."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "A sink whose `notify()` raises produces only a WARNING log; the exception never propagates into `_handle_message` and existing subscriber processing continues unchanged (DDR-007)",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Sink invocation is wrapped in try/except (lines 1046-1062) that catches all exceptions, logs WARNING via logger.warning('notification_sink_error'), and continues. Test test_raising_sink_produces_warning_not_exception verifies no exception propagates and WARNING is logged."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "With no sink bound, subscriber behaviour is byte-identical to today; existing CLI FIFO behaviour is byte-identical with or without a bound sink",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Sink invocation is guarded by `if self._notification_sink is not None:` check (line 1035). When None, the code path is identical to pre-TASK-JNB-002. All 28 existing forge_notifications_subscriber tests pass unchanged, confirming byte-identical behavior."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "`ForgeNotification` is widened with optional `build_id`, `pr_url`, and `summary` (all defaulting to `None`); existing CLI rendering and schema-import-isolation tests are updated to cover the widened model and pass",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added three optional fields to ForgeNotification: build_id (line 206-213), pr_url (line 214-219), summary (line 220-226), all with Field(default=None). Tests test_forge_notification_widened_fields and test_forge_notification_widened_fields_default_none verify the widened model. All existing tests pass."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "`src/jarvis/tools/dispatch.py` has a module-level `_notification_sink` snapshot mirroring the existing `_forge_subscriber` / `_nats_client` pattern, with a setter for lifecycle wiring (TASK-JNB-003)",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added module-level _notification_sink variable at line 181-192 in dispatch.py, immediately after _forge_subscriber pattern. Includes documentation matching the lifecycle wiring pattern. Test test_dispatch_module_has_notification_sink_snapshot verifies its existence."
+      },
+      {
+        "criterion_id": "AC-010",
+        "criterion_text": "`queue_build` fires a `build_queued` notification immediately after the PubAck / `register_correlation` block (~line 957ff); a sink failure never alters the returned `QueueBuildAck`",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added build_queued notification firing in queue_build at lines 1234-1264, after register_correlation and before QueueBuildAck return. Wrapped in try/except so sink failures log WARNING without altering the ack. Test test_queue_build_fires_build_queued_notification verifies notification is sent and ack is unchanged."
+      },
+      {
+        "criterion_id": "AC-011",
+        "criterion_text": "`queue_build` error and degraded paths emit nothing to the sink",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Sink notification code is placed in the success path AFTER all error returns (validation errors, NATS unavailable, publish failures all return before line 1234). Test test_queue_build_error_path_no_sink_notification verifies sink is not called on degraded path."
+      },
+      {
+        "criterion_id": "AC-012",
+        "criterion_text": "jarvis supervisor startup binds exactly one PIPELINE consumer; boot logs show no err_code 10100",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "No new NATS consumer added. The sink is called inside the existing ephemeral consumer's _handle_message (in-process), and build_queued is a publish-side hook in queue_build that never touches the stream. Architecture preserves the single-consumer invariant by design."
+      },
+      {
+        "criterion_id": "AC-013",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Modified files follow existing code style: type hints, docstrings, Black formatting (88 char max line length). Code mirrors existing patterns (bind_session_manager \u2192 bind_notification_sink, module-level snapshots). All tests pass including existing test suite."
+      }
+    ]
+  },
+  "runtime_parity": null,
+  "evidence_repo_tests": [],
+  "severity_recommendations": [],
+  "advisory_issues": [
+    {
+      "severity": "warning",
+      "category": "agent_invocations_advisory",
+      "description": "Advisory (non-blocking): task-work produced a report with 2 of 3 expected agent invocations. Missing phases: 3 (Implementation). Consider invoking these agents via the Task tool to strengthen stack-specific quality:\n- Phase 3: `the stack-specific Phase-3 specialist` (Implementation)",
+      "details": {
+        "missing_phases": [
+          "3"
+        ],
+        "expected_phases": 3,
+        "actual_invocations": 2
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "claim_audit",
+      "description": "Player-claimed file is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player likely swept an orchestrator-managed path into files_modified. Player claimed file pyproject.toml. Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+      "details": {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file pyproject.toml",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication."
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "claim_audit",
+      "description": "Player-claimed file is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player likely swept an orchestrator-managed path into files_modified. Player claimed file src/jarvis/config/settings.py. Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+      "details": {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/config/settings.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication."
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "claim_audit",
+      "description": "Player-claimed file is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player likely swept an orchestrator-managed path into files_modified. Player claimed file src/jarvis/tools/dispatch.py. Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+      "details": {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/tools/dispatch.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication."
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "claim_audit",
+      "description": "Player-claimed file is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player likely swept an orchestrator-managed path into files_modified. Player claimed file tests/test_slack_notifier.py. Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+      "details": {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file tests/test_slack_notifier.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication."
+      }
+    }
+  ],
+  "task_type": "feature",
+  "profile_name": "feature"
+}

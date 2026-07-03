@@ -91,6 +91,7 @@ from jarvis.infrastructure.routing_history import (
     MemoryClientProtocol,
     RoutingHistoryWriter,
 )
+from jarvis.infrastructure.slack_notifier import create_slack_sink
 from jarvis.sessions.manager import SessionManager
 from jarvis.shared.exceptions import ConfigurationError
 from jarvis.tools import (
@@ -211,7 +212,10 @@ def should_emit_voice_ack(
         if voice_reactive_adapters is not None
         else DEFAULT_VOICE_REACTIVE_ADAPTER_IDS
     )
-    return adapter_id in voice_set and swap_status.eta_seconds > VOICE_ACK_ETA_THRESHOLD_SECONDS
+    return (
+        adapter_id in voice_set
+        and swap_status.eta_seconds > VOICE_ACK_ETA_THRESHOLD_SECONDS
+    )
 
 
 def emit_voice_ack_and_queue(
@@ -315,13 +319,21 @@ class AppState:
             (FEAT-JARVIS-005 / TASK-J005-008). ``None`` when NATS soft-
             failed at startup — ``shutdown`` skips the ``stop()`` step in
             that case.
+        notification_sink: The :class:`NotificationSink` (SlackNotifier
+            or NoOpSink) constructed at startup for Forge build event
+            notifications (TASK-JNB-003). Always populated (never ``None``)
+            — when Slack config is absent, this holds a NoOpSink that
+            performs no network calls. ``shutdown`` calls ``stop()``
+            unconditionally.
     """
 
     config: JarvisConfig
     supervisor: CompiledStateGraph[Any, Any, Any, Any]
     store: BaseStore
     session_manager: SessionManager
-    capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list)
+    capability_registry: list[CapabilityDescriptor] = dataclasses.field(
+        default_factory=list
+    )
     llamaswap_adapter: LlamaSwapAdapter | None = None
     nats_client: NATSClient | None = None
     memory_client: MemoryClientProtocol | None = None
@@ -329,6 +341,7 @@ class AppState:
     fleet_heartbeat_task: asyncio.Task[None] | None = None
     capabilities_registry: CapabilitiesRegistry | None = None
     forge_subscriber: ForgeNotificationsSubscriber | None = None
+    notification_sink: Any = None  # NotificationSink protocol (TASK-JNB-003)
 
 
 # ---------------------------------------------------------------------------
@@ -616,9 +629,13 @@ async def build_app_state(config: JarvisConfig) -> AppState:
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
-            capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
+            capabilities_registry = _build_stub_capabilities_registry(
+                config, capability_registry
+            )
     else:
-        capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
+        capabilities_registry = _build_stub_capabilities_registry(
+            config, capability_registry
+        )
 
     dispatch_semaphore = DispatchSemaphore(cap=config.dispatch_concurrent_cap)
     log.info(
@@ -626,13 +643,37 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         cap=config.dispatch_concurrent_cap,
     )
 
-    # 7c. FEAT-JARVIS-005 (TASK-J005-008) — start the Forge stage-complete
+    # 7c. TASK-JNB-003 — construct and start the notification sink (SlackNotifier
+    # or NoOpSink) for Forge build event notifications. The sink is always
+    # constructed (never raises for any config permutation per AC-001) and
+    # started BEFORE the subscriber binds/starts (AC-003 start ordering).
+    notification_sink = create_slack_sink(config)
+    try:
+        await notification_sink.start()
+    except Exception as exc:
+        # Defensive — create_slack_sink returns either SlackNotifier or NoOpSink,
+        # both of which have idempotent start() that should never raise. Log and
+        # continue; the sink will degrade to no-op behavior.
+        log.warning(
+            "jarvis_notification_sink_start_failed",
+            error_class=type(exc).__name__,
+            error=str(exc),
+        )
+    else:
+        log.info("jarvis_notification_sink_started")
+
+    # 7d. FEAT-JARVIS-005 (TASK-J005-008) — start the Forge stage-complete
     # subscriber over ``pipeline.stage-complete.>``. The subscriber is
     # constructed only when NATS is up (DDR-021 soft-fail keeps the
     # supervisor alive on NATS-down) and started AFTER fleet registration
     # has either succeeded or fallen through, BEFORE the session manager is
     # constructed. ``bind_session_manager(...)`` happens later — once the
     # session manager exists — per design.md §8.
+    #
+    # TASK-JNB-003: The notification sink is bound to the subscriber via
+    # bind_notification_sink() before the subscriber starts, so the subscriber's
+    # _handle_build_lifecycle can invoke sink.notify() for build_started,
+    # build_complete, and build_failed events (AC-002).
     forge_subscriber: ForgeNotificationsSubscriber | None = None
     if nats_client is not None:
         forge_subscriber = ForgeNotificationsSubscriber(
@@ -641,6 +682,11 @@ async def build_app_state(config: JarvisConfig) -> AppState:
             queue_cap=config.forge_notifications_queue_cap,
             correlation_cap=config.forge_correlation_map_cap,
         )
+        # AC-002: Bind the notification sink to the subscriber so lifecycle
+        # events flow through the same instance that queue_build uses (via
+        # the dispatch module-level snapshot below).
+        forge_subscriber.bind_notification_sink(notification_sink)
+        log.info("jarvis_notification_sink_bound_to_subscriber")
         try:
             await forge_subscriber.start()
         except Exception as exc:
@@ -674,6 +720,10 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # (``capabilities_registry``) keeps the prompt-block wiring
     # backwards compatible — the supervisor prompt still consumes the
     # ``list[CapabilityDescriptor]`` form.
+    #
+    # TASK-JNB-003 — the ``notification_sink`` kwarg snapshots the sink
+    # into ``jarvis.tools.dispatch._notification_sink`` so queue_build
+    # can fire build_queued notifications (AC-002).
     tool_list_attended = assemble_tool_list(
         config,
         capability_registry,
@@ -683,6 +733,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         dispatch_semaphore=dispatch_semaphore,
         forge_subscriber=forge_subscriber,
         capabilities_registry=capabilities_registry,
+        notification_sink=notification_sink,
     )
     log.info(
         "jarvis_tool_list_attended_assembled",
@@ -702,6 +753,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         dispatch_semaphore=dispatch_semaphore,
         forge_subscriber=forge_subscriber,
         capabilities_registry=capabilities_registry,
+        notification_sink=notification_sink,
     )
     log.info(
         "jarvis_tool_list_ambient_assembled",
@@ -779,6 +831,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         fleet_heartbeat_task=fleet_heartbeat_task,
         capabilities_registry=capabilities_registry,
         forge_subscriber=forge_subscriber,
+        notification_sink=notification_sink,
     )
 
     log.info(
@@ -855,6 +908,23 @@ async def shutdown(state: AppState) -> None:
         except Exception as exc:
             log.warning(
                 "jarvis_forge_subscriber_stop_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 1c. TASK-JNB-003 — stop the notification sink AFTER the subscriber so
+    # any in-flight notifications from the subscriber's message handler have
+    # a chance to drain through the sink's queue (AC-003 stop ordering).
+    # Both SlackNotifier.stop() and NoOpSink.stop() are idempotent and
+    # bounded; the wrapper here is defensive belt-and-braces. The sink is
+    # always populated (never None) — when Slack config is absent, it's a
+    # NoOpSink that short-circuits to a no-op.
+    if state.notification_sink is not None:
+        try:
+            await state.notification_sink.stop()
+        except Exception as exc:
+            log.warning(
+                "jarvis_notification_sink_stop_warning",
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
@@ -946,6 +1016,9 @@ async def shutdown(state: AppState) -> None:
         # FEAT-JARVIS-005 (TASK-J005-008) — also disarm the forge subscriber
         # so a re-entrant ``build_app_state`` does not see a stale reference.
         _dispatch._forge_subscriber = None
+        # TASK-JNB-003 — also disarm the notification sink so a re-entrant
+        # ``build_app_state`` does not see a stale reference.
+        _dispatch._notification_sink = None
     except Exception as exc:
         log.warning(
             "jarvis_layer2_disarm_warning",

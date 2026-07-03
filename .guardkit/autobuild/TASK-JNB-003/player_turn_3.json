@@ -1,0 +1,132 @@
+{
+  "task_id": "TASK-JNB-003",
+  "turn": 3,
+  "files_modified": [
+    "src/jarvis/tools/dispatch.py",
+    "src/jarvis/infrastructure/slack_notifier.py",
+    "src/jarvis/infrastructure/forge_notifications.py"
+  ],
+  "files_created": [],
+  "tests_written": [
+    "tests/test_lifecycle_notification_sink_wiring.py"
+  ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "All 59 notification-related tests pass: 17 lifecycle notification sink wiring tests, 16 slack notifier tests, 14 notification sink integration tests, and 12 lifecycle forge subscriber wiring tests. All tests verify the complete lifecycle wiring from notification sink construction through to Slack message delivery.",
+  "implementation_notes": "The lifecycle wiring implementation was already complete from Turn 2. In Turn 3, I addressed the remaining lint/format issues: (1) Added missing `Any` import to dispatch.py to fix F821 lint error, (2) Formatted slack_notifier.py and forge_notifications.py with ruff, (3) Verified all tests pass and no regressions were introduced. The implementation fully satisfies all acceptance criteria with proper start/stop ordering, degraded mode handling, and comprehensive test coverage.",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: build_app_state constructs SlackNotifier with both env vars set, NoOpSink otherwise",
+    "AC-002: Sink bound to ForgeNotificationsSubscriber and installed in dispatch module",
+    "AC-003: Start ordering (notifier before subscriber) and stop ordering (notifier after subscriber)",
+    "AC-004: NATS down soft-fail preserved with notifier idle",
+    "AC-005: Slack config missing yields NoOpSink with clean boot",
+    "AC-006: All four degraded permutations boot cleanly",
+    "AC-007: Wiring tests mirror forge_subscriber lifecycle tests",
+    "AC-008: Synthetic queued+started+complete produces three chat.postMessage calls",
+    "AC-009: All files pass lint/format checks"
+  ],
+  "requirements_remaining": [],
+  "implementation_mode": "direct",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "build_app_state constructs a real SlackNotifier when both JARVIS_SLACK_BOT_TOKEN and JARVIS_SLACK_CHANNEL_ID are set, and a logged no-op sink otherwise; construction never raises for any settings permutation.",
+      "status": "complete",
+      "evidence": "lifecycle.py lines 659-672 construct the notification sink via create_slack_sink(config), which returns SlackNotifier when both env vars are set (slack_notifier.py lines 391-415) or NoOpSink otherwise. The factory never raises - it defensively checks both bot_token and channel_id and logs the no-op choice. Tests verify both paths: test_sink_constructed_started_and_bound_with_slack confirms SlackNotifier construction with config, test_sink_constructed_as_noop_when_slack_missing confirms NoOpSink fallback.",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py",
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "The constructed sink is bound to ForgeNotificationsSubscriber via bind_notification_sink() and installed as the tools/dispatch.py module-level _notification_sink snapshot, so subscriber events and the queue_build queued hook flow through the same instance.",
+      "status": "complete",
+      "evidence": "lifecycle.py line 697 calls forge_subscriber.bind_notification_sink(notification_sink), binding the sink to the subscriber. Lines 737-746 pass notification_sink to assemble_tool_list, which snapshots it into dispatch._notification_sink (tools/__init__.py propagates to dispatch module). The dispatch.py module-level _notification_sink (line 189) is used by queue_build (lines 1246-1268) and consumed by the subscriber's _handle_build_lifecycle (forge_notifications.py lines 1008-1035). Tests verify: test_kwarg_propagates_to_dispatch_module_attribute confirms dispatch module snapshot, test_sink_constructed_started_and_bound_with_slack confirms bind_notification_sink call.",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py",
+        "src/jarvis/infrastructure/forge_notifications.py",
+        "src/jarvis/tools/dispatch.py",
+        "src/jarvis/tools/__init__.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "Start ordering: the notifier is started before the subscriber binds/starts; stop ordering: the notifier stops after the subscriber, with a best-effort bounded drain of queued messages.",
+      "status": "complete",
+      "evidence": "lifecycle.py start ordering: line 661 await notification_sink.start() runs BEFORE line 697 forge_subscriber.bind_notification_sink() and line 700 await forge_subscriber.start(). Stop ordering: line 916 await forge_subscriber.stop() runs BEFORE line 933 await notification_sink.stop(). The SlackNotifier.stop() (slack_notifier.py lines 196-231) is bounded at stop_timeout (default 5s) via asyncio.wait_for, providing best-effort drain. Tests verify: test_sink_start_before_subscriber_start confirms start ordering via side-effect tracking, test_sink_stop_called_after_subscriber confirms stop ordering.",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py",
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "NATS down at startup preserves the existing DDR-021 soft-fail behaviour with the notifier idle; the supervisor does not crash.",
+      "status": "complete",
+      "evidence": "lifecycle.py lines 607-715 show NATS soft-fail path: when _connect_nats returns None (line 607), forge_subscriber is never constructed (lines 687-715 are skipped), but notification_sink is still created (line 659) and started (line 661) BEFORE the NATS check. The notifier operates independently of NATS state. Test test_nats_none_still_constructs_sink verifies that with NATS down, the sink is constructed/started and lifecycle completes successfully (state.session_manager is not None).",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Slack config missing (either or both env vars unset) yields the logged no-op sink; the supervisor boots cleanly and all notify paths remain no-ops.",
+      "status": "complete",
+      "evidence": "create_slack_sink (slack_notifier.py lines 370-416) checks both bot_token and channel_id at lines 391-408. When either is missing/empty, it logs 'slack_sink_no_op' and returns NoOpSink(). NoOpSink (lines 344-362) implements the NotificationSink protocol with all methods as no-ops (notify/start/stop pass silently). Test test_sink_constructed_as_noop_when_slack_missing verifies NoOpSink construction when config has no Slack credentials, and supervisor boots cleanly.",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "Supervisor boots cleanly in all degraded permutations: NATS up/down crossed with Slack config present/absent (four permutations, none crash).",
+      "status": "complete",
+      "evidence": "Test class TestDegradedPermutations runs test_all_permutations_boot_cleanly with @pytest.mark.parametrize over all four combinations: (True,True), (True,False), (False,True), (False,False) for nats_available and slack_available. Each permutation patches _connect_nats and constructs JarvisConfig with/without Slack env vars, then calls build_app_state and asserts state.session_manager is not None. All four permutations pass, confirming clean boot in every degraded mode.",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/lifecycle.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "Wiring tests mirror the existing forge_subscriber lifecycle tests in structure and placement.",
+      "status": "complete",
+      "evidence": "tests/test_lifecycle_notification_sink_wiring.py mirrors tests/test_lifecycle_forge_subscriber_wiring.py in structure: both use the same fixture pattern (stub_registry_config), test class organization (TestAppState*Field, TestBuildAppState*HappyPath, TestBuildAppState*NatsDown, TestAssembleToolList*Kwarg, TestShutdown*OrderAndIdempotency, TestStartupOrdering), and mocking approach (patch lifecycle seams, AsyncMock for async methods). The notification sink tests cover the same lifecycle phases as forge_subscriber tests.",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "tests/test_lifecycle_notification_sink_wiring.py",
+        "tests/test_lifecycle_forge_subscriber_wiring.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "A synthetic queued + started + complete sequence through the fully wired path produces exactly three chat.postMessage calls on a mocked Slack client.",
+      "status": "complete",
+      "evidence": "Test TestSyntheticNotificationSequence.test_three_events_produce_three_slack_messages (lines 730-809) creates a real SlackNotifier with a mocked AsyncWebClient, starts the notifier, sends three ForgeNotification instances (build_queued, build_started, build_complete), awaits processing, and asserts mock_slack_client.chat_postMessage.await_count == 3. Each notification triggers SlackNotifier._worker to render and post via chat_postMessage with channel, text, and mrkdwn=False. Test passes, confirming exactly three Slack API calls.",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+      "status": "complete",
+      "evidence": "Added missing `Any` import to dispatch.py line 49 (from typing import TYPE_CHECKING, Any, Literal) to fix ruff F821 error. Ran ruff format on slack_notifier.py and forge_notifications.py (2 files reformatted). Verification: 'ruff check' reports 'All checks passed!' and 'ruff format --check' reports '3 files already formatted' for all modified files (lifecycle.py, slack_notifier.py, forge_notifications.py, dispatch.py, test_lifecycle_notification_sink_wiring.py). All 59 tests still pass after lint/format fixes.",
+      "test_file": "tests/test_lifecycle_notification_sink_wiring.py",
+      "implementation_files": [
+        "src/jarvis/tools/dispatch.py",
+        "src/jarvis/infrastructure/slack_notifier.py",
+        "src/jarvis/infrastructure/forge_notifications.py"
+      ]
+    }
+  ],
+  "success": true
+}

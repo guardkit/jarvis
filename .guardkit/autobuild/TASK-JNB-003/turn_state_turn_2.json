@@ -1,0 +1,26 @@
+{
+  "id": "TURN-FEAT-28FF-2",
+  "feature_id": "FEAT-28FF",
+  "task_id": "TASK-JNB-003",
+  "turn_number": 2,
+  "player_summary": "Implementation attempt",
+  "player_decision": "feedback",
+  "coach_decision": "feedback",
+  "coach_feedback": "- Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file src/jarvis/infrastructure/lifecycle.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..\n- Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file src/jarvis/tools/__init__.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..\n- Runtime-parity failure: the deliverable passed pytest but its declared runtime entry point FAILED to run (exit=1, expected=0). This is a 'passes tests but does not run' defect \u2014 fix the deliverable so it runs standalone. Command: set -e\npytest tests -x -q\n",
+  "mode": "continuing_work",
+  "blockers_found": [],
+  "progress_summary": "Turn 2: feedback",
+  "acceptance_criteria_status": {},
+  "files_modified": [
+    "tests/test_lifecycle_notification_sink_wiring.py"
+  ],
+  "tests_passed": 17,
+  "tests_failed": 0,
+  "coverage": null,
+  "arch_score": null,
+  "started_at": "2026-07-03T17:31:58.821323",
+  "completed_at": "2026-07-03T17:31:58.821323",
+  "duration_seconds": null,
+  "lessons_from_turn": [],
+  "what_to_try_next": null
+}

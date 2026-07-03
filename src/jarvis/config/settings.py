@@ -228,6 +228,15 @@ class JarvisConfig(BaseSettings):
         ),
     )
 
+    # -- FEAT-28FF: Slack notification settings (TASK-JNB-001) --------------
+    # JARVIS_SLACK_BOT_TOKEN — Slack bot token for posting notifications.
+    # None triggers no-op sink (no network calls). SecretStr masks in logs.
+    slack_bot_token: SecretStr | None = None
+
+    # JARVIS_SLACK_CHANNEL_ID — Slack channel ID for notification delivery.
+    # None triggers no-op sink alongside slack_bot_token.
+    slack_channel_id: str | None = None
+
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
         env_file=".env",

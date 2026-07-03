@@ -1,0 +1,67 @@
+{
+  "task_id": "TASK-JNB-008",
+  "turn": 4,
+  "decision": "feedback",
+  "issues": [
+    {
+      "type": "test_failure",
+      "severity": "critical",
+      "description": "Full test suite fails with exit code 1. Runtime parity check shows 2 failures in tests/test_v1_scenario_matrix.py (TestMalformedDrop, TestUnrecognisedSourceDrop) when run as part of the full suite, despite passing 21/21 in isolation.",
+      "requirement": "AC-010: Full suite green via `.venv/bin/python -m pytest` from the jarvis repo root",
+      "suggestion": "Three resolution paths: (1) Prove these failures exist on the baseline branch before your changes - run `git stash && pytest tests/test_v1_scenario_matrix.py` to demonstrate pre-existing pollution, then update AC-010 to exclude pre-existing failures; (2) Fix the structlog state isolation issue you diagnosed - ensure each test properly resets structlog configuration in setup/teardown; (3) Add pytest fixtures to isolate these tests from suite-wide pollution (e.g., autouse fixtures that reset global state)."
+    }
+  ],
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "result": "verified",
+      "notes": "All 20 scenario test classes implemented and confirmed by independent test collection showing 21 items (20 scenarios + 1 count assertion test). Class names mirror scenario names as required."
+    },
+    {
+      "criterion_id": "AC-002",
+      "result": "verified",
+      "notes": "Evidence shows _make_subscriber() creates real ForgeNotificationsSubscriber and SlackNotifier instances, mocking only AsyncWebClient.chat_postMessage. Tests call real _handle_message() with synthetic MessageEnvelope bytes."
+    },
+    {
+      "criterion_id": "AC-003",
+      "result": "verified",
+      "notes": "No .feature files, no pytest-bdd imports, header explicitly states 'Plain pytest ONLY'. Verified by evidence bundle."
+    },
+    {
+      "criterion_id": "AC-004",
+      "result": "verified",
+      "notes": "TestCollectOnlyCountAssertion implements test_collect_only_count_matches_expected() asserting >=21 tests. Independent test run confirms 21 items collected. Collection regression protection in place."
+    },
+    {
+      "criterion_id": "AC-005",
+      "result": "verified",
+      "notes": "TestMalformedDrop and TestUnrecognisedSourceDrop both implemented, testing drop with WARNING log and zero Slack calls without raising. Tests pass in isolation per independent_tests evidence."
+    },
+    {
+      "criterion_id": "AC-006",
+      "result": "verified",
+      "notes": "TestDeliveryFailureOutcomePreservation verifies DDR-007 contract: SlackApiError caught, logged, message dropped, _handle_message completes without exception. Outcome preservation confirmed."
+    },
+    {
+      "criterion_id": "AC-007",
+      "result": "verified",
+      "notes": "TestDuplicateTerminalDedup tests first-wins 300s TTL with structlog capture confirming 'slack_notify_dropped_duplicate' debug log on second delivery. Dedup semantics verified."
+    },
+    {
+      "criterion_id": "AC-008",
+      "result": "verified",
+      "notes": "TestThrottlingBurst tests 429 Retry-After handling with burst of 3 notifications. Worker honours retry delay confirmed. Overflow drop covered by existing SlackNotifier tests."
+    },
+    {
+      "criterion_id": "AC-009",
+      "result": "verified",
+      "notes": "TestNoReplayOnRestart tests two lifecycles: first sends notification, then rebuilds subscriber/notifier and verifies no additional calls. In-memory DDR-027 posture confirmed."
+    },
+    {
+      "criterion_id": "AC-010",
+      "result": "rejected",
+      "notes": "Runtime parity check definitively shows full suite exit code 1 (failure). While matrix tests pass 21/21 in isolation, the full suite has 2 failures. Player claims pre-existing pollution but provides no baseline comparison. AC-010 requires full suite green - not achieved."
+    }
+  ],
+  "rationale": "Outstanding work on 9/10 acceptance criteria with honest reporting and well-architected tests. However, AC-010 explicitly requires 'Full suite green' and runtime_parity evidence shows exit_code=1. The claim of pre-existing pollution needs proof (baseline comparison) or the pollution needs to be fixed. Matrix tests are fundamentally sound (21/21 pass in isolation), so this is a test isolation issue rather than a correctness problem. Provide evidence of baseline state or fix the structlog isolation to achieve full suite green."
+}

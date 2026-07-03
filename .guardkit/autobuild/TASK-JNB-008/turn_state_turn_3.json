@@ -1,0 +1,26 @@
+{
+  "id": "TURN-FEAT-28FF-3",
+  "feature_id": "FEAT-28FF",
+  "task_id": "TASK-JNB-008",
+  "turn_number": 3,
+  "player_summary": "Implementation attempt",
+  "player_decision": "feedback",
+  "coach_decision": "feedback",
+  "coach_feedback": "- Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file tests/test_v1_scenario_matrix.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..\n- AC-010 requires full suite green via `.venv/bin/python -m pytest` from repo root. Runtime parity check shows the full test suite failed (exit_code: 1) when running `.venv/bin/python -m pytest tests -x -q`. While the new matrix tests pass in isolation (21/21), the broader test suite is not green.: Run `.venv/bin/python -m pytest tests -v` from the repo root to identify which tests are failing. Either fix the failures or confirm they are pre-existing and document the baseline. AC-010 requires demonstrating the full suite is green, not just the new tests.\n- 17 RuntimeWarnings about unawaited coroutines in tests/test_v1_scenario_matrix.py at line 1292 of forge_notifications.py. Warning: 'coroutine AsyncMockMixin._execute_mock_call was never awaited'. This suggests async mocks are not being properly awaited in the test harness.: Investigate the async mock setup in the test helpers. The _make_subscriber() fixture may need to properly await async mock calls or configure AsyncMock differently to avoid these warnings.\n... and 1 more issues",
+  "mode": "continuing_work",
+  "blockers_found": [],
+  "progress_summary": "Turn 3: feedback",
+  "acceptance_criteria_status": {},
+  "files_modified": [
+    "tests/test_v1_scenario_matrix.py"
+  ],
+  "tests_passed": null,
+  "tests_failed": null,
+  "coverage": null,
+  "arch_score": null,
+  "started_at": "2026-07-03T21:09:17.637822",
+  "completed_at": "2026-07-03T21:09:17.637822",
+  "duration_seconds": null,
+  "lessons_from_turn": [],
+  "what_to_try_next": null
+}

@@ -1,0 +1,118 @@
+{
+  "honesty": {
+    "verified": true,
+    "discrepancies": [],
+    "honesty_score": 1.0,
+    "resolved_paths": [],
+    "should_fix_count": 0
+  },
+  "gathering_status": "complete",
+  "gathering_error": null,
+  "quality_gates": {
+    "tests_passed": true,
+    "coverage_met": true,
+    "arch_review_passed": true,
+    "plan_audit_passed": true,
+    "tests_required": false,
+    "coverage_required": false,
+    "arch_review_required": false,
+    "plan_audit_required": false,
+    "all_gates_passed": true
+  },
+  "coverage_details": {
+    "coverage_met": true,
+    "line_coverage": null,
+    "branch_coverage": null,
+    "line_threshold": null,
+    "branch_threshold": null,
+    "coverage_required": false
+  },
+  "plan_audit": null,
+  "bdd": null,
+  "arch_review": null,
+  "tests": {
+    "tests_passed": true,
+    "tests_required": false,
+    "tests_run": null,
+    "tests_failed": 0,
+    "all_passed": true,
+    "requires_infrastructure": []
+  },
+  "wiring": null,
+  "mocked_seam": null,
+  "spec_gap": null,
+  "independent_tests": {
+    "tests_passed": true,
+    "test_command": "skipped",
+    "test_output_summary": "Independent test verification skipped (tests not required for documentation tasks)",
+    "duration_seconds": 0.0,
+    "raw_output": null,
+    "signal_absent": false
+  },
+  "independent_test_classification": null,
+  "requirements": {
+    "criteria_total": 6,
+    "criteria_met": 6,
+    "all_criteria_met": true,
+    "missing": [],
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "A DDR exists under jarvis `docs/design` (following the repo's existing DDR naming/numbering convention) covering the in-process sink seam: no second PIPELINE consumer (err_code 10100 rationale named), deferral of the FEAT-JARVIS-006 `jarvis.notification.{adapter}` promotion, and the `NotificationSink` protocol described as the plug point for a future JARVIS-stream publisher.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Created DDR-032 at docs/design/FEAT-28FF/decisions/DDR-032-notification-sink-in-process.md following the established naming convention (DDR-###-descriptive-title.md pattern, continuing from DDR-031). The DDR comprehensively documents: (1) workqueue err_code 10100 single-consumer constraint with explicit citation of nats-infrastructure provisioning, (2) explicit section 'Deferred: FEAT-JARVIS-006 jarvis.notification.{adapter} Wire Promotion' explaining why wire promotion is out of v1 scope, (3) 'Future-proof plug point' rationale section describing how NotificationSink protocol serves as the seam for JARVIS-stream publishers, and (4) complete architectural context for why the sink is in-process rather than a second consumer."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "A DDR exists covering correlation-independent fan-out: restart resilience for the operator-global surface as the rationale, the accepted noise consequence (non-jarvis-queued builds now notify the phone) stated explicitly, and a config toggle named as the rollback lever.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Created DDR-033 at docs/design/FEAT-28FF/decisions/DDR-033-correlation-independent-fan-out.md. The DDR includes: (1) dedicated 'Restart Resilience for the Operator-Global Surface' rationale section with concrete overnight-build scenario demonstrating why correlation-independent fan-out is required, (2) explicit 'Accepted Consequence: Deliberate Noise' section stating that non-jarvis-queued builds will notify the phone and why this is deliberate not a bug, (3) 'Rollback Lever: Config Toggle' section naming JARVIS_SLACK_NOTIFY_CORRELATED_ONLY as the documented escape hatch, and (4) 'Operator Sign-Off on Noise Consequence' section recording explicit acceptance. The decision flow and call-sequence ordering is documented with numbered steps."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "A DDR exists covering Slack-surface dedup placement: enqueue-time first-wins 300s TTL inside `SlackNotifier`, both key shapes documented, and the in-process-only (crash-loop can double-post) posture tied to DDR-027.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Created DDR-034 at docs/design/FEAT-28FF/decisions/DDR-034-slack-dedup-placement.md. The DDR documents: (1) 'Dedup Map Design' section specifying first-wins, 300s TTL (ASSUM-006), monotonic clock, evict-on-insert mechanics, (2) 'Key Shapes' section with explicit documentation of both forms: (event_type, build_id, stage_label or '') for stream events and ('build_queued', correlation_id) for intake events, with concrete examples, (3) 'In-Process Only (Crash-Loop Can Double-Post)' section with explicit scenario showing how crash-loop within 300s window can cause double-post and why this is accepted, (4) direct citation of DDR-027 no-replay / DDR-028 in-memory posture as precedent, and (5) 'Placement Rationale' section explaining why dedup lives in the sink rather than subscriber or Forge."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "A DDR exists covering the ASSUM-010 v1 acceptance: pause-is-last-signal accepted for v1, the day-one unit-validated build-cancelled handler (TASK-JNB-005) noted, and closure explicitly delegated to v1.1 TASK-JNB-102.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Created DDR-035 at docs/design/FEAT-28FF/decisions/DDR-035-assum-010-v1-acceptance.md. The DDR includes: (1) 'v1 Split Decision' section with explicit enumeration of why pause-is-last-signal is accepted for v1, (2) documentation that build-cancelled handler is implemented and unit-validated day-one in TASK-JNB-005 even though no live producer exists in v1, (3) 'Accepted Consequence' section showing example scenario where pause-is-last-signal manifests, (4) dedicated 'v1.1 Closure: TASK-JNB-102' section explicitly delegating gap closure to Forge-side publish_build_cancelled wiring, and (5) 'Rationale for the Split' explaining why the handler is implemented in v1 despite having no producer (preserves v1.1 path as Forge-only change)."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Every DDR cross-references DDR-007, DDR-021, and DDR-027 where relevant, and cites the spec assumption ids it rests on (at minimum ASSUM-002, ASSUM-006, ASSUM-010, ASSUM-011).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "All four DDRs include comprehensive cross-references in their metadata headers and content: DDR-032 cites DDR-007 (never-raise contract), DDR-021 (NATS soft-fail), DDR-027 (workqueue retention, ephemeral consumer), and assumptions ASSUM-002 (suppressed events), ASSUM-011 (build_queued hook). DDR-033 cites DDR-027 (ephemeral/in-memory), DDR-028 (LRU map), and assumptions ASSUM-002, ASSUM-006 (300s TTL). DDR-034 cites DDR-027, DDR-028 and assumption ASSUM-006. DDR-035 cites DDR-032, DDR-033 and assumption ASSUM-010. Each DDR has a 'Related' metadata field with markdown links to the referenced DDRs using relative paths following the repository structure."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "DDRs cross-reference each other and the implementing tasks (TASK-JNB-001/002/003/005/006) so a reader can trace decision \u2192 code.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "All DDRs include 'Cross-References' sections and 'Related' metadata fields linking to implementing tasks. DDR-032 links to TASK-JNB-001 (SlackNotifier component), TASK-JNB-002 (bind_notification_sink), TASK-JNB-003 (lifecycle wiring). DDR-033 links to TASK-JNB-002 (call placement). DDR-034 links to TASK-JNB-001 (component), TASK-JNB-006 (hardening). DDR-035 links to TASK-JNB-005 (pause+cancelled handler), TASK-JNB-102 (v1.1 closure). Cross-references between DDRs are bidirectional: DDR-032 \u2194 DDR-033 (fan-out semantics), DDR-032 \u2194 DDR-034 (dedup placement), DDR-033 \u2194 DDR-034 (key shapes), DDR-032/033 \u2192 DDR-035 (architecture context). Each task link uses relative markdown paths to the actual task files in tasks/design_approved/ and tasks/backlog/."
+      }
+    ]
+  },
+  "runtime_parity": {
+    "ran": false,
+    "passed": false,
+    "command": "set -e\n./.venv/bin/python -m pytest tests -x -q\n",
+    "exit_code": null,
+    "expected_exit": 0,
+    "timed_out": false,
+    "stderr_tail": "",
+    "skipped_reason": "parallel_wave"
+  },
+  "evidence_repo_tests": [],
+  "severity_recommendations": [],
+  "advisory_issues": [],
+  "task_type": "documentation",
+  "profile_name": "documentation"
+}

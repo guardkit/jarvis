@@ -1,0 +1,175 @@
+{
+  "honesty": {
+    "verified": false,
+    "discrepancies": [
+      {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/infrastructure/lifecycle.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix",
+        "ignore_rule": null
+      },
+      {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/tools/__init__.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix",
+        "ignore_rule": null
+      }
+    ],
+    "honesty_score": 1.0,
+    "resolved_paths": [],
+    "should_fix_count": 2
+  },
+  "gathering_status": "complete",
+  "gathering_error": null,
+  "quality_gates": {
+    "tests_passed": true,
+    "coverage_met": true,
+    "arch_review_passed": true,
+    "plan_audit_passed": true,
+    "tests_required": true,
+    "coverage_required": true,
+    "arch_review_required": false,
+    "plan_audit_required": true,
+    "all_gates_passed": true
+  },
+  "coverage_details": {
+    "coverage_met": true,
+    "line_coverage": null,
+    "branch_coverage": null,
+    "line_threshold": null,
+    "branch_threshold": null,
+    "coverage_required": true
+  },
+  "plan_audit": null,
+  "bdd": null,
+  "arch_review": null,
+  "tests": {
+    "tests_passed": true,
+    "tests_required": true,
+    "tests_run": null,
+    "tests_failed": 0,
+    "all_passed": true,
+    "requires_infrastructure": []
+  },
+  "wiring": null,
+  "mocked_seam": null,
+  "spec_gap": null,
+  "independent_tests": {
+    "tests_passed": true,
+    "test_command": "pytest tests/test_lifecycle_notification_sink_wiring.py -v --tb=short",
+    "test_output_summary": "Result:\ntests/test_lifecycle_notification_sink_wiring.py::TestAssembleToolListNotificationSinkKwarg::test_default_kwarg_clears_dispatch_module_attribute\ntests/test_lifecycle_notification_sink_wiring.py::TestAssembleToolListNotificationSinkKwarg::test_ambient_call_also_propagates\ntests/test_lifecycle_notification_sink_wiring.py::TestStartupOrdering::test_sink_start_before_subscriber_start\n/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_lifecycle_notification_sink_wiring.py:70: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n======================= 17 passed, 15 warnings in 1.22s ========================",
+    "duration_seconds": 2.049578905105591,
+    "raw_output": "============================= test session starts ==============================\nplatform darwin -- Python 3.11.14, pytest-9.1.1, pluggy-1.6.0\nrootdir: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF\nconfigfile: pyproject.toml\nplugins: cov-7.1.0, anyio-4.14.1, asyncio-1.4.0, bdd-8.1.0, langsmith-0.9.7\nasyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 17 items\n\ntests/test_lifecycle_notification_sink_wiring.py .................       [100%]\n\n=============================== warnings summary ===============================\ntests/test_lifecycle_notification_sink_wiring.py::TestBuildAppStateNotificationSinkHappyPath::test_sink_constructed_started_and_bound_with_slack\n  /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_lifecycle_notification_sink_wiring.py:94: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n    cfg.validate_provider_keys()\n\ntests/test_lifecycle_notification_sink_wiring.py::TestBuildAppStateNotificationSinkHappyPath::test_sink_constructed_started_and_bound_with_slack\ntests/test_lifecycle_notification_sink_wiring.py::TestBuildAppStateNotificationSinkHappyPath::test_sink_constructed_as_noop_when_slack_missing\ntests/test_lifecycle_notification_sink_wiring.py::TestBuildAppStateNotificationSinkNatsDown::test_nats_none_still_constructs_sink\ntests/test_lifecycle_notification_sink_wiring.py::TestDegradedPermutations::test_all_permutations_boot_cleanly[True-True]\ntests/test_lifecycle_notification_sink_wiring.py::TestDegradedPermutations::test_all_permutations_boot_cleanly[True-False]\ntests/test_lifecycle_notification_sink_wiring.py::TestDegradedPermutations::test_all_permutations_boot_cleanly[False-True]\ntests/test_lifecycle_notification_sink_wiring.py::TestDegradedPermutations::test_all_permutations_boot_cleanly[False-False]\ntests/test_lifecycle_notification_sink_wiring.py::TestStartupOrdering::test_sink_start_before_subscriber_start\n  /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/src/jarvis/infrastructure/lifecycle.py:539: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n    config.validate_provider_keys()\n\ntests/test_lifecycle_notification_sink_wiring.py::TestBuildAppStateNotificationSinkHappyPath::test_sink_constructed_as_noop_when_slack_missing\ntests/test_lifecycle_notification_sink_wiring.py::TestBuildAppStateNotificationSinkNatsDown::test_nats_none_still_constructs_sink\ntests/test_lifecycle_notification_sink_wiring.py::TestAssembleToolListNotificationSinkKwarg::test_kwarg_propagates_to_dispatch_module_attribute\ntests/test_lifecycle_notification_sink_wiring.py::TestAssembleToolListNotificationSinkKwarg::test_default_kwarg_clears_dispatch_module_attribute\ntests/test_lifecycle_notification_sink_wiring.py::TestAssembleToolListNotificationSinkKwarg::test_ambient_call_also_propagates\ntests/test_lifecycle_notification_sink_wiring.py::TestStartupOrdering::test_sink_start_before_subscriber_start\n  /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_lifecycle_notification_sink_wiring.py:70: UserWarning: web_search_provider='tavily' but TAVILY_API_KEY (JARVIS_TAVILY_API_KEY) is not set \u2014 web search will be disabled.\n    cfg.validate_provider_keys()\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================= 17 passed, 15 warnings in 1.22s ========================\n",
+    "signal_absent": false
+  },
+  "independent_test_classification": null,
+  "requirements": {
+    "criteria_total": 9,
+    "criteria_met": 9,
+    "all_criteria_met": true,
+    "missing": [],
+    "criteria_results": [
+      {
+        "criterion_id": "AC-001",
+        "criterion_text": "`build_app_state` constructs a real SlackNotifier when both `JARVIS_SLACK_BOT_TOKEN` and `JARVIS_SLACK_CHANNEL_ID` are set, and a logged no-op sink otherwise; construction never raises for any settings permutation.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Modified build_app_state() in lifecycle.py (lines 647-663) to call create_slack_sink(config) which returns SlackNotifier when both env vars are set, or NoOpSink otherwise. Construction wrapped in try/except for defensive handling, though create_slack_sink never raises. Tests verify both paths: test_sink_constructed_started_and_bound_with_slack() and test_sink_constructed_as_noop_when_slack_missing()."
+      },
+      {
+        "criterion_id": "AC-002",
+        "criterion_text": "The constructed sink is bound to ForgeNotificationsSubscriber via `bind_notification_sink()` and installed as the `tools/dispatch.py` module-level `_notification_sink` snapshot, so subscriber events and the `queue_build` queued hook flow through the same instance.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Modified build_app_state() to call forge_subscriber.bind_notification_sink(notification_sink) (line 682 in lifecycle.py). Modified assemble_tool_list() in tools/__init__.py to accept notification_sink parameter (line 111) and snapshot it to _dispatch._notification_sink (line 341). Tests verify binding (test_sink_constructed_started_and_bound_with_slack) and module snapshot propagation (TestAssembleToolListNotificationSinkKwarg class)."
+      },
+      {
+        "criterion_id": "AC-003",
+        "criterion_text": "Start ordering: the notifier is started before the subscriber binds/starts; stop ordering: the notifier stops after the subscriber, with a best-effort bounded drain of queued messages.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Start ordering: notification_sink.start() called (line 653 lifecycle.py) before subscriber construction (line 673) and bind_notification_sink (line 682). Stop ordering: notification_sink.stop() called (lines 896-905 lifecycle.py) after forge_subscriber.stop() (lines 875-882). Test TestStartupOrdering verifies start order with sequenced side effects. Test test_sink_stop_called_after_subscriber verifies stop order."
+      },
+      {
+        "criterion_id": "AC-004",
+        "criterion_text": "NATS down at startup preserves the existing DDR-021 soft-fail behaviour with the notifier idle; the supervisor does not crash.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Notification sink is constructed and started independently of NATS status. When nats_client is None, forge_subscriber remains None (line 673 lifecycle.py) but notification_sink is still constructed (line 648). Test test_nats_none_still_constructs_sink verifies sink is constructed and started even when NATS is down, and lifecycle completes successfully."
+      },
+      {
+        "criterion_id": "AC-005",
+        "criterion_text": "Slack config missing (either or both env vars unset) yields the logged no-op sink; the supervisor boots cleanly and all notify paths remain no-ops.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "create_slack_sink() (imported from slack_notifier.py) returns NoOpSink when either JARVIS_SLACK_BOT_TOKEN or JARVIS_SLACK_CHANNEL_ID is unset. NoOpSink has idempotent start/stop methods that are no-ops. Test test_sink_constructed_as_noop_when_slack_missing verifies NoOpSink construction when Slack config is missing and lifecycle completes successfully."
+      },
+      {
+        "criterion_id": "AC-006",
+        "criterion_text": "Supervisor boots cleanly in all degraded permutations: NATS up/down crossed with Slack config present/absent (four permutations, none crash).",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "TestDegradedPermutations.test_all_permutations_boot_cleanly uses @pytest.mark.parametrize to test all four combinations: (NATS=True, Slack=True), (NATS=True, Slack=False), (NATS=False, Slack=True), (NATS=False, Slack=False). Each permutation verifies the supervisor boots successfully with session_manager and notification_sink populated. Notification sink is always constructed regardless of NATS or Slack status."
+      },
+      {
+        "criterion_id": "AC-007",
+        "criterion_text": "Wiring tests mirror the existing `forge_subscriber` lifecycle tests in structure and placement.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Created tests/test_lifecycle_notification_sink_wiring.py mirroring test_lifecycle_forge_subscriber_wiring.py structure: (1) AppState field tests, (2) happy-path construction/start/bind tests, (3) NATS-down soft-fail tests, (4) degraded permutations, (5) assemble_tool_list propagation tests, (6) shutdown ordering and idempotency tests, (7) startup ordering tests, (8) synthetic notification sequence test. Test class names, fixtures, and patterns directly mirror forge_subscriber tests."
+      },
+      {
+        "criterion_id": "AC-008",
+        "criterion_text": "A synthetic queued + started + complete sequence through the fully wired path produces exactly three `chat.postMessage` calls on a mocked Slack client.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Added TestSyntheticNotificationSequence.test_three_events_produce_three_slack_messages (lines 722-810 in test_lifecycle_notification_sink_wiring.py). Test constructs a real SlackNotifier with mocked Slack client, sends three ForgeNotification events (build_queued, build_started, build_complete), and verifies exactly three chat.postMessage calls with correct parameters (channel, text, mrkdwn=False). Uses asyncio.sleep(0.2) to allow worker task to process queue, then asserts await_count == 3 and validates call parameters."
+      },
+      {
+        "criterion_id": "AC-009",
+        "criterion_text": "All modified files pass project-configured lint/format checks with zero errors.",
+        "result": "verified",
+        "status": "verified",
+        "evidence": "Ran 'python -m ruff check' and 'python -m ruff format' on the updated test file. Results: test_lifecycle_notification_sink_wiring.py - All checks passed, 1 file reformatted. All files pass lint and format checks with zero errors. The existing implementation files (lifecycle.py, tools/__init__.py) continue to pass all checks from turn 1."
+      }
+    ]
+  },
+  "runtime_parity": {
+    "ran": true,
+    "passed": false,
+    "command": "set -e\npytest tests -x -q\n",
+    "exit_code": 1,
+    "expected_exit": 0,
+    "timed_out": false,
+    "stderr_tail": "",
+    "skipped_reason": null
+  },
+  "evidence_repo_tests": [],
+  "severity_recommendations": [],
+  "advisory_issues": [
+    {
+      "severity": "should_fix",
+      "category": "claim_audit",
+      "description": "Player-claimed file is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player likely swept an orchestrator-managed path into files_modified. Player claimed file src/jarvis/infrastructure/lifecycle.py. Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+      "details": {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/infrastructure/lifecycle.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication."
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "claim_audit",
+      "description": "Player-claimed file is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player likely swept an orchestrator-managed path into files_modified. Player claimed file src/jarvis/tools/__init__.py. Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+      "details": {
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/tools/__init__.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication."
+      }
+    }
+  ],
+  "task_type": "feature",
+  "profile_name": "feature"
+}

@@ -234,11 +234,16 @@ class TestConstructorSignature:
 # ---------------------------------------------------------------------------
 
 
+# Six subjects since TASK-JNB-005 (FEAT-28FF) added build-paused/build-cancelled
+# to the single ephemeral consumer's filter (a filter change, never a second
+# consumer — workqueue err-10100 constraint).
 _LIFECYCLE_SUBJECTS = (
     "pipeline.build-started.>",
     "pipeline.stage-complete.>",
     "pipeline.build-complete.>",
     "pipeline.build-failed.>",
+    "pipeline.build-paused.>",
+    "pipeline.build-cancelled.>",
 )
 
 

@@ -1,0 +1,187 @@
+{
+  "task_id": "TASK-JNB-005",
+  "turn": 1,
+  "decision": "feedback",
+  "issues": [
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file docs/design/FEAT-28FF/decisions/DDR-032-notification-sink-in-process.md. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file docs/design/FEAT-28FF/decisions/DDR-032-notification-sink-in-process.md",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file docs/design/FEAT-28FF/decisions/DDR-033-correlation-independent-fan-out.md. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file docs/design/FEAT-28FF/decisions/DDR-033-correlation-independent-fan-out.md",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file docs/design/FEAT-28FF/decisions/DDR-034-slack-dedup-placement.md. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file docs/design/FEAT-28FF/decisions/DDR-034-slack-dedup-placement.md",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file docs/design/FEAT-28FF/decisions/DDR-035-assum-010-v1-acceptance.md. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file docs/design/FEAT-28FF/decisions/DDR-035-assum-010-v1-acceptance.md",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file src/jarvis/infrastructure/forge_notifications.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/infrastructure/forge_notifications.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file src/jarvis/infrastructure/slack_notifier.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/infrastructure/slack_notifier.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file tests/test_forge_notifications_pause_cancelled.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file tests/test_forge_notifications_pause_cancelled.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "type": "test_failure",
+      "severity": "critical",
+      "description": "Independent test execution timed out after 600s. Test signal is ABSENT (null), not passing. Cannot verify implementation correctness without independent test execution. Evidence: gathering_status='partial_gate_abort', tests.tests_passed=null, tests.tests_run=null. Advisory: 'Isolated test execution timed out after 600s'.",
+      "requirement": "All acceptance criteria (AC-001 through AC-011)",
+      "suggestion": "Investigate test timeout - check for infinite loops, blocking I/O, or excessive test suite runtime. May need to optimize test execution or split into faster unit tests. Re-run tests in isolation to obtain passing signal."
+    },
+    {
+      "type": "missing_requirement",
+      "severity": "major",
+      "description": "AC-012 requires runtime validation (jarvis supervisor startup binds exactly one PIPELINE consumer, boot logs show no err_code 10100). No runtime logs or startup validation evidence present in bundle.",
+      "requirement": "AC-012",
+      "suggestion": "Add integration test or startup validation that verifies single consumer binding and checks for err_code 10100 in logs."
+    },
+    {
+      "type": "missing_requirement",
+      "severity": "major",
+      "description": "AC-013 requires lint/format validation. No explicit lint execution evidence in bundle (Player claims 'no lint errors observed during test runs', but test runs did not complete independently).",
+      "requirement": "AC-013",
+      "suggestion": "Run explicit lint/format checks (e.g., black --check, ruff, mypy) and include output in evidence."
+    },
+    {
+      "type": "code_quality",
+      "severity": "minor",
+      "description": "Honesty verification flagged 7 file claims as 'should_fix' (claim_audit_unmodified). Player claimed files that git status shows were not modified: docs/design/FEAT-28FF/decisions/DDR-*.md (4 files), src/jarvis/infrastructure/*.py (2 files), tests/test_forge_notifications_pause_cancelled.py. These appear to be orchestrator-managed paths incorrectly included in files_created/files_modified.",
+      "requirement": "Report accuracy",
+      "suggestion": "Filter orchestrator-managed paths (e.g., .guardkit/autobuild/, docs/design/) from files_modified/files_created. Only report files actually modified by the Player agent."
+    }
+  ],
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims test 'test_lifecycle_subjects_returns_six_subjects' verifies six subjects, but independent test execution timed out (null result)."
+    },
+    {
+      "criterion_id": "AC-002",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims tests verify projection branches for BuildPausedPayload and BuildCancelledPayload, but no independent test execution."
+    },
+    {
+      "criterion_id": "AC-003",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims model widening is tested, but cannot independently verify without test execution."
+    },
+    {
+      "criterion_id": "AC-004",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims test verifies approval_subject retention, but no independent confirmation."
+    },
+    {
+      "criterion_id": "AC-005",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims pause rendering is tested with all required elements (stage, rationale, coach_score, CLI hint), but timeout prevents verification."
+    },
+    {
+      "criterion_id": "AC-006",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims cancelled rendering test exists, but no independent execution."
+    },
+    {
+      "criterion_id": "AC-007",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims test 'test_long_rationale_is_chunked' verifies multi-paragraph handling, but no independent test signal."
+    },
+    {
+      "criterion_id": "AC-008",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims test verifies formatting characters render inert, but timeout prevents verification."
+    },
+    {
+      "criterion_id": "AC-009",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims tests verify boundary values (0.0, 1.0) and out-of-range values (-0.5, 1.7) render defensively, but no independent execution."
+    },
+    {
+      "criterion_id": "AC-010",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims synthetic BuildCancelledPayload envelope test exists, but no independent verification."
+    },
+    {
+      "criterion_id": "AC-011",
+      "result": "rejected",
+      "notes": "Cannot verify - test signal absent. Player claims 73 existing tests pass (57 + 16), but no independent regression testing evidence due to timeout."
+    },
+    {
+      "criterion_id": "AC-012",
+      "result": "rejected",
+      "notes": "No runtime evidence in bundle. Player claims code inspection shows single consumer with extended filter_subjects, but AC requires runtime validation (boot logs showing no err_code 10100). No startup test or runtime logs provided."
+    },
+    {
+      "criterion_id": "AC-013",
+      "result": "rejected",
+      "notes": "No lint evidence in bundle. Player claims 'no lint errors observed during test runs', but test runs did not complete independently, and no explicit lint execution (black, ruff, mypy) is documented."
+    }
+  ],
+  "rationale": "Cannot approve due to ABSENT test signal (Guard #5: gathering_status='partial_gate_abort', Guard #2 context: tests_run=null, tests_passed=null). The orchestrator's independent test execution timed out after 600s, leaving no deterministic evidence to verify any acceptance criterion. Per absence-of-failure guards: 'do NOT approve based on absence of test execution.' This is a substrate failure (advisory confirms test-orchestrator timeout), not necessarily Player error, but it prevents validation. Additionally, AC-012 (runtime validation) and AC-013 (lint) lack evidence in the bundle, and 7 honesty discrepancies (should_fix severity) indicate report accuracy issues. All 13 criteria rejected due to absent evidence."
+}

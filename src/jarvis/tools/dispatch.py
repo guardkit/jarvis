@@ -46,7 +46,7 @@ import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from langchain_core.tools import tool
 from nats_core import EventType, MessageEnvelope, Topics
@@ -177,6 +177,16 @@ _dispatch_semaphore: DispatchSemaphore | None = None
 # correlation register step rather than raising.
 # ---------------------------------------------------------------------------
 _forge_subscriber: ForgeNotificationsSubscriber | None = None
+
+# ---------------------------------------------------------------------------
+# TASK-JNB-002 — NotificationSink snapshot (mirrors _forge_subscriber pattern)
+# ---------------------------------------------------------------------------
+# Module-level snapshot for the bound NotificationSink (SlackNotifier in
+# TASK-JNB-003). Wired via a setter from lifecycle.build_app_state, mirroring
+# the existing _forge_subscriber / _nats_client pattern. Consumed by queue_build
+# to fire build_queued notifications after PubAck/register_correlation (AC-010).
+
+_notification_sink: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -1227,6 +1237,35 @@ async def queue_build(
             subject=subject,
             in_flight=_in_flight_or_zero(semaphore),
         )
+
+        # ----- TASK-JNB-002: Fire build_queued notification (AC-010) -----
+        # Per AC-010, queue_build fires a build_queued notification immediately
+        # after the PubAck/register_correlation block. Per DDR-007, sink
+        # failures are WARNING-only and never alter the returned QueueBuildAck.
+        # Per AC-011, error paths (above returns) emit nothing to the sink.
+        if _notification_sink is not None:
+            try:
+                # Import locally to avoid top-level dependency on infrastructure
+                from jarvis.infrastructure.forge_notifications import ForgeNotification
+
+                build_queued_notification = ForgeNotification(
+                    event_type="build_queued",  # type: ignore[arg-type]
+                    correlation_id=resolved_correlation_id,
+                    feature_id=feature_id,
+                    completed_at=queued_at,
+                )
+                await _notification_sink.notify(build_queued_notification)
+            except Exception as exc:
+                # DDR-007: sink failures are WARNING-only, never propagate
+                logger.warning(
+                    "queue_build_notification_sink_error",
+                    extra={
+                        "reason": type(exc).__name__,
+                        "detail": str(exc),
+                        "correlation_id": resolved_correlation_id,
+                        "feature_id": feature_id,
+                    },
+                )
 
         # ----- QueueBuildAck JSON ----------------------------------------
         ack = {

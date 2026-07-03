@@ -1,0 +1,149 @@
+{
+  "task_id": "TASK-JNB-001",
+  "turn": 2,
+  "files_modified": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/src/jarvis/infrastructure/slack_notifier.py",
+    "pyproject.toml",
+    "src/jarvis/config/settings.py",
+    "src/jarvis/infrastructure/forge_notifications.py",
+    "src/jarvis/infrastructure/slack_notifier.py",
+    "src/jarvis/tools/dispatch.py",
+    "tests/test_notification_sink_integration.py",
+    "tests/test_slack_notifier.py"
+  ],
+  "files_created": [],
+  "tests_written": [],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "Fixed AC-008 rendering to include pr_url and summary fields",
+    "Integration tests passing (TASK-JNB-002 seam verified)",
+    "Coverage at 83% (exceeds 80% requirement)",
+    "All lint checks passing"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 14,
+  "sdk_max_turns": 150,
+  "sdk_ceiling_hit": false,
+  "files_authored": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/.guardkit/autobuild/TASK-JNB-001/player_turn_2.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/src/jarvis/infrastructure/slack_notifier.py"
+  ],
+  "tests_passed_count": 30,
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "slack_bot_token (SecretStr | None, default None) and slack_channel_id fields exist on the jarvis pydantic-settings model under the existing JARVIS_ prefix, matching the .env keys JARVIS_SLACK_BOT_TOKEN and JARVIS_SLACK_CHANNEL_ID",
+      "status": "complete",
+      "evidence": "Fields added in Turn 1. Verified still present and correctly configured in src/jarvis/config/settings.py with JARVIS_ prefix and proper types.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "slack-sdk is declared as a dependency in the jarvis pyproject.toml and imports resolve in the test venv",
+      "status": "complete",
+      "evidence": "Dependency added in Turn 1. Verified imports resolve correctly via successful test execution of both test_slack_notifier.py and test_notification_sink_integration.py (30 tests total).",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "pyproject.toml"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "src/jarvis/infrastructure/slack_notifier.py defines a NotificationSink protocol with async notify(ForgeNotification) (plus start()/stop() lifecycle)",
+      "status": "complete",
+      "evidence": "Protocol created in Turn 1. Verified protocol matches TASK-JNB-002 integration test expectations and all lifecycle methods properly defined.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Factory returns a logged no-op sink when slack_bot_token or slack_channel_id is unset; no Slack client is constructed and no network calls occur in no-op mode",
+      "status": "complete",
+      "evidence": "No-op sink implemented in Turn 1. Verified via TestNoOpSinkWhenConfigAbsent test class (3 tests) covering all config combinations.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Delivery uses a bounded asyncio.Queue drained by a single worker task posting plain-text chat.postMessage with mrkdwn disabled",
+      "status": "complete",
+      "evidence": "Queue and worker implemented in Turn 1. Verified via TestPlainTextMrkdwnDisabled test that mrkdwn=False in all postMessage calls.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "start() launches the worker; stop() performs a bounded shutdown (does not hang on a full or stuck queue)",
+      "status": "complete",
+      "evidence": "Lifecycle implemented in Turn 1. Verified via TestLifecycle class including bounded shutdown test with 0.5s timeout and full queue.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "notify() never raises to the caller under any failure (client error, full queue, stopped sink); every delivery failure logs at WARNING and processing continues (DDR-007)",
+      "status": "complete",
+      "evidence": "Never-raise contract implemented in Turn 1. Verified via TestNotifyNeverRaises and TestDeliveryFailureLogsWarning classes. Worker catches SlackApiError and all exceptions, logs WARNING, continues.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Render shapes implemented for exactly the checkpoint slice: queued; build-started; build-complete including pr_url and summary when present; build-failed including reason",
+      "status": "complete",
+      "evidence": "Turn 2 fix: Updated _render() method to include pr_url in build_started (when present) and both pr_url and summary in build_complete (when present). Renders these fields on separate lines with 'PR:' and 'Summary:' prefixes. Gracefully handles None values. All 4 event types render correctly. Verified via TestCheckpointRenderShapes (4 tests) plus integration tests.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "Mocked AsyncWebClient tests prove: never-raise behaviour, no-op mode, WARNING-on-failure, all four render shapes, and that a raised SlackApiError does not stop the worker (subsequent messages still deliver)",
+      "status": "complete",
+      "evidence": "Comprehensive test suite created in Turn 1. Turn 2: All 16 unit tests pass plus 14 integration tests. Tests cover all required behaviors with mocked AsyncWebClient.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-010",
+      "criterion_text": "The SecretStr token value never appears in repr(), str(), or any log output (asserted in tests)",
+      "status": "complete",
+      "evidence": "SecretStr masking implemented in Turn 1 via pydantic. Verified via TestSecretTokenNeverLogged class with assertions on repr(), str(), and log output.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/config/settings.py",
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-011",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors",
+      "status": "complete",
+      "evidence": "Ruff lint check passes with 'All checks passed!' for all modified files. Coverage at 83% (exceeds 80% minimum).",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    }
+  ]
+}

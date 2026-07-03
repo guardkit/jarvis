@@ -1,0 +1,116 @@
+{
+  "task_id": "TASK-JNB-003",
+  "turn": 2,
+  "decision": "feedback",
+  "validation_results": {
+    "requirements_met": [
+      "AC-001",
+      "AC-002",
+      "AC-003",
+      "AC-004",
+      "AC-005",
+      "AC-006",
+      "AC-007",
+      "AC-008",
+      "AC-009"
+    ],
+    "tests_run": true,
+    "tests_passed": true,
+    "test_command": "pytest tests/test_lifecycle_notification_sink_wiring.py -v --tb=short",
+    "test_output_summary": "17 passed, 15 warnings in 1.22s - All task-specific tests passed successfully",
+    "code_quality": "Passes ruff lint and format checks with zero errors",
+    "edge_cases_covered": [
+      "NATS up/down with Slack present/absent (4 permutations)",
+      "NoOpSink when Slack config missing",
+      "Real SlackNotifier when Slack config present",
+      "Start/stop ordering",
+      "Synthetic notification sequence with 3 events"
+    ]
+  },
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "result": "verified",
+      "notes": "Tests test_sink_constructed_started_and_bound_with_slack and test_sink_constructed_as_noop_when_slack_missing verify both SlackNotifier and NoOpSink construction paths"
+    },
+    {
+      "criterion_id": "AC-002",
+      "result": "verified",
+      "notes": "TestAssembleToolListNotificationSinkKwarg class verifies sink propagation to dispatch._notification_sink module attribute"
+    },
+    {
+      "criterion_id": "AC-003",
+      "result": "verified",
+      "notes": "TestStartupOrdering and test_sink_stop_called_after_subscriber verify start-before and stop-after ordering"
+    },
+    {
+      "criterion_id": "AC-004",
+      "result": "verified",
+      "notes": "test_nats_none_still_constructs_sink verifies notifier construction and lifecycle success when NATS is down"
+    },
+    {
+      "criterion_id": "AC-005",
+      "result": "verified",
+      "notes": "test_sink_constructed_as_noop_when_slack_missing verifies NoOpSink when Slack config absent and clean boot"
+    },
+    {
+      "criterion_id": "AC-006",
+      "result": "verified",
+      "notes": "TestDegradedPermutations.test_all_permutations_boot_cleanly parametrizes all 4 combinations of NATS up/down \u00d7 Slack present/absent"
+    },
+    {
+      "criterion_id": "AC-007",
+      "result": "verified",
+      "notes": "test_lifecycle_notification_sink_wiring.py mirrors the structure of test_lifecycle_forge_subscriber_wiring.py with parallel test classes and patterns"
+    },
+    {
+      "criterion_id": "AC-008",
+      "result": "verified",
+      "notes": "TestSyntheticNotificationSequence.test_three_events_produce_three_slack_messages (lines 722-810) provides the missing disk evidence from turn 1. Test constructs real SlackNotifier with mocked client, sends 3 ForgeNotification events, and verifies exactly 3 chat.postMessage calls with correct parameters. This integration test passes independently."
+    },
+    {
+      "criterion_id": "AC-009",
+      "result": "verified",
+      "notes": "ruff check and ruff format pass with zero errors on all modified files"
+    }
+  ],
+  "rationale": "Runtime-parity failure: the deliverable passed pytest but its declared runtime entry point FAILED to run (exit=1, expected=0). This is a 'passes tests but does not run' defect \u2014 fix the deliverable so it runs standalone. Command: set -e\npytest tests -x -q\n",
+  "issues": [
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file src/jarvis/infrastructure/lifecycle.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/infrastructure/lifecycle.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "severity": "should_fix",
+      "category": "honesty",
+      "description": "Deterministic honesty record (claim_audit_unmodified, severity=should_fix): Player claim: Player claimed file src/jarvis/tools/__init__.py. Actual: Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication..",
+      "details": {
+        "source": "deterministic_honesty_gate",
+        "claim_type": "claim_audit_unmodified",
+        "player_claim": "Player claimed file src/jarvis/tools/__init__.py",
+        "actual_value": "Path is tracked in git but 'git status --porcelain' shows no change for it \u2014 the Player claimed work on a file it did not actually modify this turn. Most likely cause: the report writer swept an orchestrator-managed path (e.g. a file under .guardkit/autobuild/ or tasks/<state>/) into files_modified. Defence-in-depth for the agent_invoker-side filter; this is a warning, not a turn-rejecting fabrication.",
+        "severity": "should_fix"
+      }
+    },
+    {
+      "severity": "must_fix",
+      "category": "runtime_parity",
+      "description": "Runtime-parity failure: the deliverable passed pytest but its declared runtime entry point FAILED to run (exit=1, expected=0). This is a 'passes tests but does not run' defect \u2014 fix the deliverable so it runs standalone. Command: set -e\npytest tests -x -q\n",
+      "details": {
+        "command": "set -e\npytest tests -x -q\n",
+        "exit_code": 1,
+        "timed_out": false,
+        "stderr_tail": "",
+        "overridden_decision": "approve"
+      }
+    }
+  ]
+}

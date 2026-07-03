@@ -1,0 +1,9 @@
+[
+  {
+    "task_id": "TASK-JNB-001",
+    "pre_path": "tasks/backlog/TASK-JNB-001-slacknotifier-component-slack-settings-slack-sdk.md",
+    "post_path": "tasks/design_approved/TASK-JNB-001-slacknotifier-component-slack-settings-slack-sdk.md",
+    "timestamp": "2026-07-03T16:02:52.098260+00:00",
+    "kind": "design_approved_transition"
+  }
+]

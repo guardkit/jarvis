@@ -55,6 +55,10 @@ dependencies = [
     # lives in `[project.optional-dependencies].providers` for explicit
     # opt-in, but the underlying SDK is always available.
     "anthropic>=0.40",
+    # ---- FEAT-28FF (TASK-JNB-001) — Slack SDK for notifications ----------
+    # Slack SDK for posting build notifications to Slack channels.
+    # AsyncWebClient used for async chat.postMessage delivery.
+    "slack-sdk>=3.0,<4",
 ]
 
 [project.optional-dependencies]

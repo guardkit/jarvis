@@ -1,0 +1,56 @@
+{
+  "task_id": "TASK-JNB-008",
+  "checkpoints": [
+    {
+      "turn": 1,
+      "commit_hash": "a0611756ce9bff7d7cc2027ac8c1e96031504432",
+      "timestamp": "2026-07-03T20:41:12.138888",
+      "tests_passed": false,
+      "test_count": 0,
+      "message": "[guardkit-checkpoint] Turn 1 complete (tests: fail)",
+      "from_prior_run": false,
+      "evidence_commits": {}
+    },
+    {
+      "turn": 2,
+      "commit_hash": "35f5fb1cfcb3e6c462eef62fdc7491d63015a013",
+      "timestamp": "2026-07-03T20:56:16.140922",
+      "tests_passed": true,
+      "test_count": 0,
+      "message": "[guardkit-checkpoint] Turn 2 complete (tests: pass)",
+      "from_prior_run": false,
+      "evidence_commits": {}
+    },
+    {
+      "turn": 3,
+      "commit_hash": "726103efa8b1772e3600ad1076d62e6d54aae2dc",
+      "timestamp": "2026-07-03T21:09:17.737366",
+      "tests_passed": true,
+      "test_count": 0,
+      "message": "[guardkit-checkpoint] Turn 3 complete (tests: pass)",
+      "from_prior_run": false,
+      "evidence_commits": {}
+    },
+    {
+      "turn": 4,
+      "commit_hash": "c188aa19a41db3fa25763a89c421093d554e1db1",
+      "timestamp": "2026-07-03T21:37:06.648942",
+      "tests_passed": true,
+      "test_count": 0,
+      "message": "[guardkit-checkpoint] Turn 4 complete (tests: pass)",
+      "from_prior_run": false,
+      "evidence_commits": {}
+    },
+    {
+      "turn": 5,
+      "commit_hash": "0b71052ff4ca48e1756c23c846684b51183a4def",
+      "timestamp": "2026-07-03T21:45:19.990289",
+      "tests_passed": true,
+      "test_count": 0,
+      "message": "[guardkit-checkpoint] Turn 5 complete (tests: pass)",
+      "from_prior_run": false,
+      "evidence_commits": {}
+    }
+  ],
+  "last_updated": "2026-07-03T21:45:19.990587"
+}

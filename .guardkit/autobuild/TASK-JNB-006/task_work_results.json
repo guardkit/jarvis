@@ -1,0 +1,183 @@
+{
+  "task_id": "TASK-JNB-006",
+  "timestamp": "2026-07-03T20:21:32.740095",
+  "completed": true,
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "text": "Implementation \u2713",
+      "completed": false
+    }
+  },
+  "quality_gates": {
+    "tests_passing": true,
+    "tests_passed": 25,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": null,
+    "all_passed": null
+  },
+  "files_modified": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/src/jarvis/infrastructure/slack_notifier.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_slack_notifier.py",
+    "src/jarvis/infrastructure/slack_notifier.py",
+    "tests/test_slack_notifier.py"
+  ],
+  "files_created": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/.guardkit/autobuild/TASK-JNB-006/player_turn_1.json"
+  ],
+  "files_authored": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/.guardkit/autobuild/TASK-JNB-006/player_turn_1.json",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/src/jarvis/infrastructure/slack_notifier.py",
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_slack_notifier.py"
+  ],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_slack_notifier.py"
+  ],
+  "summary": "25 tests passed",
+  "sdk_turns": {
+    "turns_used": 33,
+    "max_turns": 150,
+    "ceiling_hit": false
+  },
+  "task_type": "feature",
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 2,
+    "missing_phases": [
+      "3"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  },
+  "plan_audit": {
+    "status": "skipped",
+    "severity": null,
+    "violations": 0,
+    "extra_files": [],
+    "missing_files": [],
+    "extra_modifications": [],
+    "missing_modifications": [],
+    "extra_dependencies": [],
+    "missing_dependencies": [],
+    "loc_variance_pct": null,
+    "discrepancies_count": 0,
+    "message": "no implementation plan on disk"
+  },
+  "unconfirmed_low_confidence_assumptions": {
+    "status": "ok",
+    "unconfirmed": [],
+    "files_scanned": 0,
+    "files_skipped": 0,
+    "message": null
+  },
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Dedup map is first-wins with a 300s TTL, keyed (event_type, build_id, stage_label or '') for stream events and ('build_queued', correlation_id) for the intake event (ASSUM-006).",
+      "status": "complete",
+      "evidence": "Implemented in slack_notifier.py lines 173 (dedup_map initialization), 194-210 (dedup logic in notify()), and 381-399 (_make_dedup_key() with proper keying for stream events and build_queued intake). Test coverage: TestQueuedIntakeDedupKeyedOnCorrelationId with two test methods.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "TTL is measured with a monotonic clock (time.monotonic()), never wall clock; expired entries are evicted on insert.",
+      "status": "complete",
+      "evidence": "Implemented using _monotonic alias (line 75) called in evict logic (lines 401-414 in _evict_expired_dedup_entries()) and notify (line 197). Eviction happens on every notify() call before dedup check. Test coverage: TestDedupTtlExpiry with improved monotonic clock mocking using controlled current_time dict.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "A duplicated terminal envelope (same event_type/build_id redelivered within 300s) posts to Slack exactly once.",
+      "status": "complete",
+      "evidence": "Dedup logic in notify() (lines 199-207) checks if dedup_key exists in map within TTL and drops duplicates silently with debug log. Test coverage: TestDuplicateTerminalEnvelopePostsOnce verifies same notification posted twice results in exactly one chat_postMessage call.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Two distinct concurrent terminal events (different build_ids) both post, and each message contains only its own build's fields \u2014 no cross-contamination.",
+      "status": "complete",
+      "evidence": "Dedup keys include build_id (line 397-399), ensuring different build_ids create distinct keys and both post. Rendering in _render() (lines 416-512) uses notification parameter fields directly with no shared state. Test coverage: TestDistinctConcurrentTerminalsBothPost verifies two messages with different build_ids both post and contain only their own feature_id.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Worker paces chat.postMessage at ~1 msg/s.",
+      "status": "complete",
+      "evidence": "Worker pacing implemented with _WORKER_PACING_DELAY = 1.0 (line 69) and asyncio.sleep() after every message delivery (line 368). Test coverage: all async tests implicitly verify pacing; TestDistinctConcurrentTerminalsBothPost waits 2.5s for two messages confirming ~1s spacing.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "A 429 response honours Retry-After, retries within a bounded per-message retry budget, and on budget exhaustion logs WARNING and drops that message (DDR-007 \u2014 never raises).",
+      "status": "complete",
+      "evidence": "429 handling in worker loop (lines 307-344): attempts_left = _MAX_429_RETRIES + 1 (4 total attempts including initial), SlackApiError with status_code 429 triggers retry with Retry-After header honor (line 326), budget exhaustion logs slack_429_budget_exhausted WARNING and breaks (lines 338-343). Never raises. Test coverage: Test429BackoffHonoursRetryAfter and Test429BudgetExhaustionWarnsAndDrops verify retry logic and budget exhaustion behavior. Fixed bug: changed from retries_left to attempts_left to ensure 1 initial + 3 retries = 4 total attempts.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "A mocked 429 burst backs off, keeps delivering subsequent messages after the backoff, and never blocks the subscriber callback or the event loop (enqueue returns immediately; backoff sleeps happen only in the worker task).",
+      "status": "complete",
+      "evidence": "Backoff sleep (line 335) happens inside worker task, not in notify(). notify() uses put_nowait (line 217) ensuring immediate return. Worker continues processing queue after backoff, delivering subsequent messages. Test coverage: Test429BackoffHonoursRetryAfter verifies backoff and subsequent delivery; TestNotifyNeverBlocksEventLoop verifies notify() completes immediately (< 0.1s) even with stalled worker.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Bounded-queue overflow drops the oldest queued message and emits exactly one WARNING per drop; enqueue never blocks and never raises.",
+      "status": "complete",
+      "evidence": "Queue overflow handling (lines 218-237): on QueueFull exception, get_nowait() retrieves oldest message, logs slack_notify_dropped_queue_overflow WARNING once, then put_nowait() enqueues new message. Never blocks (uses put_nowait/get_nowait), never raises (try/except catches and logs). Test coverage: TestOverflowDropsOldestWithOneWarning verifies overflow behavior with small queue.",
+      "test_file": "tests/test_slack_notifier.py",
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py"
+      ]
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors",
+      "status": "complete",
+      "evidence": "Ran ruff check --fix and ruff format on both src/jarvis/infrastructure/slack_notifier.py and tests/test_slack_notifier.py. Fixed import sorting issue and reformatted both files. Final verification: 'ruff check' returns 'All checks passed!' with zero errors.",
+      "test_file": null,
+      "implementation_files": [
+        "src/jarvis/infrastructure/slack_notifier.py",
+        "tests/test_slack_notifier.py"
+      ]
+    }
+  ],
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 12.64890674999333
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "completed",
+      "source": "orchestrator",
+      "duration_seconds": 164.5198783329979
+    }
+  ]
+}

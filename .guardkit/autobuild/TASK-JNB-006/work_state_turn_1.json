@@ -1,0 +1,40 @@
+{
+  "turn_number": 1,
+  "files_modified": [
+    "tests/test_slack_notifier.py"
+  ],
+  "files_created": [],
+  "tests_written": [
+    "tests/test_slack_notifier.py"
+  ],
+  "tests_passed": true,
+  "test_count": 0,
+  "timestamp": "2026-07-03T19:19:51.050091",
+  "detection_method": "player_report",
+  "git_changes": {
+    "files_modified": [
+      ".guardkit/autobuild/TASK-JNB-006/player_turn_1.json",
+      ".guardkit/autobuild/TASK-JNB-006/task_work_results.json",
+      "tests/test_slack_notifier.py"
+    ],
+    "files_added": [
+      ".guardkit/autobuild/TASK-JNB-006/checkpoints.json"
+    ],
+    "files_deleted": [],
+    "diff_stats": ".../autobuild/TASK-JNB-006/player_turn_1.json      |  70 ++--\n .../autobuild/TASK-JNB-006/task_work_results.json  | 155 ++-----\n tests/test_slack_notifier.py                       | 451 ++++++++++++++++++++-\n 3 files changed, 517 insertions(+), 159 deletions(-)",
+    "insertions": 517,
+    "deletions": 159,
+    "timestamp": "2026-07-03T19:19:44.886738"
+  },
+  "test_results": {
+    "tests_run": false,
+    "tests_passed": false,
+    "test_count": 0,
+    "passed_count": 0,
+    "failed_count": 1,
+    "output_summary": "\n=============================== warnings summary ===============================\n../../../../../../../../Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/langchain_core/_api/deprecation.py:25\n  /Library/Frameworks/Python.framework/Versions/3.14/lib/python3.14/site-packages/langchain_core/_api/deprecation.py:25: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.\n    from pydantic.v1.fields import FieldInfo as FieldInfoV1\n\ntests",
+    "timestamp": "2026-07-03T19:19:51.049885",
+    "error": null
+  },
+  "player_report_available": true
+}

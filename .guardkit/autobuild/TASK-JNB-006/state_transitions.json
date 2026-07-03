@@ -1,0 +1,9 @@
+[
+  {
+    "task_id": "TASK-JNB-006",
+    "pre_path": "tasks/backlog/TASK-JNB-006-hardening-300s-first-wins-dedup-throttling-backo.md",
+    "post_path": "tasks/design_approved/TASK-JNB-006-hardening-300s-first-wins-dedup-throttling-backo.md",
+    "timestamp": "2026-07-03T16:53:17.527777+00:00",
+    "kind": "design_approved_transition"
+  }
+]

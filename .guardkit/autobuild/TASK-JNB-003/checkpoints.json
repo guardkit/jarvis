@@ -1,0 +1,36 @@
+{
+  "task_id": "TASK-JNB-003",
+  "checkpoints": [
+    {
+      "turn": 1,
+      "commit_hash": "5d905813fefdf35c320a965f662ccfcdac619b16",
+      "timestamp": "2026-07-03T17:27:52.228079",
+      "tests_passed": null,
+      "test_count": 0,
+      "message": "[guardkit-checkpoint] Turn 1 complete (tests: unknown)",
+      "from_prior_run": true,
+      "evidence_commits": {}
+    },
+    {
+      "turn": 2,
+      "commit_hash": "8ddb51e522fd51eec5ad3f863d7f37d925501d3a",
+      "timestamp": "2026-07-03T17:31:58.910081",
+      "tests_passed": true,
+      "test_count": 17,
+      "message": "[guardkit-checkpoint] Turn 2 complete (tests: pass)",
+      "from_prior_run": true,
+      "evidence_commits": {}
+    },
+    {
+      "turn": 1,
+      "commit_hash": "fc143608552338d090240fb27bcde627d645e6e0",
+      "timestamp": "2026-07-03T17:51:55.475762",
+      "tests_passed": true,
+      "test_count": 17,
+      "message": "[guardkit-checkpoint] Turn 1 complete (tests: pass)",
+      "from_prior_run": false,
+      "evidence_commits": {}
+    }
+  ],
+  "last_updated": "2026-07-03T17:51:55.476011"
+}

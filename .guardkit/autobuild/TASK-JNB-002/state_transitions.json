@@ -1,0 +1,9 @@
+[
+  {
+    "task_id": "TASK-JNB-002",
+    "pre_path": "tasks/backlog/TASK-JNB-002-notification-sink-seam-in-forgenotificationssubs.md",
+    "post_path": "tasks/design_approved/TASK-JNB-002-notification-sink-seam-in-forgenotificationssubs.md",
+    "timestamp": "2026-07-03T16:02:52.083923+00:00",
+    "kind": "design_approved_transition"
+  }
+]
