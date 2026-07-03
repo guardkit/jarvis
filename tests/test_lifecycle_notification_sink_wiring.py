@@ -784,8 +784,13 @@ class TestSyntheticNotificationSequence:
             await notifier.notify(notification_started)
             await notifier.notify(notification_complete)
 
-            # Give the worker task time to process the queue
-            await asyncio.sleep(0.2)
+            # Give the worker time to drain the queue. The worker paces at
+            # ~1 msg/s (TASK-JNB-006 AC-005), so three messages need >2s —
+            # poll with a bounded deadline instead of a fixed nap.
+            for _ in range(120):
+                if mock_slack_client.chat_postMessage.await_count >= 3:
+                    break
+                await asyncio.sleep(0.05)
 
             # AC-008: Verify exactly three chat.postMessage calls
             assert mock_slack_client.chat_postMessage.await_count == 3, (
