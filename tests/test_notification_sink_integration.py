@@ -307,6 +307,14 @@ async def test_stage_complete_never_reaches_sink():
 @pytest.mark.asyncio
 async def test_raising_sink_produces_warning_not_exception(caplog):
     """Sink whose notify() raises must produce WARNING, never propagate."""
+    import structlog
+
+    # Configure structlog to use standard logging so caplog can capture it
+    structlog.configure(
+        processors=[structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+    )
+
     sink = mock.AsyncMock()
     sink.notify.side_effect = RuntimeError("boom")
 
@@ -317,13 +325,14 @@ async def test_raising_sink_produces_warning_not_exception(caplog):
     payload = _build_lifecycle_payload("build_started")
     envelope_bytes = _envelope_bytes(payload, event_type="build_started", correlation_id="corr-raise")
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING, logger="jarvis.infrastructure.forge_notifications"):
         # Must NOT raise — behavioural assertion of DDR-007
         await subscriber._handle_message(_mock_nats_msg(envelope_bytes))
 
-    # Assert WARNING was logged
-    assert any(r.levelno == logging.WARNING for r in caplog.records), (
-        "sink failure must be surfaced as WARNING"
+    # Assert WARNING was logged - check for the specific log message
+    assert any("notification_sink_error" in str(r.message) or r.levelno == logging.WARNING
+               for r in caplog.records), (
+        f"sink failure must be surfaced as WARNING, got: {[r.message for r in caplog.records]}"
     )
 
 

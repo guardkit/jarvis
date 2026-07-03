@@ -311,13 +311,22 @@ class SlackNotifier:
             return f"[{hhmm}] Forge {feature_id}: stage {stage_label} ({status})"
 
         if event_type == "build_started":
-            return f"[{hhmm}] Forge {feature_id}: build-started (RUNNING)"
+            base = f"[{hhmm}] Forge {feature_id}: build-started (RUNNING)"
+            if notification.pr_url:
+                return f"{base}\nPR: {notification.pr_url}"
+            return base
 
         if event_type == "build_complete":
-            # Task spec says include pr_url + summary when present.
-            # ForgeNotification may not have these fields yet (they're
-            # future additions). Render base shape for now.
-            return f"[{hhmm}] Forge {feature_id}: build-complete (PASSED)"
+            # Include pr_url and summary when present (AC-008)
+            base = f"[{hhmm}] Forge {feature_id}: build-complete (PASSED)"
+            parts = [base]
+
+            if notification.pr_url:
+                parts.append(f"PR: {notification.pr_url}")
+            if notification.summary:
+                parts.append(f"Summary: {notification.summary}")
+
+            return "\n".join(parts) if len(parts) > 1 else base
 
         if event_type == "build_failed":
             reason = notification.failure_reason or "unknown"

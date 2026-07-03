@@ -1011,17 +1011,16 @@ class ForgeNotificationsSubscriber:
         # per-operator, not per-session).
         # Per DDR-007, sink errors are WARNING-only; they never propagate.
         if self._notification_sink is not None:
-
             try:
                 sink_notification = ForgeNotification(
                     event_type=event_type,  # type: ignore[arg-type]
                     correlation_id=correlation_id,
                     feature_id=payload.feature_id,
                     completed_at=envelope.timestamp,
-                    failure_reason=failure_reason,
-                    build_id=build_id,
-                    pr_url=pr_url,
-                    summary=summary,
+                    failure_reason=failure_reason_for_sink,
+                    build_id=build_id_for_sink,
+                    pr_url=pr_url_for_sink,
+                    summary=summary_for_sink,
                 )
                 await self._notification_sink.notify(sink_notification)
             except Exception as exc:
