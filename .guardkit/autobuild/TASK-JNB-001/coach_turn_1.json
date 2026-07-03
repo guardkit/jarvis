@@ -1,0 +1,93 @@
+{
+  "task_id": "TASK-JNB-001",
+  "turn": 1,
+  "decision": "feedback",
+  "issues": [
+    {
+      "type": "test_failure",
+      "severity": "critical",
+      "description": "4 tests failed in independent verification. Specific failure: assert notification.pr_url == 'https://github.com/org/repo/pull/42' failed with AssertionError (pr_url was None). This indicates the ForgeNotification model or render logic is not correctly handling the pr_url field.",
+      "requirement": "AC-008: Render shapes must include pr_url for build-complete events when present",
+      "suggestion": "Investigate whether pr_url is defined on ForgeNotification model, whether _render() correctly extracts it for build-complete events, and whether test fixtures correctly populate it. Run full test suite locally to identify all 4 failures and fix underlying issues."
+    },
+    {
+      "type": "test_failure",
+      "severity": "critical",
+      "description": "Evidence bundle shows tests_passed: false, tests_failed: 4, contradicting Player's report of 16 passing tests. The orchestrator's independent test-orchestrator specialist found failures.",
+      "requirement": "AC-009: Mocked AsyncWebClient tests must all pass",
+      "suggestion": "Run pytest with verbose output to see all failures. Fix each failing test before resubmitting. Ensure test fixtures correctly populate all required fields on ForgeNotification objects."
+    },
+    {
+      "type": "missing_requirement",
+      "severity": "critical",
+      "description": "Coverage requirement not met. coverage_met: false while coverage_required: true. Coverage data is null due to gathering abort after test failures.",
+      "requirement": "Coverage thresholds must be met for all modified code",
+      "suggestion": "After fixing test failures, run coverage analysis (likely pytest-cov or coverage.py). Ensure line coverage meets project threshold. Add tests for uncovered branches, especially error handling paths required by AC-007 never-raise contract."
+    },
+    {
+      "type": "code_quality",
+      "severity": "major",
+      "description": "Evidence gathering aborted with status 'partial_gate_abort' before completing all verification steps. This means quality gates failed early and subsequent evidence could not be collected.",
+      "requirement": "All quality gates must pass for approval",
+      "suggestion": "Fix test failures first (they caused the abort). Then rerun full quality gate suite to ensure tests pass, coverage is met, and all evidence can be collected successfully."
+    }
+  ],
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "result": "rejected",
+      "notes": "Cannot verify settings fields work correctly - tests failed before proving integration. Need passing tests to confirm slack_bot_token (SecretStr) and slack_channel_id fields are correctly configured and usable."
+    },
+    {
+      "criterion_id": "AC-002",
+      "result": "rejected",
+      "notes": "Cannot verify slack-sdk imports resolve - test failures prevent confirmation. While likely added to pyproject.toml, need passing tests to prove the dependency works in the test venv."
+    },
+    {
+      "criterion_id": "AC-003",
+      "result": "rejected",
+      "notes": "Cannot verify NotificationSink protocol contract - tests failed. Protocol definition requires test evidence showing async notify/start/stop methods work correctly."
+    },
+    {
+      "criterion_id": "AC-004",
+      "result": "rejected",
+      "notes": "Cannot verify no-op sink factory - 4 tests failed overall. Player claims TestNoOpSinkWhenConfigAbsent has 3 passing tests, but cannot confirm without full test suite passing."
+    },
+    {
+      "criterion_id": "AC-005",
+      "result": "rejected",
+      "notes": "Cannot verify bounded queue delivery - gathering aborted and tests failed. Need passing tests to confirm asyncio.Queue with single worker task posting chat.postMessage with mrkdwn=False."
+    },
+    {
+      "criterion_id": "AC-006",
+      "result": "rejected",
+      "notes": "Cannot verify lifecycle methods - tests failed. Bounded shutdown that never hangs requires working test evidence, especially TestLifecycle hang prevention test."
+    },
+    {
+      "criterion_id": "AC-007",
+      "result": "rejected",
+      "notes": "Cannot verify never-raise contract (DDR-007) - critical requirement needs passing tests. Exception handling for QueueFull, SlackApiError, and all other exceptions must be proven by test evidence, which failed."
+    },
+    {
+      "criterion_id": "AC-008",
+      "result": "rejected",
+      "notes": "REJECTED - Test failure explicitly shows pr_url is None when it should be 'https://github.com/org/repo/pull/42'. The build-complete render shape must include pr_url when present, but implementation is failing this requirement. Check ForgeNotification model definition and _render() logic."
+    },
+    {
+      "criterion_id": "AC-009",
+      "result": "rejected",
+      "notes": "REJECTED - Player reports 16 tests passing, but evidence bundle shows tests_failed: 4, tests_passed: false. The mocked AsyncWebClient tests did not all pass. Independent verification found failures that must be fixed."
+    },
+    {
+      "criterion_id": "AC-010",
+      "result": "rejected",
+      "notes": "Cannot verify SecretStr masking - requires passing tests including TestSecretTokenNeverLogged assertions. Test failures prevent confirmation that token never appears in repr/str/logs."
+    },
+    {
+      "criterion_id": "AC-011",
+      "result": "rejected",
+      "notes": "Cannot verify lint/format compliance - gathering aborted before this could be independently confirmed. While Player reports ruff check passed, need complete evidence gathering to verify."
+    }
+  ],
+  "rationale": "Providing FEEDBACK due to critical blocking issues: (1) 4 tests failed in independent verification, specifically pr_url field is None when it should contain a URL, violating AC-008; (2) coverage requirement not met (coverage_met: false while coverage_required: true); (3) evidence gathering aborted with status 'partial_gate_abort', preventing independent verification; (4) all_gates_passed: false. Per absence-of-failure guards, gathering_status != 'complete' means I must treat null fields as ABSENT SIGNAL. The test failures are deterministic evidence that the implementation does not yet meet requirements. Player was honest (honesty_score: 1.0), but the work needs fixes before approval."
+}

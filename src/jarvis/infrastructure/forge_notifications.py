@@ -101,7 +101,7 @@ class ForgeNotification(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     event_type: Literal[
-        "stage_complete", "build_started", "build_complete", "build_failed"
+        "stage_complete", "build_started", "build_complete", "build_failed", "build_queued"
     ] = Field(
         default="stage_complete",
         description=(
@@ -113,7 +113,9 @@ class ForgeNotification(BaseModel):
             "pipeline namespace (``Topics.Pipeline.ALL``) and now "
             "projects build-started, build-complete and build-failed "
             "envelopes onto this same model with the "
-            "stage-complete-specific fields left as None."
+            "stage-complete-specific fields left as None. Per "
+            "TASK-JNB-002, build_queued is added for the publish-side "
+            "hook in queue_build."
         ),
     )
     correlation_id: str = Field(
@@ -201,6 +203,32 @@ class ForgeNotification(BaseModel):
             "FEAT-JARVIS-INTERNAL-001 first-real-run runbook §7.1 "
             "shape ``[HH:MM] Forge FEAT-XXX: build-failed (path "
             "outside allowlist)``."
+        ),
+    )
+    build_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Build identifier from lifecycle payloads. Optional field "
+            "added in TASK-JNB-002 per frozen-model rule — new optional "
+            "fields with None defaults only. Populated for build_started, "
+            "build_complete, and build_failed event types."
+        ),
+    )
+    pr_url: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Pull request URL from lifecycle payloads. Optional field "
+            "added in TASK-JNB-002 per frozen-model rule."
+        ),
+    )
+    summary: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Human-readable summary from lifecycle payloads. Optional "
+            "field added in TASK-JNB-002 per frozen-model rule."
         ),
     )
 
@@ -459,6 +487,7 @@ class ForgeNotificationsSubscriber:
         "_correlation_cap",
         "_correlations",
         "_nats_client",
+        "_notification_sink",
         "_queue_cap",
         "_routing_history_writer",
         "_session_manager",
@@ -506,6 +535,7 @@ class ForgeNotificationsSubscriber:
         # plain dict suffices for thread-safety; OrderedDict is for ordering.
         self._correlations: OrderedDict[str, BuildCorrelation] = OrderedDict()
         self._session_manager: SessionManager | None = None
+        self._notification_sink: Any = None  # NotificationSink protocol (TASK-JNB-002)
         self._subscription: Any = None  # nats.js.JetStreamContext.PushSubscription
         self._started: bool = False
 
@@ -641,6 +671,28 @@ class ForgeNotificationsSubscriber:
             )
             raise RuntimeError(msg)
         self._session_manager = session_manager
+
+    def bind_notification_sink(self, sink: Any) -> None:
+        """Bind the NotificationSink for correlation-independent fan-out.
+
+        Per TASK-JNB-002, the sink is invoked for build_started,
+        build_complete, and build_failed events AFTER the source-id gate
+        and payload validation but BEFORE and independent of the
+        correlation lookup. stage_complete events are NOT forwarded
+        (ASSUM-002). Sink failures are WARNING-only (DDR-007) and never
+        disturb existing subscriber processing.
+
+        Called from ``lifecycle.build_app_state`` in TASK-JNB-003.
+        Re-binding is a programming error and raises ``RuntimeError``.
+        """
+        if self._notification_sink is not None:
+            msg = (
+                "ForgeNotificationsSubscriber.bind_notification_sink called "
+                "twice — sink binding must be set exactly once from "
+                "lifecycle.build_app_state."
+            )
+            raise RuntimeError(msg)
+        self._notification_sink = sink
 
     # ------------------------------------------------------------------
     # Correlation map (DDR-028 LRU)
@@ -917,6 +969,17 @@ class ForgeNotificationsSubscriber:
             )
             return
 
+        # --- TASK-JNB-002: Extract widened fields BEFORE validation ---
+        # Per AC-008, ForgeNotification is widened with optional build_id,
+        # pr_url, and summary. These may or may not be present in the raw
+        # payload dict. Extract them before Pydantic validation (which
+        # strips unknown fields) so the sink notification can carry them.
+        raw_payload_dict = envelope.payload
+        build_id_for_sink = raw_payload_dict.get("build_id")
+        pr_url_for_sink = raw_payload_dict.get("pr_url")
+        summary_for_sink = raw_payload_dict.get("summary")
+        failure_reason_for_sink = raw_payload_dict.get("failure_reason")
+
         # Validate the payload against the right model. A bad payload
         # mirrors the stage-complete branch's ``dropped_bad_payload``
         # WARN shape so diagnostic tooling can grep one log key for
@@ -941,16 +1004,49 @@ class ForgeNotificationsSubscriber:
             )
             return
 
+        # --- TASK-JNB-002: Notification-sink seam (correlation-independent) ---
+        # Per AC-004, sink.notify() is invoked AFTER the source-id gate and
+        # payload validation but BEFORE and INDEPENDENT of the correlation
+        # lookup. A correlation miss still notifies the sink (the phone is
+        # per-operator, not per-session).
+        # Per DDR-007, sink errors are WARNING-only; they never propagate.
+        if self._notification_sink is not None:
+
+            try:
+                sink_notification = ForgeNotification(
+                    event_type=event_type,  # type: ignore[arg-type]
+                    correlation_id=correlation_id,
+                    feature_id=payload.feature_id,
+                    completed_at=envelope.timestamp,
+                    failure_reason=failure_reason,
+                    build_id=build_id,
+                    pr_url=pr_url,
+                    summary=summary,
+                )
+                await self._notification_sink.notify(sink_notification)
+            except Exception as exc:
+                # DDR-007: sink failures are WARNING-only, never propagate
+                logger.warning(
+                    "notification_sink_error",
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                    event_type=event_type,
+                    correlation_id=correlation_id,
+                )
+
+        # --- End TASK-JNB-002 sink seam ---
+
         correlation = self._correlations.get(correlation_id)
         if correlation is None:
             # Same silent-drop semantics as stage-complete (Group C #2).
+            # NOTE: Sink was already notified above (correlation-independent).
             return
         self._correlations.move_to_end(correlation_id)
 
         # ``isinstance`` narrows the union — only BuildFailedPayload
         # carries ``failure_reason``; the other two branches keep it None
         # and the renderer falls through to its non-failure shapes.
-        failure_reason: str | None = (
+        failure_reason_for_cli: str | None = (
             payload.failure_reason
             if isinstance(payload, BuildFailedPayload)
             else None
@@ -962,7 +1058,7 @@ class ForgeNotificationsSubscriber:
                 correlation_id=correlation_id,
                 feature_id=payload.feature_id,
                 completed_at=envelope.timestamp,
-                failure_reason=failure_reason,
+                failure_reason=failure_reason_for_cli,
             )
         except ValidationError as exc:
             logger.warning(

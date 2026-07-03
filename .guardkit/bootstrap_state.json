@@ -1,5 +1,6 @@
 {
-  "content_hash": "1cd5c56e7d90a690da68a1d3d57da2102514e044b4aa25524ac5c75647b1528d",
+  "content_hash": "0f3b202f9c4985c5d96f72408ea4dcfc3edac31cb7d2d8bff715534af1e1b588",
   "success": true,
-  "timestamp": "2026-04-30T20:13:45.378585"
+  "timestamp": "2026-07-03T17:09:46.576106",
+  "venv_python": "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/.venv/bin/python"
 }

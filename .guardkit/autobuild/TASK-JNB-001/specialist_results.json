@@ -1,0 +1,21 @@
+{
+  "phase_4": {
+    "status": "failed",
+    "duration_seconds": 3.338456124998629,
+    "error": "tests failed (deterministic Phase 4): Error detail:\n    assert notification.pr_url == \"https://github.com/org/repo/pull/42\"\nE   AssertionError: assert None == 'https://github.com/org/repo/pull/42'\nE",
+    "tests_run": 30,
+    "tests_failed": 4,
+    "coverage_pct": 0.0,
+    "output_summary": "Error detail:\n    assert notification.pr_url == \"https://github.com/org/repo/pull/42\"\nE   AssertionError: assert None == 'https://github.com/org/repo/pull/42'\nE    +  where None = ForgeNotification(ev",
+    "quality_gates_passed": false
+  },
+  "phase_5": {
+    "status": "skipped",
+    "duration_seconds": 0.0,
+    "error": "phase_4 status=failed",
+    "issues": [],
+    "quality_score": 0.0,
+    "recommendations": [],
+    "output_summary": "Review completed by orchestrator-invoked code-reviewer."
+  }
+}
