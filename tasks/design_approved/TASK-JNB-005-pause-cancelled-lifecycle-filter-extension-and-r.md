@@ -1,20 +1,25 @@
 ---
-id: TASK-JNB-005
-title: "Pause + cancelled lifecycle: filter extension and rendering"
-status: backlog
-created: 2026-07-03T15:30:00Z
-updated: 2026-07-03T15:30:00Z
-priority: high
-task_type: feature
-parent_review: TASK-REV-C951
+complexity: 5
+created: 2026-07-03 15:30:00+00:00
+dependencies:
+- TASK-JNB-003
 feature_id: FEAT-28FF
+id: TASK-JNB-005
+implementation_mode: task-work
+parent_review: TASK-REV-C951
+priority: high
+repo: jarvis
+status: design_approved
+tags:
+- ubs-003
+- jarvis-notification-bridge
+- slack
+- v1
+task_type: feature
+title: 'Pause + cancelled lifecycle: filter extension and rendering'
+updated: 2026-07-03 15:30:00+00:00
 version: v1
 wave: 4
-repo: jarvis
-implementation_mode: task-work
-complexity: 5
-dependencies: [TASK-JNB-003]
-tags: [ubs-003, jarvis-notification-bridge, slack, v1]
 ---
 
 # Task: Pause + cancelled lifecycle: filter extension and rendering

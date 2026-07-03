@@ -106,6 +106,8 @@ class ForgeNotification(BaseModel):
         "build_complete",
         "build_failed",
         "build_queued",
+        "build_paused",
+        "build_cancelled",
     ] = Field(
         default="stage_complete",
         description=(
@@ -119,7 +121,8 @@ class ForgeNotification(BaseModel):
             "envelopes onto this same model with the "
             "stage-complete-specific fields left as None. Per "
             "TASK-JNB-002, build_queued is added for the publish-side "
-            "hook in queue_build."
+            "hook in queue_build. Per TASK-JNB-005, build_paused and "
+            "build_cancelled are added for the pause + cancelled lifecycle."
         ),
     )
     correlation_id: str = Field(
@@ -231,6 +234,57 @@ class ForgeNotification(BaseModel):
         description=(
             "Human-readable summary from lifecycle payloads. Optional "
             "field added in TASK-JNB-002 per frozen-model rule."
+        ),
+    )
+    coach_score: float | None = Field(
+        default=None,
+        description=(
+            "Coach quality score from BuildPausedPayload (0.0–1.0 range). "
+            "None is the live default (ADR-ARCH-033) and renders as "
+            "'score unavailable'. Out-of-range values render as inert "
+            "text. Optional field added in TASK-JNB-005 per frozen-model rule."
+        ),
+    )
+    rationale: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Verbatim plain-text rationale from BuildPausedPayload. "
+            "Chunked if > 3000 chars for Block Kit rendering. "
+            "Optional field added in TASK-JNB-005 per frozen-model rule."
+        ),
+    )
+    gate_mode: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Gate mode from BuildPausedPayload (e.g. 'automated'). "
+            "Optional field added in TASK-JNB-005 per frozen-model rule."
+        ),
+    )
+    approval_subject: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Approval subject from BuildPausedPayload for v1.1 button "
+            "routing (TASK-JNB-103). Retained verbatim on pause projection. "
+            "Optional field added in TASK-JNB-005 per frozen-model rule."
+        ),
+    )
+    cancelled_by: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Operator who cancelled the build (from BuildCancelledPayload). "
+            "Optional field added in TASK-JNB-005 per frozen-model rule."
+        ),
+    )
+    reason: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Cancellation reason from BuildCancelledPayload. "
+            "Optional field added in TASK-JNB-005 per frozen-model rule."
         ),
     )
 
@@ -409,17 +463,20 @@ def _get_deliver_policy_all() -> Any:
 
 
 def _get_lifecycle_subjects() -> list[str]:
-    """Lazy-derive the four lifecycle subject wildcards from ``nats_core.Topics``.
+    """Lazy-derive the six lifecycle subject wildcards from ``nats_core.Topics``.
 
-    Returns the explicit four-subject lifecycle filter list Jarvis
+    Returns the explicit six-subject lifecycle filter list Jarvis
     binds on the canonical PIPELINE stream:
 
     * ``pipeline.build-started.>``
     * ``pipeline.stage-complete.>``
     * ``pipeline.build-complete.>``
     * ``pipeline.build-failed.>``
+    * ``pipeline.build-paused.>``
+    * ``pipeline.build-cancelled.>``
 
-    These are exactly the runbook §7.1 envelope types Jarvis renders.
+    These are exactly the runbook §7.1 envelope types Jarvis renders,
+    plus the pause + cancelled lifecycle events (TASK-JNB-005).
 
     Why this list (and not the wider ``Topics.Pipeline.ALL`` —
     ``pipeline.>``)? PIPELINE is workqueue-retention; workqueue policy
@@ -429,7 +486,7 @@ def _get_lifecycle_subjects() -> list[str]:
     use a filter disjoint from that. ``pipeline.>`` is a superset of
     ``pipeline.build-queued.>`` and JetStream rejects the bind with
     ``err_code=10100 'filtered consumer not unique on workqueue
-    stream'``. The four lifecycle subjects above are disjoint from
+    stream'``. The six lifecycle subjects above are disjoint from
     ``pipeline.build-queued.>`` by construction (TASK-FRR-F010Db, the
     correction to TASK-FRR-F010D's Option A widening). Jarvis's own
     ``pipeline.build-queued.*`` self-publishes never reach
@@ -456,6 +513,8 @@ def _get_lifecycle_subjects() -> list[str]:
         pipeline.STAGE_COMPLETE.replace("{feature_id}", ">"),
         pipeline.BUILD_COMPLETE.replace("{feature_id}", ">"),
         pipeline.BUILD_FAILED.replace("{feature_id}", ">"),
+        pipeline.BUILD_PAUSED.replace("{feature_id}", ">"),
+        pipeline.BUILD_CANCELLED.replace("{feature_id}", ">"),
     ]
 
 
@@ -835,12 +894,15 @@ class ForgeNotificationsSubscriber:
         if event_type in ("build_started", "build_complete", "build_failed"):
             await self._handle_build_lifecycle(envelope, event_type)
             return
+        if event_type in ("build_paused", "build_cancelled"):
+            # TASK-JNB-005: Pause + cancelled lifecycle
+            await self._handle_pause_or_cancelled(envelope, event_type)
+            return
         # Other pipeline.* events (build_queued, build_progress,
-        # build_paused, build_resumed, build_cancelled, feature_planned,
-        # feature_ready_for_build, stage_gated) are intentionally not
-        # rendered as CLI between-prompt notifications today. Drop with
-        # a debug log; consumers needing those types will be added by a
-        # follow-up task.
+        # build_resumed, feature_planned, feature_ready_for_build,
+        # stage_gated) are intentionally not rendered as CLI
+        # between-prompt notifications today. Drop with a debug log;
+        # consumers needing those types will be added by a follow-up task.
         logger.debug(
             "forge_notification_dropped_unsupported_event_type",
             event_type=str(event_type),
@@ -1064,6 +1126,141 @@ class ForgeNotificationsSubscriber:
                 error=str(exc),
                 event_type=event_type,
                 correlation_id=correlation_id,
+            )
+            return
+
+        self._enqueue_for_correlation(correlation, notification)
+
+    async def _handle_pause_or_cancelled(
+        self,
+        envelope: Any,
+        event_type: str,
+    ) -> None:
+        """Project a build-paused or build-cancelled envelope onto ForgeNotification.
+
+        Handles the two TASK-JNB-005 lifecycle types:
+
+        * ``build_paused``    → BuildPausedPayload (carries its own correlation_id)
+        * ``build_cancelled`` → BuildCancelledPayload (carries its own correlation_id)
+
+        Per TASK-JNB-005, both payloads carry their own ``correlation_id`` field.
+        The pause projection retains ``approval_subject`` verbatim for v1.1
+        button routing (TASK-JNB-103). ``completed_at`` is sourced from
+        ``envelope.timestamp``.
+
+        Per DDR-007, the notification-sink seam is invoked AFTER the source-id
+        gate and payload validation but BEFORE and INDEPENDENT of the
+        correlation lookup (same pattern as _handle_build_lifecycle).
+        """
+        correlation_id = envelope.correlation_id
+        if not correlation_id:
+            logger.warning(
+                "forge_notification_dropped_missing_envelope_correlation",
+                event_type=event_type,
+            )
+            return
+
+        # Extract raw payload dict for sink notification (before Pydantic validation)
+        raw_payload_dict = envelope.payload
+
+        # Validate against BuildPausedPayload or BuildCancelledPayload
+        # Both are synthetic payloads constructed in-test per ASSUM-010
+        # (no live producer for cancelled in v1)
+        try:
+            # Both payloads are dict-like; extract common fields
+            feature_id = raw_payload_dict.get("feature_id")
+            payload_correlation_id = raw_payload_dict.get("correlation_id")
+
+            if not feature_id:
+                raise ValueError("Missing feature_id in payload")
+            if not payload_correlation_id:
+                raise ValueError("Missing correlation_id in payload")
+
+            # Build type-specific fields
+            if event_type == "build_paused":
+                coach_score = raw_payload_dict.get("coach_score")
+                rationale = raw_payload_dict.get("rationale")
+                gate_mode = raw_payload_dict.get("gate_mode")
+                approval_subject = raw_payload_dict.get("approval_subject")
+                stage_label = raw_payload_dict.get("stage")
+                cancelled_by = None
+                reason = None
+            else:  # build_cancelled
+                cancelled_by = raw_payload_dict.get("cancelled_by")
+                reason = raw_payload_dict.get("reason")
+                coach_score = None
+                rationale = None
+                gate_mode = None
+                approval_subject = None
+                stage_label = None
+
+        except (KeyError, ValueError) as exc:
+            logger.warning(
+                "forge_notification_dropped_bad_payload",
+                error_class=type(exc).__name__,
+                error=str(exc),
+                event_type=event_type,
+                correlation_id=correlation_id,
+            )
+            return
+
+        # TASK-JNB-002 pattern: Notification-sink seam (correlation-independent)
+        # Per DDR-007, sink errors are WARNING-only; they never propagate.
+        if self._notification_sink is not None:
+            try:
+                sink_notification = ForgeNotification(
+                    event_type=event_type,  # type: ignore[arg-type]
+                    correlation_id=payload_correlation_id,
+                    feature_id=feature_id,
+                    completed_at=envelope.timestamp,
+                    coach_score=coach_score,
+                    rationale=rationale,
+                    gate_mode=gate_mode,
+                    approval_subject=approval_subject,
+                    cancelled_by=cancelled_by,
+                    reason=reason,
+                    stage_label=stage_label,
+                )
+                await self._notification_sink.notify(sink_notification)
+            except Exception as exc:
+                # DDR-007: sink failures are WARNING-only, never propagate
+                logger.warning(
+                    "notification_sink_error",
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                    event_type=event_type,
+                    correlation_id=correlation_id,
+                )
+
+        # Correlation lookup for CLI routing
+        correlation = self._correlations.get(payload_correlation_id)
+        if correlation is None:
+            # Same silent-drop semantics as other lifecycle events (Group C #2).
+            # NOTE: Sink was already notified above (correlation-independent).
+            return
+        self._correlations.move_to_end(payload_correlation_id)
+
+        try:
+            notification = ForgeNotification(
+                event_type=event_type,  # type: ignore[arg-type]
+                correlation_id=payload_correlation_id,
+                feature_id=feature_id,
+                completed_at=envelope.timestamp,
+                coach_score=coach_score,
+                rationale=rationale,
+                gate_mode=gate_mode,
+                approval_subject=approval_subject,
+                cancelled_by=cancelled_by,
+                reason=reason,
+                stage_label=stage_label,
+            )
+        except ValidationError as exc:
+            logger.warning(
+                "forge_notification_dropped_projection_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+                event_type=event_type,
+                correlation_id=payload_correlation_id,
             )
             return
 

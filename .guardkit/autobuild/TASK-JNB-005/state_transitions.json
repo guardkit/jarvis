@@ -1,0 +1,9 @@
+[
+  {
+    "task_id": "TASK-JNB-005",
+    "pre_path": "tasks/backlog/TASK-JNB-005-pause-cancelled-lifecycle-filter-extension-and-r.md",
+    "post_path": "tasks/design_approved/TASK-JNB-005-pause-cancelled-lifecycle-filter-extension-and-r.md",
+    "timestamp": "2026-07-03T16:53:17.543834+00:00",
+    "kind": "design_approved_transition"
+  }
+]

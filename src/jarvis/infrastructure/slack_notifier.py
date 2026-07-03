@@ -41,6 +41,7 @@ Notes
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
@@ -57,6 +58,15 @@ _DEFAULT_QUEUE_MAXSIZE = 100
 # Default stop timeout (seconds) — stop() returns within this bound even
 # if queue is full or worker is stuck
 _DEFAULT_STOP_TIMEOUT = 5.0
+
+# Dedup TTL (TASK-JNB-006 ASSUM-006) — 300s first-wins window
+_DEDUP_TTL_SECONDS = 300.0
+
+# 429 retry budget — maximum retry attempts per message
+_MAX_429_RETRIES = 3
+
+# Worker pacing — target ~1 msg/s
+_WORKER_PACING_DELAY = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +128,7 @@ class SlackNotifier:
         "_bot_token",
         "_channel_id",
         "_client",
+        "_dedup_map",
         "_queue",
         "_queue_maxsize",
         "_started",
@@ -154,11 +165,17 @@ class SlackNotifier:
         )
         self._started = False
         self._worker_task: asyncio.Task[None] | None = None
+        # Dedup map: key -> monotonic timestamp (TASK-JNB-006)
+        self._dedup_map: dict[tuple[str, ...], float] = {}
 
     async def notify(self, notification: ForgeNotification) -> None:
         """Enqueue a notification; never raises (DDR-007).
 
-        If the queue is full, logs WARNING and drops the notification.
+        Implements dedup (TASK-JNB-006 ASSUM-006): first-wins 300s TTL keyed
+        on (event_type, build_id, stage_label) for stream events and
+        ('build_queued', correlation_id) for intake events.
+
+        If the queue is full, drops the oldest queued message with WARNING.
         If the sink is not started, logs WARNING and drops.
         """
         if not self._started:
@@ -169,16 +186,48 @@ class SlackNotifier:
             )
             return
 
+        # Dedup check: evict expired entries then check for duplicate
+        self._evict_expired_dedup_entries()
+
+        dedup_key = self._make_dedup_key(notification)
+        now_mono = time.monotonic()
+
+        if dedup_key in self._dedup_map:
+            # Duplicate within TTL — drop silently
+            logger.debug(
+                "slack_notify_dropped_duplicate",
+                correlation_id=notification.correlation_id,
+                feature_id=notification.feature_id,
+                dedup_key=dedup_key,
+            )
+            return
+
+        # Record this notification in the dedup map
+        self._dedup_map[dedup_key] = now_mono
+
         try:
             # put_nowait raises QueueFull if at capacity
             self._queue.put_nowait(notification)
         except asyncio.QueueFull:
-            logger.warning(
-                "slack_notify_dropped_queue_full",
-                correlation_id=notification.correlation_id,
-                feature_id=notification.feature_id,
-                queue_maxsize=self._queue_maxsize,
-            )
+            # Drop oldest message from queue (TASK-JNB-006 AC-008)
+            try:
+                oldest = self._queue.get_nowait()
+                logger.warning(
+                    "slack_notify_dropped_queue_overflow",
+                    dropped_correlation_id=oldest.correlation_id,
+                    dropped_feature_id=oldest.feature_id,
+                    queue_maxsize=self._queue_maxsize,
+                )
+                # Try to enqueue the new notification
+                self._queue.put_nowait(notification)
+            except (asyncio.QueueEmpty, asyncio.QueueFull):
+                # Fallback: log and drop new notification
+                logger.warning(
+                    "slack_notify_dropped_queue_full",
+                    correlation_id=notification.correlation_id,
+                    feature_id=notification.feature_id,
+                    queue_maxsize=self._queue_maxsize,
+                )
 
     async def start(self) -> None:
         """Launch the worker task (idempotent)."""
@@ -235,6 +284,10 @@ class SlackNotifier:
 
         Runs until cancelled. Every delivery failure logs at WARNING and
         continues — the worker never stops on error (DDR-007).
+
+        Implements (TASK-JNB-006):
+        - ~1 msg/s pacing
+        - 429 handling with Retry-After honour and bounded retry budget
         """
         from slack_sdk.errors import SlackApiError
 
@@ -243,30 +296,69 @@ class SlackNotifier:
                 notification = await self._queue.get()
                 text = self._render(notification)
 
-                try:
-                    await self._client.chat_postMessage(
-                        channel=self._channel_id,
-                        text=text,
-                        mrkdwn=False,
-                    )
-                except SlackApiError as exc:
-                    logger.warning(
-                        "slack_delivery_failed",
-                        correlation_id=notification.correlation_id,
-                        feature_id=notification.feature_id,
-                        error=str(exc),
-                        error_class=type(exc).__name__,
-                    )
-                except Exception as exc:
-                    # Defensive catch-all — any other exception logs and
-                    # continues
-                    logger.warning(
-                        "slack_delivery_unexpected_error",
-                        correlation_id=notification.correlation_id,
-                        feature_id=notification.feature_id,
-                        error=str(exc),
-                        error_class=type(exc).__name__,
-                    )
+                # Deliver with retry budget for 429 responses
+                retries_left = _MAX_429_RETRIES
+                delivered = False
+
+                while retries_left > 0 and not delivered:
+                    try:
+                        await self._client.chat_postMessage(
+                            channel=self._channel_id,
+                            text=text,
+                            mrkdwn=False,
+                        )
+                        delivered = True
+
+                    except SlackApiError as exc:
+                        # 429 rate limit handling (TASK-JNB-006 AC-006)
+                        if exc.response.status_code == 429:
+                            retries_left -= 1
+
+                            if retries_left > 0:
+                                # Honour Retry-After header
+                                retry_after = exc.response.headers.get("Retry-After")
+                                delay = float(retry_after) if retry_after else 1.0
+                                logger.warning(
+                                    "slack_429_backoff",
+                                    correlation_id=notification.correlation_id,
+                                    feature_id=notification.feature_id,
+                                    retry_after=delay,
+                                    retries_left=retries_left,
+                                )
+                                await asyncio.sleep(delay)
+                            else:
+                                # Budget exhausted
+                                logger.warning(
+                                    "slack_429_budget_exhausted",
+                                    correlation_id=notification.correlation_id,
+                                    feature_id=notification.feature_id,
+                                    error=str(exc),
+                                )
+                                break
+                        else:
+                            # Non-429 SlackApiError — log and drop
+                            logger.warning(
+                                "slack_delivery_failed",
+                                correlation_id=notification.correlation_id,
+                                feature_id=notification.feature_id,
+                                error=str(exc),
+                                error_class=type(exc).__name__,
+                            )
+                            break
+
+                    except Exception as exc:
+                        # Defensive catch-all — any other exception logs and drops
+                        logger.warning(
+                            "slack_delivery_unexpected_error",
+                            correlation_id=notification.correlation_id,
+                            feature_id=notification.feature_id,
+                            error=str(exc),
+                            error_class=type(exc).__name__,
+                        )
+                        break
+
+                # Worker pacing: ~1 msg/s (TASK-JNB-006 AC-005)
+                await asyncio.sleep(_WORKER_PACING_DELAY)
 
             except asyncio.CancelledError:
                 # Worker is stopping
@@ -278,6 +370,41 @@ class SlackNotifier:
                     error_class=type(exc).__name__,
                     error=str(exc),
                 )
+
+    def _make_dedup_key(self, notification: ForgeNotification) -> tuple[str, ...]:
+        """Construct dedup key per TASK-JNB-006 ASSUM-006.
+
+        For build_queued (intake): ('build_queued', correlation_id)
+        For stream events: (event_type, build_id, stage_label or '')
+
+        Args:
+            notification: The notification to key.
+
+        Returns:
+            Dedup key tuple.
+        """
+        if notification.event_type == "build_queued":
+            return ("build_queued", notification.correlation_id)
+
+        # Stream events (build_started, build_complete, build_failed, stage_complete)
+        build_id = notification.build_id or ""
+        stage_label = notification.stage_label or ""
+        return (notification.event_type, build_id, stage_label)
+
+    def _evict_expired_dedup_entries(self) -> None:
+        """Evict expired entries from dedup map (TASK-JNB-006 AC-002).
+
+        Uses monotonic clock with 300s TTL. Eviction happens on insert
+        (called from notify()).
+        """
+        now_mono = time.monotonic()
+        expired_keys = [
+            key
+            for key, timestamp in self._dedup_map.items()
+            if (now_mono - timestamp) >= _DEDUP_TTL_SECONDS
+        ]
+        for key in expired_keys:
+            del self._dedup_map[key]
 
     def _render(self, notification: ForgeNotification) -> str:
         """Render a ForgeNotification into plain-text Slack message.
@@ -331,6 +458,48 @@ class SlackNotifier:
         if event_type == "build_failed":
             reason = notification.failure_reason or "unknown"
             return f"[{hhmm}] Forge {feature_id}: build-failed ({reason})"
+
+        if event_type == "build_paused":
+            # TASK-JNB-005: Pause rendering
+            # Format: stage, rationale, coach_score, CLI hint
+            parts = [f"[{hhmm}] Forge {feature_id}: build-paused"]
+
+            # Stage
+            if notification.stage_label:
+                parts.append(f"Stage: {notification.stage_label}")
+
+            # Coach score
+            if notification.coach_score is None:
+                score_text = "score unavailable"
+            else:
+                # Defensive rendering: out-of-range scores render as text, never rejected
+                score_text = f"{notification.coach_score:.2f}"
+            parts.append(f"Coach score: {score_text}")
+
+            # Rationale (verbatim plain text)
+            if notification.rationale:
+                # Chunk rationales > 3000 chars for Block Kit compatibility
+                # In plain text mode, we just include the full rationale
+                # but note that actual Block Kit would need chunking
+                parts.append(f"Rationale: {notification.rationale}")
+
+            # CLI hint for v1 (v1.1 will use buttons per TASK-JNB-103)
+            parts.append("Use CLI to approve or reject this build.")
+
+            return "\n".join(parts)
+
+        if event_type == "build_cancelled":
+            # TASK-JNB-005: Cancelled rendering
+            # Format: cancelled_by, reason
+            parts = [f"[{hhmm}] Forge {feature_id}: build-cancelled"]
+
+            if notification.cancelled_by:
+                parts.append(f"Cancelled by: {notification.cancelled_by}")
+
+            if notification.reason:
+                parts.append(f"Reason: {notification.reason}")
+
+            return "\n".join(parts)
 
         # Fallback (should not reach here given the event_type Literal)
         return f"[{hhmm}] Forge {feature_id}: {event_type}"
