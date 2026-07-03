@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
@@ -67,6 +68,12 @@ _MAX_429_RETRIES = 3
 
 # Worker pacing — target ~1 msg/s
 _WORKER_PACING_DELAY = 1.0
+
+# Injectable monotonic-clock seam. Tests MUST patch this alias
+# (jarvis.infrastructure.slack_notifier._monotonic) instead of
+# time.monotonic — patching the shared stdlib attribute freezes
+# asyncio's event-loop clock and hangs the whole test process.
+_monotonic = time.monotonic
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +197,7 @@ class SlackNotifier:
         self._evict_expired_dedup_entries()
 
         dedup_key = self._make_dedup_key(notification)
-        now_mono = time.monotonic()
+        now_mono = _monotonic()
 
         if dedup_key in self._dedup_map:
             # Duplicate within TTL — drop silently
@@ -397,7 +404,7 @@ class SlackNotifier:
         Uses monotonic clock with 300s TTL. Eviction happens on insert
         (called from notify()).
         """
-        now_mono = time.monotonic()
+        now_mono = _monotonic()
         expired_keys = [
             key
             for key, timestamp in self._dedup_map.items()

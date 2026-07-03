@@ -696,7 +696,7 @@ class TestDedupTtlExpiry:
         with patch(
             "slack_sdk.web.async_client.AsyncWebClient"
         ) as mock_client_cls, patch(
-            "jarvis.infrastructure.slack_notifier.time.monotonic"
+            "jarvis.infrastructure.slack_notifier._monotonic"
         ) as mock_monotonic:
             mock_client = AsyncMock()
             mock_client_cls.return_value = mock_client
