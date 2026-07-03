@@ -16,6 +16,8 @@ Jarvis's existing NATS identity — ``config.nats_url`` +
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from collections import Counter
 from dataclasses import dataclass
@@ -30,6 +32,13 @@ if TYPE_CHECKING:
     from jarvis.config.settings import JarvisConfig
 
 logger = logging.getLogger(__name__)
+
+# Hard ceiling on the one-shot connect for a fire-and-forget memory write. Bounds
+# the whole connect (including any nats-py retry) the same way the supervisor's
+# NATSClient.connect uses ``asyncio.wait_for`` — so an unreachable / unauthorized
+# broker fails open in seconds instead of a minutes-long background retry-storm
+# (DDR-019 fail-open; live-proof finding 2026-07-03).
+_CONNECT_TIMEOUT_SECONDS = 6.0
 
 
 @dataclass
@@ -68,6 +77,14 @@ def build_nats_client(config: JarvisConfig) -> NATSClient:
         url=config.nats_url,
         creds_file=creds_file,
         name="jarvis-memory",
+        # Fail fast — this is a fire-and-forget, fail-open publisher (DDR-019).
+        # NATSConfig defaults to ``max_reconnect_attempts=60`` (~2 min of retries
+        # at the 2s ``reconnect_time_wait``); against an unreachable or
+        # unauthorized broker that would spawn a 2-minute background retry-storm
+        # per routing-history write. A one-shot connect-publish-disconnect never
+        # needs reconnection, so disable retries and bound the initial connect.
+        max_reconnect_attempts=0,
+        connect_timeout=5.0,
     )
     return NATSClient(nats_config, source_id="jarvis-memory")
 
@@ -104,8 +121,12 @@ async def publish_episodes(
     skipped_oversized = 0
     type_counts: Counter[str] = Counter()
 
+    connected = False
     try:
-        await client.connect()
+        # Bound the connect so a bad/unauthorized broker fails open in seconds
+        # rather than triggering nats-py's multi-minute reconnect loop.
+        await asyncio.wait_for(client.connect(), timeout=_CONNECT_TIMEOUT_SECONDS)
+        connected = True
 
         for episode in episodes:
             try:
@@ -133,8 +154,12 @@ async def publish_episodes(
                 else:
                     raise
     finally:
-        # Always disconnect, even if errors occurred.
-        await client.disconnect()
+        # Disconnect only if the connect succeeded; a never-connected client
+        # has no live connection to drain. Swallow teardown errors — the caller
+        # fails open regardless.
+        if connected:
+            with contextlib.suppress(Exception):
+                await client.disconnect()
 
     return PublishSummary(
         published=published,

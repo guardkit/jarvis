@@ -27,7 +27,7 @@ import pytest
 
 from jarvis.config.settings import JarvisConfig
 from jarvis.infrastructure.fleet_memory.client import FleetMemoryClient
-from jarvis.infrastructure.fleet_memory.publisher import PublishSummary
+from jarvis.infrastructure.fleet_memory.publisher import PublishSummary, build_nats_client
 
 # The write path builds a ``nats_core.events.MemoryEpisodeV1``; skip cleanly if
 # the memory extra is absent from a minimal env (mirrors guardkit §3).
@@ -158,6 +158,32 @@ class TestFleetMemoryClientAddEpisodeBoundary:
             )
 
         assert result is None
+
+
+@pytest.mark.skipif(not _HAS_NATS_CORE, reason="nats_core (memory write dep) not installed")
+class TestPublisherFailFast:
+    """The memory publisher connects with fail-fast settings (DDR-019).
+
+    Regression guard for the live-proof finding: the default
+    ``NATSConfig.max_reconnect_attempts=60`` caused a ~2-minute background
+    retry-storm per fire-and-forget write against an unreachable / unauthorized
+    broker. A one-shot fail-open publish must not retry.
+    """
+
+    def test_build_nats_client_disables_reconnect_retries(self) -> None:
+        client = build_nats_client(_enabled_config())
+        assert client._config.max_reconnect_attempts == 0
+        assert client._config.connect_timeout <= 5.0
+
+    def test_build_nats_client_reuses_config_creds_and_url(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            cfg = JarvisConfig(
+                llama_swap_base_url="http://fake",
+                nats_url="nats://broker.example:4222",
+            )
+        client = build_nats_client(cfg)
+        assert client._config.url == "nats://broker.example:4222"
+        assert client._config.creds_file is None  # nats_credentials_path unset
 
 
 class TestFleetMemoryClientInterface:
