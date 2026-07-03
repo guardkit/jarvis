@@ -31,7 +31,7 @@ boundary of ``jarvis.tools``. No domain package (``jarvis.agents``,
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import BaseTool
 
@@ -108,6 +108,7 @@ def assemble_tool_list(
     dispatch_semaphore: DispatchSemaphore | None = None,
     forge_subscriber: ForgeNotificationsSubscriber | None = None,
     capabilities_registry: CapabilitiesRegistry | None = None,
+    notification_sink: Any = None,
 ) -> list[BaseTool]:
     """Wire and return the Jarvis tool list in stable alphabetical order.
 
@@ -225,6 +226,14 @@ def assemble_tool_list(
             wiring (``lifecycle.build_app_state``) always supplies either
             a :class:`LiveCapabilitiesRegistry` (NATS up) or a
             :class:`StubCapabilitiesRegistry` (NATS down — DDR-021 soft-fail).
+        notification_sink: The NotificationSink (SlackNotifier or NoOpSink)
+            constructed at startup for Forge build event notifications
+            (TASK-JNB-003). Snapshotted into
+            ``jarvis.tools.dispatch._notification_sink`` so :func:`queue_build`
+            can fire build_queued notifications after PubAck. ``None`` (the
+            default) is honoured — the dispatch tool skips the notification
+            step rather than raising. Production wiring (``lifecycle.build_app_state``)
+            always supplies a sink (either real SlackNotifier or NoOpSink).
 
     Returns:
         A fresh ``list[BaseTool]`` in stable alphabetical order:
@@ -326,6 +335,13 @@ def assemble_tool_list(
     # path — DDR-021): the dispatch tool then skips the correlation step
     # rather than raising.
     _dispatch._forge_subscriber = forge_subscriber
+
+    # TASK-JNB-003 — snapshot the notification sink (SlackNotifier or NoOpSink)
+    # so the ``queue_build`` tool body can fire build_queued notifications
+    # after PubAck/register_correlation. ``None`` is honoured (default):
+    # the dispatch tool skips the notification step rather than raising.
+    # Production wiring always supplies a sink (never None).
+    _dispatch._notification_sink = notification_sink
 
     # Stable alphabetical ordering — the test suite and the supervisor
     # wiring rely on this being deterministic. A literal list (rather
