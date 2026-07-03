@@ -1,20 +1,26 @@
 ---
-id: TASK-JNB-008
-title: "v1 scenario test matrix (plain pytest, no BDD glue)"
-status: backlog
-created: 2026-07-03T15:30:00Z
-updated: 2026-07-03T15:30:00Z
-priority: high
-task_type: testing
-parent_review: TASK-REV-C951
+complexity: 6
+created: 2026-07-03 15:30:00+00:00
+dependencies:
+- TASK-JNB-005
+- TASK-JNB-006
 feature_id: FEAT-28FF
+id: TASK-JNB-008
+implementation_mode: task-work
+parent_review: TASK-REV-C951
+priority: high
+repo: jarvis
+status: design_approved
+tags:
+- ubs-003
+- jarvis-notification-bridge
+- slack
+- v1
+task_type: testing
+title: v1 scenario test matrix (plain pytest, no BDD glue)
+updated: 2026-07-03 15:30:00+00:00
 version: v1
 wave: 5
-repo: jarvis
-implementation_mode: task-work
-complexity: 6
-dependencies: [TASK-JNB-005, TASK-JNB-006]
-tags: [ubs-003, jarvis-notification-bridge, slack, v1]
 ---
 
 # Task: v1 scenario test matrix (plain pytest, no BDD glue)

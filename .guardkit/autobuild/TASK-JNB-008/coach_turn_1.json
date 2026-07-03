@@ -1,0 +1,81 @@
+{
+  "task_id": "TASK-JNB-008",
+  "turn": 1,
+  "decision": "feedback",
+  "issues": [
+    {
+      "type": "test_failure",
+      "severity": "critical",
+      "description": "Caplog not capturing structlog output. Tests in TestMalformedDrop, TestUnrecognisedSourceDrop, and TestDuplicateTerminalDedup fail with assertions like 'assert \"slack_notify_dropped_duplicate\" in caplog.text' because caplog.text is empty. Structlog writes to a different output stream that caplog doesn't capture by default.",
+      "requirement": "AC-005, AC-007",
+      "suggestion": "Configure structlog to write to a caplog-compatible logger, or use structlog's testing.capture_logs() context manager instead of pytest's caplog fixture. Alternatively, configure the test to redirect structlog output to the standard logging infrastructure that caplog monitors."
+    },
+    {
+      "type": "test_failure",
+      "severity": "critical",
+      "description": "Async mock timing and configuration issues in TestDeliveryFailureOutcomePreservation, TestThrottlingBurst, and TestNoReplayOnRestart. The async mocks for SlackApiError and worker pacing are not properly awaited or configured, causing test failures.",
+      "requirement": "AC-006, AC-008, AC-009",
+      "suggestion": "Ensure AsyncMock is used consistently for async methods. For SlackApiError delivery failures, verify the mock is configured to raise on await. For throttling tests, use explicit asyncio.sleep() calls or mock time.monotonic() to control timing deterministically. For no-replay tests, ensure the subscriber/notifier lifecycle is fully torn down and recreated between test phases."
+    },
+    {
+      "type": "test_failure",
+      "severity": "critical",
+      "description": "8 out of 21 tests failing prevents AC-010 (full suite green) from being met. The failures are all technical async mocking and logging infrastructure issues, not logic errors in the test scenarios themselves.",
+      "requirement": "AC-010",
+      "suggestion": "Fix the caplog/structlog integration and async mock issues identified above. Once those are resolved, re-run the full suite to verify all 21 tests pass."
+    }
+  ],
+  "criteria_verification": [
+    {
+      "criterion_id": "AC-001",
+      "result": "verified",
+      "notes": "Player created 20 test classes with names mirroring the v1 scenario names: TestQueuedRendering, TestStartedRendering, TestCompleteRendering, TestFailedRendering, TestPausedRenderingNoScore, TestPausedRenderingZeroScore, TestPausedRenderingOneScore, TestCancelledRendering, TestSuppression, TestDuplicateTerminalDedup, TestMalformedDrop, TestUnrecognisedSourceDrop, TestDeliveryFailureOutcomePreservation, TestInertText, TestLongRationale, TestThrottlingBurst, TestConcurrentTerminals, TestNoReplayOnRestart, TestDegradedStart, TestTwoBuildFieldIsolation. Honesty verification confirms this claim."
+    },
+    {
+      "criterion_id": "AC-002",
+      "result": "verified",
+      "notes": "Tests drive synthetic MessageEnvelopes through real ForgeNotificationsSubscriber._handle_message and real SlackNotifier, with only AsyncWebClient mocked using unittest.mock.patch. No test doubles re-implement subscriber or notifier logic. The passing tests demonstrate this pattern works correctly."
+    },
+    {
+      "criterion_id": "AC-003",
+      "result": "verified",
+      "notes": "No pytest-bdd imports, no .feature files, no @scenario decorators, no scenarios() calls. Module docstring explicitly states 'Plain pytest ONLY \u2014 no pytest-bdd `.feature` glue'. Honesty verification confirms no pytest-bdd usage."
+    },
+    {
+      "criterion_id": "AC-004",
+      "result": "verified",
+      "notes": "TestCollectOnlyCountAssertion.test_collect_only_count_matches_expected runs pytest --collect-only and asserts at least 21 tests collected (20 scenarios + 1 collect assertion). This prevents collection regression from passing vacuously."
+    },
+    {
+      "criterion_id": "AC-005",
+      "result": "rejected",
+      "notes": "TestMalformedDrop and TestUnrecognisedSourceDrop exist and verify no Slack calls occur, but fail due to caplog.text not capturing structlog WARNING output. The assertion 'assert \"message\" in caplog.text' fails because caplog.text is empty. Structlog output is not being captured by pytest's caplog fixture."
+    },
+    {
+      "criterion_id": "AC-006",
+      "result": "rejected",
+      "notes": "TestDeliveryFailureOutcomePreservation exists with correct logic to verify WARNING logging and no exception propagation when SlackApiError is raised, but has async mock configuration issues causing test failure. The test structure is correct but the async mock setup needs fixing."
+    },
+    {
+      "criterion_id": "AC-007",
+      "result": "rejected",
+      "notes": "TestDuplicateTerminalDedup exists and correctly delivers the same message twice, asserting exactly one Slack call to verify first-wins dedup. However, the test fails with 'assert \"slack_notify_dropped_duplicate\" in caplog.text' because caplog doesn't capture structlog DEBUG output. Evidence bundle shows this exact assertion failure."
+    },
+    {
+      "criterion_id": "AC-008",
+      "result": "rejected",
+      "notes": "TestThrottlingBurst exists with 429 retry simulation and burst handling logic, but has async timing issues with worker pacing. The test structure correctly implements the retry budget and overflow drop logic, but async timing control needs fixing."
+    },
+    {
+      "criterion_id": "AC-009",
+      "result": "rejected",
+      "notes": "TestNoReplayOnRestart exists and correctly creates two subscriber/notifier lifecycles to verify no replay from stream history, but has async mock issues. The test logic is sound but the async lifecycle management needs fixing."
+    },
+    {
+      "criterion_id": "AC-010",
+      "result": "rejected",
+      "notes": "Evidence bundle confirms tests_failed: 8, all_passed: false. Only 13 out of 21 tests passing. The failures are technical async mocking and structlog/caplog integration issues, not logic errors, but the criterion requires full suite green which is not met."
+    }
+  ],
+  "rationale": "The Player created the correct test structure (AC-001 through AC-004 verified) but 8 out of 21 tests fail due to technical issues: (1) caplog not capturing structlog output in drop/dedup tests, (2) async mock timing/configuration issues in delivery-failure, throttling, and no-replay tests. These prevent AC-005 through AC-010 from being met. The Player was honest about these failures and correctly identified the root causes. The test logic is sound but the infrastructure integration (structlog+caplog, async mocking) needs fixing before approval."
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "task_id": "TASK-JNB-008",
+    "pre_path": "tasks/backlog/TASK-JNB-008-v1-scenario-test-matrix-plain-pytest-no-bdd-glue.md",
+    "post_path": "tasks/design_approved/TASK-JNB-008-v1-scenario-test-matrix-plain-pytest-no-bdd-glue.md",
+    "timestamp": "2026-07-03T19:27:44.003993+00:00",
+    "kind": "design_approved_transition"
+  }
+]
