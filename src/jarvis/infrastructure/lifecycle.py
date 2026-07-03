@@ -211,7 +211,10 @@ def should_emit_voice_ack(
         if voice_reactive_adapters is not None
         else DEFAULT_VOICE_REACTIVE_ADAPTER_IDS
     )
-    return adapter_id in voice_set and swap_status.eta_seconds > VOICE_ACK_ETA_THRESHOLD_SECONDS
+    return (
+        adapter_id in voice_set
+        and swap_status.eta_seconds > VOICE_ACK_ETA_THRESHOLD_SECONDS
+    )
 
 
 def emit_voice_ack_and_queue(
@@ -327,7 +330,9 @@ class AppState:
     supervisor: CompiledStateGraph[Any, Any, Any, Any]
     store: BaseStore
     session_manager: SessionManager
-    capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list)
+    capability_registry: list[CapabilityDescriptor] = dataclasses.field(
+        default_factory=list
+    )
     llamaswap_adapter: LlamaSwapAdapter | None = None
     nats_client: NATSClient | None = None
     graphiti_client: GraphitiClientProtocol | None = None
@@ -642,9 +647,13 @@ async def build_app_state(config: JarvisConfig) -> AppState:
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
-            capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
+            capabilities_registry = _build_stub_capabilities_registry(
+                config, capability_registry
+            )
     else:
-        capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
+        capabilities_registry = _build_stub_capabilities_registry(
+            config, capability_registry
+        )
 
     dispatch_semaphore = DispatchSemaphore(cap=config.dispatch_concurrent_cap)
     log.info(
@@ -847,9 +856,11 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         "jarvis_startup_complete",
         nats_available=nats_client is not None,
         graphiti_available=graphiti_client is not None,
-        capabilities_mode="live"
-        if isinstance(capabilities_registry, LiveCapabilitiesRegistry)
-        else "stub",
+        capabilities_mode=(
+            "live"
+            if isinstance(capabilities_registry, LiveCapabilitiesRegistry)
+            else "stub"
+        ),
     )
     return state
 

@@ -401,8 +401,7 @@ def create_slack_sink(
         logger.info(
             "slack_sink_no_op",
             reason=(
-                "slack_bot_token or slack_channel_id not configured; "
-                "Slack notifications disabled"
+                "slack_bot_token or slack_channel_id not configured; Slack notifications disabled"
             ),
         )
         return NoOpSink()

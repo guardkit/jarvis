@@ -101,7 +101,11 @@ class ForgeNotification(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     event_type: Literal[
-        "stage_complete", "build_started", "build_complete", "build_failed", "build_queued"
+        "stage_complete",
+        "build_started",
+        "build_complete",
+        "build_failed",
+        "build_queued",
     ] = Field(
         default="stage_complete",
         description=(
@@ -154,17 +158,15 @@ class ForgeNotification(BaseModel):
             "for ``event_type='stage_complete'``."
         ),
     )
-    target_kind: Literal["local_tool", "fleet_capability", "subagent"] | None = (
-        Field(
-            default=None,
-            description=(
-                "Which kind of executor ran the stage on Forge's side. "
-                "Surfaced on the rendered line so Rich can see whether "
-                "a stage was internal-tool work, fleet-dispatch, or "
-                "subagent-driven. Only populated for "
-                "``event_type='stage_complete'``."
-            ),
-        )
+    target_kind: Literal["local_tool", "fleet_capability", "subagent"] | None = Field(
+        default=None,
+        description=(
+            "Which kind of executor ran the stage on Forge's side. "
+            "Surfaced on the rendered line so Rich can see whether "
+            "a stage was internal-tool work, fleet-dispatch, or "
+            "subagent-driven. Only populated for "
+            "``event_type='stage_complete'``."
+        ),
     )
     target_identifier: str | None = Field(
         default=None,
@@ -635,9 +637,7 @@ class ForgeNotificationsSubscriber:
             return
 
         try:
-            await asyncio.wait_for(
-                sub.unsubscribe(), timeout=self._stop_timeout
-            )
+            await asyncio.wait_for(sub.unsubscribe(), timeout=self._stop_timeout)
         except TimeoutError:
             logger.warning(
                 "forge_notifications_stop_timeout",
@@ -1046,9 +1046,7 @@ class ForgeNotificationsSubscriber:
         # carries ``failure_reason``; the other two branches keep it None
         # and the renderer falls through to its non-failure shapes.
         failure_reason_for_cli: str | None = (
-            payload.failure_reason
-            if isinstance(payload, BuildFailedPayload)
-            else None
+            payload.failure_reason if isinstance(payload, BuildFailedPayload) else None
         )
 
         try:
@@ -1094,9 +1092,7 @@ class ForgeNotificationsSubscriber:
         # SessionManager.enqueue_notification is idempotent on missing /
         # ended sessions and bounds the per-session FIFO at queue_cap
         # internally — no try/except needed here.
-        self._session_manager.enqueue_notification(
-            correlation.session_id, notification
-        )
+        self._session_manager.enqueue_notification(correlation.session_id, notification)
 
 
 def _parse_completed_at(value: str | datetime) -> datetime:

@@ -46,7 +46,7 @@ import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from langchain_core.tools import tool
 from nats_core import EventType, MessageEnvelope, Topics
