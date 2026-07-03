@@ -1,0 +1,27 @@
+{
+  "id": "TURN-FEAT-28FF-1",
+  "feature_id": "FEAT-28FF",
+  "task_id": "TASK-JNB-006",
+  "turn_number": 1,
+  "player_summary": "Implementation attempt",
+  "player_decision": "feedback",
+  "coach_decision": "feedback",
+  "coach_feedback": "- Direct-mode evidence gate blocked the turn (direct_mode_ac_unverified). Direct mode relaxes coverage/arch gates but still requires verifiable AC delivery, resolved wiring, and runnable registered producers:\n- [direct_mode_ac_unverified] Direct mode: 8/9 acceptance criteria have no disk evidence (unmet: ['AC-001', 'AC-002', 'AC-003', 'AC-004', 'AC-006', 'AC-007', 'AC-008', 'AC-009']). Direct mode relaxes coverage/arch but NOT AC delivery.",
+  "mode": "fresh_start",
+  "blockers_found": [],
+  "progress_summary": "Turn 1: feedback",
+  "acceptance_criteria_status": {},
+  "files_modified": [
+    "src/jarvis/infrastructure/slack_notifier.py",
+    "tests/infrastructure/test_slack_notifier_hardening.py"
+  ],
+  "tests_passed": null,
+  "tests_failed": null,
+  "coverage": null,
+  "arch_score": null,
+  "started_at": "2026-07-03T18:38:33.967889",
+  "completed_at": "2026-07-03T18:38:33.967889",
+  "duration_seconds": null,
+  "lessons_from_turn": [],
+  "what_to_try_next": null
+}

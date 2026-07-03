@@ -1,0 +1,128 @@
+{
+  "task_id": "TASK-JNB-006",
+  "timestamp": "2026-07-03T18:38:29.941128",
+  "completed": true,
+  "success": true,
+  "implementation_mode": "direct",
+  "phases": {
+    "phase_3": {
+      "detected": true,
+      "completed": true
+    }
+  },
+  "quality_gates": {
+    "tests_passing": null,
+    "tests_passed": 1,
+    "tests_failed": 0,
+    "coverage": null,
+    "coverage_met": true,
+    "quality_gates_relaxed": true,
+    "all_passed": true
+  },
+  "files_modified": [
+    "src/jarvis/infrastructure/slack_notifier.py"
+  ],
+  "files_created": [
+    "tests/infrastructure/test_slack_notifier_hardening.py"
+  ],
+  "tests_written": [
+    "tests/infrastructure/test_slack_notifier_hardening.py"
+  ],
+  "requirements_addressed": [],
+  "requirements_met": [],
+  "summary": "Direct mode implementation completed successfully",
+  "completion_promises": [
+    {
+      "criterion_id": "AC-001",
+      "criterion_text": "Dedup map is first-wins with a 300s TTL, keyed `(event_type, build_id, stage_label or '')` for stream events and `('build_queued', correlation_id)` for the intake event (ASSUM-006).",
+      "status": "incomplete",
+      "evidence": "No git-analysis evidence for this criterion",
+      "evidence_type": "git_analysis"
+    },
+    {
+      "criterion_id": "AC-002",
+      "criterion_text": "TTL is measured with a monotonic clock (`time.monotonic()`), never wall clock; expired entries are evicted on insert.",
+      "status": "incomplete",
+      "evidence": "No git-analysis evidence for this criterion",
+      "evidence_type": "git_analysis"
+    },
+    {
+      "criterion_id": "AC-003",
+      "criterion_text": "A duplicated terminal envelope (same event_type/build_id redelivered within 300s) posts to Slack exactly once.",
+      "status": "incomplete",
+      "evidence": "No git-analysis evidence for this criterion",
+      "evidence_type": "git_analysis"
+    },
+    {
+      "criterion_id": "AC-004",
+      "criterion_text": "Two distinct concurrent terminal events (different build_ids) both post, and each message contains only its own build's fields \u2014 no cross-contamination.",
+      "status": "incomplete",
+      "evidence": "No git-analysis evidence for this criterion",
+      "evidence_type": "git_analysis"
+    },
+    {
+      "criterion_id": "AC-005",
+      "criterion_text": "Worker paces `chat.postMessage` at ~1 msg/s.",
+      "status": "partial",
+      "evidence": "Git-analysis detected: Files: src/jarvis/infrastructure/slack_notifier.py (modified); Patterns: /s",
+      "evidence_type": "git_analysis"
+    },
+    {
+      "criterion_id": "AC-006",
+      "criterion_text": "A 429 response honours `Retry-After`, retries within a bounded per-message retry budget, and on budget exhaustion logs WARNING and drops that message (DDR-007 \u2014 never raises).",
+      "status": "incomplete",
+      "evidence": "No git-analysis evidence for this criterion",
+      "evidence_type": "git_analysis"
+    },
+    {
+      "criterion_id": "AC-007",
+      "criterion_text": "A mocked 429 burst backs off, keeps delivering subsequent messages after the backoff, and never blocks the subscriber callback or the event loop (enqueue returns immediately; backoff sleeps happen only in the worker task).",
+      "status": "incomplete",
+      "evidence": "No git-analysis evidence for this criterion",
+      "evidence_type": "git_analysis"
+    },
+    {
+      "criterion_id": "AC-008",
+      "criterion_text": "Bounded-queue overflow drops the oldest queued message and emits exactly one WARNING per drop; enqueue never blocks and never raises.",
+      "status": "incomplete",
+      "evidence": "No git-analysis evidence for this criterion",
+      "evidence_type": "git_analysis"
+    },
+    {
+      "criterion_id": "AC-009",
+      "criterion_text": "All modified files pass project-configured lint/format checks with zero errors",
+      "status": "incomplete",
+      "evidence": "No git-analysis evidence for this criterion",
+      "evidence_type": "git_analysis"
+    }
+  ],
+  "_synthetic": true,
+  "agent_invocations": [
+    {
+      "phase": "4",
+      "agent": "test-orchestrator",
+      "status": "skipped",
+      "source": "orchestrator",
+      "duration_seconds": 0.0,
+      "error": "specialist_skipped: budget exhausted (post_player_remaining=287.53095183399273s)"
+    },
+    {
+      "phase": "5",
+      "agent": "code-reviewer",
+      "status": "skipped",
+      "source": "orchestrator",
+      "error": "specialist_results.json missing phase_5 block"
+    }
+  ],
+  "agent_invocations_validation": {
+    "status": "violation",
+    "expected_phases": 3,
+    "actual_invocations": 0,
+    "missing_phases": [
+      "3",
+      "4",
+      "5"
+    ],
+    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 0 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n  - Phase 4 (Testing)\n  - Phase 5 (Code Review)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u274c Phase 4 (Phase 4): SKIPPED (Not invoked)\n\u274c Phase 5 (Phase 5): SKIPPED (Not invoked)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
+  }
+}

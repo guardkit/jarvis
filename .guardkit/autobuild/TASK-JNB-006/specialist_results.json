@@ -1,0 +1,12 @@
+{
+  "phase_4": {
+    "status": "skipped",
+    "duration_seconds": 0.0,
+    "error": "specialist_skipped: budget exhausted (post_player_remaining=287.53095183399273s)",
+    "tests_run": 0,
+    "tests_failed": 0,
+    "coverage_pct": 0.0,
+    "output_summary": "",
+    "quality_gates_passed": false
+  }
+}
