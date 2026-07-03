@@ -50,7 +50,7 @@ def stub_registry_config() -> JarvisConfig:
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint=None,
+            fleet_memory_enabled=False,
         )
     cfg.validate_provider_keys()
     return cfg
@@ -79,7 +79,7 @@ class TestProtocolReachesToolSlot:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -154,8 +154,8 @@ class TestProtocolReachesToolSlot:
 
         fake_nats = MagicMock()
         fake_nats.drain = AsyncMock()
-        fake_graphiti = MagicMock()
-        fake_graphiti.aclose = AsyncMock()
+        fake_memory = MagicMock()
+        fake_memory.close = AsyncMock()
 
         with (
             patch("sys.stderr", new=io.StringIO()),
@@ -164,8 +164,8 @@ class TestProtocolReachesToolSlot:
                 new=AsyncMock(return_value=fake_nats),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
-                new=AsyncMock(return_value=fake_graphiti),
+                "jarvis.infrastructure.lifecycle._connect_memory",
+                new=AsyncMock(return_value=fake_memory),
             ),
             patch(
                 "jarvis.infrastructure.lifecycle.register_on_fleet",

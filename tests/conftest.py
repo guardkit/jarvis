@@ -153,11 +153,11 @@ def _restore_dispatch_layer2_hooks() -> Generator[None, None, None]:
 # inner ``patch("jarvis.infrastructure.lifecycle.NATSClient.connect", ...)``
 # block — the inner ``patch`` shadows this autouse stub for the duration.
 #
-# The Graphiti seam gets the same treatment so the optional graphiti-core
-# import never fires during unit tests (the seam is pure-stub by default).
+# The fleet-memory seam gets the same treatment so unit tests never attempt
+# a live NATS memory publish (the seam is pure-stub by default).
 # ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
-def _stub_nats_and_graphiti_connect_seams() -> Generator[None, None, None]:
+def _stub_nats_and_memory_connect_seams() -> Generator[None, None, None]:
     from unittest.mock import AsyncMock as _AsyncMock
     from unittest.mock import patch as _patch
 
@@ -167,7 +167,7 @@ def _stub_nats_and_graphiti_connect_seams() -> Generator[None, None, None]:
             new=_AsyncMock(return_value=None),
         ),
         _patch(
-            "jarvis.infrastructure.lifecycle._connect_graphiti",
+            "jarvis.infrastructure.lifecycle._connect_memory",
             new=_AsyncMock(return_value=None),
         ),
     ):

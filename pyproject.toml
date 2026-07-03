@@ -70,16 +70,6 @@ dependencies = [
 nats = [
     "nats-py>=2.0,<3",
 ]
-# `[graphiti]` declares the `graphiti-core` SDK used by the routing-history
-# writer (DDR-019 — fire-and-forget Graphiti writes). The lower bound
-# `>=0.9` is the first 0.9.x line shipping the pydantic-2 / falkordb backend
-# combo Jarvis relies on (`.guardkit/graphiti.yaml` configures
-# `graph_store: falkordb`). The upper bound `<1` caps at the next major;
-# graphiti-core is still on its 0.x stabilisation path and a 1.0 bump is
-# expected to ship breaking surface changes.
-graphiti = [
-    "graphiti-core @ git+https://github.com/guardkit/graphiti.git@v0.29.5-guardkit.1",
-]
 providers = [
     # langchain-* providers rebaselined 2026-04-27 to coherent 1.x; see
     # ADR-ARCH-010-rev2 / TASK-REV-FA04 follow-up.
@@ -100,7 +90,6 @@ providers = [
     # `jarvis[nats]` from inside the `jarvis` distribution pulls in the
     # `[nats]` group's deps.
     "jarvis[nats]",
-    "jarvis[graphiti]",
 ]
 # `dev` mirrors the PEP 735 `[dependency-groups].dev` entries below for
 # consumers (and CI) that prefer the older PEP 631 extras syntax
@@ -186,13 +175,6 @@ dev = [
 [project.scripts]
 jarvis = "jarvis.cli.main:main"
 
-[tool.hatch.metadata]
-# Allow direct git+ URL references for the graphiti-core fork pin
-# (graphiti-core @ git+https://github.com/guardkit/graphiti.git@v0.29.5-guardkit.1).
-# Required by hatchling 2.4+ metadata spec; without this the build backend
-# refuses to construct project metadata when dependencies use direct URLs.
-allow-direct-references = true
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/jarvis"]
 
@@ -263,7 +245,8 @@ markers = [
     "boundary: boundary / parameter-edge scenarios",
     "negative: negative / failure-mode scenarios",
     "edge_case: edge-case scenarios",
-    "e2e: end-to-end soft-prereq tests (real NATS + Forge + Graphiti on GB10). Opt-out via 'pytest -m \"not e2e\"'.",
+    "e2e: end-to-end soft-prereq tests (real NATS + Forge + fleet-memory on GB10). Opt-out via 'pytest -m \"not e2e\"'.",
+    "live: operator-run round-trips against a live fleet-memory store; skip cleanly when disabled (JARVIS_FLEET_MEMORY_ENABLED unset).",
     "feat_jarvis_002: feature-level tag for FEAT-JARVIS-002",
     "task_TASK_J002_006: scenarios scoped to TASK-J002-006",
     "task_TASK_J002_008: scenarios scoped to TASK-J002-008",

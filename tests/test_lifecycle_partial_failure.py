@@ -1,16 +1,16 @@
 """Cross-product soft-fail tests — DDR-019 + DDR-021 (TASK-J004-016).
 
 Three lifecycle scenarios that combine the NATS-down (DDR-021) and
-Graphiti-down (DDR-019) invariants on the same supervisor:
+Memory-down (DDR-019) invariants on the same supervisor:
 
-* **NATS up + Graphiti down** — dispatches succeed end-to-end against the
+* **NATS up + Memory down** — dispatches succeed end-to-end against the
   mocked broker; trace persistence is skipped and the writer emits one
   ``WARN routing_history_write_failed`` per writer instance.
-* **NATS down + Graphiti up** — dispatches return
+* **NATS down + Memory up** — dispatches return
   ``DEGRADED: transport_unavailable``; no specialist round-trip occurs.
 * **Both down** — Jarvis still starts. ``escalate_to_frontier`` (the
   attended-only escape), the ``jarvis-reasoner`` AsyncSubAgent, and the
-  Phase 2 deterministic tools (no NATS / Graphiti dependency) remain
+  Phase 2 deterministic tools (no NATS / Memory dependency) remain
   functional. Demo-day robustness gate.
 
 Every scenario asserts process-still-alive at the end. WARN assertions
@@ -72,7 +72,7 @@ def cross_product_config(tmp_path: Path) -> JarvisConfig:
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint="bolt://203.0.113.2:7687",
+            fleet_memory_enabled=True,
             jarvis_traces_dir=tmp_path / "traces",
             nats_url="nats://203.0.113.1:4222",
         )
@@ -144,9 +144,9 @@ def _assert_process_alive(state: AppState) -> None:
 
 
 # ===========================================================================
-# AC: NATS up + Graphiti down — dispatches succeed; traces lost; WARN
+# AC: NATS up + Memory down — dispatches succeed; traces lost; WARN
 # ===========================================================================
-class TestNATSUpGraphitiDown:
+class TestNATSUpMemoryDown:
     """Dispatch round-trips succeed end-to-end; one WARN per writer instance."""
 
     @pytest.mark.asyncio
@@ -174,9 +174,9 @@ class TestNATSUpGraphitiDown:
         nats_client = MagicMock()
         nats_client.request = AsyncMock(side_effect=_request)
 
-        # Writer in DDR-019 degraded mode (no Graphiti client).
+        # Writer in DDR-019 degraded mode (no Memory client).
         writer = RoutingHistoryWriter(
-            graphiti_client=None,
+            memory_client=None,
             config=cross_product_config,
         )
 
@@ -206,11 +206,11 @@ class TestNATSUpGraphitiDown:
         assert parsed["success"] is True
         assert parsed["command"] == "review_spec"
 
-        # Trace was attempted; Graphiti is down so the writer offloaded
+        # Trace was attempted; Memory is down so the writer offloaded
         # to <traces_dir>/<correlation_id>.json per TASK-FRR-003 instead
         # of dropping the trace on the floor. The structured WARN now
         # carries the local-offload contract — see TestRatchetWarnOnceThenSilent
-        # in tests/test_graphiti_unavailable.py for the full contract.
+        # in tests/test_memory_unavailable.py for the full contract.
         warnings = _routing_history_warnings(caplog)
         offloaded = [
             rec
@@ -224,7 +224,7 @@ class TestNATSUpGraphitiDown:
         )
         # The dispatch-side trace is no longer "lost" — it lives at
         # <traces_dir>/<correlation_id>.json on disk for future
-        # rehydration into Graphiti.
+        # rehydration into Memory.
         offload_path = getattr(offloaded[0], "path", None)
         assert offload_path is not None, (
             "routing_history_offloaded_locally must carry the on-disk path"
@@ -236,9 +236,9 @@ class TestNATSUpGraphitiDown:
 
 
 # ===========================================================================
-# AC: NATS down + Graphiti up — dispatches return DEGRADED; no specialist hops
+# AC: NATS down + Memory up — dispatches return DEGRADED; no specialist hops
 # ===========================================================================
-class TestNATSDownGraphitiUp:
+class TestNATSDownMemoryUp:
     """Dispatches surface DEGRADED transport; no specialist round-trip occurs."""
 
     @pytest.mark.asyncio
@@ -248,11 +248,11 @@ class TestNATSDownGraphitiUp:
         bound_capability_registry: list[CapabilityDescriptor],
     ) -> None:
         """``dispatch_by_capability`` returns the DDR-021 DEGRADED string."""
-        # Graphiti is "up" — give the writer a connected (mocked) client.
-        fake_graphiti = MagicMock()
-        fake_graphiti.add_episode = AsyncMock(return_value=None)
+        # Memory is "up" — give the writer a connected (mocked) client.
+        fake_memory = MagicMock()
+        fake_memory.add_episode = AsyncMock(return_value=None)
         writer = RoutingHistoryWriter(
-            graphiti_client=fake_graphiti,
+            memory_client=fake_memory,
             config=cross_product_config,
         )
 
@@ -274,11 +274,11 @@ class TestNATSDownGraphitiUp:
             dispatch_module._dispatch_semaphore = saved_sem
 
         assert result == "DEGRADED: transport_unavailable — NATS connection failed"
-        # No specialist round-trip occurred — Graphiti would only see the
+        # No specialist round-trip occurred — Memory would only see the
         # diagnostic transport_unavailable trace, never a "success" entry.
         # Inspect the sole add_episode call (if any) and assert outcome_type.
-        if fake_graphiti.add_episode.await_count > 0:
-            kwargs = fake_graphiti.add_episode.await_args.kwargs
+        if fake_memory.add_episode.await_count > 0:
+            kwargs = fake_memory.add_episode.await_args.kwargs
             episode_body = json.loads(kwargs["episode_body"])
             assert episode_body["outcome_type"] == "transport_unavailable", (
                 "Only the transport_unavailable diagnostic trace may be written; "
@@ -289,7 +289,7 @@ class TestNATSDownGraphitiUp:
 # ===========================================================================
 # AC: both down — Jarvis still starts; attended-only escape + local subagents
 # ===========================================================================
-class TestBothNATSAndGraphitiDown:
+class TestBothNATSAndMemoryDown:
     """Demo-day gate: supervisor stays usable when both transports degrade."""
 
     @pytest.mark.asyncio
@@ -308,7 +308,7 @@ class TestBothNATSAndGraphitiDown:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -322,13 +322,13 @@ class TestBothNATSAndGraphitiDown:
         ):
             state = await build_app_state(cross_product_config)
 
-        # Lifecycle invariants under both-down: no NATS, no Graphiti, but the
+        # Lifecycle invariants under both-down: no NATS, no Memory, but the
         # writer + the local AsyncSubAgent list still wired.
         assert state.nats_client is None
-        assert state.graphiti_client is None
+        assert state.memory_client is None
         assert state.fleet_heartbeat_task is None
         assert isinstance(state.routing_history_writer, RoutingHistoryWriter)
-        assert state.routing_history_writer._graphiti_client is None
+        assert state.routing_history_writer._memory_client is None
         # AsyncSubAgent list (jarvis-reasoner local subagent) was built.
         mock_async_sub.assert_called_once()
         _assert_process_alive(state)
@@ -362,7 +362,7 @@ class TestBothNATSAndGraphitiDown:
         assert escape_reply == "frontier-canned-reply"
 
         # ---- Phase 2 deterministic tool still functional --------------------
-        # ``calculate`` has no NATS / Graphiti dependency — DDR-019/021
+        # ``calculate`` has no NATS / Memory dependency — DDR-019/021
         # soft-fail must not affect it.
         deterministic_result = general.calculate.invoke({"expression": "2 + 2"})
         # Tool returns either a JSON string or the answer string; both must be

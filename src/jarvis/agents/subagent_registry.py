@@ -28,7 +28,7 @@ Purity contract
 instantiation, and reads only the supplied :class:`JarvisConfig`. The
 ``description`` string is a module-level constant so the function is
 deterministic — successive calls with the same config produce
-byte-identical output, which Graphiti relies on for trace richness.
+byte-identical output, which the memory trace layer relies on for richness.
 """
 
 from __future__ import annotations

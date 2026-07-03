@@ -76,6 +76,7 @@ from jarvis.infrastructure.capabilities_registry import (
     StubCapabilitiesRegistry,
 )
 from jarvis.infrastructure.dispatch_semaphore import DispatchSemaphore
+from jarvis.infrastructure.fleet_memory import FleetMemoryClient
 from jarvis.infrastructure.fleet_registration import (
     JARVIS_AGENT_ID,
     build_jarvis_manifest,
@@ -87,7 +88,7 @@ from jarvis.infrastructure.forge_notifications import ForgeNotificationsSubscrib
 from jarvis.infrastructure.logging import configure
 from jarvis.infrastructure.nats_client import NATSClient
 from jarvis.infrastructure.routing_history import (
-    GraphitiClientProtocol,
+    MemoryClientProtocol,
     RoutingHistoryWriter,
 )
 from jarvis.sessions.manager import SessionManager
@@ -289,15 +290,15 @@ class AppState:
         nats_client: Connected :class:`NATSClient` wrapper, or ``None``
             when NATS soft-failed at startup (DDR-021).  ``shutdown`` calls
             :meth:`NATSClient.drain` when present.
-        graphiti_client: Connected Graphiti client (any object satisfying
-            :class:`GraphitiClientProtocol`), or ``None`` when Graphiti
-            soft-failed at startup (DDR-019).  ``shutdown`` calls
-            ``aclose()`` when present.
+        memory_client: Connected fleet-memory client (any object satisfying
+            :class:`MemoryClientProtocol`), or ``None`` when fleet-memory is
+            disabled / could not be built at startup (DDR-019).  ``shutdown``
+            calls ``close()`` when present.
         routing_history_writer: Configured :class:`RoutingHistoryWriter`
-            owning the in-flight Graphiti submission tasks.  Always
+            owning the in-flight memory submission tasks.  Always
             populated by ``build_app_state`` even when
-            ``graphiti_client is None`` — the writer enters degraded mode
-            (every ``write_*`` becomes a no-op + WARN once).
+            ``memory_client is None`` — the writer enters degraded mode
+            (dispatch writes offload locally; edge writes WARN once).
         fleet_heartbeat_task: The :class:`asyncio.Task` running
             :func:`heartbeat_loop` against the live NATS broker, or
             ``None`` when NATS soft-failed at startup.  ``shutdown``
@@ -323,7 +324,7 @@ class AppState:
     capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list)
     llamaswap_adapter: LlamaSwapAdapter | None = None
     nats_client: NATSClient | None = None
-    graphiti_client: GraphitiClientProtocol | None = None
+    memory_client: MemoryClientProtocol | None = None
     routing_history_writer: RoutingHistoryWriter | None = None
     fleet_heartbeat_task: asyncio.Task[None] | None = None
     capabilities_registry: CapabilitiesRegistry | None = None
@@ -331,13 +332,14 @@ class AppState:
 
 
 # ---------------------------------------------------------------------------
-# Graphiti connect seam — DDR-019 soft-fail.
+# Fleet-memory connect seam — DDR-019 soft-fail.
 #
-# A thin, patchable helper that hides the graphiti-core import from the
-# lifecycle hot path. Returns ``None`` on any failure (missing endpoint,
-# import error, connect error). Tests patch this symbol directly via
-# ``patch("jarvis.infrastructure.lifecycle._connect_graphiti", ...)`` so the
-# soft-fail branch is exercisable without importing graphiti-core in CI.
+# A thin, patchable helper that builds the fleet-memory write client. Returns
+# ``None`` when fleet-memory is disabled (or the client cannot be built), which
+# puts the routing-history writer into local-offload degraded mode. Tests patch
+# this symbol directly via
+# ``patch("jarvis.infrastructure.lifecycle._connect_memory", ...)`` so the
+# soft-fail branch is exercisable without a live NATS broker in CI.
 # ---------------------------------------------------------------------------
 
 
@@ -406,62 +408,42 @@ async def _connect_nats(config: JarvisConfig) -> NATSClient | None:
     return await NATSClient.connect(config)
 
 
-async def _connect_graphiti(config: JarvisConfig) -> GraphitiClientProtocol | None:
-    """Connect to Graphiti per DDR-019 — return ``None`` on any failure.
+async def _connect_memory(config: JarvisConfig) -> MemoryClientProtocol | None:
+    """Build the fleet-memory write client per DDR-019 — ``None`` on soft-fail.
 
-    The function is intentionally permissive: a missing
-    ``graphiti_endpoint``, an unimportable ``graphiti_core`` SDK, or a live
-    connect failure all converge on the same ``None`` return so the
-    supervisor lifecycle continues into degraded-mode wiring without a
-    second branch.
+    The function is intentionally permissive: a disabled backend
+    (``fleet_memory_enabled=False``) or any construction error converges on the
+    same ``None`` return so the supervisor lifecycle continues into
+    degraded-mode wiring (local trace offload) without a second branch.
+
+    No network I/O happens here — the client connects to NATS per publish batch
+    (fire-and-forget), so there is nothing to await at startup.
 
     Args:
         config: Validated :class:`JarvisConfig`. Reads
-            ``config.graphiti_endpoint`` and ``config.graphiti_api_key``.
+            ``config.fleet_memory_enabled`` and the NATS endpoint/credentials.
 
     Returns:
-        A connected Graphiti client on success; ``None`` on any failure.
-        Never raises.
+        A :class:`FleetMemoryClient` when enabled; ``None`` otherwise (or on
+        any construction error). Never raises.
     """
-    if config.graphiti_endpoint is None:
+    if not config.fleet_memory_enabled:
         logger.info(
-            "graphiti_skipped_no_endpoint",
-            graphiti_endpoint=None,
+            "memory_skipped_disabled",
+            fleet_memory_project=config.fleet_memory_project,
         )
         return None
     try:
-        # Lazy import — graphiti-core is an optional extra (TASK-J004-002).
-        from graphiti_core import Graphiti
-
-        api_key = (
-            config.graphiti_api_key.get_secret_value()
-            if config.graphiti_api_key is not None
-            else None
-        )
-        # Graphiti's constructor signature varies across 0.9.x; we forward
-        # the kwargs the SDK currently accepts via duck typing, falling back
-        # to the positional ``uri`` form when ``api_key`` is unsupported.
-        kwargs: dict[str, Any] = {"uri": config.graphiti_endpoint}
-        if api_key is not None:
-            kwargs["api_key"] = api_key
-        try:
-            client: Any = Graphiti(**kwargs)
-        except TypeError:
-            # Older SDKs reject ``api_key``; fall back to URI-only.
-            client = Graphiti(uri=config.graphiti_endpoint)
+        client = FleetMemoryClient(config)
         logger.info(
-            "graphiti_connect_success",
-            graphiti_endpoint=config.graphiti_endpoint,
+            "memory_client_ready",
+            fleet_memory_project=config.fleet_memory_project,
         )
-        # The graphiti-core ``Graphiti`` client implements ``add_episode``
-        # so it satisfies the GraphitiClientProtocol structural surface;
-        # the cast keeps mypy strict-clean without forcing a Protocol
-        # subclass declaration into the third-party SDK.
-        return client  # type: ignore[no-any-return]
+        return client
     except Exception as exc:
         logger.error(
-            "graphiti_connect_failed",
-            graphiti_endpoint=config.graphiti_endpoint,
+            "memory_client_build_failed",
+            fleet_memory_project=config.fleet_memory_project,
             error_class=type(exc).__name__,
             error=str(exc),
         )
@@ -591,17 +573,17 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     )
 
     # 7b. FEAT-JARVIS-004 wiring — connect the live transports per
-    # DDR-021 (NATS soft-fail) and DDR-019 (Graphiti soft-fail), then
+    # DDR-021 (NATS soft-fail) and DDR-019 (memory soft-fail), then
     # build the writer + dispatch semaphore the swapped-in dispatch tools
     # consume. ``register_on_fleet`` failures convert to a startup WARN so
     # a degraded broker (e.g. JetStream offline) does not block the
     # supervisor process.
     nats_client = await _connect_nats(config)
-    graphiti_client = await _connect_graphiti(config)
-    routing_history_writer = RoutingHistoryWriter(graphiti_client, config)
+    memory_client = await _connect_memory(config)
+    routing_history_writer = RoutingHistoryWriter(memory_client, config)
     log.info(
         "jarvis_routing_history_writer_ready",
-        graphiti_available=graphiti_client is not None,
+        memory_available=memory_client is not None,
     )
 
     fleet_heartbeat_task: asyncio.Task[None] | None = None
@@ -792,7 +774,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         capability_registry=capability_registry,
         llamaswap_adapter=llamaswap_adapter,
         nats_client=nats_client,
-        graphiti_client=graphiti_client,
+        memory_client=memory_client,
         routing_history_writer=routing_history_writer,
         fleet_heartbeat_task=fleet_heartbeat_task,
         capabilities_registry=capabilities_registry,
@@ -802,7 +784,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     log.info(
         "jarvis_startup_complete",
         nats_available=nats_client is not None,
-        graphiti_available=graphiti_client is not None,
+        memory_available=memory_client is not None,
         capabilities_mode="live"
         if isinstance(capabilities_registry, LiveCapabilitiesRegistry)
         else "stub",
@@ -831,7 +813,7 @@ async def shutdown(state: AppState) -> None:
         4. ``await capabilities_registry.close()``.
         5. ``await routing_history_writer.flush(timeout=5.0)``.
         6. ``await nats_client.drain(timeout=5.0)``.
-        7. ``await graphiti_client.aclose()``.
+        7. ``await memory_client.close()``.
         8. Disarm Layer-2 hooks + dispatch deps + forge subscriber ref.
         9. ``state.store.close()``.
 
@@ -904,7 +886,7 @@ async def shutdown(state: AppState) -> None:
             )
 
     # 4. Flush the routing-history writer — bounded at 5.0s per DDR-019.
-    # ``flush`` already swallows broker / Graphiti failures (logs WARN);
+    # ``flush`` already swallows broker / memory failures (logs WARN);
     # the wrapper here protects the rest of the sequence from any
     # untyped exception slipping out.
     if state.routing_history_writer is not None:
@@ -928,24 +910,23 @@ async def shutdown(state: AppState) -> None:
                 error=str(exc),
             )
 
-    # 6. Close Graphiti. The graphiti-core convention as of the version
-    # pinned in TASK-J004-002 is ``aclose()`` (async). When a future SDK
-    # release renames the method, swap the call here — the soft-fail
+    # 6. Close the fleet-memory client. ``FleetMemoryClient.close()`` is an
+    # async no-op (the publisher connects per batch), but we call it through a
+    # defensive getattr — preferring ``close`` then ``aclose`` — so a future
+    # client that holds a long-lived connection tears down here. The soft-fail
     # wrapper protects the rest of the sequence.
-    if state.graphiti_client is not None:
+    if state.memory_client is not None:
         try:
-            close = getattr(state.graphiti_client, "aclose", None)
+            close = getattr(state.memory_client, "close", None)
             if close is None:
-                # Some graphiti-core versions only expose ``close``; fall
-                # back rather than raise so the test surface is stable.
-                close = getattr(state.graphiti_client, "close", None)
+                close = getattr(state.memory_client, "aclose", None)
             if close is not None:
                 result = close()
                 if asyncio.iscoroutine(result):
                     await result
         except Exception as exc:
             log.warning(
-                "jarvis_graphiti_close_warning",
+                "jarvis_memory_close_warning",
                 error_class=type(exc).__name__,
                 error=str(exc),
             )

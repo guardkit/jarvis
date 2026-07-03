@@ -376,7 +376,7 @@ async def test_build_app_state_reports_capabilities_mode_live_against_canonical(
             new=AsyncMock(return_value=nats_test_server),
         ),
         patch(
-            "jarvis.infrastructure.lifecycle._connect_graphiti",
+            "jarvis.infrastructure.lifecycle._connect_memory",
             new=AsyncMock(return_value=None),
         ),
         patch(

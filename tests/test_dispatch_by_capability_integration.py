@@ -24,7 +24,7 @@ In addition to the matrix, these invariants are pinned:
 * **Trace shape**: the writer is invoked once per dispatch and the
   captured ``JarvisRoutingHistoryEntry`` re-validates against its own
   schema with the expected ``outcome_type`` / ``attempts`` length /
-  ``chosen_specialist_id`` (mirroring what gets persisted to Graphiti).
+  ``chosen_specialist_id`` (mirroring what gets persisted to Memory).
 * **DEGRADED string format** matches design §10 byte-identically.
 
 The "in-process NATS server fixture" called for in the task is
@@ -218,9 +218,9 @@ def wired_dispatch(
 
     Mocks the writer's ``write_specialist_dispatch`` so the test captures
     the :class:`JarvisRoutingHistoryEntry` that would otherwise be passed
-    to Graphiti's ``add_episode`` (the writer constructs the episode from
+    to Memory's ``add_episode`` (the writer constructs the episode from
     this entry, so capturing here gives the same trace shape we'd see
-    from a Graphiti-side mock — minus the redaction step, which is
+    from a Memory-side mock — minus the redaction step, which is
     covered by ``test_routing_history_writer.py``). The entry is the
     object the AC's ``model_validate(...)`` re-check operates on.
 

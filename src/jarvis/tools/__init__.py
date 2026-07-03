@@ -197,7 +197,7 @@ def assemble_tool_list(
         routing_history_writer: Configured
             :class:`~jarvis.infrastructure.routing_history.RoutingHistoryWriter`,
             or ``None`` to disable trace persistence entirely. The writer
-            itself may carry a ``None`` Graphiti client (DDR-019 degraded
+            itself may carry a ``None`` fleet-memory client (DDR-019 degraded
             mode); that is independent of this flag.
         dispatch_semaphore: A
             :class:`~jarvis.infrastructure.dispatch_semaphore.DispatchSemaphore`

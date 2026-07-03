@@ -7,7 +7,7 @@ as the Group-D adapters land. The first one — :class:`LlamaSwapAdapter`
 ``/running`` + ``/log`` endpoints; FEAT-JARVIS-004 swaps the stub for
 a live HTTP probe without changing the public surface.
 
-NATS / Graphiti adapters land in subsequent waves and will join this
+NATS / fleet-memory adapters land in subsequent waves and will join this
 re-export list.
 """
 

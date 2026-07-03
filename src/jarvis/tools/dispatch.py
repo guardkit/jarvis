@@ -156,11 +156,11 @@ _capability_registry: list[CapabilityDescriptor] = []
 #   ``DEGRADED: transport_unavailable`` structured error (DDR-021 soft-fail).
 # * If ``_routing_history_writer`` is ``None`` the trace-write step is
 #   skipped — the dispatch decision is still served, only the trace is
-#   missing (Graphiti-degraded path).
+#   missing (memory-degraded path).
 #
 # Production wiring assigns a connected ``NATSClient``, a configured
 # ``DispatchSemaphore`` (DDR-020 cap=8), and a ``RoutingHistoryWriter``
-# (which itself may carry a degraded Graphiti client per DDR-019).
+# (which itself may carry a degraded fleet-memory client per DDR-019).
 # ---------------------------------------------------------------------------
 _nats_client: NATSClient | None = None
 _routing_history_writer: RoutingHistoryWriter | None = None

@@ -118,7 +118,7 @@ class TestAC001EnvExample:
         match = re.search(r"^JARVIS_MEMORY_STORE_BACKEND=(.+)$", content, re.MULTILINE)
         assert match is not None, "JARVIS_MEMORY_STORE_BACKEND must have an assignment"
         value = match.group(1).strip()
-        valid_backends = {"in_memory", "file", "graphiti"}
+        valid_backends = {"in_memory", "file"}
         assert value in valid_backends, (
             f"JARVIS_MEMORY_STORE_BACKEND default must be valid, got {value!r}"
         )

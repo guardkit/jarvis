@@ -1,25 +1,25 @@
 """TDD tests for DDR-019 trace-offload autocreate and non-silent drop.
 
-TASK-FRR-003 — When ``JARVIS_GRAPHITI_ENDPOINT`` is unset, the
-routing-history writer must fall back to writing the trace JSON locally
+TASK-FRR-003 — When fleet-memory is disabled (``JARVIS_FLEET_MEMORY_ENABLED``
+unset), the routing-history writer must fall back to writing the trace JSON locally
 to ``<JARVIS_TRACES_DIR>/<correlation_id>.json``. The directory is
-autocreated on first use. If both the graphiti write AND the local
+autocreated on first use. If both the memory write AND the local
 offload fail, emit ``routing_history_offload_failed`` with both error
 paths — never silently drop the trace.
 
 Acceptance Criteria (from
 ``tasks/in_progress/feat-jarvis-internal-001-followups/TASK-FRR-003-...``):
 
-* Graphiti unset + non-existent traces dir → autocreate dir + write
+* Memory unset + non-existent traces dir → autocreate dir + write
   ``<traces_dir>/<correlation_id>.json`` containing a payload that
   round-trips through ``JarvisRoutingHistoryEntry.model_validate_json``.
-* Graphiti unset + uncreatable traces dir → log a structured
-  ``routing_history_offload_failed`` event with both the graphiti error
+* Memory unset + uncreatable traces dir → log a structured
+  ``routing_history_offload_failed`` event with both the memory error
   AND the local-write error. The trace is never silently dropped.
 * Successful local offload emits ``routing_history_offloaded_locally``
-  with ``correlation_id``, ``traces_dir``, ``path``, and the graphiti
+  with ``correlation_id``, ``traces_dir``, ``path``, and the memory
   error.
-* The happy path (graphiti reachable + writes succeed) is unchanged —
+* The happy path (memory reachable + writes succeed) is unchanged —
   no offload file is written.
 """
 
@@ -43,22 +43,22 @@ from jarvis.infrastructure.routing_history import (
 from tests.test_routing_history_writer import (
     _build_entry,
     _make_config,
-    _RecordingGraphitiClient,
+    _RecordingMemoryClient,
 )
 
 
 class TestSoftFailOffload:
     """DDR-019 soft-fail path autocreates traces_dir and writes locally."""
 
-    async def test_unset_graphiti_autocreates_traces_dir_and_writes_file(
+    async def test_unset_memory_autocreates_traces_dir_and_writes_file(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Graphiti unset + traces_dir does not exist → autocreate + write."""
+        """Memory unset + traces_dir does not exist → autocreate + write."""
         traces_dir = tmp_path / "traces"
         assert not traces_dir.exists(), "Pre-condition: traces_dir absent"
 
         config = _make_config(traces_dir)
-        writer = RoutingHistoryWriter(None, config)  # graphiti unreachable
+        writer = RoutingHistoryWriter(None, config)  # memory unreachable
 
         correlation_id = "a58ec9a7-27c6-485a-beac-e18675639a10"
         entry = _build_entry(subagent_task_id=correlation_id)
@@ -81,7 +81,7 @@ class TestSoftFailOffload:
         assert loaded.subagent_type == entry.subagent_type
         assert loaded.decision_id == entry.decision_id
 
-    async def test_unset_graphiti_logs_routing_history_offloaded_locally(
+    async def test_unset_memory_logs_routing_history_offloaded_locally(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Successful local offload emits the per-write ``offloaded_locally`` event."""
@@ -110,11 +110,11 @@ class TestSoftFailOffload:
         assert log.__dict__.get("path") == str(
             traces_dir / f"{correlation_id}.json"
         )
-        # The graphiti error is reported alongside so operators can correlate
-        # the local offload with why graphiti was unreachable.
-        assert log.__dict__.get("graphiti_error") is not None
+        # The memory error is reported alongside so operators can correlate
+        # the local offload with why memory was unreachable.
+        assert log.__dict__.get("memory_error") is not None
 
-    async def test_build_queue_unset_graphiti_writes_local_file(
+    async def test_build_queue_unset_memory_writes_local_file(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """``write_build_queue_dispatch`` follows the same offload contract."""
@@ -144,9 +144,9 @@ class TestSoftFailOffload:
     ) -> None:
         """Both paths failed → ``routing_history_offload_failed`` with details.
 
-        The new event distinguishes operationally-recoverable graphiti
+        The new event distinguishes operationally-recoverable memory
         outages (we wrote the trace locally) from genuinely-lost traces
-        (graphiti AND local both failed). The payload must surface BOTH
+        (memory AND local both failed). The payload must surface BOTH
         error paths so on-call can triage without reading source.
         """
         # macOS root can sometimes still write to 0o555 dirs. Skip the test
@@ -186,8 +186,8 @@ class TestSoftFailOffload:
             assert log.__dict__.get("correlation_id") == correlation_id
             assert log.__dict__.get("traces_dir") == str(traces_dir)
             # Both error paths reported in a single structured event.
-            assert log.__dict__.get("graphiti_error") is not None, (
-                "graphiti_error must be populated even when local offload fails"
+            assert log.__dict__.get("memory_error") is not None, (
+                "memory_error must be populated even when local offload fails"
             )
             local_err = log.__dict__.get("local_error")
             assert local_err is not None, (
@@ -226,12 +226,12 @@ class TestSoftFailOffload:
             trace_file.read_text(encoding="utf-8")
         )
 
-    async def test_happy_path_graphiti_reachable_writes_no_local_file(
+    async def test_happy_path_memory_reachable_writes_no_local_file(
         self, tmp_path: Path
     ) -> None:
-        """When graphiti succeeds, no local offload file is written."""
+        """When memory succeeds, no local offload file is written."""
         traces_dir = tmp_path / "traces"
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         config = _make_config(traces_dir)
         writer = RoutingHistoryWriter(client, config)
 
@@ -241,9 +241,9 @@ class TestSoftFailOffload:
         # Either traces_dir was never created (preferred) or it's empty.
         if traces_dir.exists():
             assert list(traces_dir.glob("*.json")) == [], (
-                "No local offload file should be written when graphiti succeeds"
+                "No local offload file should be written when memory succeeds"
             )
-        # And graphiti got the entry.
+        # And memory got the entry.
         assert client.add_episode_calls == 1
 
     async def test_offload_per_write_not_warn_once(
@@ -252,8 +252,8 @@ class TestSoftFailOffload:
         """Each soft-fail write emits its own offload event (no log dedup).
 
         The previous design emitted one ``routing_history_write_failed
-        reason=graphiti_unavailable`` per writer instance. That meant
-        operators learned that graphiti was down once, and then every
+        reason=memory_unavailable`` per writer instance. That meant
+        operators learned that memory was down once, and then every
         subsequent trace was dropped silently. The new design writes
         each trace locally and emits one event per write so the audit
         trail matches the on-disk file count.

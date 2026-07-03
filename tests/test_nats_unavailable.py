@@ -67,7 +67,7 @@ def nats_unreachable_config() -> JarvisConfig:
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint=None,
+            fleet_memory_enabled=False,
             # Deliberately point at an unrouteable address so the integration
             # surface (if it ever leaked through the patches) would fail fast
             # rather than block on a real broker.
@@ -164,7 +164,7 @@ class TestStartupNATSUnreachable:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -193,7 +193,7 @@ class TestStartupNATSUnreachable:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(

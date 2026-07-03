@@ -1,17 +1,17 @@
-"""Soft-fail tests: Graphiti unavailable — DDR-019 invariants (TASK-J004-016).
+"""Soft-fail tests: Memory unavailable — DDR-019 invariants (TASK-J004-016).
 
-Asserts the supervisor's Graphiti-down behaviour:
+Asserts the supervisor's Memory-down behaviour:
 
-* Startup against an unreachable Graphiti endpoint still produces a usable
+* Startup against an unreachable Memory endpoint still produces a usable
   :class:`AppState` — the process does not exit / crash.
-* ``state.graphiti_client is None``; the
+* ``state.memory_client is None``; the
   :class:`~jarvis.infrastructure.routing_history.RoutingHistoryWriter` is
   still constructed (degraded mode).
-* Real dispatch round-trips succeed when NATS is up — Graphiti soft-fail
+* Real dispatch round-trips succeed when NATS is up — Memory soft-fail
   must not break the dispatch contract.
 * DDR-019 ratchet: the writer emits ``WARN routing_history_write_failed``
   exactly once on the first attempted write; subsequent writes are silent.
-* Recovery: a fresh ``build_app_state`` call after Graphiti is reconfigured
+* Recovery: a fresh ``build_app_state`` call after Memory is reconfigured
   produces a writer with a connected client (no ratchet carry-over).
 
 The ``WARN routing_history_write_failed`` log line is asserted via
@@ -24,7 +24,6 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -61,8 +60,8 @@ def _stub_yaml_path() -> Path:
 
 
 @pytest.fixture()
-def graphiti_unreachable_config(tmp_path: Path) -> JarvisConfig:
-    """A :class:`JarvisConfig` whose Graphiti endpoint is set but unreachable."""
+def memory_unreachable_config(tmp_path: Path) -> JarvisConfig:
+    """A :class:`JarvisConfig` whose Memory endpoint is set but unreachable."""
     stub_path = _stub_yaml_path()
     assert stub_path.exists()
 
@@ -70,7 +69,7 @@ def graphiti_unreachable_config(tmp_path: Path) -> JarvisConfig:
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint="bolt://203.0.113.2:7687",
+            fleet_memory_enabled=True,
             jarvis_traces_dir=tmp_path / "traces",
         )
     cfg.validate_provider_keys()
@@ -79,13 +78,13 @@ def graphiti_unreachable_config(tmp_path: Path) -> JarvisConfig:
 
 @pytest.fixture()
 def basic_config(tmp_path: Path) -> JarvisConfig:
-    """A :class:`JarvisConfig` with no graphiti_endpoint configured."""
+    """A :class:`JarvisConfig` with no memory_endpoint configured."""
     stub_path = _stub_yaml_path()
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint=None,
+            fleet_memory_enabled=False,
             jarvis_traces_dir=tmp_path / "traces",
         )
     cfg.validate_provider_keys()
@@ -94,12 +93,12 @@ def basic_config(tmp_path: Path) -> JarvisConfig:
 
 def _make_entry(
     decision_id: str = "11111111-2222-4333-8444-555555555555",
-    subagent_task_id: str = "corr-graphiti-down",
+    subagent_task_id: str = "corr-memory-down",
 ) -> JarvisRoutingHistoryEntry:
     """Construct a minimum-valid routing-history entry."""
     return JarvisRoutingHistoryEntry(
         decision_id=decision_id,
-        session_id="sess-graphiti-down",
+        session_id="sess-memory-down",
         timestamp=datetime.now(UTC),
         supervisor_tool_call_sequence=[],
         capability_snapshot_hash="0" * 64,
@@ -136,17 +135,17 @@ def _assert_process_alive(state: AppState) -> None:
 
 
 # ===========================================================================
-# AC: startup against an unreachable Graphiti endpoint still produces a state
+# AC: startup against an unreachable Memory endpoint still produces a state
 # ===========================================================================
-class TestStartupGraphitiUnreachable:
-    """Lifecycle returns a usable :class:`AppState` even when Graphiti is unreachable."""
+class TestStartupMemoryUnreachable:
+    """Lifecycle returns a usable :class:`AppState` even when Memory is unreachable."""
 
     @pytest.mark.asyncio
-    async def test_startup_with_unreachable_graphiti_still_starts(
+    async def test_startup_with_unreachable_memory_still_starts(
         self,
-        graphiti_unreachable_config: JarvisConfig,
+        memory_unreachable_config: JarvisConfig,
     ) -> None:
-        """``build_app_state`` returns; ``state.graphiti_client is None``."""
+        """``build_app_state`` returns; ``state.memory_client is None``."""
         with (
             patch("sys.stderr", new=io.StringIO()),
             patch(
@@ -154,7 +153,7 @@ class TestStartupGraphitiUnreachable:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -166,17 +165,17 @@ class TestStartupGraphitiUnreachable:
                 return_value=[],
             ),
         ):
-            state = await build_app_state(graphiti_unreachable_config)
+            state = await build_app_state(memory_unreachable_config)
 
-        assert state.graphiti_client is None
+        assert state.memory_client is None
         _assert_process_alive(state)
 
     @pytest.mark.asyncio
     async def test_routing_history_writer_in_degraded_mode(
         self,
-        graphiti_unreachable_config: JarvisConfig,
+        memory_unreachable_config: JarvisConfig,
     ) -> None:
-        """Writer is constructed but holds ``graphiti_client=None`` — degraded mode."""
+        """Writer is constructed but holds ``memory_client=None`` — degraded mode."""
         with (
             patch("sys.stderr", new=io.StringIO()),
             patch(
@@ -184,7 +183,7 @@ class TestStartupGraphitiUnreachable:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -196,26 +195,26 @@ class TestStartupGraphitiUnreachable:
                 return_value=[],
             ),
         ):
-            state = await build_app_state(graphiti_unreachable_config)
+            state = await build_app_state(memory_unreachable_config)
 
         writer = state.routing_history_writer
         assert isinstance(writer, RoutingHistoryWriter)
         # The private attribute is the most reliable signal that the writer
         # is in DDR-019 degraded mode.
-        assert writer._graphiti_client is None
+        assert writer._memory_client is None
         _assert_process_alive(state)
 
 
 # ===========================================================================
-# AC: real dispatch round-trips succeed when only Graphiti is degraded
+# AC: real dispatch round-trips succeed when only Memory is degraded
 # ===========================================================================
-class TestDispatchSucceedsWhenGraphitiDown:
-    """NATS up + Graphiti down: dispatches succeed end-to-end (traces lost)."""
+class TestDispatchSucceedsWhenMemoryDown:
+    """NATS up + Memory down: dispatches succeed end-to-end (traces lost)."""
 
     @pytest.mark.asyncio
-    async def test_dispatches_succeed_when_graphiti_down(
+    async def test_dispatches_succeed_when_memory_down(
         self,
-        graphiti_unreachable_config: JarvisConfig,
+        memory_unreachable_config: JarvisConfig,
     ) -> None:
         """A real round-trip returns the specialist's success payload."""
         from nats_core.events import ResultPayload
@@ -251,10 +250,10 @@ class TestDispatchSucceedsWhenGraphitiDown:
         nats_client = MagicMock()
         nats_client.request = AsyncMock(side_effect=_request)
 
-        # Writer in degraded mode (Graphiti unwired) — same shape as lifecycle.
+        # Writer in degraded mode (Memory unwired) — same shape as lifecycle.
         writer = RoutingHistoryWriter(
-            graphiti_client=None,
-            config=graphiti_unreachable_config,
+            memory_client=None,
+            config=memory_unreachable_config,
         )
 
         saved_nats = dispatch_module._nats_client
@@ -306,15 +305,15 @@ class TestRatchetWarnOnceThenSilent:
     @pytest.mark.asyncio
     async def test_warn_once_then_silent_ratchet(
         self,
-        graphiti_unreachable_config: JarvisConfig,
+        memory_unreachable_config: JarvisConfig,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Three writes against a degraded writer: three offload events + three files."""
         caplog.set_level(logging.WARNING, logger=ROUTING_HISTORY_LOGGER)
 
         writer = RoutingHistoryWriter(
-            graphiti_client=None,
-            config=graphiti_unreachable_config,
+            memory_client=None,
+            config=memory_unreachable_config,
         )
 
         n = 3
@@ -340,16 +339,16 @@ class TestRatchetWarnOnceThenSilent:
             f"got {len(offloaded)}"
         )
         # Each event carries the correlation_id, traces_dir, path, and
-        # graphiti_error so on-call can correlate locally-offloaded
+        # memory_error so on-call can correlate locally-offloaded
         # traces with their dispatch.
         for record in offloaded:
             assert getattr(record, "correlation_id", None) is not None
             assert getattr(record, "traces_dir", None) is not None
             assert getattr(record, "path", None) is not None
-            assert getattr(record, "graphiti_error", None) is not None
+            assert getattr(record, "memory_error", None) is not None
 
         # n distinct files should land on disk.
-        traces_dir = graphiti_unreachable_config.jarvis_traces_dir
+        traces_dir = memory_unreachable_config.jarvis_traces_dir
         assert traces_dir.exists()
         files = sorted(traces_dir.glob("*.json"))
         assert len(files) == n, (
@@ -358,22 +357,22 @@ class TestRatchetWarnOnceThenSilent:
 
 
 # ===========================================================================
-# AC: recovery on the next startup after Graphiti is reconfigured
+# AC: recovery on the next startup after Memory is reconfigured
 # ===========================================================================
 class TestRecoveryOnRestart:
-    """A fresh lifecycle wires a connected Graphiti client; ratchet does not carry."""
+    """A fresh lifecycle wires a connected Memory client; ratchet does not carry."""
 
     @pytest.mark.asyncio
-    async def test_recovery_on_next_startup_after_graphiti_reconfigured(
+    async def test_recovery_on_next_startup_after_memory_reconfigured(
         self,
-        graphiti_unreachable_config: JarvisConfig,
+        memory_unreachable_config: JarvisConfig,
         basic_config: JarvisConfig,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Startup #1 is degraded; startup #2 (with a fake client) is healthy."""
         caplog.set_level(logging.WARNING, logger=ROUTING_HISTORY_LOGGER)
 
-        # ---- Startup #1: Graphiti unreachable -------------------------------
+        # ---- Startup #1: Memory unreachable -------------------------------
         # ``configure()`` is patched out so it does not clear pytest's caplog
         # handler from the root logger (the production logging-config helper
         # rebuilds the handler list on every call — see
@@ -387,7 +386,7 @@ class TestRecoveryOnRestart:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -399,19 +398,19 @@ class TestRecoveryOnRestart:
                 return_value=[],
             ),
         ):
-            state1 = await build_app_state(graphiti_unreachable_config)
+            state1 = await build_app_state(memory_unreachable_config)
 
-        assert state1.graphiti_client is None
+        assert state1.memory_client is None
         # First startup's writer is in degraded mode — exercise it once so the
         # WARN-once ratchet fires on instance #1.
         await state1.routing_history_writer.write_specialist_dispatch(_make_entry())
         startup1_warnings = _routing_history_warnings(caplog)
         assert len(startup1_warnings) == 1
 
-        # ---- Startup #2: Graphiti reconfigured + reachable ------------------
-        fake_graphiti = MagicMock()
-        fake_graphiti.add_episode = AsyncMock(return_value=None)
-        fake_graphiti.aclose = AsyncMock()
+        # ---- Startup #2: Memory reconfigured + reachable ------------------
+        fake_memory = MagicMock()
+        fake_memory.add_episode = AsyncMock(return_value=None)
+        fake_memory.close = AsyncMock()
 
         caplog.clear()
         with (
@@ -422,8 +421,8 @@ class TestRecoveryOnRestart:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
-                new=AsyncMock(return_value=fake_graphiti),
+                "jarvis.infrastructure.lifecycle._connect_memory",
+                new=AsyncMock(return_value=fake_memory),
             ),
             patch(
                 "jarvis.infrastructure.lifecycle.build_supervisor",
@@ -437,15 +436,15 @@ class TestRecoveryOnRestart:
             state2 = await build_app_state(basic_config)
 
         # Recovery: the new writer holds the live client.
-        assert state2.graphiti_client is fake_graphiti
+        assert state2.memory_client is fake_memory
         # The writer object is fresh — the per-instance ratchet did not carry.
-        assert state2.routing_history_writer._graphiti_client is fake_graphiti
+        assert state2.routing_history_writer._memory_client is fake_memory
 
-        # Driving a write goes through to graphiti, not the WARN path.
+        # Driving a write goes through to memory, not the WARN path.
         await state2.routing_history_writer.write_specialist_dispatch(_make_entry())
         # Yield so the fire-and-forget add_episode task lands.
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         startup2_warnings = _routing_history_warnings(caplog)
         assert len(startup2_warnings) == 0
-        fake_graphiti.add_episode.assert_awaited()
+        fake_memory.add_episode.assert_awaited()

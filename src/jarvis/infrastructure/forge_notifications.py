@@ -434,7 +434,7 @@ class ForgeNotificationsSubscriber:
 
     Maintains a bounded LRU map from ``correlation_id`` to
     :class:`BuildCorrelation`, decodes each delivered envelope into a
-    :class:`ForgeNotification`, fire-and-forgets a Graphiti edge via
+    :class:`ForgeNotification`, fire-and-forgets a memory edge via
     :meth:`RoutingHistoryWriter.append_build_queue_event` (DDR-029), and
     enqueues the notification on the originating session's FIFO via
     :meth:`SessionManager.enqueue_notification` (DDR-030).
@@ -484,7 +484,7 @@ class ForgeNotificationsSubscriber:
                 does not own the connection — lifecycle wiring drains it
                 via ``NATSClient.drain``.
             routing_history_writer: The fire-and-forget writer used to
-                append a Graphiti edge per matched stage-complete event
+                append a memory edge per matched stage-complete event
                 (DDR-029).
             queue_cap: Per-session FIFO cap (forwarded to
                 lifecycle.build_app_state for the session manager). Not

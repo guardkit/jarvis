@@ -14,7 +14,7 @@ The canonical 8-step sequence (from
     3. ``await capabilities_registry.close()``
     4. ``await routing_history_writer.flush(timeout=5.0)``
     5. ``await nats_client.drain(timeout=5.0)``
-    6. ``await graphiti_client.aclose()``
+    6. ``await memory_client.close()``
     7. disarm Layer-2 hooks (``_dispatch._current_session_hook`` etc.)
     8. ``state.store.close()``
 
@@ -22,11 +22,11 @@ Why ordering matters (in the words of the task description):
 
 - **3 before 5** — closing the registry before draining NATS prevents
   KV-watch callbacks firing during the drain.
-- **4 before 5** — writer flush submits Graphiti episodes that may
+- **4 before 5** — writer flush submits Memory episodes that may
   themselves use the NATS client indirectly; flush must precede drain.
 - **2 before 5** — deregister publishes to NATS, so it has to precede
   ``drain()``.
-- **6 last (among I/O closes)** — Graphiti close after the writer has
+- **6 last (among I/O closes)** — Memory close after the writer has
   flushed avoids dropping in-flight episodes.
 
 Acceptance criteria covered:
@@ -45,7 +45,7 @@ The fixture builds a synthetic :class:`AppState` whose every shutdown
 side-effect target is a :class:`unittest.mock.MagicMock` whose
 ``side_effect`` appends a sentinel string to a shared ``list``. After
 ``await lifecycle.shutdown(state)`` returns, the test asserts the list
-matches the canonical step sequence verbatim. No real NATS or Graphiti
+matches the canonical step sequence verbatim. No real NATS or Memory
 connection is made.
 """
 
@@ -74,7 +74,7 @@ STEP_DEREGISTER = "2.fleet.deregister"
 STEP_CAPABILITIES_CLOSE = "3.capabilities.close"
 STEP_WRITER_FLUSH = "4.writer.flush"
 STEP_NATS_DRAIN = "5.nats.drain"
-STEP_GRAPHITI_ACLOSE = "6.graphiti.aclose"
+STEP_MEMORY_CLOSE = "6.memory.close"
 STEP_LAYER2_DISARM = "7.layer2.disarm"
 STEP_STORE_CLOSE = "8.store.close"
 
@@ -84,7 +84,7 @@ EXPECTED_ORDER: tuple[str, ...] = (
     STEP_CAPABILITIES_CLOSE,
     STEP_WRITER_FLUSH,
     STEP_NATS_DRAIN,
-    STEP_GRAPHITI_ACLOSE,
+    STEP_MEMORY_CLOSE,
     STEP_LAYER2_DISARM,
     STEP_STORE_CLOSE,
 )
@@ -147,10 +147,10 @@ def shutdown_harness() -> _ShutdownHarness:
         side_effect=lambda *a, **kw: calls.append(STEP_NATS_DRAIN),
     )
 
-    # --- Step 6: graphiti_client.aclose()
-    graphiti_client = MagicMock()
-    graphiti_client.aclose = AsyncMock(
-        side_effect=lambda: calls.append(STEP_GRAPHITI_ACLOSE),
+    # --- Step 6: memory_client.close()
+    memory_client = MagicMock()
+    memory_client.close = AsyncMock(
+        side_effect=lambda: calls.append(STEP_MEMORY_CLOSE),
     )
 
     # --- Step 8: store.close()
@@ -167,7 +167,7 @@ def shutdown_harness() -> _ShutdownHarness:
         capability_registry=[],
         llamaswap_adapter=None,
         nats_client=nats_client,
-        graphiti_client=graphiti_client,
+        memory_client=memory_client,
         routing_history_writer=writer,
         fleet_heartbeat_task=None,  # replaced inside each test body
         capabilities_registry=capabilities_registry,
@@ -274,7 +274,7 @@ class TestExactShutdownOrder:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -327,7 +327,7 @@ class TestExactShutdownOrder:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -378,7 +378,7 @@ class TestExactShutdownOrder:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -436,7 +436,7 @@ class TestPairwiseOrderingInvariants:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -474,12 +474,12 @@ class TestPairwiseOrderingInvariants:
     async def test_writer_flush_before_nats_drain(
         self, recorded_calls: list[str]
     ) -> None:
-        """4 before 5 — writer flush submits Graphiti episodes that may
+        """4 before 5 — writer flush submits Memory episodes that may
         use the NATS client indirectly; flush before drain."""
         idx = {step: i for i, step in enumerate(recorded_calls)}
         assert idx[STEP_WRITER_FLUSH] < idx[STEP_NATS_DRAIN], (
             "routing_history_writer.flush() must precede "
-            "nats_client.drain() so in-flight Graphiti submissions do "
+            "nats_client.drain() so in-flight Memory submissions do "
             "not race the drain.\n"
             f"  sequence: {recorded_calls}"
         )
@@ -497,15 +497,15 @@ class TestPairwiseOrderingInvariants:
         )
 
     @pytest.mark.asyncio
-    async def test_writer_flush_before_graphiti_aclose(
+    async def test_writer_flush_before_memory_close(
         self, recorded_calls: list[str]
     ) -> None:
-        """6 last among I/O closes — Graphiti close after writer has
+        """6 last among I/O closes — Memory close after writer has
         flushed avoids dropping in-flight episodes."""
         idx = {step: i for i, step in enumerate(recorded_calls)}
-        assert idx[STEP_WRITER_FLUSH] < idx[STEP_GRAPHITI_ACLOSE], (
+        assert idx[STEP_WRITER_FLUSH] < idx[STEP_MEMORY_CLOSE], (
             "routing_history_writer.flush() must precede "
-            "graphiti_client.aclose() so the writer's in-flight episodes "
+            "memory_client.close() so the writer's in-flight episodes "
             "are not dropped.\n"
             f"  sequence: {recorded_calls}"
         )
@@ -573,7 +573,7 @@ class TestFailureToleranceInvariant:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -596,7 +596,7 @@ class TestFailureToleranceInvariant:
             STEP_CAPABILITIES_CLOSE,
             STEP_WRITER_FLUSH,
             STEP_NATS_DRAIN,
-            STEP_GRAPHITI_ACLOSE,
+            STEP_MEMORY_CLOSE,
             STEP_LAYER2_DISARM,
             STEP_STORE_CLOSE,
         ):
@@ -638,7 +638,7 @@ class TestFailureToleranceInvariant:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -661,7 +661,7 @@ class TestFailureToleranceInvariant:
         for later_step in (
             STEP_WRITER_FLUSH,
             STEP_NATS_DRAIN,
-            STEP_GRAPHITI_ACLOSE,
+            STEP_MEMORY_CLOSE,
             STEP_LAYER2_DISARM,
             STEP_STORE_CLOSE,
         ):
@@ -702,7 +702,7 @@ class TestFailureToleranceInvariant:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -723,7 +723,7 @@ class TestFailureToleranceInvariant:
             await shutdown(state)
 
         for later_step in (
-            STEP_GRAPHITI_ACLOSE,
+            STEP_MEMORY_CLOSE,
             STEP_LAYER2_DISARM,
             STEP_STORE_CLOSE,
         ):
@@ -759,7 +759,7 @@ class TestFailureToleranceInvariant:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -772,8 +772,8 @@ class TestFailureToleranceInvariant:
         shutdown_harness.state.routing_history_writer.flush = AsyncMock(  # type: ignore[union-attr]
             side_effect=RuntimeError("flush failed"),
         )
-        shutdown_harness.state.graphiti_client.aclose = AsyncMock(  # type: ignore[union-attr]
-            side_effect=RuntimeError("aclose failed"),
+        shutdown_harness.state.memory_client.close = AsyncMock(  # type: ignore[union-attr]
+            side_effect=RuntimeError("close failed"),
         )
 
         with (
@@ -826,7 +826,7 @@ class TestHeartbeatCancellationClean:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,
@@ -894,7 +894,7 @@ class TestHeartbeatCancellationClean:
             capability_registry=shutdown_harness.state.capability_registry,
             llamaswap_adapter=shutdown_harness.state.llamaswap_adapter,
             nats_client=shutdown_harness.state.nats_client,
-            graphiti_client=shutdown_harness.state.graphiti_client,
+            memory_client=shutdown_harness.state.memory_client,
             routing_history_writer=shutdown_harness.state.routing_history_writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=shutdown_harness.state.capabilities_registry,

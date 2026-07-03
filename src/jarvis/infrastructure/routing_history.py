@@ -1,20 +1,26 @@
 """Routing-history wire schema and writer for ``jarvis_routing_history`` entries.
 
 This module is the persistence boundary between the Jarvis supervisor's
-in-memory dispatch decisions and the durable, queryable Graphiti knowledge
-graph. It exposes a frozen Pydantic schema (:class:`JarvisRoutingHistoryEntry`
-and its helper types) describing the wire shape of every routing-history
-record, plus :class:`RoutingHistoryWriter` which redacts human-shaped fields
-at the write boundary, optionally offloads oversized inline trace payloads
-to the local trace store, and submits the entry as a fire-and-forget
-Graphiti ``add_episode`` call.
+in-memory dispatch decisions and the durable, queryable fleet-memory store. It
+exposes a frozen Pydantic schema (:class:`JarvisRoutingHistoryEntry` and its
+helper types) describing the wire shape of every routing-history record, plus
+:class:`RoutingHistoryWriter` which redacts human-shaped fields at the write
+boundary, optionally offloads oversized inline trace payloads to the local
+trace store, and submits the entry as a fire-and-forget memory
+``add_episode`` call (published to fleet-memory as a ``document`` episode).
+
+The memory client is duck-typed via :class:`MemoryClientProtocol`; the live
+implementation is
+:class:`jarvis.infrastructure.fleet_memory.client.FleetMemoryClient`. Jarvis
+migrated off Graphiti to fleet-memory in the FEAT-MEM-09 fleet-wide cutover;
+the ``add_episode`` surface was preserved so this writer body did not change.
 
 Origin
 ------
 Authored under **FEAT-JARVIS-004** (Phase 3 — Fleet Integration), Group A.2.
 The schema was promoted to authoritative status for v1+ per DDR-018, and the
 write path was constrained to fire-and-forget semantics per DDR-019 so a
-degraded Graphiti instance never propagates back into the dispatch hot path.
+degraded memory backend never propagates back into the dispatch hot path.
 
 Design references
 -----------------
@@ -30,14 +36,16 @@ readable as part of the docstring contract.
   <../../../docs/design/FEAT-JARVIS-004/decisions/DDR-018-routing-history-schema-authoritative.md>`_
   — additions are append-only; renames or type changes require a
   ``schema_version`` marker at the change point.
-* `DDR-019 — Per-dispatch fire-and-forget Graphiti writes; WARN on failure
+* `DDR-019 — Per-dispatch fire-and-forget memory writes; WARN on failure
   <../../../docs/design/FEAT-JARVIS-004/decisions/DDR-019-graphiti-fire-and-forget-writes.md>`_
   — failures log ``WARN routing_history_write_failed reason=<err>`` and
-  never raise; the supervisor stays up when Graphiti is degraded.
+  never raise; the supervisor stays up when the memory backend is degraded.
+  (The DDR filename retains its original ``graphiti`` slug; the write target
+  is now fleet-memory.)
 * `DDR-023 — Trace-file collision policy: WARN + preserve original
   <../../../docs/design/FEAT-JARVIS-004/decisions/DDR-023-trace-file-collision-warn-and-preserve.md>`_
   — pre-existing trace files at the same path are preserved (no overwrite);
-  the Graphiti write is also skipped for that record because the entity
+  the memory write is also skipped for that record because the entity
   needs a :class:`TraceRef` the writer cannot construct without on-disk
   content.
 * `ADR-ARCH-029 — Personal-use compliance posture
@@ -486,12 +494,15 @@ class JarvisRoutingHistoryEntry(BaseModel):
 _OFFLOAD_THRESHOLD_BYTES = 16 * 1024
 
 
-class GraphitiClientProtocol(Protocol):
-    """Duck-typed surface the writer needs from a Graphiti client.
+class MemoryClientProtocol(Protocol):
+    """Duck-typed surface the writer needs from a fleet-memory client.
 
-    The real client lives behind FEAT-JARVIS-004 wave 1; this protocol
-    exists so the writer can be unit-tested without importing the SDK
-    and so the Optional[None] startup-soft-fail path is type-checked.
+    Structurally satisfied by
+    :class:`jarvis.infrastructure.fleet_memory.client.FleetMemoryClient`. This
+    protocol exists so the writer can be unit-tested without importing the
+    concrete client and so the ``Optional[None]`` startup-soft-fail path is
+    type-checked. The keyword-only ``add_episode`` signature is preserved from
+    the retired Graphiti client so the cutover did not touch the writer body.
     """
 
     async def add_episode(
@@ -505,17 +516,18 @@ class GraphitiClientProtocol(Protocol):
 
 
 class RoutingHistoryWriter:
-    """Fire-and-forget Graphiti writer for ``jarvis_routing_history``.
+    """Fire-and-forget fleet-memory writer for ``jarvis_routing_history``.
 
     DDR-019: failures log ``WARN routing_history_write_failed reason=…``
-    and never raise — the supervisor stays up when Graphiti is degraded.
+    and never raise — the supervisor stays up when the memory backend is
+    degraded.
 
     DDR-018: oversized inline payloads are offloaded to the local trace
     store as flat JSON files; the entity itself stores only a
     :class:`TraceRef` pointer.
 
     DDR-023: pre-existing trace files at the same path are preserved
-    (no overwrite). The Graphiti write is *also* skipped for that record
+    (no overwrite). The memory write is *also* skipped for that record
     because the entity needs a TraceRef the writer cannot construct
     without on-disk content.
 
@@ -523,7 +535,7 @@ class RoutingHistoryWriter:
     Pydantic validator. The frozen entry is never mutated — redaction
     operates on a ``model_dump(mode='json')`` copy.
 
-    The writer creates one :class:`asyncio.Task` per Graphiti
+    The writer creates one :class:`asyncio.Task` per memory
     submission (the dispatch boundary owns the fire-and-forget); the
     method awaits the *submission*, not the round-trip.
     :meth:`flush` drains the in-flight set with a bounded timeout on
@@ -532,19 +544,20 @@ class RoutingHistoryWriter:
 
     def __init__(
         self,
-        graphiti_client: GraphitiClientProtocol | None,
+        memory_client: MemoryClientProtocol | None,
         config: JarvisConfig,
     ) -> None:
         """Build the writer.
 
-        ``graphiti_client`` is ``None`` when Graphiti was unreachable at
-        startup (DDR-019 startup soft-fail). In that mode, every write
-        method is a no-op; the first call emits one ``WARN`` and
-        subsequent calls are silent (no log spam).
+        ``memory_client`` is ``None`` when fleet-memory is disabled or the
+        client could not be built at startup (DDR-019 startup soft-fail). In
+        that mode, dispatch-write entries are offloaded to the local trace
+        store; edge writes emit one ``WARN`` and subsequent edge calls are
+        silent (no log spam).
         """
-        self._graphiti_client = graphiti_client
+        self._memory_client = memory_client
         self._config = config
-        self._graphiti_unavailable_warned: bool = False
+        self._memory_unavailable_warned: bool = False
         self._pending_tasks: set[asyncio.Task[Any]] = set()
         # DDR-029 §50 / DDR-018 — per-correlation monotonic edge counter.
         # Populated by ``write_build_queue_dispatch`` (registers correlation
@@ -574,25 +587,25 @@ class RoutingHistoryWriter:
            ``~/.jarvis/traces/{date}/{decision_id}.json`` (mode 0700 dir,
            mode 0600 file) and replace both fields with a
            :class:`TraceRef` pointer.
-        4. Submit Graphiti ``add_episode`` via :func:`asyncio.create_task`
+        4. Submit memory ``add_episode`` via :func:`asyncio.create_task`
            — fire-and-forget; this method awaits the *submission*.
         5. Any failure logs ``WARN routing_history_write_failed
            reason=<err>`` and is swallowed.
 
         DDR-019 soft-fail offload (TASK-FRR-003): when the writer was
-        constructed with ``graphiti_client=None`` (Graphiti endpoint
-        unset or unreachable at startup), the entry is offloaded to
+        constructed with ``memory_client=None`` (fleet-memory disabled
+        or unreachable at startup), the entry is offloaded to
         ``<traces_dir>/<correlation_id>.json`` so that a future
-        rehydration tool can replay it once Graphiti is reachable
+        rehydration tool can replay it once the memory backend is reachable
         again. Successful offload emits
         ``routing_history_offloaded_locally``; both-paths-failed emits
         ``routing_history_offload_failed`` carrying both error paths.
         See :meth:`_offload_to_local_filesystem_soft_fail` for the
         on-disk shape.
         """
-        if self._graphiti_client is None:
+        if self._memory_client is None:
             self._offload_to_local_filesystem_soft_fail(
-                entry, graphiti_error="graphiti_endpoint_unset"
+                entry, memory_error="memory_disabled"
             )
             return
 
@@ -620,7 +633,7 @@ class RoutingHistoryWriter:
         3. Register ``entry.subagent_task_id`` in the per-correlation
            edge-seq map at seq=0 so subsequent
            :meth:`append_build_queue_event` calls can find it.
-        4. Submit Graphiti ``add_episode`` via :func:`asyncio.create_task`
+        4. Submit memory ``add_episode`` via :func:`asyncio.create_task`
            (fire-and-forget — caller used ``asyncio.create_task`` at the
            ``queue_build`` boundary; this method awaits the *submission*).
         5. Failures log ``WARN routing_history_write_failed
@@ -628,13 +641,13 @@ class RoutingHistoryWriter:
            never raises.
 
         DDR-019 soft-fail offload (TASK-FRR-003): when
-        ``graphiti_client`` is ``None``, the entry is written to
+        ``memory_client`` is ``None``, the entry is written to
         ``<traces_dir>/<correlation_id>.json`` instead of being
         dropped. See :meth:`_offload_to_local_filesystem_soft_fail`.
         """
-        if self._graphiti_client is None:
+        if self._memory_client is None:
             self._offload_to_local_filesystem_soft_fail(
-                entry, graphiti_error="graphiti_endpoint_unset"
+                entry, memory_error="memory_disabled"
             )
             return
 
@@ -655,21 +668,21 @@ class RoutingHistoryWriter:
     async def append_build_queue_event(
         self, correlation_id: str, event: dict[str, Any]
     ) -> None:
-        """Append a ``stage_complete`` Graphiti edge for ``correlation_id``.
+        """Append a ``stage_complete`` memory edge for ``correlation_id``.
 
         DDR-029: each ``pipeline.stage-complete.*`` event lands as one
-        append-only Graphiti edge against the originating
+        append-only memory edge against the originating
         :class:`JarvisRoutingHistoryEntry`. The entry stays
         ``frozen=True`` per DDR-018 — never mutated, never overwritten.
         Multiple events for the same ``correlation_id`` produce
         multiple distinct edges (one per call), each with a monotonic
-        ``seq`` suffix so Graphiti entity names don't collide.
+        ``seq`` suffix so memory entity names don't collide.
 
         Side-effect ordering:
 
-        1. If the writer was constructed with ``graphiti_client=None``
+        1. If the writer was constructed with ``memory_client=None``
            (DDR-019 startup soft-fail), emit the once-per-instance
-           ``graphiti_unavailable`` WARN and return.
+           ``memory_unavailable`` WARN and return.
         2. If ``correlation_id`` is unknown (no
            :meth:`write_build_queue_dispatch` ever registered it — e.g.
            the correlation was evicted from DDR-028's bounded map),
@@ -678,7 +691,7 @@ class RoutingHistoryWriter:
         3. Redact ``event`` via the same recursive processor used by
            :meth:`write_specialist_dispatch` (ADR-ARCH-029); operates
            on a deep copy so the caller's dict is never mutated.
-        4. Submit Graphiti ``add_episode`` with
+        4. Submit memory ``add_episode`` with
            ``source_description='jarvis-routing-history-edge'`` and
            ``name='stage_complete:{correlation_id}:{seq}'`` — see
            DDR-029 §4 for the naming convention.
@@ -687,8 +700,8 @@ class RoutingHistoryWriter:
         6. Any failure logs ``WARN routing_history_append_failed
            reason=<err>`` (DDR-019) and is swallowed.
         """
-        if self._graphiti_client is None:
-            self._warn_graphiti_unavailable_once()
+        if self._memory_client is None:
+            self._warn_memory_unavailable_once()
             return
 
         if correlation_id not in self._correlation_edge_seq:
@@ -724,11 +737,11 @@ class RoutingHistoryWriter:
                 with contextlib.suppress(ValueError):
                     reference_time = datetime.fromisoformat(completed_at)
 
-            assert self._graphiti_client is not None  # checked above
+            assert self._memory_client is not None  # checked above
             episode_body = json.dumps(
                 redacted_event, sort_keys=True, default=str
             )
-            coro = self._graphiti_client.add_episode(
+            coro = self._memory_client.add_episode(
                 name=edge_name,
                 episode_body=episode_body,
                 source_description="jarvis-routing-history-edge",
@@ -793,7 +806,7 @@ class RoutingHistoryWriter:
     # Internals
     # ------------------------------------------------------------------
 
-    def _warn_graphiti_unavailable_once(self) -> None:
+    def _warn_memory_unavailable_once(self) -> None:
         """Emit ``WARN`` exactly once per writer instance.
 
         Used by :meth:`append_build_queue_event` for stage-complete edges.
@@ -801,29 +814,29 @@ class RoutingHistoryWriter:
         records, so there's no canonical-payload offload path for them
         (TASK-FRR-003 scope was the dispatch-write entries only). The
         once-per-instance dedup keeps the operator log clean when
-        Graphiti is down for an extended period.
+        the memory backend is down for an extended period.
         """
-        if self._graphiti_unavailable_warned:
+        if self._memory_unavailable_warned:
             return
         logger.warning(
             "routing_history_write_failed",
-            extra={"reason": "graphiti_unavailable"},
+            extra={"reason": "memory_unavailable"},
         )
-        self._graphiti_unavailable_warned = True
+        self._memory_unavailable_warned = True
 
     def _offload_to_local_filesystem_soft_fail(
         self,
         entry: JarvisRoutingHistoryEntry,
         *,
-        graphiti_error: str,
+        memory_error: str,
     ) -> None:
         """Write ``entry`` to ``<traces_dir>/<correlation_id>.json`` (DDR-019).
 
         TASK-FRR-003 (DDR-019 soft-fail offload). When the writer was
-        constructed with ``graphiti_client=None`` — i.e. Graphiti was
-        unreachable at startup or the endpoint was not configured —
+        constructed with ``memory_client=None`` — i.e. fleet-memory was
+        disabled or unreachable at startup —
         the dispatch-write entry is offloaded to local disk so that a
-        future rehydration tool can replay it once Graphiti is
+        future rehydration tool can replay it once the memory backend is
         reachable. Without this, the trace is silently dropped on the
         floor (the pre-fix behaviour observed during the GB10 first
         real run, 2026-05-01, correlation_id
@@ -836,7 +849,7 @@ class RoutingHistoryWriter:
         a read-only parent) does not crash supervisor startup — the
         failure surfaces here, scoped to a single trace, and the
         operator gets a structured log event documenting both the
-        graphiti error and the local-write error.
+        memory-backend error and the local-write error.
 
         Filename: ``<correlation_id>.json``, where ``correlation_id``
         is :attr:`JarvisRoutingHistoryEntry.subagent_task_id`. This is
@@ -854,10 +867,10 @@ class RoutingHistoryWriter:
 
         * Success → ``WARN routing_history_offloaded_locally`` with
           ``correlation_id``, ``traces_dir``, ``path``, and
-          ``graphiti_error``. One event per write — no dedup, because
+          ``memory_error``. One event per write — no dedup, because
           the on-disk file count must match the audit-trail count.
         * Failure → ``WARN routing_history_offload_failed`` with
-          ``correlation_id``, ``traces_dir``, ``graphiti_error`` AND
+          ``correlation_id``, ``traces_dir``, ``memory_error`` AND
           ``local_error``. This is the new "trace genuinely lost"
           event — operationally distinct from the success case.
 
@@ -885,7 +898,7 @@ class RoutingHistoryWriter:
                 extra={
                     "correlation_id": correlation_id,
                     "traces_dir": str(traces_dir),
-                    "graphiti_error": graphiti_error,
+                    "memory_error": memory_error,
                     "local_error": (
                         f"{type(local_exc).__name__}: {local_exc}"
                     ),
@@ -899,7 +912,7 @@ class RoutingHistoryWriter:
                 "correlation_id": correlation_id,
                 "traces_dir": str(traces_dir),
                 "path": str(path),
-                "graphiti_error": graphiti_error,
+                "memory_error": memory_error,
             },
         )
 
@@ -930,9 +943,9 @@ class RoutingHistoryWriter:
             data["supervisor_tool_call_sequence"] = trace_ref_dict
             data["subagent_trace_ref"] = trace_ref_dict
 
-        # 4. Submit Graphiti ``add_episode`` — fire-and-forget.
-        assert self._graphiti_client is not None  # checked by caller
-        coro = self._graphiti_client.add_episode(
+        # 4. Submit memory ``add_episode`` — fire-and-forget.
+        assert self._memory_client is not None  # checked by caller
+        coro = self._memory_client.add_episode(
             name=f"jarvis_routing_history:{entry.decision_id}",
             episode_body=json.dumps(data, sort_keys=True),
             source_description="jarvis-routing-history",
@@ -952,7 +965,7 @@ class RoutingHistoryWriter:
 
         DDR-023 collision policy: when the target path already exists,
         log ``WARN`` with ``reason=trace_file_exists``, preserve the
-        original, and return ``None`` so the caller skips the Graphiti
+        original, and return ``None`` so the caller skips the memory
         submission.
         """
         date_str = entry.timestamp.strftime("%Y-%m-%d")
@@ -1001,8 +1014,8 @@ __all__ = [
     "CapabilityDescriptorRef",
     "ConcurrentWorkloadSnapshot",
     "DispatchOutcome",
-    "GraphitiClientProtocol",
     "JarvisRoutingHistoryEntry",
+    "MemoryClientProtocol",
     "ModelCallRecord",
     "RedirectAttempt",
     "RoutingHistoryWriter",

@@ -6,9 +6,9 @@ Acceptance criteria covered:
     AC-002: ``NATSClient.connect`` returning ``None`` does NOT block startup;
             ``capabilities_registry`` falls back to ``StubCapabilitiesRegistry``;
             ``heartbeat_task = None``.
-    AC-003: ``GraphitiClient.connect`` failure does NOT block startup;
+    AC-003: ``MemoryClient.connect`` failure does NOT block startup;
             ``routing_history_writer`` is constructed with
-            ``graphiti_client=None`` (degraded mode).
+            ``memory_client=None`` (degraded mode).
     AC-004: ``AppState`` gains the four new fields (frozen dataclass).
     AC-005: ``assemble_tool_list`` accepts and propagates the three new
             kwargs to ``tools/dispatch.py`` module attributes.
@@ -16,7 +16,7 @@ Acceptance criteria covered:
             independently failure-tolerant.
     AC-007: Heartbeat task cancellation produces no traceback.
 
-Tests are purely unit-level — every transport seam (NATS, Graphiti,
+Tests are purely unit-level — every transport seam (NATS, Memory,
 fleet registration, capabilities registry) is patched so the suite runs
 without an in-process broker or graph store.
 """
@@ -54,7 +54,7 @@ def stub_registry_config() -> JarvisConfig:
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint=None,
+            fleet_memory_enabled=False,
         )
     cfg.validate_provider_keys()
     return cfg
@@ -70,16 +70,16 @@ def patched_supervisor() -> Any:
 # AC-004 — AppState gains the four new fields (frozen dataclass)
 # ---------------------------------------------------------------------------
 class TestAC004AppStateExtensions:
-    """``AppState`` gains nats_client, graphiti_client, routing_history_writer,
+    """``AppState`` gains nats_client, memory_client, routing_history_writer,
     fleet_heartbeat_task, capabilities_registry as declared dataclass fields."""
 
     def test_nats_client_field_present(self) -> None:
         field_names = {f.name for f in dataclasses.fields(AppState)}
         assert "nats_client" in field_names
 
-    def test_graphiti_client_field_present(self) -> None:
+    def test_memory_client_field_present(self) -> None:
         field_names = {f.name for f in dataclasses.fields(AppState)}
-        assert "graphiti_client" in field_names
+        assert "memory_client" in field_names
 
     def test_routing_history_writer_field_present(self) -> None:
         field_names = {f.name for f in dataclasses.fields(AppState)}
@@ -120,7 +120,7 @@ class TestAC002NatsSoftFail:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch("jarvis.infrastructure.lifecycle.build_supervisor", return_value=MagicMock()),
@@ -137,14 +137,14 @@ class TestAC002NatsSoftFail:
 
 
 # ---------------------------------------------------------------------------
-# AC-003 — Graphiti soft-fail
+# AC-003 — Memory soft-fail
 # ---------------------------------------------------------------------------
-class TestAC003GraphitiSoftFail:
-    """When Graphiti soft-fails, the writer is still constructed but with
-    ``graphiti_client=None`` (degraded mode)."""
+class TestAC003MemorySoftFail:
+    """When Memory soft-fails, the writer is still constructed but with
+    ``memory_client=None`` (degraded mode)."""
 
     @pytest.mark.asyncio
-    async def test_graphiti_none_writer_in_degraded_mode(
+    async def test_memory_none_writer_in_degraded_mode(
         self, stub_registry_config: JarvisConfig
     ) -> None:
         from jarvis.infrastructure.lifecycle import build_app_state
@@ -156,7 +156,7 @@ class TestAC003GraphitiSoftFail:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch("jarvis.infrastructure.lifecycle.build_supervisor", return_value=MagicMock()),
@@ -167,9 +167,9 @@ class TestAC003GraphitiSoftFail:
         ):
             state = await build_app_state(stub_registry_config)
 
-        assert state.graphiti_client is None
+        assert state.memory_client is None
         assert isinstance(state.routing_history_writer, RoutingHistoryWriter)
-        # The writer must report the unavailable graphiti when called.
+        # The writer must report the unavailable memory when called.
         # Force a write — should not raise; it should warn-and-no-op.
         from jarvis.infrastructure.routing_history import (
             ConcurrentWorkloadSnapshot,
@@ -201,22 +201,22 @@ class TestAC003GraphitiSoftFail:
 
 
 # ---------------------------------------------------------------------------
-# AC-001 — happy-path startup wiring (NATS up + Graphiti up)
+# AC-001 — happy-path startup wiring (NATS up + Memory up)
 # ---------------------------------------------------------------------------
 class TestAC001StartupHappyPath:
     """When both transports come up, the lifecycle wires the live registry,
     schedules a heartbeat task, and registers on the fleet."""
 
     @pytest.mark.asyncio
-    async def test_nats_up_graphiti_up_full_wiring(
+    async def test_nats_up_memory_up_full_wiring(
         self, stub_registry_config: JarvisConfig
     ) -> None:
         from jarvis.infrastructure.lifecycle import build_app_state
 
         fake_nats = MagicMock()
         fake_nats.drain = AsyncMock()
-        fake_graphiti = MagicMock()
-        fake_graphiti.aclose = AsyncMock()
+        fake_memory = MagicMock()
+        fake_memory.close = AsyncMock()
 
         fake_live_registry = MagicMock()
         fake_live_registry.snapshot = MagicMock(return_value=[])
@@ -234,8 +234,8 @@ class TestAC001StartupHappyPath:
                 new=AsyncMock(return_value=fake_nats),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
-                new=AsyncMock(return_value=fake_graphiti),
+                "jarvis.infrastructure.lifecycle._connect_memory",
+                new=AsyncMock(return_value=fake_memory),
             ),
             patch(
                 "jarvis.infrastructure.lifecycle.register_on_fleet",
@@ -258,7 +258,7 @@ class TestAC001StartupHappyPath:
             state = await build_app_state(stub_registry_config)
 
         assert state.nats_client is fake_nats
-        assert state.graphiti_client is fake_graphiti
+        assert state.memory_client is fake_memory
         assert state.capabilities_registry is fake_live_registry
         assert state.fleet_heartbeat_task is not None
         assert isinstance(state.fleet_heartbeat_task, asyncio.Task)
@@ -348,8 +348,8 @@ class TestAC006ShutdownOrderAndFailureTolerance:
         nats_client = MagicMock()
         nats_client.drain = AsyncMock(side_effect=lambda timeout: calls.append("nats.drain"))
 
-        graphiti_client = MagicMock()
-        graphiti_client.aclose = AsyncMock(side_effect=lambda: calls.append("graphiti.aclose"))
+        memory_client = MagicMock()
+        memory_client.close = AsyncMock(side_effect=lambda: calls.append("memory.close"))
 
         writer = MagicMock(spec=RoutingHistoryWriter)
         writer.flush = AsyncMock(side_effect=lambda timeout: calls.append("writer.flush"))
@@ -377,7 +377,7 @@ class TestAC006ShutdownOrderAndFailureTolerance:
             capability_registry=[],
             llamaswap_adapter=None,
             nats_client=nats_client,
-            graphiti_client=graphiti_client,
+            memory_client=memory_client,
             routing_history_writer=writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=capabilities_registry,
@@ -405,15 +405,15 @@ class TestAC006ShutdownOrderAndFailureTolerance:
         # 2) deregister BEFORE capabilities.close
         # 3) capabilities.close BEFORE writer.flush
         # 4) writer.flush BEFORE nats.drain
-        # 5) nats.drain BEFORE graphiti.aclose
-        # 6) graphiti.aclose BEFORE store.close
+        # 5) nats.drain BEFORE memory.close
+        # 6) memory.close BEFORE store.close
         idx = {name: i for i, name in enumerate(calls)}
         assert idx["heartbeat.cancelled"] < idx["fleet.deregister"]
         assert idx["fleet.deregister"] < idx["capabilities.close"]
         assert idx["capabilities.close"] < idx["writer.flush"]
         assert idx["writer.flush"] < idx["nats.drain"]
-        assert idx["nats.drain"] < idx["graphiti.aclose"]
-        assert idx["graphiti.aclose"] < idx["store.close"]
+        assert idx["nats.drain"] < idx["memory.close"]
+        assert idx["memory.close"] < idx["store.close"]
 
     @pytest.mark.asyncio
     async def test_shutdown_continues_when_a_step_raises(self) -> None:
@@ -433,7 +433,7 @@ class TestAC006ShutdownOrderAndFailureTolerance:
         assert "capabilities.close" in calls
         assert "writer.flush" in calls
         assert "nats.drain" in calls
-        assert "graphiti.aclose" in calls
+        assert "memory.close" in calls
         assert "store.close" in calls
 
     @pytest.mark.asyncio

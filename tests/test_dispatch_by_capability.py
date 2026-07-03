@@ -626,7 +626,7 @@ class TestTraceWritesFireAndForget:
     ) -> None:
         # Writer raises — dispatch must still return the specialist's result.
         async def _explode(_entry: Any) -> None:
-            raise RuntimeError("graphiti down")
+            raise RuntimeError("memory down")
 
         mock_dispatch_deps["writer"].write_specialist_dispatch = AsyncMock(side_effect=_explode)
         nats_client = mock_dispatch_deps["nats_client"]

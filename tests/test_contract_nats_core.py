@@ -15,7 +15,7 @@ Acceptance criteria covered:
   line in the assertion message.
 - AC-004: the source-id audit (#4) parametrises across every
   ``MessageEnvelope`` construction site found via grep.
-- AC-005: no real NATS / Graphiti — pure schema + grep contract tests.
+- AC-005: no real NATS / Memory — pure schema + grep contract tests.
 - AC-006: ``uv run pytest tests/test_contract_nats_core.py -v`` green.
 
 The test suite is deliberately self-contained — synthetic

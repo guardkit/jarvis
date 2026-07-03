@@ -10,12 +10,12 @@ FEAT-J004 and ratified by DDR-019 / DDR-021 / DDR-027 / ASSUM-011:
 * **NATS up but ``js.publish`` stalls past timeout** — ``queue_build``
   returns DEGRADED ``transport_unavailable`` after ``asyncio.wait_for``
   raises ``TimeoutError`` (Group B #6).
-* **Graphiti raises during ``write_build_queue_dispatch``** — the
+* **Memory raises during ``write_build_queue_dispatch``** — the
   fire-and-forget routing-history hook logs ``WARN
   routing_history_write_failed`` exactly once and ``queue_build`` still
   returns the operator-facing ``{"status": "queued", ...}`` ack (DDR-019,
   Group A #6).
-* **Graphiti raises during ``append_build_queue_event``** — the subscriber
+* **Memory raises during ``append_build_queue_event``** — the subscriber
   wraps the writer in :func:`contextlib.suppress`; the notification still
   reaches ``SessionManager.enqueue_notification`` and
   :meth:`ForgeNotification.render_line` produces a clean line
@@ -27,7 +27,7 @@ FEAT-J004 and ratified by DDR-019 / DDR-021 / DDR-027 / ASSUM-011:
   no-op and never raises.
 
 Pattern reused from ``tests/test_nats_unavailable.py`` and
-``tests/test_graphiti_unavailable.py`` (FEAT-J004): in-process JetStream
+``tests/test_memory_unavailable.py`` (FEAT-J004): in-process JetStream
 mocks via ``unittest.mock``; module-level dispatch state saved/restored
 via fixture; ``caplog.records`` filtered to the producing logger to
 assert WARN content (no stderr matching).
@@ -102,7 +102,7 @@ def nats_unreachable_config(tmp_path: Path) -> JarvisConfig:
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint=None,
+            fleet_memory_enabled=False,
             nats_url="nats://203.0.113.1:4222",
             jarvis_traces_dir=tmp_path / "traces",
         )
@@ -111,14 +111,14 @@ def nats_unreachable_config(tmp_path: Path) -> JarvisConfig:
 
 
 @pytest.fixture()
-def graphiti_unreachable_config(tmp_path: Path) -> JarvisConfig:
-    """A :class:`JarvisConfig` configured for Graphiti soft-fail tests."""
+def memory_unreachable_config(tmp_path: Path) -> JarvisConfig:
+    """A :class:`JarvisConfig` configured for Memory soft-fail tests."""
     stub_path = _stub_yaml_path()
     with patch.dict("os.environ", {}, clear=True):
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint="bolt://203.0.113.2:7687",
+            fleet_memory_enabled=True,
             jarvis_traces_dir=tmp_path / "traces",
         )
     cfg.validate_provider_keys()
@@ -264,7 +264,7 @@ class TestNatsDownAtBuildAppStateTime:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -366,19 +366,19 @@ class TestPublishStallsPastTimeout:
 
 
 # ===========================================================================
-# AC: Graphiti raises during write_build_queue_dispatch → WARN logged,
+# AC: Memory raises during write_build_queue_dispatch → WARN logged,
 # queue_build still returns {"status": "queued", ...} (Group A #6).
 # ===========================================================================
-class TestGraphitiRaisesDuringWriteBuildQueueDispatch:
-    """DDR-019 fire-and-forget: graphiti errors don't break the operator ack."""
+class TestMemoryRaisesDuringWriteBuildQueueDispatch:
+    """DDR-019 fire-and-forget: memory errors don't break the operator ack."""
 
-    def test_queue_build_returns_queued_when_graphiti_raises_warn_logged(
+    def test_queue_build_returns_queued_when_memory_raises_warn_logged(
         self,
         reset_dispatch_state: None,
-        graphiti_unreachable_config: JarvisConfig,
+        memory_unreachable_config: JarvisConfig,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """A faulty Graphiti client → WARN ``routing_history_write_failed``.
+        """A faulty Memory client → WARN ``routing_history_write_failed``.
 
         ``queue_build`` still returns the success ack because the routing-
         history hook is fire-and-forget per DDR-019 / DDR-029. The
@@ -387,14 +387,14 @@ class TestGraphitiRaisesDuringWriteBuildQueueDispatch:
         """
         caplog.set_level(logging.WARNING, logger=ROUTING_HISTORY_LOGGER)
 
-        # Real writer with a Graphiti client whose ``add_episode`` raises.
-        graphiti_client = MagicMock()
-        graphiti_client.add_episode = MagicMock(
-            side_effect=RuntimeError("graphiti boom")
+        # Real writer with a Memory client whose ``add_episode`` raises.
+        memory_client = MagicMock()
+        memory_client.add_episode = MagicMock(
+            side_effect=RuntimeError("memory boom")
         )
         writer = RoutingHistoryWriter(
-            graphiti_client=graphiti_client,
-            config=graphiti_unreachable_config,
+            memory_client=memory_client,
+            config=memory_unreachable_config,
         )
 
         nats_client = _make_nats_client()
@@ -441,12 +441,12 @@ class TestGraphitiRaisesDuringWriteBuildQueueDispatch:
         assert parsed["correlation_id"] == correlation_id
         assert parsed["feature_id"] == "FEAT-J005DEMO"
 
-        # The writer logged a WARN reflecting the underlying Graphiti error
+        # The writer logged a WARN reflecting the underlying Memory error
         # (caught by the writer's own DDR-019 ``except Exception`` block).
         warnings = _routing_history_warnings(caplog)
         assert len(warnings) >= 1, (
             "DDR-019: writer must log WARN routing_history_write_failed when "
-            "the Graphiti add_episode call fails"
+            "the Memory add_episode call fails"
         )
         assert any(
             record.getMessage() == "routing_history_write_failed"
@@ -455,10 +455,10 @@ class TestGraphitiRaisesDuringWriteBuildQueueDispatch:
 
 
 # ===========================================================================
-# AC: Graphiti raises during append_build_queue_event → WARN logged,
+# AC: Memory raises during append_build_queue_event → WARN logged,
 # notification still enqueued + rendered (Group D #5 scenario).
 # ===========================================================================
-class TestGraphitiRaisesDuringAppendBuildQueueEvent:
+class TestMemoryRaisesDuringAppendBuildQueueEvent:
     """The subscriber's contextlib.suppress keeps the FIFO enqueue alive."""
 
     @pytest.mark.asyncio
@@ -474,7 +474,7 @@ class TestGraphitiRaisesDuringAppendBuildQueueEvent:
 
         writer = MagicMock()
         writer.append_build_queue_event = AsyncMock(
-            side_effect=RuntimeError("graphiti boom on append")
+            side_effect=RuntimeError("memory boom on append")
         )
 
         sub = ForgeNotificationsSubscriber(

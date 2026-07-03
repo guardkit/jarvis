@@ -6,7 +6,7 @@ Acceptance Criteria:
     AC-002: Module docstring references ``FEAT-JARVIS-004`` as origin.
     AC-003/AC-004: Module docstring cites at least one DDR identifier
             resolving under ``docs/design/FEAT-JARVIS-004/decisions/``,
-            including ``DDR-019`` (Graphiti fire-and-forget writes).
+            including ``DDR-019`` (Memory fire-and-forget writes).
     AC-005: Module docstring references the feature/data-model design doc.
     AC-006: Each cited design-doc / DDR file exists on disk and is readable.
     AC-007: Entire file contains no token matching ``TASK-J\\d{3}-\\d{3}``.
@@ -71,7 +71,7 @@ class TestModuleDocstringContract:
         assert ddr_refs, "expected at least one DDR file path in docstring"
 
     def test_cites_ddr_019(self, module_docstring: str) -> None:
-        """AC-004: module docstring explicitly cites DDR-019 (Graphiti
+        """AC-004: module docstring explicitly cites DDR-019 (Memory
         fire-and-forget writes)."""
         assert "DDR-019" in module_docstring
 
@@ -142,7 +142,7 @@ class TestModuleDocstringContract:
             "ConcurrentWorkloadSnapshot",
             "RedirectAttempt",
             "JarvisRoutingHistoryEntry",
-            "GraphitiClientProtocol",
+            "MemoryClientProtocol",
             "RoutingHistoryWriter",
         }:
             assert required in names, (

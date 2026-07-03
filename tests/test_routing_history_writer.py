@@ -13,18 +13,18 @@ Acceptance Criteria:
             file contents.
     AC-005: DDR-023 collision policy — pre-existing trace file at the same
             path → WARN + preserve original; the writer does not call
-            Graphiti add_episode for that record.
+            Memory add_episode for that record.
     AC-006: ADR-ARCH-029 redaction at the write boundary — synthetic
             ``OPENAI_API_KEY=sk-...`` in human_response_text becomes
             ``***REDACTED***`` in the persisted entity (and offload file).
-    AC-007: Graphiti unreachable (graphiti_client is None) → no-op with
+    AC-007: Memory unreachable (memory_client is None) → no-op with
             one-time WARN log; subsequent writes silent.
     AC-008: flush(timeout=5.0) drains pending tasks; bounded; WARN on
             overflow; never raises.
     AC-009: TASK-J005-004 — write_build_queue_dispatch persists a
             ``forge_build_queue`` entry; append_build_queue_event emits
-            one ``stage_complete`` Graphiti edge per call with monotonic
-            seq; unknown correlation → WARN + return; Graphiti errors are
+            one ``stage_complete`` Memory edge per call with monotonic
+            seq; unknown correlation → WARN + return; Memory errors are
             WARN-only; the frozen-entry invariant is preserved.
     AC-010: Seam test — writer never mutates the frozen entry.
 """
@@ -59,11 +59,11 @@ from jarvis.infrastructure.routing_history import (
 # ---------------------------------------------------------------------------
 
 
-class _RecordingGraphitiClient:
-    """In-memory stand-in for the real Graphiti client.
+class _RecordingMemoryClient:
+    """In-memory stand-in for the real Memory client.
 
     Records every call to :meth:`add_episode` so tests can assert the
-    persisted episode body without spinning a Graphiti round-trip.
+    persisted episode body without spinning a Memory round-trip.
     """
 
     def __init__(self) -> None:
@@ -171,10 +171,10 @@ class TestPublicSignatures:
         ):
             assert hasattr(RoutingHistoryWriter, name), f"Missing method: {name}"
 
-    def test_init_signature_takes_graphiti_client_and_config(self) -> None:
+    def test_init_signature_takes_memory_client_and_config(self) -> None:
         sig = inspect.signature(RoutingHistoryWriter.__init__)
         params = list(sig.parameters)
-        assert params == ["self", "graphiti_client", "config"]
+        assert params == ["self", "memory_client", "config"]
 
     def test_flush_has_keyword_only_timeout_default(self) -> None:
         sig = inspect.signature(RoutingHistoryWriter.flush)
@@ -207,7 +207,7 @@ class TestInlineWritePath:
         self, tmp_path: Path
     ) -> None:
         traces_dir = tmp_path / "traces"
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(traces_dir))
 
         await writer.write_specialist_dispatch(_build_entry())
@@ -218,10 +218,10 @@ class TestInlineWritePath:
         )
         assert client.add_episode_calls == 1
 
-    async def test_inline_write_passes_entity_through_to_graphiti(
+    async def test_inline_write_passes_entity_through_to_memory(
         self, tmp_path: Path
     ) -> None:
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         await writer.write_specialist_dispatch(_build_entry())
@@ -246,7 +246,7 @@ class TestFilesystemOffload:
         self, tmp_path: Path
     ) -> None:
         traces_root = tmp_path / "traces"
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(traces_root))
 
         entry = _build_entry(
@@ -274,7 +274,7 @@ class TestFilesystemOffload:
         self, tmp_path: Path
     ) -> None:
         traces_root = tmp_path / "traces"
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(traces_root))
 
         entry = _build_entry(
@@ -298,7 +298,7 @@ class TestFilesystemOffload:
     async def test_traceref_replaces_both_offload_candidate_fields(
         self, tmp_path: Path
     ) -> None:
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         entry = _build_entry(
@@ -324,7 +324,7 @@ class TestFilesystemOffload:
 class TestCollisionPolicy:
     """Pre-existing trace file → WARN, preserve original, skip add_episode."""
 
-    async def test_collision_preserves_original_and_skips_graphiti_write(
+    async def test_collision_preserves_original_and_skips_memory_write(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         traces_root = tmp_path / "traces"
@@ -335,7 +335,7 @@ class TestCollisionPolicy:
         original_bytes = b"PRE-EXISTING CONTENT"
         offload_path.write_bytes(original_bytes)
 
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(traces_root))
         entry = _build_entry(
             decision_id=decision_id,
@@ -348,7 +348,7 @@ class TestCollisionPolicy:
 
         # Original file is preserved byte-for-byte.
         assert offload_path.read_bytes() == original_bytes
-        # Graphiti add_episode was NOT called.
+        # Memory add_episode was NOT called.
         assert client.add_episode_calls == 0
         # WARN was logged with reason=trace_file_exists.
         warn_messages = [
@@ -369,12 +369,12 @@ class TestCollisionPolicy:
 
 
 class TestRedaction:
-    """Secrets are redacted before the entity reaches Graphiti / disk."""
+    """Secrets are redacted before the entity reaches Memory / disk."""
 
     async def test_inline_redacts_openai_api_key_in_human_response_text(
         self, tmp_path: Path
     ) -> None:
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         secret = "sk-test1234567890abcdefABCDEF"
@@ -392,7 +392,7 @@ class TestRedaction:
         self, tmp_path: Path
     ) -> None:
         traces_root = tmp_path / "traces"
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(traces_root))
 
         secret = "sk-test1234567890abcdefABCDEF"
@@ -419,7 +419,7 @@ class TestRedaction:
     async def test_redaction_covers_supervisor_reasoning_summary(
         self, tmp_path: Path
     ) -> None:
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         entry = _build_entry(
@@ -436,26 +436,26 @@ class TestRedaction:
 
 
 # ---------------------------------------------------------------------------
-# AC-007 — Graphiti unavailable: per-write local offload, never raise
+# AC-007 — Memory unavailable: per-write local offload, never raise
 # (TASK-FRR-003: replaced the once-per-instance WARN dedup with per-write
 # local offload; see tests/test_routing_history_offload.py for the full
 # soft-fail offload contract.)
 # ---------------------------------------------------------------------------
 
 
-class TestGraphitiUnavailable:
-    """``graphiti_client is None`` → local offload + per-write WARN.
+class TestMemoryUnavailable:
+    """``memory_client is None`` → local offload + per-write WARN.
 
-    The pre-FRR-003 contract was "log one ``graphiti_unavailable`` WARN
+    The pre-FRR-003 contract was "log one ``memory_unavailable`` WARN
     per writer, then silently drop subsequent traces". That meant the
-    operator learned graphiti was down once, and every later trace
+    operator learned memory was down once, and every later trace
     vanished off the floor. The post-FRR-003 contract is "write each
     trace to ``<traces_dir>/<correlation_id>.json`` and emit one
     ``routing_history_offloaded_locally`` event per write so the
     audit-trail count matches the on-disk file count". The dedup
     behaviour is preserved on the :meth:`append_build_queue_event`
     edge path, which has no canonical-payload offload story (see
-    :meth:`RoutingHistoryWriter._warn_graphiti_unavailable_once`).
+    :meth:`RoutingHistoryWriter._warn_memory_unavailable_once`).
     """
 
     async def test_each_dispatch_write_emits_offload_event(
@@ -499,7 +499,7 @@ class TestFlushBounded:
     async def test_flush_drains_completed_pending_tasks(
         self, tmp_path: Path
     ) -> None:
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         for _ in range(3):
@@ -512,7 +512,7 @@ class TestFlushBounded:
     async def test_flush_warns_on_timeout_overflow_and_does_not_raise(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         # Force every add_episode to exceed the flush bound.
         client.delay_seconds = 5.0
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
@@ -554,7 +554,7 @@ class TestWriteBuildQueueDispatch:
         ``subagent_task_id == correlation_id`` (the BuildQueuedPayload
         correlation per FEAT-J005 §7).
         """
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         correlation_id = "build-corr-001"
@@ -577,7 +577,7 @@ class TestWriteBuildQueueDispatch:
         self, tmp_path: Path
     ) -> None:
         """AC: fire-and-forget — method returns before round-trip completes."""
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         client.delay_seconds = 0.5  # Round-trip would block 500ms
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
@@ -601,10 +601,10 @@ class TestWriteBuildQueueDispatch:
         # Drain so the dangling task doesn't bleed into other tests.
         await writer.flush(timeout=1.0)
 
-    async def test_unavailable_graphiti_does_not_raise(
+    async def test_unavailable_memory_does_not_raise(
         self, tmp_path: Path
     ) -> None:
-        """DDR-019: graphiti_client=None → no-op + one-time WARN; never raise."""
+        """DDR-019: memory_client=None → no-op + one-time WARN; never raise."""
         writer = RoutingHistoryWriter(None, _make_config(tmp_path / "traces"))
         entry = _build_entry(
             subagent_type="forge_build_queue",
@@ -625,7 +625,7 @@ class TestAppendBuildQueueEvent:
         Two stage-complete events for the same correlation_id produce
         two distinct edges with seqs 0 and 1 (not one overwritten edge).
         """
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         correlation_id = "build-corr-A4"
@@ -700,7 +700,7 @@ class TestAppendBuildQueueEvent:
         ``routing_history_append_failed reason=unknown_correlation`` WARN
         and returns None. Must not raise.
         """
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         with caplog.at_level(logging.WARNING):
@@ -725,16 +725,16 @@ class TestAppendBuildQueueEvent:
             f"Expected one unknown_correlation WARN, got {len(unknown_warns)}"
         )
 
-    async def test_graphiti_raises_during_edge_write_logs_warn_and_returns(
+    async def test_memory_raises_during_edge_write_logs_warn_and_returns(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Test Requirement #4 / Group D #5 — Graphiti raises → WARN, return.
+        """Test Requirement #4 / Group D #5 — Memory raises → WARN, return.
 
-        Per DDR-019, append_build_queue_event swallows all Graphiti errors
+        Per DDR-019, append_build_queue_event swallows all Memory errors
         and surfaces them as a ``routing_history_append_failed`` WARN.
         """
 
-        class _RaisingClient(_RecordingGraphitiClient):
+        class _RaisingClient(_RecordingMemoryClient):
             async def add_episode(
                 self,
                 *,
@@ -746,7 +746,7 @@ class TestAppendBuildQueueEvent:
                 # First write (the entry) succeeds; subsequent edge
                 # writes raise so we can isolate the edge-error path.
                 if source_description == "jarvis-routing-history-edge":
-                    raise RuntimeError("graphiti edge write failed")
+                    raise RuntimeError("memory edge write failed")
                 await super().add_episode(
                     name=name,
                     episode_body=episode_body,
@@ -782,10 +782,10 @@ class TestAppendBuildQueueEvent:
         # event loop drives the coroutine; flush awaits it.
         # We verify the writer never raised by reaching this assertion.
 
-    async def test_unavailable_graphiti_does_not_raise(
+    async def test_unavailable_memory_does_not_raise(
         self, tmp_path: Path
     ) -> None:
-        """graphiti_client=None → no-op; never raise (DDR-019)."""
+        """memory_client=None → no-op; never raise (DDR-019)."""
         writer = RoutingHistoryWriter(None, _make_config(tmp_path / "traces"))
         await writer.append_build_queue_event(
             "corr-x", {"stage_label": "x", "status": "PASSED"}
@@ -799,11 +799,11 @@ class TestAppendBuildQueueEvent:
         After ``append_build_queue_event``, the parent
         :class:`JarvisRoutingHistoryEntry` is still frozen — direct
         attribute assignment raises ``ValidationError``. The writer
-        operates on Graphiti edges, never on the entry itself.
+        operates on Memory edges, never on the entry itself.
         """
         from pydantic import ValidationError
 
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         correlation_id = "build-corr-frozen"
@@ -830,7 +830,7 @@ class TestAppendBuildQueueEvent:
         The caller's dict is never mutated; the persisted edge body
         carries the redacted form.
         """
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         correlation_id = "build-corr-red"
@@ -876,7 +876,7 @@ class TestSeamFrozenEntryInvariant:
     """RoutingHistoryWriter operates on a copy; entry stays untouched."""
 
     async def test_writer_does_not_mutate_entry(self, tmp_path: Path) -> None:
-        client = _RecordingGraphitiClient()
+        client = _RecordingMemoryClient()
         writer = RoutingHistoryWriter(client, _make_config(tmp_path / "traces"))
 
         entry = _build_entry(

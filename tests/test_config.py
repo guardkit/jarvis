@@ -354,18 +354,6 @@ class TestAC005ValidateProviderKeys:
         with pytest.raises(ConfigurationError, match="not implemented"):
             cfg.validate_provider_keys()
 
-    def test_graphiti_backend_raises_configuration_error(self) -> None:
-        from jarvis.config.settings import JarvisConfig
-        from jarvis.shared.exceptions import ConfigurationError
-
-        with patch.dict("os.environ", {}, clear=True):
-            cfg = JarvisConfig(
-                memory_store_backend="graphiti",
-                llama_swap_base_url="http://localhost:9000",
-            )
-        with pytest.raises(ConfigurationError, match="not implemented"):
-            cfg.validate_provider_keys()
-
     def test_unknown_provider_passes_validation(self) -> None:
         """Unknown provider prefix has no key requirement — passes silently."""
         from jarvis.config.settings import JarvisConfig

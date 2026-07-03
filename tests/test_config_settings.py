@@ -18,7 +18,7 @@ from typing import get_args, get_type_hints
 from unittest.mock import patch
 
 import pytest
-from pydantic import SecretStr, ValidationError
+from pydantic import ValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -48,20 +48,20 @@ class TestAC001NewFieldsAndDefaults:
             cfg = JarvisConfig()
         assert cfg.heartbeat_interval_seconds == 30
 
-    def test_default_graphiti_endpoint_is_none(self) -> None:
-        """``None`` triggers the DDR-019 soft-fail path."""
+    def test_default_fleet_memory_enabled_is_false(self) -> None:
+        """``False`` (default) triggers the DDR-019 local-offload soft-fail path."""
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig()
-        assert cfg.graphiti_endpoint is None
+        assert cfg.fleet_memory_enabled is False
 
-    def test_default_graphiti_api_key_is_none(self) -> None:
+    def test_default_fleet_memory_project_is_jarvis(self) -> None:
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig()
-        assert cfg.graphiti_api_key is None
+        assert cfg.fleet_memory_project == "jarvis"
 
     def test_default_jarvis_traces_dir_is_home_dot_jarvis_traces(self) -> None:
         from jarvis.config.settings import JarvisConfig
@@ -100,10 +100,8 @@ class TestAC001NewFieldsAndDefaults:
         assert Path in get_args(hints["nats_credentials_path"])
         assert type(None) in get_args(hints["nats_credentials_path"])
         assert hints["heartbeat_interval_seconds"] is int
-        assert str in get_args(hints["graphiti_endpoint"])
-        assert type(None) in get_args(hints["graphiti_endpoint"])
-        assert SecretStr in get_args(hints["graphiti_api_key"])
-        assert type(None) in get_args(hints["graphiti_api_key"])
+        assert hints["fleet_memory_enabled"] is bool
+        assert hints["fleet_memory_project"] is str
         assert hints["jarvis_traces_dir"] is Path
         assert hints["specialist_dispatch_timeout_seconds"] is int
         assert hints["dispatch_concurrent_cap"] is int
@@ -261,30 +259,39 @@ class TestAC005EnvPrefixResolution:
             cfg = JarvisConfig()
         assert cfg.heartbeat_interval_seconds == 60
 
-    def test_jarvis_graphiti_endpoint_env_var(self) -> None:
+    def test_jarvis_fleet_memory_enabled_env_var(self) -> None:
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict(
             "os.environ",
-            {"JARVIS_GRAPHITI_ENDPOINT": "http://graphiti.local:8000"},
+            {"JARVIS_FLEET_MEMORY_ENABLED": "true"},
             clear=True,
         ):
             cfg = JarvisConfig()
-        assert cfg.graphiti_endpoint == "http://graphiti.local:8000"
+        assert cfg.fleet_memory_enabled is True
 
-    def test_jarvis_graphiti_api_key_env_var_is_secret(self) -> None:
+    def test_unprefixed_fleet_memory_enabled_env_var(self) -> None:
+        """The fleet-wide un-prefixed ``FLEET_MEMORY_ENABLED`` is honoured."""
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict(
             "os.environ",
-            {"JARVIS_GRAPHITI_API_KEY": "graphiti-secret"},
+            {"FLEET_MEMORY_ENABLED": "true"},
             clear=True,
         ):
             cfg = JarvisConfig()
-        assert isinstance(cfg.graphiti_api_key, SecretStr)
-        assert cfg.graphiti_api_key.get_secret_value() == "graphiti-secret"
-        # SecretStr must mask the value in str/repr output.
-        assert "graphiti-secret" not in str(cfg)
+        assert cfg.fleet_memory_enabled is True
+
+    def test_jarvis_fleet_memory_project_env_var(self) -> None:
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict(
+            "os.environ",
+            {"JARVIS_FLEET_MEMORY_PROJECT": "jarvis-staging"},
+            clear=True,
+        ):
+            cfg = JarvisConfig()
+        assert cfg.fleet_memory_project == "jarvis-staging"
 
     def test_jarvis_traces_dir_env_var(self) -> None:
         from jarvis.config.settings import JarvisConfig
@@ -339,8 +346,8 @@ class TestAC005EnvPrefixResolution:
         assert cfg.nats_url == "nats://localhost:4222"
         assert cfg.nats_credentials_path is None
         assert cfg.heartbeat_interval_seconds == 30
-        assert cfg.graphiti_endpoint is None
-        assert cfg.graphiti_api_key is None
+        assert cfg.fleet_memory_enabled is False
+        assert cfg.fleet_memory_project == "jarvis"
         assert cfg.jarvis_traces_dir == Path.home() / ".jarvis" / "traces"
         assert cfg.specialist_dispatch_timeout_seconds == 60
         assert cfg.dispatch_concurrent_cap == 8

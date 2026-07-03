@@ -52,7 +52,7 @@ class JarvisConfig(BaseSettings):
     # -- Application settings ------------------------------------------------
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     supervisor_model: str = "openai:jarvis-reasoner"
-    memory_store_backend: Literal["in_memory", "file", "graphiti"] = "in_memory"
+    memory_store_backend: Literal["in_memory", "file"] = "in_memory"
     data_dir: Path = Path.home() / ".jarvis"
 
     # -- Provider API keys (SecretStr for masking) ---------------------------
@@ -100,11 +100,11 @@ class JarvisConfig(BaseSettings):
     # (ADR-ARCH-016 consumer-surface list).
     attended_adapter_ids: frozenset[str] = frozenset({"telegram", "cli", "dashboard", "reachy"})
 
-    # -- FEAT-JARVIS-004: NATS / fleet / dispatch / Graphiti settings --------
+    # -- FEAT-JARVIS-004: NATS / fleet / dispatch / memory settings ----------
     # See docs/design/FEAT-JARVIS-004/contracts/API-internal.md §8 for the
     # authoritative field list. This module remains dependency-free — no
-    # ``nats-py`` or ``graphiti-core`` import lives here; the typed Python
-    # APIs that consume these values live under ``src/jarvis/infrastructure``.
+    # ``nats-py`` import lives here; the typed Python APIs that consume these
+    # values live under ``src/jarvis/infrastructure``.
 
     # ── NATS ────────────────────────────────────────────
     # JARVIS_NATS_URL — NATS broker endpoint. Default is the in-process
@@ -124,17 +124,42 @@ class JarvisConfig(BaseSettings):
     # 1..60 seconds; default 10s matches the runbook AC.
     startup_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
 
-    # ── Graphiti ────────────────────────────────────────
-    # JARVIS_GRAPHITI_ENDPOINT — Graphiti service endpoint. ``None`` triggers
-    # the DDR-019 soft-fail path (fire-and-forget writes are dropped, the
-    # supervisor stays up).
-    graphiti_endpoint: str | None = None
-    # JARVIS_GRAPHITI_API_KEY — optional Graphiti API key.
-    graphiti_api_key: SecretStr | None = None
+    # ── Fleet-memory (routing-history writes) ───────────
+    # Jarvis publishes routing-history telemetry to the fleet-memory store as
+    # ``document`` episodes over NATS (FEAT-MEM-09 cutover off Graphiti). The
+    # write path reuses the NATS endpoint + credentials above; no separate
+    # memory NATS identity is required. See
+    # ``src/jarvis/infrastructure/fleet_memory/``.
+    #
+    # JARVIS_FLEET_MEMORY_ENABLED — master switch for the memory write path.
+    # ``False`` (default) triggers the DDR-019 soft-fail: routing-history
+    # entries are offloaded to ``jarvis_traces_dir`` instead of published, and
+    # the supervisor stays up. Accepts the fleet-wide un-prefixed
+    # ``FLEET_MEMORY_ENABLED`` as well as the ``JARVIS_``-prefixed form.
+    fleet_memory_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "FLEET_MEMORY_ENABLED",
+            "JARVIS_FLEET_MEMORY_ENABLED",
+            "fleet_memory_enabled",
+        ),
+    )
+    # JARVIS_FLEET_MEMORY_PROJECT — the fleet-memory project namespace this
+    # Jarvis instance writes under (``memory.episode.{project}.{type}`` subject
+    # + the ``project`` component of every natural key). Accepts the un-prefixed
+    # ``FLEET_MEMORY_PROJECT`` for fleet-wide consistency.
+    fleet_memory_project: str = Field(
+        default="jarvis",
+        validation_alias=AliasChoices(
+            "FLEET_MEMORY_PROJECT",
+            "JARVIS_FLEET_MEMORY_PROJECT",
+            "fleet_memory_project",
+        ),
+    )
     # JARVIS_TRACES_DIR — local directory for offloaded routing-history
-    # payloads when the Graphiti write path soft-fails. Bound via
-    # ``validation_alias`` so the friendlier ``JARVIS_TRACES_DIR`` env name
-    # resolves to this field instead of the double-prefixed
+    # payloads when the memory write path soft-fails (disabled or unreachable).
+    # Bound via ``validation_alias`` so the friendlier ``JARVIS_TRACES_DIR`` env
+    # name resolves to this field instead of the double-prefixed
     # ``JARVIS_JARVIS_TRACES_DIR`` form the env_prefix would otherwise produce.
     jarvis_traces_dir: Path = Field(
         default=Path.home() / ".jarvis" / "traces",

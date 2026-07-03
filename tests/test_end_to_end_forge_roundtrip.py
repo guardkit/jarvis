@@ -4,7 +4,7 @@ TASK-J005-012 — see ``tasks/design_approved/TASK-J005-012-end-to-end-forge-rou
 
 This is the **Phase 3 close-criterion** evidence test per
 ``docs/research/ideas/phase3-build-plan.md`` Step 14. It is a *soft-prereq*
-test — it requires real Forge + real NATS + real Graphiti running on the
+test — it requires real Forge + real NATS + real fleet-memory running on the
 GB10 box, plus all subagent provider keys for any subagent dispatch the
 chosen FEAT-JARVIS-INTERNAL-001 build entails. When the prereqs are not
 present (CI default, MacBook-only, no operator-provisioned env-vars) the
@@ -20,7 +20,7 @@ The full round-trip exercised:
                 → Jarvis ForgeNotificationsSubscriber routes each event
                 → SessionManager per-session FIFO receives the
                   notification (CLI render shape per DDR-030)
-                → RoutingHistoryWriter appends one Graphiti edge per
+                → RoutingHistoryWriter appends one fleet-memory edge per
                   stage-complete event under the originating
                   JarvisRoutingHistoryEntry.
 
@@ -30,13 +30,13 @@ Acceptance criteria mapping (from the task file):
     AC-002  When prereqs present, runs to completion within 10 minutes.
     AC-003  Asserts the full round-trip — queue_build → publish → Forge
             consumes → stage-complete events → subscriber routes →
-            CLI queue → Graphiti edges.
-    AC-004  Asserts ≥ 3 distinct stage-complete edges land in Graphiti
+            CLI queue → fleet-memory edges.
+    AC-004  Asserts ≥ 3 distinct stage-complete edges land in fleet-memory
             (one per ``plan-complete`` / ``autobuild-complete`` /
             ``task-review-complete`` stage event observed).
     AC-005  Failure modes produce structured pytest output naming the
             failing assertion (correlation lookup miss, edge missing).
-    AC-006  Records the session transcript and Graphiti trace dump as
+    AC-006  Records the session transcript and fleet-memory trace dump as
             test attachments — the Phase 3 evidence artefact.
 
 Marked ``@pytest.mark.e2e`` so it can be opted out of laptop / CI runs
@@ -68,18 +68,18 @@ _logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Pre-flight skip — AC-001
 #
-# The conftest.py autouse ``_stub_nats_and_graphiti_connect_seams`` fixture
-# stubs the NATS + Graphiti connect seams to ``None`` for every test in the
+# The conftest.py autouse ``_stub_nats_and_memory_connect_seams`` fixture
+# stubs the NATS + fleet-memory connect seams to ``None`` for every test in the
 # suite (so unit tests cannot accidentally hit a live broker). For the
 # end-to-end test we *want* those seams to call the real connect path so the
-# round-trip exercises a live JetStream + Graphiti deployment. The fixture
+# round-trip exercises a live JetStream + fleet-memory deployment. The fixture
 # below re-patches the seams back to their original implementations for the
 # duration of the test, but only when the operator has set the GB10 env-vars
 # — otherwise the test skips before any patching happens.
 # ---------------------------------------------------------------------------
 REQUIRED_ENV_VARS: tuple[str, ...] = (
     "JARVIS_NATS_URL",
-    "JARVIS_GRAPHITI_ENDPOINT",
+    "JARVIS_FLEET_MEMORY_ENABLED",
 )
 
 # Per phase3-build-plan §13: Rich selects a FEAT-JARVIS-INTERNAL-001
@@ -116,7 +116,7 @@ def _missing_required_env_vars() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Live-seam fixture — restore the real ``_connect_nats`` / ``_connect_graphiti``
+# Live-seam fixture — restore the real ``_connect_nats`` / ``_connect_memory``
 # implementations for the duration of the e2e test, overriding the autouse
 # stub from conftest.py.
 # ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ def _missing_required_env_vars() -> list[str]:
 def _live_connect_seams() -> Any:
     """Re-patch the lifecycle connect seams back to their real implementations.
 
-    The autouse ``_stub_nats_and_graphiti_connect_seams`` fixture in
+    The autouse ``_stub_nats_and_memory_connect_seams`` fixture in
     ``tests/conftest.py`` replaces both seams with ``AsyncMock(return_value=None)``
     so unit tests never hit a live broker. The e2e test needs the opposite
     — it must talk to the real GB10 deployment. We restore the seam by
@@ -140,7 +140,7 @@ def _live_connect_seams() -> Any:
     # ``lifecycle._connect_nats`` (an attribute on the lifecycle module),
     # not the function objects themselves.
     from jarvis.infrastructure.lifecycle import (
-        _connect_graphiti as _real_connect_graphiti,
+        _connect_memory as _real_connect_memory,
     )
     from jarvis.infrastructure.lifecycle import _connect_nats as _real_connect_nats
     from jarvis.infrastructure.nats_client import NATSClient
@@ -152,12 +152,12 @@ def _live_connect_seams() -> Any:
         # which the original lifecycle helper delegates to.
         return await NATSClient.connect(config)
 
-    async def _live_graphiti(config: Any) -> Any:
+    async def _live_memory(config: Any) -> Any:
         # Defer to the original module-level helper. Resolving via the
         # imported name (rather than ``getattr`` on the module) means the
-        # autouse fixture's patch on ``lifecycle._connect_graphiti`` does
+        # autouse fixture's patch on ``lifecycle._connect_memory`` does
         # not affect this closure.
-        return await _real_connect_graphiti(config)
+        return await _real_connect_memory(config)
 
     with (
         patch(
@@ -165,8 +165,8 @@ def _live_connect_seams() -> Any:
             new=_live_nats,
         ),
         patch(
-            "jarvis.infrastructure.lifecycle._connect_graphiti",
-            new=_live_graphiti,
+            "jarvis.infrastructure.lifecycle._connect_memory",
+            new=_live_memory,
         ),
     ):
         # The closures reference _real_connect_nats so the linter doesn't
@@ -241,14 +241,14 @@ class TestEndToEndForgeRoundTrip:
         """Drive a real ``queue_build`` through Forge and assert the full round-trip.
 
         Skips cleanly (AC-001) when ``JARVIS_NATS_URL`` /
-        ``JARVIS_GRAPHITI_ENDPOINT`` are absent — laptops, CI, and any
+        ``JARVIS_FLEET_MEMORY_ENABLED`` are absent — laptops, CI, and any
         environment without GB10 reachability hit this branch first. The
         test never fails as a side-effect of missing infrastructure.
 
         Body (only runs when prereqs are present):
 
         1. Build :class:`JarvisConfig` from env (no overrides — pydantic
-           settings reads ``JARVIS_NATS_URL`` / ``JARVIS_GRAPHITI_ENDPOINT``
+           settings reads ``JARVIS_NATS_URL`` / ``JARVIS_FLEET_MEMORY_ENABLED``
            directly from the operator's exported environment).
         2. ``await build_app_state(config)`` — full lifecycle wiring
            including the live ``ForgeNotificationsSubscriber`` bound to
@@ -265,7 +265,7 @@ class TestEndToEndForgeRoundTrip:
            up to 5 minutes until ≥ 3 distinct stage-complete labels have
            been observed (AC-004) or the budget expires.
         7. Assert the routing-history writer appended ≥ 3 stage-complete
-           Graphiti edges under ``correlation_id`` (AC-003 — round-trip
+           fleet-memory edges under ``correlation_id`` (AC-003 — round-trip
            tail; AC-004 minimum count).
         8. Persist the transcript + trace dump as a JSON attachment under
            ``tmp_path`` for operator inspection (AC-006).
@@ -284,15 +284,15 @@ class TestEndToEndForgeRoundTrip:
                 "End-to-end Forge round-trip requires real GB10 "
                 f"infrastructure. Missing env-vars: {sorted(missing)}. "
                 "Set JARVIS_NATS_URL=nats://promaxgb10-41b1:4222 and "
-                "JARVIS_GRAPHITI_ENDPOINT=<falkordb-endpoint> on the operator "
+                "JARVIS_FLEET_MEMORY_ENABLED=<falkordb-endpoint> on the operator "
                 "host before re-running with -m e2e."
             )
 
         caplog.set_level(logging.INFO)
 
         # Imports deferred until after the skip check so a missing optional
-        # extra (e.g. graphiti-core) on a laptop install does not break the
-        # collection-time skip path. ``ImportError`` on the live path is
+        # extra (e.g. the nats live client) on a laptop install does not break
+        # the collection-time skip path. ``ImportError`` on the live path is
         # itself diagnostic and will surface as a structured pytest failure.
         from jarvis.config.settings import JarvisConfig
         from jarvis.infrastructure.lifecycle import build_app_state, shutdown
@@ -322,7 +322,7 @@ class TestEndToEndForgeRoundTrip:
         _log_event(
             "config_loaded",
             nats_url=config.nats_url,
-            graphiti_endpoint=config.graphiti_endpoint,
+            fleet_memory_enabled=config.fleet_memory_enabled,
             supervisor_model=config.supervisor_model,
         )
 
@@ -331,7 +331,7 @@ class TestEndToEndForgeRoundTrip:
         _log_event(
             "app_state_built",
             nats_available=state.nats_client is not None,
-            graphiti_available=state.graphiti_client is not None,
+            memory_available=state.memory_client is not None,
             forge_subscriber_started=state.forge_subscriber is not None,
         )
 
@@ -348,12 +348,12 @@ class TestEndToEndForgeRoundTrip:
             )
             assert state.routing_history_writer is not None, (
                 "Round-trip pre-condition failed: RoutingHistoryWriter is "
-                "None. Graphiti soft-fail produced a degraded-mode writer "
-                "but the e2e test requires a live Graphiti to assert edges."
+                "None. fleet-memory soft-fail produced a degraded-mode writer "
+                "but the e2e test requires a live fleet-memory to assert edges."
             )
-            assert state.graphiti_client is not None, (
-                "Round-trip pre-condition failed: graphiti_client is None. "
-                "JARVIS_GRAPHITI_ENDPOINT was set but the connect attempt "
+            assert state.memory_client is not None, (
+                "Round-trip pre-condition failed: memory_client is None. "
+                "JARVIS_FLEET_MEMORY_ENABLED was set but the connect attempt "
                 "soft-failed — check FalkorDB is up at the configured URL."
             )
 
@@ -498,7 +498,7 @@ class TestEndToEndForgeRoundTrip:
                 await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
             # 7. AC-004 — assert the round-trip TAIL: at least 3 distinct
-            # stage labels observed, and at least 3 Graphiti edges queued
+            # stage labels observed, and at least 3 fleet-memory edges queued
             # by the routing-history writer for our correlation_id.
             assert len(observed_stage_labels) >= 3, (
                 "Round-trip tail failed (AC-004): expected ≥ 3 distinct "
@@ -525,24 +525,24 @@ class TestEndToEndForgeRoundTrip:
                 "writer's edge-seq map. The build_queue_dispatch trace "
                 "submission failed — check the "
                 "routing_history_write_failed WARN log line for the "
-                "underlying Graphiti exception."
+                "underlying fleet-memory exception."
             )
             edge_count = edge_seq_map[correlation_id]
             assert edge_count >= 3, (
                 "Round-trip tail failed (AC-004): expected ≥ 3 stage-"
-                "complete Graphiti edges appended under correlation_id "
+                "complete fleet-memory edges appended under correlation_id "
                 f"{correlation_id!r}, got {edge_count}. The subscriber "
                 "received the events (transcript above) but the "
                 "append_build_queue_event hop did not enqueue them — "
                 "check the routing_history_append_failed WARN log line."
             )
             _log_event(
-                "graphiti_edges_appended",
+                "memory_edges_appended",
                 correlation_id=correlation_id,
                 edge_seq=edge_count,
             )
 
-            # Best-effort: drain any in-flight Graphiti submission tasks
+            # Best-effort: drain any in-flight fleet-memory submission tasks
             # so the trace dump reflects the final edge count rather than
             # the not-yet-flushed state.
             await state.routing_history_writer.flush(timeout=5.0)
@@ -577,7 +577,7 @@ class TestEndToEndForgeRoundTrip:
                 f"{artefact_path}\n"
                 f"  correlation_id: {correlation_id}\n"
                 f"  stage_labels:   {sorted(observed_stage_labels)}\n"
-                f"  graphiti_edges: {edge_count}\n"
+                f"  memory_edges: {edge_count}\n"
             )
         finally:
             # 9. Clean shutdown — runs even when an assertion above

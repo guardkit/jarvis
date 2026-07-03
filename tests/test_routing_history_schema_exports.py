@@ -12,7 +12,7 @@ Acceptance Criteria:
     AC-004: ``DispatchOutcome`` is a closed ``Literal[...]`` with exactly
             the seven members listed.
     AC-005: ``__all__`` exports are explicit.
-    AC-006: No writer logic, no filesystem I/O, no Graphiti import in this file.
+    AC-006: No writer logic, no filesystem I/O, no Memory import in this file.
     AC-007: ``uv run mypy ...`` passes (verified externally).
     AC-008: Lint/format checks pass with zero errors (verified externally).
 
@@ -20,7 +20,7 @@ Note:
     Heavyweight schema-conformance / round-trip / redaction / offload tests
     live in TASK-J004-005 — parallel-safe. This module verifies the
     *declarative* surface only: exports, model_config, validator metadata,
-    Literal closure, and the no-writer-no-fs-no-graphiti invariant.
+    Literal closure, and the no-writer-no-fs-no-memory invariant.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ class TestModuleExports:
     """AC-001 and AC-005 — public surface.
 
     Note: TASK-J004-010 appended ``RoutingHistoryWriter``,
-    ``GraphitiClientProtocol`` and ``REDACTION_PLACEHOLDER`` to ``__all__``
+    ``MemoryClientProtocol`` and ``REDACTION_PLACEHOLDER`` to ``__all__``
     per the writer-lands-here contract spelled out in the module docstring
     and API-internal.md §4. The schema's eight DM-routing-history.md types
     must remain a *subset* of ``__all__``.
@@ -485,7 +485,7 @@ class TestExtraIgnoreForwardCompat:
 # ============================================================================
 # AC-006 (TASK-J004-004) was retired by TASK-J004-010, which appended
 # ``RoutingHistoryWriter`` to this module per API-internal.md §4. The writer
-# legitimately needs ``pathlib``, ``hashlib`` and the Graphiti protocol
+# legitimately needs ``pathlib``, ``hashlib`` and the Memory protocol
 # alias — the "declarative-only" invariant only held until the writer
 # landed. The writer's own behavioural tests live in
 # ``tests/test_routing_history_writer.py``.

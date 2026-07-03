@@ -61,7 +61,7 @@ def stub_registry_config() -> JarvisConfig:
         cfg = JarvisConfig(
             stub_capabilities_path=stub_path,
             llama_swap_base_url="http://fake-llama-swap:9000",
-            graphiti_endpoint=None,
+            fleet_memory_enabled=False,
         )
     cfg.validate_provider_keys()
     return cfg
@@ -125,7 +125,7 @@ class TestBuildAppStateForgeSubscriberHappyPath:
                 new=AsyncMock(return_value=fake_nats),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -203,7 +203,7 @@ class TestBuildAppStateForgeSubscriberNatsDown:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
@@ -302,9 +302,9 @@ class TestShutdownForgeSubscriberOrderAndIdempotency:
             side_effect=lambda timeout: calls.append("nats.drain")
         )
 
-        graphiti_client = MagicMock()
-        graphiti_client.aclose = AsyncMock(
-            side_effect=lambda: calls.append("graphiti.aclose")
+        memory_client = MagicMock()
+        memory_client.close = AsyncMock(
+            side_effect=lambda: calls.append("memory.close")
         )
 
         from jarvis.infrastructure.routing_history import RoutingHistoryWriter
@@ -342,7 +342,7 @@ class TestShutdownForgeSubscriberOrderAndIdempotency:
             capability_registry=[],
             llamaswap_adapter=None,
             nats_client=nats_client,
-            graphiti_client=graphiti_client,
+            memory_client=memory_client,
             routing_history_writer=writer,
             fleet_heartbeat_task=heartbeat_task,
             capabilities_registry=capabilities_registry,
@@ -407,7 +407,7 @@ class TestShutdownForgeSubscriberOrderAndIdempotency:
         # All later steps still ran:
         assert "writer.flush" in calls
         assert "nats.drain" in calls
-        assert "graphiti.aclose" in calls
+        assert "memory.close" in calls
         assert "store.close" in calls
 
     @pytest.mark.asyncio
@@ -482,7 +482,7 @@ class TestStartupOrdering:
                 new=AsyncMock(return_value=fake_nats),
             ),
             patch(
-                "jarvis.infrastructure.lifecycle._connect_graphiti",
+                "jarvis.infrastructure.lifecycle._connect_memory",
                 new=AsyncMock(return_value=None),
             ),
             patch(
