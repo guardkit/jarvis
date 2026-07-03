@@ -14,11 +14,11 @@ Acceptance criteria covered (cross-referenced to the task file):
             and forwards both into ``build_supervisor`` via the new kwargs.
     AC-006: ``AppState`` gains a ``capability_registry: list[CapabilityDescriptor]``
             field.
-    AC-007: Startup with the 4-entry stub registry completes in under 2 seconds
-            (no network).
+    AC-007: Startup with the stub registry (5 entries as of TASK-DSR-005 /
+            FEAT-DSR) completes in under 2 seconds (no network).
     AC-008: Seam test — ``build_app_state(test_config)`` returns an ``AppState``
             whose ``supervisor`` has 9 tools wired and ``capability_registry``
-            has 4 entries.
+            has 5 entries (grew from 4 to 5 in TASK-DSR-005 / FEAT-DSR).
 
 The lint/format AC (AC-009) is verified externally via ``ruff`` /
 ``ruff format`` and is not asserted here.
@@ -77,7 +77,7 @@ def descriptor_charlie() -> CapabilityDescriptor:
 @pytest.fixture()
 def stub_registry_config(tmp_path: Path) -> JarvisConfig:
     """Return a ``JarvisConfig`` whose ``stub_capabilities_path`` resolves to
-    the canonical 4-entry stub document.
+    the canonical stub document (5 entries as of TASK-DSR-005 / FEAT-DSR).
 
     The autouse ``_isolate_dotenv`` fixture chdirs each test into ``tmp_path``,
     which means a relative ``stub_capabilities_path`` would not resolve to the
@@ -484,7 +484,12 @@ class TestAC008Seam:
     async def test_supervisor_has_nine_tools_and_registry_has_four_entries(
         self, stub_registry_config: JarvisConfig, fake_llm: Any
     ) -> None:
-        """End-to-end seam: 9 wired tools, 4 capability entries."""
+        """End-to-end seam: 9 wired tools, 5 capability entries.
+
+        Method name kept for historical continuity with AC-008; the
+        registry grew from 4 to 5 entries in TASK-DSR-005 (FEAT-DSR), which
+        added ``gcse-tutor``.
+        """
         from jarvis.infrastructure.lifecycle import build_app_state
 
         captured = io.StringIO()
@@ -497,9 +502,9 @@ class TestAC008Seam:
         ):
             state = await build_app_state(stub_registry_config)
 
-        # The 4-entry stub registry shipped at
-        # src/jarvis/config/stub_capabilities.yaml.
-        assert len(state.capability_registry) == 4
+        # The stub registry shipped at src/jarvis/config/stub_capabilities.yaml
+        # (5 entries as of TASK-DSR-005 / FEAT-DSR).
+        assert len(state.capability_registry) == 5
 
         # 9 Phase 2 tools wired into the supervisor.  The compiled DeepAgents
         # graph exposes tool names via the ``tools_by_name`` middleware

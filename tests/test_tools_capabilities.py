@@ -12,10 +12,12 @@ and the three capability ``@tool`` functions documented in
 Acceptance criteria covered:
 
 * AC-001: ``tests/test_tools_capabilities.py`` covers — stub YAML loads into
-  4 descriptors; ``list_available_capabilities`` returns JSON of 4 descriptors;
-  refresh/subscribe OK acks; startup-fatal on missing YAML; startup-fatal on
-  malformed YAML (invalid uppercase ``agent_id``); snapshot isolation via
-  ``concurrent.futures`` (both calls succeed, snapshot unchanged).
+  5 descriptors (grew from 4 to 5 in TASK-DSR-005 / FEAT-DSR, which added
+  ``gcse-tutor``); ``list_available_capabilities`` returns JSON of 5
+  descriptors; refresh/subscribe OK acks; startup-fatal on missing YAML;
+  startup-fatal on malformed YAML (invalid uppercase ``agent_id``); snapshot
+  isolation via ``concurrent.futures`` (both calls succeed, snapshot
+  unchanged).
 * AC-002: Byte-equal check on the ``OK:`` strings from refresh and subscribe
   (identical to the constants documented in API-tools.md §2.2 / §2.3).
 * AC-003: Duplicate ``agent_id`` YAML is rejected by the loader with a
@@ -57,6 +59,7 @@ STUB_YAML_PATH = (
 
 EXPECTED_AGENT_IDS: list[str] = [
     "architect-agent",
+    "gcse-tutor",
     "product-owner-agent",
     "ideation-agent",
     "forge",
@@ -138,13 +141,18 @@ def bound_canonical_registry() -> Generator[list[CapabilityDescriptor], None, No
 
 
 class TestStubYamlLoadsFourDescriptors:
-    """AC-001 — the canonical stub YAML loads into exactly four descriptors."""
+    """AC-001 — the canonical stub YAML loads into exactly five descriptors.
+
+    Grew from four to five in TASK-DSR-005 (FEAT-DSR), which added
+    ``gcse-tutor``; class/method names kept for historical continuity with
+    AC-001.
+    """
 
     def test_canonical_yaml_loads_into_four_descriptors(self) -> None:
         descriptors = load_stub_registry(STUB_YAML_PATH)
 
         assert isinstance(descriptors, list)
-        assert len(descriptors) == 4
+        assert len(descriptors) == 5
         assert all(
             isinstance(descriptor, CapabilityDescriptor)
             for descriptor in descriptors
@@ -230,12 +238,13 @@ class TestDuplicateAgentIdRejected:
 
 
 # ---------------------------------------------------------------------------
-# AC-001 — list_available_capabilities returns JSON of 4 descriptors
+# AC-001 — list_available_capabilities returns JSON of 5 descriptors
+# (grew from 4 to 5 in TASK-DSR-005 / FEAT-DSR, which added ``gcse-tutor``)
 # ---------------------------------------------------------------------------
 
 
 class TestListAvailableCapabilitiesReturnsFourDescriptors:
-    """AC-001 — the catalogue tool surfaces all four canonical descriptors."""
+    """AC-001 — the catalogue tool surfaces all five canonical descriptors."""
 
     def test_returns_json_array_of_four_descriptors(
         self, bound_canonical_registry: list[CapabilityDescriptor]
@@ -245,7 +254,7 @@ class TestListAvailableCapabilitiesReturnsFourDescriptors:
         assert isinstance(result, str)
         parsed = json.loads(result)
         assert isinstance(parsed, list)
-        assert len(parsed) == 4
+        assert len(parsed) == 5
         assert [entry["agent_id"] for entry in parsed] == EXPECTED_AGENT_IDS
 
     def test_payload_shape_matches_descriptor_dump(
@@ -362,7 +371,7 @@ class TestSnapshotIsolationUnderConcurrentRefresh:
         assert not list_result.startswith("ERROR:")
 
         # The snapshot returned by list_available_capabilities is still
-        # the four canonical descriptors (registry unchanged).
+        # the five canonical descriptors (registry unchanged).
         payload = json.loads(list_result)
         observed_ids = [entry["agent_id"] for entry in payload]
         assert observed_ids == EXPECTED_AGENT_IDS

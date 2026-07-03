@@ -62,7 +62,7 @@ from jarvis.tools import CapabilityDescriptor
 @pytest.fixture()
 def stub_registry_config() -> JarvisConfig:
     """Return a ``JarvisConfig`` whose ``stub_capabilities_path`` resolves to
-    the canonical 4-entry stub document.
+    the canonical stub document (5 entries as of TASK-DSR-005 / FEAT-DSR).
 
     Mirrors the fixture used in ``tests/test_supervisor_lifecycle_wiring.py``
     so the two suites stay aligned.
@@ -542,9 +542,10 @@ class TestAC008Phase1AndFeatJ002BehaviourPreserved:
         assert state.supervisor is not None
         assert state.store is not None
         assert state.session_manager is not None
-        # The 4-entry stub registry shipped at
-        # src/jarvis/config/stub_capabilities.yaml.
-        assert len(state.capability_registry) == 4
+        # The stub registry shipped at src/jarvis/config/stub_capabilities.yaml
+        # grew from 4 to 5 entries in TASK-DSR-005 (FEAT-DSR), which added
+        # gcse-tutor.
+        assert len(state.capability_registry) == 5
 
 
 # ---------------------------------------------------------------------------

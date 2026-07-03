@@ -254,11 +254,18 @@ class TestAC005VersionPinsExplicitlyBound:
       - nats-py: matches the sibling `nats-core/pyproject.toml` runtime dep
         (`nats-py>=2.0`). Mismatched majors are the FEAT-J004 #1 likely
         contract-test failure mode (TASK-J004-002 implementation notes).
-      - graphiti-core: 0.x line; lower bound `>=0.9` is the first minor
-        shipping the pydantic-2 / FalkorDB combo Jarvis relies on.
+      - graphiti-core: originally a `>=0.9,<1` PyPI range (the first minor
+        shipping the pydantic-2 / FalkorDB combo Jarvis relies on).
+        TASK-JAR-FORK-PIN (commit be13f25) replaced that range with a
+        ``git+https://.../guardkit/graphiti.git@v0.29.5-guardkit.1`` fork
+        pin — a single-tag reference is a *strictly* bounded dependency
+        (exactly one resolvable commit, no ambiguity at all), so it
+        satisfies the "explicit lower/upper bound" intent of AC-005 even
+        though it carries no ``>=``/``<`` PEP 508 operators.
 
     Upper bounds: the *next major* in both cases, matching the Phase 1
-    `<2` convention applied across the langchain-* pins.
+    `<2` convention applied across the langchain-* pins. graphiti-core's
+    fork pin is exempt from the operator-based check for the reason above.
     """
 
     def _spec_for(self, group: str, pkg: str) -> str:
@@ -283,15 +290,36 @@ class TestAC005VersionPinsExplicitlyBound:
         )
 
     def test_graphiti_core_lower_bound_present(self) -> None:
-        """`graphiti-core` declares an explicit lower bound."""
+        """`graphiti-core` declares an explicit lower bound (or is fork-pinned).
+
+        TASK-JAR-FORK-PIN (commit be13f25) switched the pin from the PyPI
+        range `>=0.9,<1` to a `git+...@v0.29.5-guardkit.1` fork tag. A
+        git+URL pinned to an explicit tag is inherently more tightly bound
+        than any `>=X.Y` PyPI range (it resolves to exactly one commit), so
+        it satisfies this AC without a PEP 508 `>=` operator.
+        """
         spec = self._spec_for("graphiti", "graphiti-core")
+        is_fork_pin = spec.strip().startswith("graphiti-core @ git+")
+        if is_fork_pin:
+            assert "@" in spec.split("git+", 1)[1], (
+                f"graphiti-core fork pin must reference an explicit tag/ref "
+                f"after '@': {spec!r}"
+            )
+            return
         assert ">=" in spec, f"graphiti-core needs an explicit lower bound: {spec!r}"
         match = re.search(r">=\s*(\d+)\.(\d+)", spec)
         assert match, f"graphiti-core pin missing >=X.Y lower bound: {spec!r}"
 
     def test_graphiti_core_upper_bound_caps_at_next_major(self) -> None:
-        """`graphiti-core` upper bound caps at `<1` (the next major after 0.x)."""
+        """`graphiti-core` upper bound caps at `<1` (or is fork-pinned).
+
+        See ``test_graphiti_core_lower_bound_present`` — a git+URL pinned to
+        an explicit tag has no "next major" to protect against, since it
+        never resolves to any version other than the pinned commit.
+        """
         spec = self._spec_for("graphiti", "graphiti-core")
+        if spec.strip().startswith("graphiti-core @ git+"):
+            return
         assert "<1" in spec, (
             f"graphiti-core pin {spec!r} missing `<1` next-major cap — "
             "graphiti-core is on its 0.x stabilisation path and a 1.0 bump "

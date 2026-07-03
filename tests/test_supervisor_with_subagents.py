@@ -88,7 +88,8 @@ ASYNC_MIDDLEWARE_TOOL_NAMES: frozenset[str] = frozenset(
 # Fixtures
 # ---------------------------------------------------------------------------
 def _stub_registry_path() -> Path:
-    """Return the absolute path to the canonical 4-entry stub YAML.
+    """Return the absolute path to the canonical stub YAML (5 entries as of
+    TASK-DSR-005 / FEAT-DSR, which added ``gcse-tutor``).
 
     Mirrors the helper in ``test_supervisor_with_tools.py`` — the autouse
     ``_isolate_dotenv`` fixture chdirs each test into ``tmp_path``, so a
@@ -102,7 +103,8 @@ def _stub_registry_path() -> Path:
 
 @pytest.fixture()
 def stub_registry_config() -> JarvisConfig:
-    """``JarvisConfig`` whose ``stub_capabilities_path`` is the 4-entry stub.
+    """``JarvisConfig`` whose ``stub_capabilities_path`` is the canonical stub
+    (5 entries as of TASK-DSR-005 / FEAT-DSR).
 
     Provider key validation is satisfied via the OpenAI base URL (matching
     the conftest ``test_config`` shape) but with the stub registry path
@@ -121,11 +123,16 @@ def stub_registry_config() -> JarvisConfig:
 
 @pytest.fixture()
 def capability_registry() -> list[CapabilityDescriptor]:
-    """Return the 4-entry capability registry loaded from the stub YAML."""
+    """Return the 5-entry capability registry loaded from the stub YAML.
+
+    Grew from 4 to 5 entries in TASK-DSR-005 (FEAT-DSR), which added
+    ``gcse-tutor``.
+    """
     descriptors = load_stub_registry(_stub_registry_path())
-    assert len(descriptors) == 4, (
-        f"Expected 4-entry stub registry; got {len(descriptors)} — "
-        "the canonical stub must remain at 4 entries for this integration."
+    assert len(descriptors) == 5, (
+        f"Expected 5-entry stub registry; got {len(descriptors)} — "
+        "the canonical stub must remain at 5 entries for this integration "
+        "(grew from 4 to 5 in TASK-DSR-005 / FEAT-DSR)."
     )
     return descriptors
 

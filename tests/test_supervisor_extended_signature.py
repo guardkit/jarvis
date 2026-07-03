@@ -69,7 +69,8 @@ ASYNC_MIDDLEWARE_TOOL_NAMES: frozenset[str] = frozenset(
 # Fixtures
 # ---------------------------------------------------------------------------
 def _stub_registry_path() -> Path:
-    """Return the absolute path to the canonical 4-entry stub YAML."""
+    """Return the absolute path to the canonical stub YAML (5 entries as of
+    TASK-DSR-005 / FEAT-DSR, which added ``gcse-tutor``)."""
     project_root = Path(__file__).resolve().parent.parent
     stub_path = project_root / "src" / "jarvis" / "config" / "stub_capabilities.yaml"
     assert stub_path.exists(), f"Expected stub registry at {stub_path}"
@@ -78,9 +79,13 @@ def _stub_registry_path() -> Path:
 
 @pytest.fixture()
 def capability_registry() -> list[CapabilityDescriptor]:
-    """Return the 4-entry capability registry loaded from the stub YAML."""
+    """Return the 5-entry capability registry loaded from the stub YAML.
+
+    Grew from 4 to 5 entries in TASK-DSR-005 (FEAT-DSR), which added
+    ``gcse-tutor``.
+    """
     descriptors = load_stub_registry(_stub_registry_path())
-    assert len(descriptors) == 4
+    assert len(descriptors) == 5
     return descriptors
 
 

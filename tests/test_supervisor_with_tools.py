@@ -3,7 +3,8 @@
 Acceptance criteria covered (cross-referenced to the task file):
 
     AC-001: ``tests/test_supervisor_with_tools.py`` creates ``test_config`` +
-            4-entry ``capability_registry`` fixtures; calls
+            5-entry ``capability_registry`` fixtures (grew from 4 to 5 in
+            TASK-DSR-005 / FEAT-DSR, which added ``gcse-tutor``); calls
             ``build_app_state(test_config)``.
     AC-002: Asserts the compiled ``supervisor`` graph exposes exactly the 9
             tool names in alphabetical order:
@@ -11,7 +12,7 @@ Acceptance criteria covered (cross-referenced to the task file):
             dispatch_by_capability, get_calendar_events,
             list_available_capabilities, queue_build, read_file, search_web``.
     AC-003: Asserts the rendered system prompt contains the
-            ``{available_capabilities}`` block built from the 4 descriptors —
+            ``{available_capabilities}`` block built from the 5 descriptors —
             each ``as_prompt_block()`` substring appears verbatim.
     AC-004: Asserts empty-registry path:
             ``build_supervisor(test_config, tools=[], available_capabilities=[])``
@@ -83,7 +84,8 @@ EXPECTED_TOOL_NAMES: list[str] = [
 # Fixtures
 # ---------------------------------------------------------------------------
 def _stub_registry_path() -> Path:
-    """Return the absolute path to the canonical 4-entry stub YAML.
+    """Return the absolute path to the canonical stub YAML (5 entries as of
+    TASK-DSR-005 / FEAT-DSR, which added ``gcse-tutor``).
 
     The autouse ``_isolate_dotenv`` fixture chdirs each test into ``tmp_path``,
     which means a relative ``stub_capabilities_path`` would not resolve to the
@@ -98,7 +100,8 @@ def _stub_registry_path() -> Path:
 
 @pytest.fixture()
 def stub_registry_config() -> JarvisConfig:
-    """``JarvisConfig`` whose ``stub_capabilities_path`` is the 4-entry stub.
+    """``JarvisConfig`` whose ``stub_capabilities_path`` is the canonical stub
+    (5 entries as of TASK-DSR-005 / FEAT-DSR).
 
     Provider key validation is satisfied via the OpenAI base URL — the
     ``test_config`` shape used in conftest, but with the stub registry path
@@ -116,16 +119,18 @@ def stub_registry_config() -> JarvisConfig:
 
 @pytest.fixture()
 def capability_registry() -> list[CapabilityDescriptor]:
-    """Return the 4-entry capability registry loaded from the stub YAML.
+    """Return the 5-entry capability registry loaded from the stub YAML.
 
-    AC-001 calls for a 4-entry fixture; loading it from the canonical stub
-    keeps this fixture in sync with the bundled registry the supervisor
-    uses in production.
+    AC-001 originally called for a 4-entry fixture; TASK-DSR-005 (FEAT-DSR)
+    grew the canonical stub to 5 entries by adding ``gcse-tutor``. Loading
+    it from the canonical stub keeps this fixture in sync with the bundled
+    registry the supervisor uses in production.
     """
     descriptors = load_stub_registry(_stub_registry_path())
-    assert len(descriptors) == 4, (
-        f"Expected 4-entry stub registry; got {len(descriptors)} — "
-        "the canonical stub must remain at 4 entries for AC-001."
+    assert len(descriptors) == 5, (
+        f"Expected 5-entry stub registry; got {len(descriptors)} — "
+        "the canonical stub must remain at 5 entries for AC-001 "
+        "(grew from 4 to 5 in TASK-DSR-005 / FEAT-DSR)."
     )
     return descriptors
 
@@ -284,8 +289,9 @@ class TestAC003CapabilityBlockInjection:
         assert "{date}" not in system_prompt
         assert "{domain_prompt}" not in system_prompt
 
-        # Each of the 4 descriptors' rendered block appears verbatim.
-        assert len(capability_registry) == 4
+        # Each of the 5 descriptors' rendered block appears verbatim.
+        # (grew from 4 to 5 in TASK-DSR-005 / FEAT-DSR, which added gcse-tutor)
+        assert len(capability_registry) == 5
         for descriptor in capability_registry:
             block = descriptor.as_prompt_block()
             assert block in system_prompt, (

@@ -107,10 +107,12 @@ class TestProtocolReachesToolSlot:
         assert not result.startswith("ERROR:"), result
         assert not result.startswith("DEGRADED:"), result
 
-        # Stub fallback returns the on-disk YAML catalogue — 4 entries.
+        # Stub fallback returns the on-disk YAML catalogue — 5 entries
+        # (grew from 4 to 5 in TASK-DSR-005 / FEAT-DSR, which added
+        # gcse-tutor).
         payload = json.loads(result)
         assert isinstance(payload, list)
-        assert len(payload) == 4
+        assert len(payload) == 5
 
     @pytest.mark.asyncio
     async def test_build_app_state_wires_live_protocol_into_tool_slot_nats_up(

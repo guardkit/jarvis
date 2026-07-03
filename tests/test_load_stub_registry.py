@@ -111,11 +111,18 @@ class TestAC002LoadAndValidate:
         assert [d.agent_id for d in result] == ordered_ids
 
     def test_loads_canonical_phase2_stub_file(self) -> None:
-        """Round-trip: the canonical Phase 2 file under src/ loads cleanly."""
+        """Round-trip: the canonical Phase 2 file under src/ loads cleanly.
+
+        The canonical stub grew from four to five entries in TASK-DSR-005
+        (FEAT-DSR), which inserted ``gcse-tutor`` between ``architect-agent``
+        and ``product-owner-agent`` (its YAML insertion position, not
+        alphabetical order — ``load_stub_registry`` preserves YAML order).
+        """
         result = load_stub_registry(STUB_YAML_PATH)
 
         assert [d.agent_id for d in result] == [
             "architect-agent",
+            "gcse-tutor",
             "product-owner-agent",
             "ideation-agent",
             "forge",

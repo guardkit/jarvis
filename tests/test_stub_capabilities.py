@@ -3,10 +3,18 @@
 Covers acceptance criteria:
 
 - AC-001: File exists at ``src/jarvis/config/stub_capabilities.yaml`` containing
-  exactly four capabilities: ``architect-agent``, ``product-owner-agent``,
-  ``ideation-agent``, ``forge``.
+  exactly five capabilities: ``architect-agent``, ``gcse-tutor``,
+  ``product-owner-agent``, ``ideation-agent``, ``forge``. (Grew from four to
+  five entries in TASK-DSR-005 / FEAT-DSR, which added ``gcse-tutor``; the
+  registry is the source of truth and this test was updated to match it.)
 - AC-002: Content matches byte-for-byte the canonical YAML in
-  ``DM-stub-registry.md`` §"Canonical Phase 2 content".
+  ``DM-stub-registry.md`` §"Canonical Phase 2 content" *plus* the
+  ``gcse-tutor`` block added by TASK-DSR-005, which the commit for that task
+  explicitly deferred updating in the doc/canonical-match test (see commit
+  4044e12). This test now checks that the live file equals the documented
+  canonical block with exactly one additional ``gcse-tutor`` capability
+  inserted, rather than requiring pure byte-equality with the (now stale)
+  doc snippet.
 - AC-003: All ``agent_id`` values are kebab-case; all ``tool_name`` values are
   snake_case; all ``trust_tier`` values are one of
   ``core | specialist | extension``.
@@ -39,6 +47,7 @@ DM_REGISTRY_MD = (
 
 EXPECTED_AGENT_IDS: list[str] = [
     "architect-agent",
+    "gcse-tutor",
     "product-owner-agent",
     "ideation-agent",
     "forge",
@@ -80,11 +89,43 @@ def canonical_yaml_text() -> str:
     return section[start:end]
 
 
+# TASK-DSR-005 (FEAT-DSR, commit 4044e12) added a fifth ``gcse-tutor``
+# capability block to the live YAML but explicitly deferred updating the
+# DM-stub-registry.md canonical doc snippet ("Pre-existing
+# test_stub_capabilities canonical-match assertions remain out-of-scope per
+# TASK-DSR-001 R5"). AC-002 therefore no longer asserts pure byte-equality
+# against the doc; instead it asserts the live file equals the doc's
+# canonical block with exactly this one block inserted between
+# ``architect-agent`` and ``product-owner-agent`` (its YAML insertion
+# position). This keeps AC-002 meaningful as a drift detector for any
+# *other* unplanned divergence from the documented canonical content.
+_GCSE_TUTOR_INSERT_MARKER = "  - agent_id: product-owner-agent\n"
+
+
+@pytest.fixture(scope="module")
+def canonical_yaml_text_with_gcse_tutor(
+    canonical_yaml_text: str, stub_yaml_text: str
+) -> str:
+    """Doc canonical block with the TASK-DSR-005 ``gcse-tutor`` block spliced in."""
+    stub_gcse_start = stub_yaml_text.index("  - agent_id: gcse-tutor\n")
+    stub_product_owner_start = stub_yaml_text.index(_GCSE_TUTOR_INSERT_MARKER)
+    gcse_tutor_block = stub_yaml_text[stub_gcse_start:stub_product_owner_start]
+
+    doc_insert_at = canonical_yaml_text.index(_GCSE_TUTOR_INSERT_MARKER)
+    return (
+        canonical_yaml_text[:doc_insert_at]
+        + gcse_tutor_block
+        + canonical_yaml_text[doc_insert_at:]
+    )
+
+
 # ---------------------------------------------------------------------------
-# AC-001: file exists and contains exactly four expected capabilities
+# AC-001: file exists and contains exactly five expected capabilities
+# (grew from four to five in TASK-DSR-005 / FEAT-DSR, which added
+# ``gcse-tutor``; class name kept for historical continuity with AC-001).
 # ---------------------------------------------------------------------------
 class TestAC001FileExistsWithFourCapabilities:
-    """File exists at the canonical path and contains exactly four capabilities."""
+    """File exists at the canonical path and contains exactly five capabilities."""
 
     def test_stub_yaml_file_exists(self) -> None:
         assert STUB_YAML_PATH.is_file(), (
@@ -94,9 +135,13 @@ class TestAC001FileExistsWithFourCapabilities:
     def test_stub_yaml_has_four_capabilities(
         self, stub_yaml_data: dict[str, Any]
     ) -> None:
+        """NOTE: despite the historical test name, the canonical stub grew
+        from four to five entries in TASK-DSR-005 (FEAT-DSR), which added
+        ``gcse-tutor``. This asserts the current five-entry reality.
+        """
         capabilities = stub_yaml_data.get("capabilities")
         assert isinstance(capabilities, list)
-        assert len(capabilities) == 4
+        assert len(capabilities) == 5
 
     def test_stub_yaml_agent_ids_match_expected_set(
         self, stub_yaml_data: dict[str, Any]
@@ -109,21 +154,24 @@ class TestAC001FileExistsWithFourCapabilities:
 
 
 # ---------------------------------------------------------------------------
-# AC-002: byte-for-byte match with canonical content in DM-stub-registry.md
+# AC-002: byte-for-byte match with canonical content in DM-stub-registry.md,
+# plus the TASK-DSR-005 gcse-tutor addition (see fixture note above).
 # ---------------------------------------------------------------------------
 class TestAC002CanonicalByteForByteMatch:
-    """File content matches byte-for-byte the YAML block in DM-stub-registry.md."""
+    """File content matches byte-for-byte the YAML block in DM-stub-registry.md
+    with the TASK-DSR-005 ``gcse-tutor`` block accounted for.
+    """
 
     def test_byte_equal_to_canonical(
-        self, stub_yaml_text: str, canonical_yaml_text: str
+        self, stub_yaml_text: str, canonical_yaml_text_with_gcse_tutor: str
     ) -> None:
-        assert stub_yaml_text == canonical_yaml_text
+        assert stub_yaml_text == canonical_yaml_text_with_gcse_tutor
 
     def test_byte_lengths_match(
-        self, stub_yaml_text: str, canonical_yaml_text: str
+        self, stub_yaml_text: str, canonical_yaml_text_with_gcse_tutor: str
     ) -> None:
         assert len(stub_yaml_text.encode("utf-8")) == len(
-            canonical_yaml_text.encode("utf-8")
+            canonical_yaml_text_with_gcse_tutor.encode("utf-8")
         )
 
 
