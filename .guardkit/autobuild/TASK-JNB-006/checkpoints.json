@@ -1,0 +1,16 @@
+{
+  "task_id": "TASK-JNB-006",
+  "checkpoints": [
+    {
+      "turn": 1,
+      "commit_hash": "b2da626a48d577c2ec2acb86223b1f3ba6fc0e39",
+      "timestamp": "2026-07-03T18:38:34.059174",
+      "tests_passed": null,
+      "test_count": 0,
+      "message": "[guardkit-checkpoint] Turn 1 complete (tests: unknown)",
+      "from_prior_run": false,
+      "evidence_commits": {}
+    }
+  ],
+  "last_updated": "2026-07-03T18:38:34.059447"
+}
