@@ -1,18 +1,18 @@
 {
   "phase_4": {
-    "status": "failed",
-    "duration_seconds": 32.5611874590104,
-    "error": "tests failed (deterministic Phase 4): Error detail:\n    assert \"slack_notify_dropped_duplicate\" in caplog.text\nE   AssertionError: assert 'slack_notify_dropped_duplicate' in ''\nE    +  where '' = <_",
+    "status": "passed",
+    "duration_seconds": 41.27137408297858,
+    "error": null,
     "tests_run": 21,
-    "tests_failed": 8,
+    "tests_failed": 0,
     "coverage_pct": 0.0,
-    "output_summary": "Error detail:\n    assert \"slack_notify_dropped_duplicate\" in caplog.text\nE   AssertionError: assert 'slack_notify_dropped_duplicate' in ''\nE    +  where '' = <_pytest.logging.LogCaptureFixture object ",
-    "quality_gates_passed": false
+    "output_summary": "Result:\ntests/test_v1_scenario_matrix.py .....................                   [100%]\ntests/test_v1_scenario_matrix.py: 17 warnings\n======================= 21 passed, 17 warnings in 40.57s =========",
+    "quality_gates_passed": true
   },
   "phase_5": {
-    "status": "skipped",
-    "duration_seconds": 0.0,
-    "error": "phase_4 status=failed",
+    "status": "passed",
+    "duration_seconds": 244.04238316699048,
+    "error": null,
     "issues": [],
     "quality_score": 0.0,
     "recommendations": [],

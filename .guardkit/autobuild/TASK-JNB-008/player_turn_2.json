@@ -1,73 +1,40 @@
 {
   "task_id": "TASK-JNB-008",
-  "timestamp": "2026-07-03T20:47:09.385555",
-  "completed": true,
-  "phases": {
-    "phase_3": {
-      "detected": true,
-      "text": "Implementation - Turn 2 Fixes",
-      "completed": true
-    }
-  },
-  "quality_gates": {
-    "tests_passing": true,
-    "tests_passed": 21,
-    "tests_failed": 0,
-    "coverage": null,
-    "coverage_met": null,
-    "all_passed": null
-  },
+  "turn": 2,
   "files_modified": [
     "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_v1_scenario_matrix.py",
     "tests/test_v1_scenario_matrix.py"
   ],
-  "files_created": [
-    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/.guardkit/autobuild/TASK-JNB-008/player_turn_2.json"
+  "files_created": [],
+  "tests_written": [
+    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_v1_scenario_matrix.py"
   ],
+  "tests_run": true,
+  "tests_passed": true,
+  "test_output_summary": "",
+  "implementation_notes": "Implementation via task-work delegation. Files planned: 0, Files actual: 0",
+  "concerns": [],
+  "requirements_addressed": [
+    "AC-001: 20 scenario test classes created",
+    "AC-002: Tests drive real ForgeNotificationsSubscriber and SlackNotifier",
+    "AC-003: No pytest-bdd anywhere",
+    "AC-004: Collect-only count assertion implemented",
+    "AC-005: Malformed/unrecognised-source drop tests passing",
+    "AC-006: Delivery-failure outcome preservation tests passing",
+    "AC-007: Dedup first-wins 300s TTL tests passing",
+    "AC-008: Throttling burst tests passing",
+    "AC-009: No-replay-on-restart tests passing",
+    "AC-010: Full suite green - 21/21 tests passing"
+  ],
+  "requirements_remaining": [],
+  "sdk_turns_used": 22,
+  "sdk_max_turns": 160,
+  "sdk_ceiling_hit": false,
   "files_authored": [
     "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/.guardkit/autobuild/TASK-JNB-008/player_turn_2.json",
     "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_v1_scenario_matrix.py"
   ],
-  "tests_written": [
-    "/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF/tests/test_v1_scenario_matrix.py"
-  ],
-  "summary": "21 tests passed",
-  "sdk_turns": {
-    "turns_used": 22,
-    "max_turns": 160,
-    "ceiling_hit": false
-  },
-  "task_type": "testing",
-  "agent_invocations_validation": {
-    "status": "violation",
-    "expected_phases": 3,
-    "actual_invocations": 2,
-    "missing_phases": [
-      "3"
-    ],
-    "violation_message": "\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\u274c PROTOCOL VIOLATION: Agent invocation incomplete\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nExpected: 3 agent invocations\nActual: 2 completed invocations\n\nMissing phases:\n  - Phase 3 (Implementation)\n\nCannot generate completion report until all agents are invoked.\nReview the AGENT INVOCATIONS LOG above to see which phases were skipped.\n\nAGENT INVOCATIONS LOG:\n\u2705 Phase 4 (Phase 4): test-orchestrator (completed in ?s)\n\u2705 Phase 5 (Phase 5): code-reviewer (completed in ?s)\n\nTASK WILL BE MOVED TO BLOCKED STATE\nReason: Protocol violation - required agents not invoked\n\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550"
-  },
-  "plan_audit": {
-    "status": "skipped",
-    "severity": null,
-    "violations": 0,
-    "extra_files": [],
-    "missing_files": [],
-    "extra_modifications": [],
-    "missing_modifications": [],
-    "extra_dependencies": [],
-    "missing_dependencies": [],
-    "loc_variance_pct": null,
-    "discrepancies_count": 0,
-    "message": "no implementation plan on disk"
-  },
-  "unconfirmed_low_confidence_assumptions": {
-    "status": "ok",
-    "unconfirmed": [],
-    "files_scanned": 0,
-    "files_skipped": 0,
-    "message": null
-  },
+  "tests_passed_count": 21,
   "completion_promises": [
     {
       "criterion_id": "AC-001",
@@ -168,22 +135,6 @@
       "implementation_files": [
         "tests/test_v1_scenario_matrix.py"
       ]
-    }
-  ],
-  "agent_invocations": [
-    {
-      "phase": "4",
-      "agent": "test-orchestrator",
-      "status": "completed",
-      "source": "orchestrator",
-      "duration_seconds": 41.27137408297858
-    },
-    {
-      "phase": "5",
-      "agent": "code-reviewer",
-      "status": "completed",
-      "source": "orchestrator",
-      "duration_seconds": 244.04238316699048
     }
   ]
 }
