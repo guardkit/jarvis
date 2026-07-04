@@ -385,3 +385,44 @@ class TestAC005ValidateProviderKeys:
             cfg = JarvisConfig(supervisor_model="anthropic:claude-3-opus")
         with pytest.raises(JarvisError):
             cfg.validate_provider_keys()
+
+
+# ---------------------------------------------------------------------------
+# resolve_nats_user_password — the single gate shared by both connect surfaces
+# ---------------------------------------------------------------------------
+class TestResolveNatsUserPassword:
+    """The shared user/password gate: returns the plaintext pair only when
+    both are set, non-blank, and no ``.creds`` file is configured; ``None``
+    otherwise. Keeps the supervisor connect and the fleet-memory publisher in
+    lock-step and away from ``NATSConfig``'s raising auth validators."""
+
+    @staticmethod
+    def _cfg(**overrides: object):  # type: ignore[no-untyped-def]
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict("os.environ", {}, clear=True):
+            return JarvisConfig(**overrides)  # type: ignore[arg-type]
+
+    def test_both_set_returns_plaintext_pair(self) -> None:
+        cfg = self._cfg(nats_user="jarvis", nats_password="s3cr3t")
+        assert cfg.resolve_nats_user_password() == ("jarvis", "s3cr3t")
+
+    def test_neither_set_returns_none(self) -> None:
+        assert self._cfg().resolve_nats_user_password() is None
+
+    def test_lone_user_returns_none(self) -> None:
+        assert self._cfg(nats_user="jarvis").resolve_nats_user_password() is None
+
+    def test_lone_password_returns_none(self) -> None:
+        assert self._cfg(nats_password="s3cr3t").resolve_nats_user_password() is None
+
+    def test_blank_values_return_none(self) -> None:
+        assert self._cfg(nats_user="", nats_password="").resolve_nats_user_password() is None
+
+    def test_creds_file_takes_precedence_returns_none(self) -> None:
+        cfg = self._cfg(
+            nats_credentials_path="/etc/jarvis/nats.creds",
+            nats_user="jarvis",
+            nats_password="s3cr3t",
+        )
+        assert cfg.resolve_nats_user_password() is None

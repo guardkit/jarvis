@@ -185,6 +185,16 @@ class NATSClient:
         if config.nats_credentials_path is not None:
             kwargs["user_credentials"] = str(config.nats_credentials_path)
 
+        # ``JARVIS_NATS_USER`` / ``JARVIS_NATS_PASSWORD`` — user/password
+        # account auth (the fleet broker's model) so operators need not embed
+        # creds inline in ``nats_url``. Resolution (both-set, non-blank,
+        # creds-file precedence) lives on the config so this surface and the
+        # fleet-memory publisher stay in lock-step; ``None`` leaves the URL /
+        # creds-file auth above authoritative.
+        user_password = config.resolve_nats_user_password()
+        if user_password is not None:
+            kwargs["user"], kwargs["password"] = user_password
+
         budget_seconds = config.startup_connect_timeout_seconds
         started_at = time.monotonic()
         try:

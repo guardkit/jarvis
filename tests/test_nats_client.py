@@ -204,6 +204,86 @@ class TestAC001ConnectSuccess:
 
 
 # ===========================================================================
+# User/password account auth — JARVIS_NATS_USER / JARVIS_NATS_PASSWORD
+# ===========================================================================
+
+
+class TestConnectUserPasswordAuth:
+    """The wrapper forwards user/password to ``nats.connect`` only when BOTH
+    are set — so operators can drop creds out of the ``nats_url``. A lone
+    half of the pair is ignored (nats-py rejects a solo user/password)."""
+
+    async def test_forwards_user_and_password_when_both_set(
+        self, patched_connect: mock.AsyncMock
+    ) -> None:
+        config = _make_config(nats_user="jarvis", nats_password="s3cr3t")
+
+        await NATSClient.connect(config)
+
+        kwargs = patched_connect.call_args.kwargs
+        assert kwargs.get("user") == "jarvis"
+        # The plaintext secret is what nats-py needs — SecretStr is unwrapped
+        # at the connect boundary, not before.
+        assert kwargs.get("password") == "s3cr3t"
+
+    async def test_omits_auth_when_neither_set(
+        self, patched_connect: mock.AsyncMock
+    ) -> None:
+        await NATSClient.connect(_make_config())
+
+        kwargs = patched_connect.call_args.kwargs
+        assert "user" not in kwargs
+        assert "password" not in kwargs
+
+    async def test_ignores_lone_user_without_password(
+        self, patched_connect: mock.AsyncMock
+    ) -> None:
+        await NATSClient.connect(_make_config(nats_user="jarvis"))
+
+        kwargs = patched_connect.call_args.kwargs
+        assert "user" not in kwargs
+        assert "password" not in kwargs
+
+    async def test_ignores_lone_password_without_user(
+        self, patched_connect: mock.AsyncMock
+    ) -> None:
+        await NATSClient.connect(_make_config(nats_password="s3cr3t"))
+
+        kwargs = patched_connect.call_args.kwargs
+        assert "user" not in kwargs
+        assert "password" not in kwargs
+
+    async def test_ignores_blank_user_password(
+        self, patched_connect: mock.AsyncMock
+    ) -> None:
+        # Blank env placeholders coerce to "" / SecretStr("") — non-None — but
+        # forwarding empty creds would clobber working URL/anonymous auth.
+        await NATSClient.connect(_make_config(nats_user="", nats_password=""))
+
+        kwargs = patched_connect.call_args.kwargs
+        assert "user" not in kwargs
+        assert "password" not in kwargs
+
+    async def test_creds_path_takes_precedence_over_user_password(
+        self, patched_connect: mock.AsyncMock
+    ) -> None:
+        # A configured .creds file wins (parity with the fleet-memory publisher,
+        # where NATSConfig forbids password auth + creds_file together).
+        await NATSClient.connect(
+            _make_config(
+                nats_credentials_path="/etc/jarvis/nats.creds",
+                nats_user="jarvis",
+                nats_password="s3cr3t",
+            )
+        )
+
+        kwargs = patched_connect.call_args.kwargs
+        assert kwargs["user_credentials"] == "/etc/jarvis/nats.creds"
+        assert "user" not in kwargs
+        assert "password" not in kwargs
+
+
+# ===========================================================================
 # AC-001 / AC-002 — connect failure soft-fails to None
 # ===========================================================================
 

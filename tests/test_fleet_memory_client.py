@@ -186,6 +186,82 @@ class TestPublisherFailFast:
         assert client._config.creds_file is None  # nats_credentials_path unset
 
 
+@pytest.mark.skipif(not _HAS_NATS_CORE, reason="nats_core (memory write dep) not installed")
+class TestPublisherUserPasswordAuth:
+    """``build_nats_client`` threads the optional user/password account pair
+    (JARVIS_NATS_USER / JARVIS_NATS_PASSWORD) into ``NATSConfig`` — shared with
+    the supervisor's connect — so creds need not live inline in ``nats_url``.
+
+    Regression guard: a half-pair / blank / creds-file-coexistence config must
+    NOT reach ``NATSConfig`` raw, because its ``auth_fields_are_consistent``
+    validator raises on those combinations — and ``build_nats_client`` runs
+    before ``publish_episodes``' try, so the raise would propagate into
+    ``FleetMemoryClient``'s fail-open and silently drop EVERY routing-history
+    write. The shared ``resolve_nats_user_password`` gate must absorb them all.
+    """
+
+    @staticmethod
+    def _cfg(**overrides: object) -> JarvisConfig:
+        with patch.dict("os.environ", {}, clear=True):
+            return JarvisConfig(  # type: ignore[arg-type]
+                llama_swap_base_url="http://fake",
+                nats_url="nats://broker.example:4222",
+                **overrides,
+            )
+
+    def test_threads_user_password_into_config(self) -> None:
+        client = build_nats_client(self._cfg(nats_user="jarvis", nats_password="s3cr3t"))
+        assert client._config.user == "jarvis"
+        # NATSConfig stores the password as a SecretStr; unwrap to compare.
+        assert client._config.password is not None
+        assert client._config.password.get_secret_value() == "s3cr3t"
+        # …and both reach nats-py's connect kwargs (the both-set gate).
+        kwargs = client._config.to_connect_kwargs()
+        assert kwargs["user"] == "jarvis"
+        assert kwargs["password"] == "s3cr3t"
+
+    def test_omits_auth_when_user_password_unset(self) -> None:
+        client = build_nats_client(_enabled_config())
+        assert client._config.user is None
+        assert client._config.password is None
+        kwargs = client._config.to_connect_kwargs()
+        assert "user" not in kwargs
+        assert "password" not in kwargs
+
+    def test_lone_user_does_not_raise_and_omits_auth(self) -> None:
+        # NATSConfig raises "user and password must be provided together" on a
+        # half-pair; the gate must drop it so build_nats_client never raises.
+        client = build_nats_client(self._cfg(nats_user="jarvis"))
+        assert client._config.user is None
+        assert client._config.password is None
+
+    def test_lone_password_does_not_raise_and_omits_auth(self) -> None:
+        client = build_nats_client(self._cfg(nats_password="s3cr3t"))
+        assert client._config.user is None
+        assert client._config.password is None
+
+    def test_blank_user_password_omitted(self) -> None:
+        # Blank env placeholders (JARVIS_NATS_USER= / JARVIS_NATS_PASSWORD=)
+        # coerce to "" / SecretStr("") — non-None — and must NOT clobber auth.
+        client = build_nats_client(self._cfg(nats_user="", nats_password=""))
+        assert client._config.user is None
+        assert client._config.password is None
+
+    def test_creds_file_takes_precedence_over_user_password(self) -> None:
+        # NATSConfig treats password auth + creds_file as mutually exclusive;
+        # the .creds file wins and the user/password pair is dropped (no raise).
+        client = build_nats_client(
+            self._cfg(
+                nats_credentials_path="/etc/jarvis/nats.creds",
+                nats_user="jarvis",
+                nats_password="s3cr3t",
+            )
+        )
+        assert client._config.creds_file == "/etc/jarvis/nats.creds"
+        assert client._config.user is None
+        assert client._config.password is None
+
+
 class TestFleetMemoryClientInterface:
     """Interface parity with the routing-history writer's expectations."""
 

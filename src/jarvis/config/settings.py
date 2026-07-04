@@ -114,6 +114,21 @@ class JarvisConfig(BaseSettings):
     # ``None`` means "anonymous / dev broker"; production deployments set
     # this to the operator-provisioned credentials file.
     nats_credentials_path: Path | None = None
+    # JARVIS_NATS_USER / JARVIS_NATS_PASSWORD — optional username + password
+    # for user/password NATS accounts (the fleet broker's auth model, as
+    # distinct from NKey ``.creds`` files). When both are set to non-blank
+    # values (and no ``.creds`` file is configured) they are forwarded to the
+    # connect call by the supervisor's ``NATSClient.connect`` AND the
+    # fleet-memory publisher's ``build_nats_client`` — so operators no longer
+    # need to embed the password inline in ``nats_url``
+    # (``nats://user:pass@host``). Resolution is centralised in
+    # :meth:`resolve_nats_user_password` so both surfaces behave identically:
+    # a lone half, a blank placeholder, or coexistence with
+    # ``nats_credentials_path`` all fall back to the URL / creds-file / anon
+    # auth path rather than forwarding a broken pair. ``SecretStr`` masks the
+    # password in logs and ``repr()``.
+    nats_user: str | None = None
+    nats_password: SecretStr | None = None
     # JARVIS_HEARTBEAT_INTERVAL_SECONDS — fleet heartbeat cadence per
     # DDR-021/heartbeat. Constrained to 5..300 seconds.
     heartbeat_interval_seconds: int = Field(default=30, ge=5, le=300)
@@ -274,6 +289,45 @@ class JarvisConfig(BaseSettings):
             raise ValueError(msg)
 
         return value
+
+    # -- NATS auth resolution ------------------------------------------------
+
+    def resolve_nats_user_password(self) -> tuple[str, str] | None:
+        """Resolve the NATS ``(user, password)`` pair to forward, or ``None``.
+
+        The single source of truth for user/password auth, called by BOTH the
+        supervisor's ``NATSClient.connect`` and the fleet-memory
+        ``build_nats_client`` so the two connect surfaces cannot diverge.
+        Returns the plaintext pair **only** when both ``nats_user`` and
+        ``nats_password`` are set to non-empty values and no ``.creds`` file is
+        configured; otherwise returns ``None`` so callers omit the pair
+        entirely. Three edge cases this gate exists to absorb — each would
+        otherwise break a connection or (on the publisher) raise and silently
+        fail-open every routing-history write:
+
+        * **Lone half** (only user, or only password) — ``nats_core.NATSConfig``
+          rejects a half-pair with ``ValueError`` ("user and password must be
+          provided together"). Returning ``None`` keeps URL / anonymous auth
+          authoritative on both surfaces.
+        * **Blank placeholders** — ``JARVIS_NATS_USER=`` / ``JARVIS_NATS_PASSWORD=``
+          (or a templating tool emitting a bare ``KEY=``) coerce to ``""`` /
+          ``SecretStr("")``, which are non-``None``; forwarding them would
+          clobber working URL-embedded creds with empty credentials.
+        * **``.creds`` file present** — ``NATSConfig`` treats password auth and
+          a creds file as mutually exclusive, so an explicitly configured
+          ``nats_credentials_path`` wins and the user/password pair is dropped.
+        """
+        if self.nats_credentials_path is not None:
+            return None
+        user = self.nats_user
+        password = (
+            self.nats_password.get_secret_value()
+            if self.nats_password is not None
+            else None
+        )
+        if not user or not password:
+            return None
+        return user, password
 
     # -- Runtime validation --------------------------------------------------
 

@@ -9,9 +9,12 @@ server-side via the deterministic ``episode_id`` → ``Nats-Msg-Id`` header.
 The memory-write connection is intentionally **separate** from the supervisor's
 long-lived :class:`jarvis.infrastructure.nats_client.NATSClient` (connect-per
 -batch), mirroring guardkit's ``harvest_publisher.publish_episodes``. It reuses
-Jarvis's existing NATS identity — ``config.nats_url`` +
-``config.nats_credentials_path`` (``nats_core.NATSConfig`` supports
-``creds_file``) — so no new NATS user or password is required.
+Jarvis's existing NATS identity — ``config.nats_url``,
+``config.nats_credentials_path``, and the optional
+``config.nats_user`` / ``config.nats_password`` user/password pair
+(``nats_core.NATSConfig`` supports ``creds_file`` + ``user`` / ``password``) —
+so it shares the supervisor's broker credentials with no dedicated memory
+identity.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from typing import TYPE_CHECKING
 
 from nats_core.client import NATSClient
 from nats_core.config import NATSConfig
+from pydantic import SecretStr
 
 if TYPE_CHECKING:
     from nats_core.events import MemoryEpisodeV1
@@ -59,8 +63,11 @@ class PublishSummary:
 def build_nats_client(config: JarvisConfig) -> NATSClient:
     """Build a ``nats_core.NATSClient`` for memory writes from Jarvis config.
 
-    Reuses the supervisor's NATS endpoint + credentials file; no dedicated
-    user/password is introduced.
+    Reuses the supervisor's NATS endpoint + credentials — the ``.creds`` file
+    when set, otherwise the optional ``nats_user`` / ``nats_password`` account
+    pair (forwarded only when both are set and non-blank, via the shared
+    :meth:`JarvisConfig.resolve_nats_user_password` gate). No dedicated memory
+    identity.
 
     Args:
         config: The validated :class:`JarvisConfig`.
@@ -73,9 +80,25 @@ def build_nats_client(config: JarvisConfig) -> NATSClient:
         if config.nats_credentials_path is not None
         else None
     )
+    # User/password account auth (JARVIS_NATS_USER / JARVIS_NATS_PASSWORD).
+    # ``resolve_nats_user_password`` is the shared gate with the supervisor
+    # connect — it returns the pair ONLY when both are set, non-blank, and no
+    # creds file is configured. Passing a lone half, a blank, or a pair
+    # alongside ``creds_file`` straight into ``NATSConfig`` would trip its
+    # ``auth_fields_are_consistent`` validator (ValueError), which — since
+    # ``build_nats_client`` runs before ``publish_episodes``' try/except —
+    # would propagate into ``FleetMemoryClient``'s fail-open and silently drop
+    # every routing-history write. ``None`` here means creds_file / URL /
+    # anonymous auth stays authoritative, matching the supervisor exactly.
+    user_password = config.resolve_nats_user_password()
     nats_config = NATSConfig(
         url=config.nats_url,
         creds_file=creds_file,
+        user=user_password[0] if user_password is not None else None,
+        # NATSConfig.password is a SecretStr | None; re-wrap the resolved
+        # plaintext (the shared gate returns plaintext for the supervisor's
+        # nats.connect kwargs, which need the raw value).
+        password=SecretStr(user_password[1]) if user_password is not None else None,
         name="jarvis-memory",
         # Fail fast — this is a fire-and-forget, fail-open publisher (DDR-019).
         # NATSConfig defaults to ``max_reconnect_attempts=60`` (~2 min of retries
