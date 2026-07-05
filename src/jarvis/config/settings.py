@@ -252,6 +252,23 @@ class JarvisConfig(BaseSettings):
     # None triggers no-op sink alongside slack_bot_token.
     slack_channel_id: str | None = None
 
+    # -- FEAT-BF39: Slack approval reply-path settings (TASK-JNB-103) -------
+    # JARVIS_SLACK_APP_TOKEN — Slack app-level token (xapp-...) for the
+    # Socket Mode reply path (TASK-JNB-104). None keeps the reply path a
+    # logged no-op. SecretStr masks in logs.
+    slack_app_token: SecretStr | None = None
+
+    # JARVIS_SLACK_OPERATOR_USER_ID — the sole Slack member id authorized to
+    # click Approve/Reject (TASK-JNB-104 authorization gate). None keeps the
+    # reply path a logged no-op.
+    slack_operator_user_id: str | None = None
+
+    # JARVIS_SLACK_DECIDED_BY — the decided_by identity published on
+    # ApprovalResponsePayload (TASK-JNB-104). Must string-equal forge's
+    # expected_approver verbatim (a mismatch silently refuses every phone
+    # approval); aligned at TASK-JNB-107 live validation.
+    slack_decided_by: str | None = None
+
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
         env_file=".env",
@@ -320,11 +337,7 @@ class JarvisConfig(BaseSettings):
         if self.nats_credentials_path is not None:
             return None
         user = self.nats_user
-        password = (
-            self.nats_password.get_secret_value()
-            if self.nats_password is not None
-            else None
-        )
+        password = self.nats_password.get_secret_value() if self.nats_password is not None else None
         if not user or not password:
             return None
         return user, password

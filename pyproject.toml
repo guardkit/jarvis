@@ -264,4 +264,6 @@ markers = [
     "task_TASK_J002_016: scenarios scoped to TASK-J002-016",
     "task_TASK_J002_017: scenarios scoped to TASK-J002-017",
     "task_TASK_J002_019: scenarios scoped to TASK-J002-019",
+    "seam: cross-task integration-contract seam tests (FEAT-BF39)",
+    "integration_contract: names the produced/consumed contract a seam test pins (e.g. WIDENED_FORGENOTIFICATION, BUTTON_METADATA)",
 ]

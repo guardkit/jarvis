@@ -91,7 +91,11 @@ from jarvis.infrastructure.routing_history import (
     MemoryClientProtocol,
     RoutingHistoryWriter,
 )
-from jarvis.infrastructure.slack_notifier import create_slack_sink
+from jarvis.infrastructure.slack_notifier import (
+    ApprovalRequestsSubscriber,
+    SlackNotifier,
+    create_slack_sink,
+)
 from jarvis.sessions.manager import SessionManager
 from jarvis.shared.exceptions import ConfigurationError
 from jarvis.tools import (
@@ -212,10 +216,7 @@ def should_emit_voice_ack(
         if voice_reactive_adapters is not None
         else DEFAULT_VOICE_REACTIVE_ADAPTER_IDS
     )
-    return (
-        adapter_id in voice_set
-        and swap_status.eta_seconds > VOICE_ACK_ETA_THRESHOLD_SECONDS
-    )
+    return adapter_id in voice_set and swap_status.eta_seconds > VOICE_ACK_ETA_THRESHOLD_SECONDS
 
 
 def emit_voice_ack_and_queue(
@@ -325,15 +326,20 @@ class AppState:
             — when Slack config is absent, this holds a NoOpSink that
             performs no network calls. ``shutdown`` calls ``stop()``
             unconditionally.
+        approval_subscriber: The
+            :class:`ApprovalRequestsSubscriber` started over
+            ``agents.approval.forge.>`` (AGENTS stream) feeding captured
+            forge approval requests into the SlackNotifier's pending map
+            for Block Kit button rendering (TASK-JNB-103). ``None`` when
+            NATS soft-failed, when Slack is unconfigured (NoOpSink), or
+            when the subscriber's own start soft-failed.
     """
 
     config: JarvisConfig
     supervisor: CompiledStateGraph[Any, Any, Any, Any]
     store: BaseStore
     session_manager: SessionManager
-    capability_registry: list[CapabilityDescriptor] = dataclasses.field(
-        default_factory=list
-    )
+    capability_registry: list[CapabilityDescriptor] = dataclasses.field(default_factory=list)
     llamaswap_adapter: LlamaSwapAdapter | None = None
     nats_client: NATSClient | None = None
     memory_client: MemoryClientProtocol | None = None
@@ -342,6 +348,7 @@ class AppState:
     capabilities_registry: CapabilitiesRegistry | None = None
     forge_subscriber: ForgeNotificationsSubscriber | None = None
     notification_sink: Any = None  # NotificationSink protocol (TASK-JNB-003)
+    approval_subscriber: ApprovalRequestsSubscriber | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -629,13 +636,9 @@ async def build_app_state(config: JarvisConfig) -> AppState:
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
-            capabilities_registry = _build_stub_capabilities_registry(
-                config, capability_registry
-            )
+            capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
     else:
-        capabilities_registry = _build_stub_capabilities_registry(
-            config, capability_registry
-        )
+        capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
 
     dispatch_semaphore = DispatchSemaphore(cap=config.dispatch_concurrent_cap)
     log.info(
@@ -661,6 +664,30 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         )
     else:
         log.info("jarvis_notification_sink_started")
+
+    # 7c2. TASK-JNB-103 — construct and start the approval-request subscriber
+    # on ``agents.approval.forge.>`` (AGENTS stream — limits retention,
+    # overlap legal; never the PIPELINE stream). Only wired when NATS is up
+    # AND the sink is a live SlackNotifier (a NoOpSink has no button surface
+    # to feed). DDR-021-style soft-fail: a flaky JetStream consumer must not
+    # block the supervisor — pauses then render the text-only fallback.
+    approval_subscriber: ApprovalRequestsSubscriber | None = None
+    if nats_client is not None and isinstance(notification_sink, SlackNotifier):
+        approval_subscriber = ApprovalRequestsSubscriber(
+            nats_client=nats_client,
+            notifier=notification_sink,
+        )
+        try:
+            await approval_subscriber.start()
+        except Exception as exc:
+            log.warning(
+                "jarvis_approval_subscriber_start_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            approval_subscriber = None
+        else:
+            log.info("jarvis_approval_subscriber_started")
 
     # 7d. FEAT-JARVIS-005 (TASK-J005-008) — start the Forge stage-complete
     # subscriber over ``pipeline.stage-complete.>``. The subscriber is
@@ -832,6 +859,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         capabilities_registry=capabilities_registry,
         forge_subscriber=forge_subscriber,
         notification_sink=notification_sink,
+        approval_subscriber=approval_subscriber,
     )
 
     log.info(
@@ -908,6 +936,21 @@ async def shutdown(state: AppState) -> None:
         except Exception as exc:
             log.warning(
                 "jarvis_forge_subscriber_stop_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 1b2. TASK-JNB-103 — stop the approval-request subscriber alongside the
+    # forge subscriber (both are JetStream consumers) and BEFORE the sink so
+    # any in-flight capture can still reach the notifier's state maps.
+    # ``ApprovalRequestsSubscriber.stop()`` is bounded and never raises; the
+    # wrapper is defensive belt-and-braces.
+    if state.approval_subscriber is not None:
+        try:
+            await state.approval_subscriber.stop()
+        except Exception as exc:
+            log.warning(
+                "jarvis_approval_subscriber_stop_warning",
                 error_class=type(exc).__name__,
                 error=str(exc),
             )

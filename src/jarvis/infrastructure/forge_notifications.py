@@ -217,7 +217,9 @@ class ForgeNotification(BaseModel):
             "Build identifier from lifecycle payloads. Optional field "
             "added in TASK-JNB-002 per frozen-model rule — new optional "
             "fields with None defaults only. Populated for build_started, "
-            "build_complete, and build_failed event types."
+            "build_complete, build_failed, and (since TASK-JNB-103, for "
+            "the pending-approval build_id join) build_paused and "
+            "build_cancelled event types."
         ),
     )
     pr_url: str | None = Field(
@@ -239,7 +241,7 @@ class ForgeNotification(BaseModel):
     coach_score: float | None = Field(
         default=None,
         description=(
-            "Coach quality score from BuildPausedPayload (0.0–1.0 range). "
+            "Coach quality score from BuildPausedPayload (0.0-1.0 range). "
             "None is the live default (ADR-ARCH-033) and renders as "
             "'score unavailable'. Out-of-range values render as inert "
             "text. Optional field added in TASK-JNB-005 per frozen-model rule."
@@ -1170,6 +1172,10 @@ class ForgeNotificationsSubscriber:
             # Both payloads are dict-like; extract common fields
             feature_id = raw_payload_dict.get("feature_id")
             payload_correlation_id = raw_payload_dict.get("correlation_id")
+            # TASK-JNB-103: build_id is retained on the pause/cancelled
+            # projection so the Slack sink can join a captured pending
+            # approval to its pause message purely on build_id.
+            build_id = raw_payload_dict.get("build_id")
 
             if not feature_id:
                 raise ValueError("Missing feature_id in payload")
@@ -1182,7 +1188,11 @@ class ForgeNotificationsSubscriber:
                 rationale = raw_payload_dict.get("rationale")
                 gate_mode = raw_payload_dict.get("gate_mode")
                 approval_subject = raw_payload_dict.get("approval_subject")
-                stage_label = raw_payload_dict.get("stage")
+                # Contract key is ``stage_label`` (BuildPausedPayload —
+                # nats-core _pipeline.py); ``stage`` is retained as a
+                # fallback for older synthetic payloads (TASK-JNB-103
+                # review fix — real forge traffic never matched "stage").
+                stage_label = raw_payload_dict.get("stage_label") or raw_payload_dict.get("stage")
                 cancelled_by = None
                 reason = None
             else:  # build_cancelled
@@ -1213,6 +1223,7 @@ class ForgeNotificationsSubscriber:
                     correlation_id=payload_correlation_id,
                     feature_id=feature_id,
                     completed_at=envelope.timestamp,
+                    build_id=build_id,
                     coach_score=coach_score,
                     rationale=rationale,
                     gate_mode=gate_mode,
@@ -1246,6 +1257,7 @@ class ForgeNotificationsSubscriber:
                 correlation_id=payload_correlation_id,
                 feature_id=feature_id,
                 completed_at=envelope.timestamp,
+                build_id=build_id,
                 coach_score=coach_score,
                 rationale=rationale,
                 gate_mode=gate_mode,

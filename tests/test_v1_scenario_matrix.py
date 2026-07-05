@@ -36,21 +36,17 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
-import time
 from datetime import UTC, datetime
 from typing import Any
 from unittest import mock
 from unittest.mock import AsyncMock, patch
 
 import pytest
-import structlog.testing
 from pydantic import SecretStr
 from slack_sdk.errors import SlackApiError
 
 from jarvis.config.settings import JarvisConfig
 from jarvis.infrastructure.forge_notifications import (
-    BuildCorrelation,
     ForgeNotification,
     ForgeNotificationsSubscriber,
 )
@@ -58,8 +54,6 @@ from jarvis.infrastructure.slack_notifier import (
     SlackNotifier,
     create_slack_sink,
 )
-from jarvis.tools.dispatch import queue_build
-
 
 # ---------------------------------------------------------------------------
 # Test Helpers
@@ -236,7 +230,9 @@ class TestStartedRendering:
             _register_test_correlation(sub, "test-corr")
 
             payload = {"feature_id": "FEAT-TEST", "build_id": "build-001", "wave_total": 3}
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_started", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_started", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-started.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -277,7 +273,9 @@ class TestCompleteRendering:
                 "duration_seconds": 120,
                 "summary": "All tasks completed",
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_complete", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_complete", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-complete.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -315,7 +313,9 @@ class TestFailedRendering:
                 "failure_reason": "Test failure *bold* text",
                 "recoverable": False,
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_failed", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_failed", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-failed.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -355,7 +355,9 @@ class TestPausedRenderingNoScore:
                 "coach_score": None,
                 "rationale": "Test paused",
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_paused", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_paused", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-paused.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -395,7 +397,9 @@ class TestPausedRenderingZeroScore:
                 "coach_score": 0.0,
                 "rationale": "Test paused with zero score",
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_paused", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_paused", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-paused.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -435,7 +439,9 @@ class TestPausedRenderingOneScore:
                 "coach_score": 1.0,
                 "rationale": "Test paused with perfect score",
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_paused", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_paused", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-paused.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -475,7 +481,9 @@ class TestCancelledRendering:
                 "reason": "Manual cancellation",
                 "cancelled_at": datetime.now(UTC).isoformat(),
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_cancelled", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_cancelled", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-cancelled.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -509,7 +517,9 @@ class TestSuppression:
 
             # stage_complete should be suppressed per ASSUM-002
             payload = _stage_complete_payload(correlation_id="test-corr")
-            envelope_bytes = _make_envelope_bytes(payload, event_type="stage_complete", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="stage_complete", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes)
 
             await sub._handle_message(msg)
@@ -551,7 +561,9 @@ class TestDuplicateTerminalDedup:
                 "duration_seconds": 120,
                 "summary": "Complete",
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_complete", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_complete", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-complete.FEAT-TEST")
 
             # Deliver same message twice. First-wins dedup is asserted
@@ -677,7 +689,9 @@ class TestDeliveryFailureOutcomePreservation:
                 "duration_seconds": 120,
                 "summary": "Complete",
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_complete", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_complete", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-complete.FEAT-TEST")
 
             # Should NOT raise - this is the key DDR-007 assertion
@@ -723,7 +737,9 @@ class TestInertText:
                 "failure_reason": hostile_reason,
                 "recoverable": False,
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_failed", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_failed", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-failed.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -772,7 +788,9 @@ class TestLongRationale:
                 "coach_score": 0.5,
                 "rationale": long_rationale,
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_paused", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_paused", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-paused.FEAT-TEST")
 
             await sub._handle_message(msg)
@@ -869,7 +887,9 @@ class TestConcurrentTerminals:
 
             # Two distinct builds
             _register_test_correlation(sub, "corr-build-a", feature_id="FEAT-ABC")
-            _register_test_correlation(sub, "corr-build-b", feature_id="FEAT-XYZ", session_id="sess-2")
+            _register_test_correlation(
+                sub, "corr-build-b", feature_id="FEAT-XYZ", session_id="sess-2"
+            )
 
             payload_a = {
                 "feature_id": "FEAT-ABC",
@@ -891,11 +911,15 @@ class TestConcurrentTerminals:
             }
 
             msg_a = _make_msg(
-                _make_envelope_bytes(payload_a, event_type="build_complete", correlation_id="corr-build-a"),
+                _make_envelope_bytes(
+                    payload_a, event_type="build_complete", correlation_id="corr-build-a"
+                ),
                 "pipeline.build-complete.FEAT-ABC",
             )
             msg_b = _make_msg(
-                _make_envelope_bytes(payload_b, event_type="build_complete", correlation_id="corr-build-b"),
+                _make_envelope_bytes(
+                    payload_b, event_type="build_complete", correlation_id="corr-build-b"
+                ),
                 "pipeline.build-complete.FEAT-XYZ",
             )
 
@@ -941,7 +965,9 @@ class TestNoReplayOnRestart:
                 "duration_seconds": 120,
                 "summary": "Complete",
             }
-            envelope_bytes = _make_envelope_bytes(payload, event_type="build_complete", correlation_id="test-corr")
+            envelope_bytes = _make_envelope_bytes(
+                payload, event_type="build_complete", correlation_id="test-corr"
+            )
             msg = _make_msg(envelope_bytes, "pipeline.build-complete.FEAT-TEST")
 
             await sub1._handle_message(msg)
@@ -952,7 +978,7 @@ class TestNoReplayOnRestart:
 
             # Second lifecycle: rebuild subscriber/notifier (simulates restart)
             sink2 = SlackNotifier("xoxb-test", "C123456")
-            sub2, _, _ = _make_subscriber(notification_sink=sink2)
+            _sub2, _, _ = _make_subscriber(notification_sink=sink2)
             await sink2.start()
 
             # Wait to ensure no replay
@@ -993,7 +1019,9 @@ class TestDegradedStart:
             "duration_seconds": 120,
             "summary": "Complete",
         }
-        envelope_bytes = _make_envelope_bytes(payload, event_type="build_complete", correlation_id="test-corr")
+        envelope_bytes = _make_envelope_bytes(
+            payload, event_type="build_complete", correlation_id="test-corr"
+        )
         msg = _make_msg(envelope_bytes, "pipeline.build-complete.FEAT-TEST")
 
         # Should NOT raise
@@ -1066,28 +1094,36 @@ class TestTwoBuildFieldIsolation:
             # Interleave: X started, Y started, X complete, Y complete
             await sub._handle_message(
                 _make_msg(
-                    _make_envelope_bytes(payload_x1, event_type="build_started", correlation_id="corr-x"),
+                    _make_envelope_bytes(
+                        payload_x1, event_type="build_started", correlation_id="corr-x"
+                    ),
                     "pipeline.build-started.FEAT-XXX",
                 )
             )
             await asyncio.sleep(0.2)
             await sub._handle_message(
                 _make_msg(
-                    _make_envelope_bytes(payload_y1, event_type="build_started", correlation_id="corr-y"),
+                    _make_envelope_bytes(
+                        payload_y1, event_type="build_started", correlation_id="corr-y"
+                    ),
                     "pipeline.build-started.FEAT-YYY",
                 )
             )
             await asyncio.sleep(0.2)
             await sub._handle_message(
                 _make_msg(
-                    _make_envelope_bytes(payload_x2, event_type="build_complete", correlation_id="corr-x"),
+                    _make_envelope_bytes(
+                        payload_x2, event_type="build_complete", correlation_id="corr-x"
+                    ),
                     "pipeline.build-complete.FEAT-XXX",
                 )
             )
             await asyncio.sleep(0.2)
             await sub._handle_message(
                 _make_msg(
-                    _make_envelope_bytes(payload_y2, event_type="build_complete", correlation_id="corr-y"),
+                    _make_envelope_bytes(
+                        payload_y2, event_type="build_complete", correlation_id="corr-y"
+                    ),
                     "pipeline.build-complete.FEAT-YYY",
                 )
             )
@@ -1111,12 +1147,17 @@ class TestCollectOnlyCountAssertion:
     def test_collect_only_count_matches_expected(self) -> None:
         """Assert pytest collects exactly 20 scenario test classes."""
         import subprocess
+        from pathlib import Path
 
+        # Repo root derived from this file — the original autobuild
+        # hard-coded its worktree's absolute path, which fails on any
+        # other machine (portability fix applied during TASK-JNB-103).
+        repo_root = Path(__file__).resolve().parent.parent
         result = subprocess.run(
             [".venv/bin/python", "-m", "pytest", __file__, "--collect-only", "-q"],
             capture_output=True,
             text=True,
-            cwd="/Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF",
+            cwd=str(repo_root),
         )
 
         # Expected: 20 scenario classes + this assertion class = 21 classes
@@ -1131,7 +1172,10 @@ class TestCollectOnlyCountAssertion:
             or re.search(r"collected (\d+)", output)
             or re.search(r"test_v1_scenario_matrix\.py:\s*(\d+)", output)
         )
-        assert match is not None, f"Could not parse collection count from stdout={result.stdout!r} stderr={result.stderr!r}"
+        assert match is not None, (
+            f"Could not parse collection count from "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
         collected_count = int(match.group(1))
 
         # Expect at least 21 tests (20 scenarios + 1 collect assertion)

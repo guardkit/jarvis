@@ -1,9 +1,11 @@
 ---
 id: TASK-JNB-103
 title: "jarvis: approval-request capture + Block Kit approve/reject buttons"
-status: backlog
+status: in_review
 created: 2026-07-03T15:30:00Z
-updated: 2026-07-03T15:30:00Z
+updated: 2026-07-05T09:30:00Z
+previous_state: in_progress
+state_transition_reason: "task-work complete: all quality gates passed (suite 2483 green, review findings fixed)"
 priority: high
 task_type: feature
 parent_review: TASK-REV-C951
@@ -35,19 +37,19 @@ TASK-JNB-005 widened `ForgeNotification` per its frozen-model rule (event_type L
 
 ## Acceptance Criteria
 
-- [ ] pydantic-settings fields `slack_app_token` (SecretStr|None), `slack_operator_user_id`, and `slack_decided_by` exist under the `JARVIS_` prefix and load from the keys already present in `jarvis/.env`
-- [ ] A subscriber on `agents.approval.forge.>` (AGENTS stream) captures `ApprovalRequestPayload.request_id` and its timeout into a TTL-bounded pending map keyed by `build_id`; `.response` subjects are never consumed by the PIPELINE consumer's 4-token filter and never mishandled here
-- [ ] Pending-map entries are deduped on `request_id`, including across forge boot-reconcile re-emits: a re-emitted identical `request_id` produces no second actionable message
-- [ ] Join by `build_id` proven for two concurrently paused builds with distinct `request_id`s — each pause message carries only its own build's button metadata (approve-one-not-another precondition)
-- [ ] Exactly one actionable (buttoned) message exists per `request_id` at any time
-- [ ] TTL expiry drops stale pending-map entries; a pause arriving after expiry renders the text-only fallback, not a dead button
-- [ ] Button `value` JSON carries exactly `{request_id, build_id, correlation_id, approval_subject}` and round-trips within Block Kit limits (action value under 2000 characters)
-- [ ] On a defer-refreshed `request_id` for the same `build_id`, `chat.update` replaces the existing buttons in place — the operator never holds a stale button and no second buttoned message is posted
-- [ ] When no approval request has been captured for a paused `build_id`, the v1 text-only pause message is posted unchanged
-- [ ] Request-before-pause and pause-before-request orderings both converge on one correct buttoned message (or fallback when the request never arrives)
-- [ ] Rationale and all operator-visible text render as Block Kit `plain_text` objects only — no mrkdwn interpretation
-- [ ] Subscriber and rendering failures follow DDR-007: WARNING + continue, never raising into the JetStream callback
-- [ ] All modified files pass project-configured lint/format checks with zero errors
+- [x] pydantic-settings fields `slack_app_token` (SecretStr|None), `slack_operator_user_id`, and `slack_decided_by` exist under the `JARVIS_` prefix and load from the keys already present in `jarvis/.env`
+- [x] A subscriber on `agents.approval.forge.>` (AGENTS stream) captures `ApprovalRequestPayload.request_id` and its timeout into a TTL-bounded pending map keyed by `build_id`; `.response` subjects are never consumed by the PIPELINE consumer's 4-token filter and never mishandled here
+- [x] Pending-map entries are deduped on `request_id`, including across forge boot-reconcile re-emits: a re-emitted identical `request_id` produces no second actionable message
+- [x] Join by `build_id` proven for two concurrently paused builds with distinct `request_id`s — each pause message carries only its own build's button metadata (approve-one-not-another precondition)
+- [x] Exactly one actionable (buttoned) message exists per `request_id` at any time
+- [x] TTL expiry drops stale pending-map entries; a pause arriving after expiry renders the text-only fallback, not a dead button
+- [x] Button `value` JSON carries exactly `{request_id, build_id, correlation_id, approval_subject}` and round-trips within Block Kit limits (action value under 2000 characters)
+- [x] On a defer-refreshed `request_id` for the same `build_id`, `chat.update` replaces the existing buttons in place — the operator never holds a stale button and no second buttoned message is posted
+- [x] When no approval request has been captured for a paused `build_id`, the v1 text-only pause message is posted unchanged
+- [x] Request-before-pause and pause-before-request orderings both converge on one correct buttoned message (or fallback when the request never arrives)
+- [x] Rationale and all operator-visible text render as Block Kit `plain_text` objects only — no mrkdwn interpretation
+- [x] Subscriber and rendering failures follow DDR-007: WARNING + continue, never raising into the JetStream callback
+- [x] All modified files pass project-configured lint/format checks with zero errors
 
 ## Test Requirements
 
@@ -120,3 +122,19 @@ Key constraints:
 - The AutoBuild worktree for this task is jarvis-scoped: it cannot read the sibling forge repo. Everything needed (payload field names, subjects, contract notes above) must come from this file — do not plan steps that inspect forge sources.
 
 Files (verified in shared plan): `src/jarvis/infrastructure/slack_notifier.py` (rendering + button upgrade), `infrastructure/lifecycle.py` `build_app_state` (construction/wiring of the new subscriber and settings), jarvis pyproject already carries slack-sdk from TASK-JNB-001.
+
+
+---
+
+## Completion note (2026-07-05, task-work session)
+
+Implemented per `docs/state/TASK-JNB-103/implementation_plan.md` (includes the
+Phase 2.5B architectural review, the Phase 5 multi-lens review outcome with 12
+confirmed findings fixed — notably multi-gate supersede, failed-post re-park,
+Retry-After parse guard, and the pre-existing `stage`→`stage_label` payload-key
+bug in the pause projection — and the plan audit).
+
+- Suite: 2483 passed / 2 skipped / 0 failed. New tests: `tests/test_slack_approval_buttons.py` (48).
+- Coverage (touched modules, branch): slack_notifier 91%, forge_notifications 86%.
+- Live approve/reject round-trip deferred to TASK-JNB-107 (needs operator Slack + live forge);
+  set `JARVIS_SLACK_DECIDED_BY` to match forge `expected_approver` first.
