@@ -519,7 +519,12 @@ class TestReconnectNoDuplicateHandlersOrPublishes:
         with patch("slack_sdk.socket_mode.aiohttp.SocketModeClient") as mock_cls:
             sdk_client = MagicMock()
             sdk_client.socket_mode_request_listeners = []
-            sdk_client.connect = AsyncMock()
+            listeners_at_connect: list[int] = []
+
+            async def _connect() -> None:
+                listeners_at_connect.append(len(sdk_client.socket_mode_request_listeners))
+
+            sdk_client.connect = AsyncMock(side_effect=_connect)
             mock_cls.return_value = sdk_client
 
             await reply_client.start()
@@ -527,9 +532,10 @@ class TestReconnectNoDuplicateHandlersOrPublishes:
 
         mock_cls.assert_called_once()
         assert len(sdk_client.socket_mode_request_listeners) == 1
+        sdk_client.connect.assert_awaited_once()
         # Registration precedes connect (SDK's process_messages starts in
         # __init__) — the listener was present when connect() was awaited.
-        sdk_client.connect.assert_awaited_once()
+        assert listeners_at_connect == [1]
 
     @pytest.mark.asyncio
     async def test_first_click_state_survives_reconnect(self) -> None:
@@ -569,6 +575,193 @@ class TestReconnectNoDuplicateHandlersOrPublishes:
             await reply_client.start()
             await reply_client.stop()  # swallows the close error
             await reply_client.stop()  # idempotent
+
+
+# ---------------------------------------------------------------------------
+# Bounded connect — the SDK's infinite retry loop must not wedge boot
+# ---------------------------------------------------------------------------
+
+
+class TestBoundedConnect:
+    """slack-sdk's connect() never raises (infinite retry) — start() must
+    bound it so a bad app token / Slack outage cannot hang build_app_state
+    (review fix, CRITICAL)."""
+
+    @pytest.mark.asyncio
+    async def test_hanging_connect_times_out_and_closes_sdk_client(self) -> None:
+        handler, _, _, _ = _make_handler()
+        reply_client = SlackSocketModeReplyClient(
+            app_token="xapp-test", handler=handler, web_client=AsyncMock()
+        )
+
+        async def hang() -> None:
+            await asyncio.Event().wait()  # the SDK's retry loop, in spirit
+
+        with (
+            patch("slack_sdk.socket_mode.aiohttp.SocketModeClient") as mock_cls,
+            patch("jarvis.infrastructure.slack_reply._CONNECT_TIMEOUT_SECONDS", 0.05),
+        ):
+            sdk_client = MagicMock()
+            sdk_client.socket_mode_request_listeners = []
+            sdk_client.connect = AsyncMock(side_effect=hang)
+            sdk_client.close = AsyncMock()
+            mock_cls.return_value = sdk_client
+
+            with pytest.raises(TimeoutError):
+                await reply_client.start()
+
+        # The half-started SDK client was cleaned up (its __init__ spawns
+        # process_messages + an aiohttp session).
+        sdk_client.close.assert_awaited_once()
+        assert reply_client._client is None
+        assert reply_client._started is False
+
+    @pytest.mark.asyncio
+    async def test_build_app_state_soft_fails_when_connect_hangs(self) -> None:
+        """Drives the REAL factory + start() through lifecycle: the boot
+        must complete with slack_reply_client=None (DDR-021), replacing
+        the mock-only soft-fail evidence flagged by the review."""
+        import contextlib
+        from contextlib import ExitStack
+        from pathlib import Path
+
+        from jarvis.config.settings import JarvisConfig
+        from jarvis.infrastructure.lifecycle import build_app_state
+
+        project_root = Path(__file__).resolve().parent.parent
+        stub_path = project_root / "src" / "jarvis" / "config" / "stub_capabilities.yaml"
+        with patch.dict(
+            "os.environ",
+            {
+                "JARVIS_SLACK_BOT_TOKEN": "xoxb-t",
+                "JARVIS_SLACK_APP_TOKEN": "xapp-t",
+                "JARVIS_SLACK_OPERATOR_USER_ID": _OPERATOR,
+            },
+            clear=True,
+        ):
+            cfg = JarvisConfig(
+                stub_capabilities_path=stub_path,
+                llama_swap_base_url="http://fake-llama-swap:9000",
+                graphiti_endpoint=None,
+            )
+        cfg.validate_provider_keys()
+
+        fake_nats = MagicMock()
+        fake_nats.drain = AsyncMock()
+
+        async def hang() -> None:
+            await asyncio.Event().wait()
+
+        sdk_client = MagicMock()
+        sdk_client.socket_mode_request_listeners = []
+        sdk_client.connect = AsyncMock(side_effect=hang)
+        sdk_client.close = AsyncMock()
+
+        patches = [
+            *_lifecycle_patches(fake_nats),
+            patch(
+                "slack_sdk.socket_mode.aiohttp.SocketModeClient",
+                return_value=sdk_client,
+            ),
+            patch("jarvis.infrastructure.slack_reply._CONNECT_TIMEOUT_SECONDS", 0.05),
+        ]
+        with ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            state = await asyncio.wait_for(build_app_state(cfg), timeout=10.0)
+
+        # Boot completed; the reply path degraded to None per DDR-021.
+        assert state.slack_reply_client is None
+        sdk_client.close.assert_awaited_once()
+
+        if state.fleet_heartbeat_task is not None:
+            state.fleet_heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await state.fleet_heartbeat_task
+
+
+# ---------------------------------------------------------------------------
+# Cross-task decision serialization (review fix)
+# ---------------------------------------------------------------------------
+
+
+class TestDecisionSequenceSerialized:
+    """A failed attempt's restore can never land after a concurrent
+    retry's durable publish — the decision sequence holds a lock."""
+
+    @pytest.mark.asyncio
+    async def test_failed_restore_completes_before_concurrent_retry_publishes(
+        self,
+    ) -> None:
+        handler, publisher, web_client, _ = _make_handler()
+
+        events: list[str] = []
+        publisher.publish = AsyncMock(side_effect=[RuntimeError("broker blip"), None])
+
+        async def record_update(**kwargs: Any) -> None:
+            blocks = kwargs.get("blocks") or []
+            if _actions_in(blocks):
+                events.append("restore")
+            else:
+                joined = " ".join(b["text"]["text"] for b in blocks if b.get("text"))
+                events.append("success" if "Decision recorded" in joined else "optimistic")
+            await asyncio.sleep(0.01)  # let the other task try to interleave
+
+        web_client.chat_update = AsyncMock(side_effect=record_update)
+
+        first = asyncio.create_task(handler.handle_block_actions(_click_payload()))
+        retry = asyncio.create_task(handler.handle_block_actions(_click_payload()))
+        await asyncio.gather(first, retry)
+
+        assert publisher.publish.await_count == 2
+        # The failed attempt's restore strictly precedes the retry's
+        # updates; the LAST update visible to the operator is the
+        # success update, never a restore.
+        assert events == ["optimistic", "restore", "optimistic", "success"]
+
+
+# ---------------------------------------------------------------------------
+# Missing message.blocks — never destroy what cannot be restored
+# ---------------------------------------------------------------------------
+
+
+class TestMissingMessageBlocks:
+    """Without message.blocks in the interaction payload, the optimistic
+    disable is skipped (nothing restorable) but publish still runs."""
+
+    @pytest.mark.asyncio
+    async def test_publish_failure_without_blocks_issues_no_updates(self) -> None:
+        handler, publisher, web_client, _ = _make_handler()
+        publisher.publish = AsyncMock(side_effect=RuntimeError("broker gone"))
+
+        payload = _click_payload()
+        del payload["message"]
+
+        await handler.handle_block_actions(payload)
+
+        publisher.publish.assert_awaited_once()
+        web_client.chat_update.assert_not_awaited()  # nothing destroyed
+
+        # Retry still possible (first-click-wins un-marked)
+        publisher.publish = AsyncMock()
+        await handler.handle_block_actions(payload)
+        publisher.publish.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_success_without_blocks_still_shows_decision(self) -> None:
+        handler, publisher, web_client, _ = _make_handler()
+
+        payload = _click_payload()
+        del payload["message"]
+
+        await handler.handle_block_actions(payload)
+
+        publisher.publish.assert_awaited_once()
+        # Exactly one update: the success update (no optimistic pass)
+        web_client.chat_update.assert_awaited_once()
+        blocks = web_client.chat_update.await_args.kwargs["blocks"]
+        joined = " ".join(b["text"]["text"] for b in blocks if b.get("text"))
+        assert "Decision recorded: approve" in joined
 
 
 # ---------------------------------------------------------------------------

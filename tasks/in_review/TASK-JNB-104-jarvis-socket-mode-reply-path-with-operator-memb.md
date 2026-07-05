@@ -1,11 +1,11 @@
 ---
 id: TASK-JNB-104
 title: "jarvis: Socket Mode reply path with operator-member-id authorization"
-status: in_progress
+status: in_review
 created: 2026-07-03T15:30:00Z
-updated: 2026-07-05T10:00:00Z
-previous_state: backlog
-state_transition_reason: "task-work execution (fable-window plan ACTION 4, second half)"
+updated: 2026-07-05T13:00:00Z
+previous_state: in_progress
+state_transition_reason: "task-work complete: all quality gates passed (suite 2527 green, review findings fixed)"
 priority: high
 task_type: feature
 parent_review: TASK-REV-C951
@@ -40,19 +40,19 @@ Architecture context: the client is constructed in `infrastructure/lifecycle.py`
 
 ## Acceptance Criteria
 
-- [ ] Socket Mode client (slack-sdk `SocketModeClient` on `JARVIS_SLACK_APP_TOKEN`) is constructed and started in `infrastructure/lifecycle.py` `build_app_state`, and shut down cleanly with the supervisor lifecycle
-- [ ] When `JARVIS_SLACK_APP_TOKEN` or `JARVIS_SLACK_OPERATOR_USER_ID` is absent, the reply path is a logged no-op and the supervisor starts and runs normally
-- [ ] Every `block_actions` envelope is acked immediately, before any authorization, parsing, or publish work
-- [ ] An unauthorized click (`payload.user.id != JARVIS_SLACK_OPERATOR_USER_ID`) never publishes: WARN log + ephemeral refusal to the clicking user, nothing sent to NATS
-- [ ] An authorized approve click publishes `ApprovalResponsePayload` with `request_id` taken from the button value JSON, `decision="approve"`, and `decided_by=settings.slack_decided_by`, to `approval_subject + ".response"`, carrying the request's `correlation_id` — a payload forge's untouched validation chain accepts
-- [ ] An authorized reject click publishes `decision="reject"` through the same path
-- [ ] `decided_by` equals `settings.slack_decided_by` verbatim — no trimming, casing, or normalisation (config alignment with forge `expected_approver`; a mismatch silently refuses every phone approval)
-- [ ] A double-click publishes at most once client-side (local first-click-wins keyed on `request_id`); forge `request_id` dedup remains the authoritative guard
-- [ ] After a successful publish, `chat.update` disables the buttons and shows the recorded decision in place
-- [ ] A publish failure logs WARNING and re-enables the buttons; no exception propagates out of the handler (DDR-007)
-- [ ] Malformed action payloads (unparseable value JSON, missing keys, unknown action id) are dropped with a log entry; nothing is published and the client keeps running
-- [ ] A Socket Mode reconnect never duplicates handlers and never re-publishes a prior decision (handler registration is idempotent; first-click-wins state survives reconnect)
-- [ ] All modified files pass project-configured lint/format checks with zero errors
+- [x] Socket Mode client (slack-sdk `SocketModeClient` on `JARVIS_SLACK_APP_TOKEN`) is constructed and started in `infrastructure/lifecycle.py` `build_app_state`, and shut down cleanly with the supervisor lifecycle
+- [x] When `JARVIS_SLACK_APP_TOKEN` or `JARVIS_SLACK_OPERATOR_USER_ID` is absent, the reply path is a logged no-op and the supervisor starts and runs normally
+- [x] Every `block_actions` envelope is acked immediately, before any authorization, parsing, or publish work
+- [x] An unauthorized click (`payload.user.id != JARVIS_SLACK_OPERATOR_USER_ID`) never publishes: WARN log + ephemeral refusal to the clicking user, nothing sent to NATS
+- [x] An authorized approve click publishes `ApprovalResponsePayload` with `request_id` taken from the button value JSON, `decision="approve"`, and `decided_by=settings.slack_decided_by`, to `approval_subject + ".response"`, carrying the request's `correlation_id` — a payload forge's untouched validation chain accepts
+- [x] An authorized reject click publishes `decision="reject"` through the same path
+- [x] `decided_by` equals `settings.slack_decided_by` verbatim — no trimming, casing, or normalisation (config alignment with forge `expected_approver`; a mismatch silently refuses every phone approval)
+- [x] A double-click publishes at most once client-side (local first-click-wins keyed on `request_id`); forge `request_id` dedup remains the authoritative guard
+- [x] After a successful publish, `chat.update` disables the buttons and shows the recorded decision in place
+- [x] A publish failure logs WARNING and re-enables the buttons; no exception propagates out of the handler (DDR-007)
+- [x] Malformed action payloads (unparseable value JSON, missing keys, unknown action id) are dropped with a log entry; nothing is published and the client keeps running
+- [x] A Socket Mode reconnect never duplicates handlers and never re-publishes a prior decision (handler registration is idempotent; first-click-wins state survives reconnect)
+- [x] All modified files pass project-configured lint/format checks with zero errors
 
 ## Test Requirements
 
@@ -124,3 +124,22 @@ async def test_published_decided_by_equals_slack_decided_by_verbatim(settings, a
 - **Correlation-INDEPENDENT fan-out is deliberate**: the phone surface is per-operator, not per-session; nothing in this task should couple the reply path to the correlation LRU.
 - **Operational surface**: the Socket Mode client's lifetime inside the supervisor event loop (reconnects, missed acks) is new; reconnect-without-duplicate-handlers/publishes is an explicit AC because real behaviour only shows in TASK-JNB-107.
 - **Worktree scope**: the autobuild worktree is jarvis-scoped and cannot read the sibling forge repo — everything needed (contract shapes, subjects, validation-chain behaviour) is stated in this file; do not attempt to open forge sources.
+
+
+---
+
+## Completion note (2026-07-05, task-work session)
+
+Implemented per `docs/state/TASK-JNB-104/implementation_plan.md` (arch review
+78/100 with C1/C2 invariants; multi-lens review with worktree-isolated
+verifiers — 7 confirmed findings fixed, most notably the CRITICAL unbounded
+`SocketModeClient.connect()` hang that could brick supervisor boot on a bad
+app token, now bounded at 15 s with DDR-021 soft-fail; handler-wide decision
+lock; missing-blocks guard).
+
+- Suite: 2527 passed / 2 skipped / 0 failed. New tests: `tests/test_slack_reply.py` (43).
+- Coverage (branch): slack_reply 91%.
+- New emit site registered in the API-events §5 source_id pin
+  (`tests/test_contract_nats_core.py`).
+- Live approve/reject round-trip deferred to TASK-JNB-107 (operator phone +
+  live forge; `JARVIS_SLACK_DECIDED_BY` must equal forge `expected_approver`).

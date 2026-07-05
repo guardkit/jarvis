@@ -49,3 +49,4 @@ htmlcov/
 
 # Per-machine Claude Code overrides
 .claude/settings.local.json
+.claude/worktrees/

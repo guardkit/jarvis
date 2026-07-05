@@ -45,7 +45,10 @@ Behaviour invariants (task ACs + Phase 2.5B review C1/C2):
   ``chat.update`` fails → WARNING only, first-click-wins stays marked,
   and the original blocks are NEVER restored (re-enabling a button for
   an already-recorded decision would reintroduce double-publish risk).
-  The restore branch fires only on publish failure.
+  The restore branch fires only on publish failure. The guarantee holds
+  ACROSS concurrently dispatched clicks too: the whole decision sequence
+  runs under a handler-wide ``asyncio.Lock``, so a failed attempt's
+  restore always completes before a retry's publish begins.
 """
 
 from __future__ import annotations
@@ -77,6 +80,14 @@ _PUBLISH_TIMEOUT_SECONDS = 5.0
 
 # Bounded Socket Mode close timeout.
 _DEFAULT_STOP_TIMEOUT = 5.0
+
+# Bounded first-connect timeout (review fix — CRITICAL): slack-sdk's
+# aiohttp SocketModeClient.connect() is a ``while True`` retry loop that
+# catches EVERY exception (invalid_auth included) and never raises, so an
+# unbounded await would hang build_app_state forever on a bad app token
+# or a Slack outage. Bounding it turns the failure into an observable
+# TimeoutError the lifecycle's DDR-021 soft-fail branch can catch.
+_CONNECT_TIMEOUT_SECONDS = 15.0
 
 
 def parse_button_value(value: str) -> dict[str, str]:
@@ -195,7 +206,13 @@ class ApprovalReplyHandler:
     Never raises (DDR-007). Constructed via :func:`build_reply_handler`.
     """
 
-    __slots__ = ("_decided_request_ids", "_publisher", "_settings", "_web_client")
+    __slots__ = (
+        "_decided_request_ids",
+        "_decision_lock",
+        "_publisher",
+        "_settings",
+        "_web_client",
+    )
 
     def __init__(
         self,
@@ -211,6 +228,15 @@ class ApprovalReplyHandler:
         # First-click-wins state — in-process only (DDR-027); forge's
         # request_id dedup is the authoritative backstop after restart.
         self._decided_request_ids: set[str] = set()
+        # Serializes the decision sequence (check/mark → publish →
+        # update/restore) across concurrently dispatched clicks (review
+        # fix): the SDK schedules one task per WS message, and without
+        # this a failed attempt's restore chat.update could land AFTER a
+        # concurrent retry's durable publish — re-displaying live buttons
+        # for an already-recorded decision. The Socket Mode ack happens
+        # upstream in _on_request, so holding the lock here never
+        # threatens the ack deadline.
+        self._decision_lock = asyncio.Lock()
 
     async def handle_block_actions(self, payload: dict[str, Any]) -> None:
         """Handle one authorized-or-not button click. Never raises."""
@@ -262,106 +288,118 @@ class ApprovalReplyHandler:
 
         request_id = button["request_id"]
 
-        # --- 3. First-click-wins (synchronous check-and-mark) -----------
-        # No await between the membership check and the insert: the SDK
-        # schedules one task per WS message (asyncio.ensure_future), so a
-        # double-click is two concurrent tasks and this atomicity is what
-        # "publishes at most once client-side" rests on. Courtesy only —
-        # forge's request_id dedup is authoritative (DDR-027).
-        if request_id in self._decided_request_ids:
+        # The decision sequence (check/mark → publish → update/restore)
+        # is serialized across concurrently dispatched clicks (review
+        # fix): without the lock, a failed attempt's restore chat.update
+        # could land AFTER a concurrent retry's durable publish and
+        # re-display live buttons for an already-recorded decision.
+        async with self._decision_lock:
+            # --- 3. First-click-wins (check-and-mark under the lock) -----
+            # Courtesy only — forge's request_id dedup is authoritative
+            # (DDR-027).
+            if request_id in self._decided_request_ids:
+                logger.info(
+                    "slack_reply_duplicate_click_dropped",
+                    request_id=request_id,
+                    decision=decision,
+                )
+                return
+            self._decided_request_ids.add(request_id)
+
+            # --- 3b. decided_by presence guard ----------------------------
+            # The no-op factory gate is app_token/operator_id only (task
+            # AC); an unset decided_by fails loud here instead — forge
+            # would refuse the response anyway (expected_approver
+            # mismatch).
+            decided_by = self._settings.slack_decided_by
+            if not decided_by:
+                logger.warning(
+                    "slack_reply_decided_by_unset",
+                    request_id=request_id,
+                    detail=(
+                        "JARVIS_SLACK_DECIDED_BY is not configured; "
+                        "refusing to publish an approval response"
+                    ),
+                )
+                self._decided_request_ids.discard(request_id)
+                return
+
+            # --- 4. Optimistic disable (independent wrap — C2) ------------
+            # Skipped when the interaction payload carries no
+            # message.blocks (review fix): we could not restore what we
+            # cannot rebuild, so the buttons stay live during the publish
+            # — first-click-wins still guards the client side and forge
+            # dedups the wire.
+            original_blocks = (payload.get("message") or {}).get("blocks")
+            if original_blocks:
+                await self._update_message(
+                    payload,
+                    blocks=_blocks_with_status(original_blocks, f"Recording {decision}…"),
+                    text=f"Recording {decision}…",
+                    log_event="slack_reply_optimistic_update_failed",
+                )
+
+            # --- 5. Publish -----------------------------------------------
+            from nats_core.events import ApprovalResponsePayload
+
+            response = ApprovalResponsePayload(
+                request_id=request_id,
+                decision=decision,  # type: ignore[arg-type]
+                # Verbatim — no trimming, casing, or normalisation. Must
+                # string-equal forge's expected_approver (config contract).
+                decided_by=decided_by,
+            )
+            subject = button["approval_subject"] + ".response"
+
+            try:
+                await self._publisher.publish(
+                    subject=subject,
+                    payload=response,
+                    correlation_id=button["correlation_id"] or None,
+                )
+            except Exception as exc:
+                # Publish failure: WARNING, un-mark first-click-wins so
+                # the operator can retry, and restore the ORIGINAL blocks
+                # (buttons re-enabled). This is the ONLY branch that
+                # restores (C1); with no original blocks nothing was
+                # disabled, so there is nothing to restore.
+                logger.warning(
+                    "slack_reply_publish_failed",
+                    request_id=request_id,
+                    subject=subject,
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                )
+                self._decided_request_ids.discard(request_id)
+                if original_blocks:
+                    await self._update_message(
+                        payload,
+                        blocks=original_blocks,
+                        text=("Approval buttons re-enabled after a publish failure."),
+                        log_event="slack_reply_restore_update_failed",
+                    )
+                return
+
             logger.info(
-                "slack_reply_duplicate_click_dropped",
+                "slack_reply_decision_published",
                 request_id=request_id,
                 decision=decision,
-            )
-            return
-        self._decided_request_ids.add(request_id)
-
-        # --- 3b. decided_by presence guard -------------------------------
-        # The no-op factory gate is app_token/operator_id only (task AC);
-        # an unset decided_by fails loud here instead — forge would refuse
-        # the response anyway (expected_approver mismatch).
-        decided_by = self._settings.slack_decided_by
-        if not decided_by:
-            logger.warning(
-                "slack_reply_decided_by_unset",
-                request_id=request_id,
-                detail=(
-                    "JARVIS_SLACK_DECIDED_BY is not configured; refusing "
-                    "to publish an approval response"
-                ),
-            )
-            self._decided_request_ids.discard(request_id)
-            return
-
-        # --- 4. Optimistic disable (independent wrap — C2) ---------------
-        original_blocks = (payload.get("message") or {}).get("blocks")
-        await self._update_message(
-            payload,
-            blocks=_blocks_with_status(original_blocks, f"Recording {decision}…"),
-            text=f"Recording {decision}…",
-            log_event="slack_reply_optimistic_update_failed",
-        )
-
-        # --- 5. Publish ---------------------------------------------------
-        from nats_core.events import ApprovalResponsePayload
-
-        response = ApprovalResponsePayload(
-            request_id=request_id,
-            decision=decision,  # type: ignore[arg-type]
-            # Verbatim — no trimming, casing, or normalisation. Must
-            # string-equal forge's expected_approver (config contract).
-            decided_by=decided_by,
-        )
-        subject = button["approval_subject"] + ".response"
-
-        try:
-            await self._publisher.publish(
                 subject=subject,
-                payload=response,
-                correlation_id=button["correlation_id"] or None,
             )
-        except Exception as exc:
-            # Publish failure: WARNING, un-mark first-click-wins so the
-            # operator can retry, and restore the ORIGINAL blocks
-            # (buttons re-enabled). This is the ONLY branch that
-            # restores (C1).
-            logger.warning(
-                "slack_reply_publish_failed",
-                request_id=request_id,
-                subject=subject,
-                error_class=type(exc).__name__,
-                error=str(exc),
-            )
-            self._decided_request_ids.discard(request_id)
+
+            # --- 6. Success update (C1: never restore from here) ----------
+            # The decision is durably published: even if this chat.update
+            # fails, first-click-wins stays marked and the buttons are
+            # never re-enabled.
             await self._update_message(
                 payload,
-                blocks=original_blocks,
-                text="Approval buttons re-enabled after a publish failure.",
-                log_event="slack_reply_restore_update_failed",
+                blocks=_blocks_with_status(
+                    original_blocks,
+                    f"Decision recorded: {decision} (by {decided_by})",
+                ),
+                text=f"Decision recorded: {decision}",
+                log_event="slack_reply_success_update_failed",
             )
-            return
-
-        logger.info(
-            "slack_reply_decision_published",
-            request_id=request_id,
-            decision=decision,
-            subject=subject,
-        )
-
-        # --- 6. Success update (C1: never restore from here) -------------
-        # The decision is durably published: even if this chat.update
-        # fails, first-click-wins stays marked and the buttons are never
-        # re-enabled.
-        await self._update_message(
-            payload,
-            blocks=_blocks_with_status(
-                original_blocks,
-                f"Decision recorded: {decision} (by {decided_by})",
-            ),
-            text=f"Decision recorded: {decision}",
-            log_event="slack_reply_success_update_failed",
-        )
 
     # ------------------------------------------------------------------
     # Slack side-effects — every call independently wrapped (C2)
@@ -534,7 +572,27 @@ class SlackSocketModeReplyClient:
         # in the SDK client's __init__, so connecting first would open a
         # window where deliveries find zero listeners.
         self._client.socket_mode_request_listeners.append(self._on_request)
-        await self._client.connect()
+        # Bounded connect (review fix — CRITICAL): the SDK's connect() is
+        # an infinite retry loop that never raises (it swallows
+        # invalid_auth and network errors alike), so an unbounded await
+        # would wedge build_app_state forever on a bad app token or a
+        # Slack outage. On timeout/failure the SDK client is closed
+        # (its __init__ already spawned process_messages and an aiohttp
+        # session) and the error re-raised so the lifecycle's DDR-021
+        # soft-fail branch fires as designed.
+        try:
+            await asyncio.wait_for(self._client.connect(), timeout=_CONNECT_TIMEOUT_SECONDS)
+        except BaseException:
+            client, self._client = self._client, None
+            try:
+                await asyncio.wait_for(client.close(), timeout=self._stop_timeout)
+            except Exception as exc:
+                logger.warning(
+                    "slack_reply_connect_cleanup_failed",
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                )
+            raise
         self._started = True
         logger.info("slack_reply_socket_mode_started")
 

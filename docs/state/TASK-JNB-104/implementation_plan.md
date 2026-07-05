@@ -178,3 +178,59 @@ registration BEFORE `connect()` with a comment citing the SDK internals
 
 Complexity 7 → FULL_REQUIRED checkpoint → auto-approved (autonomous
 session; plan + arch review persisted here as the review artifact).
+
+
+## Phase 5 outcome (2026-07-05) — multi-lens review workflow
+
+3 review lenses + worktree-isolated adversarial verifiers (12 agents; no
+shared-tree mutation this time — isolation applied per the JNB-103
+lesson). 9 raw findings → 7 confirmed (1 duplicate cluster), 2 refuted.
+All confirmed findings fixed:
+
+- **CRITICAL — unbounded `connect()` hang**: slack-sdk's aiohttp
+  `SocketModeClient.connect()` is a `while True` retry loop that never
+  raises (swallows invalid_auth and network errors), so `await start()`
+  could wedge `build_app_state` forever on a bad app token or Slack
+  outage — the DDR-021 soft-fail except was unreachable, and the
+  mock-based soft-fail test was false-green evidence. Fixed:
+  `_CONNECT_TIMEOUT_SECONDS = 15.0` bound via `asyncio.wait_for`, with
+  best-effort SDK-client close + `_client = None` on failure before
+  re-raising, so the lifecycle soft-fails as designed. Two new tests
+  drive the REAL `start()` (hanging connect → bounded raise + cleanup;
+  full `build_app_state` completes with `slack_reply_client=None`).
+- **MINOR — C1 cross-task race**: a failed attempt's restore
+  `chat.update` could land after a concurrent retry's durable publish
+  (SDK dispatches one task per WS message). Fixed with a handler-wide
+  `asyncio.Lock` serializing check/mark → publish → update/restore; the
+  ack stays outside the lock. Regression test pins the exact event order.
+- **MINOR — missing `message.blocks`**: the optimistic disable would
+  destroy buttons it could not restore (restore sent `blocks=None`).
+  Fixed: optimistic disable and restore are skipped when the payload
+  carries no original blocks; publish is unaffected. Tests added.
+- **MINOR — listener-ordering assertion gap**: registration-before-
+  connect is now pinned (listener count captured at connect-await time).
+
+Refuted: partial-start `stop()` leak (superseded by the connect-failure
+cleanup path), and one duplicate of the missing-blocks finding whose
+harm-path analysis differed (the fix covers both readings).
+
+## Plan audit (Phase 5.5)
+
+Planned files all created/modified as specified; one extra file beyond
+plan: `tests/test_contract_nats_core.py` — required by the pre-existing
+emit-site count pin (the new `MessageEnvelope` publish site had to be
+registered; 2 pre-existing SIM110s cleared for the modified-files lint
+AC). LOC ~640 source (vs ~475 planned; review fixes + docstrings) and
+~1030 tests (vs ~700). Severity: LOW → Approve (deviations traced to the
+contract pin and confirmed review findings).
+
+Final: suite 2527 passed / 2 skipped / 0 failed; `slack_reply.py` 91%
+line/branch-inclusive coverage; ruff + format + mypy clean on all
+modified files.
+
+## Live-validation caveat
+
+The live approve/reject round-trip (TASK-JNB-107) needs the operator's
+Slack workspace/phone, a live forge build, and `JARVIS_SLACK_DECIDED_BY`
+set to string-equal forge's `expected_approver` — not runnable in this
+autonomous session.
