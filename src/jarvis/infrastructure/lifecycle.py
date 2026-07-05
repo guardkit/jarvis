@@ -96,6 +96,10 @@ from jarvis.infrastructure.slack_notifier import (
     SlackNotifier,
     create_slack_sink,
 )
+from jarvis.infrastructure.slack_reply import (
+    SlackSocketModeReplyClient,
+    create_slack_reply_client,
+)
 from jarvis.sessions.manager import SessionManager
 from jarvis.shared.exceptions import ConfigurationError
 from jarvis.tools import (
@@ -333,6 +337,14 @@ class AppState:
             for Block Kit button rendering (TASK-JNB-103). ``None`` when
             NATS soft-failed, when Slack is unconfigured (NoOpSink), or
             when the subscriber's own start soft-failed.
+        slack_reply_client: The
+            :class:`SlackSocketModeReplyClient` handling Approve/Reject
+            button clicks over Socket Mode and publishing
+            ``ApprovalResponsePayload`` to ``approval_subject +
+            ".response"`` (TASK-JNB-104). ``None`` when the app token /
+            operator id / bot token are unset, when NATS soft-failed, or
+            when the client's own start soft-failed — the supervisor
+            starts and runs normally in every no-op permutation.
     """
 
     config: JarvisConfig
@@ -349,6 +361,7 @@ class AppState:
     forge_subscriber: ForgeNotificationsSubscriber | None = None
     notification_sink: Any = None  # NotificationSink protocol (TASK-JNB-003)
     approval_subscriber: ApprovalRequestsSubscriber | None = None
+    slack_reply_client: SlackSocketModeReplyClient | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -689,6 +702,28 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         else:
             log.info("jarvis_approval_subscriber_started")
 
+    # 7c3. TASK-JNB-104 — construct and start the Socket Mode reply client
+    # (outbound WebSocket; publishes ApprovalResponsePayload to
+    # ``approval_subject + ".response"`` on the AGENTS stream — publish
+    # only, never a consumer). ``create_slack_reply_client`` returns None
+    # (logged no-op) when the app token / operator id / bot token are
+    # unset or NATS is down; start failures soft-fail per DDR-021.
+    slack_reply_client: SlackSocketModeReplyClient | None = create_slack_reply_client(
+        config, nats_client
+    )
+    if slack_reply_client is not None:
+        try:
+            await slack_reply_client.start()
+        except Exception as exc:
+            log.warning(
+                "jarvis_slack_reply_start_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            slack_reply_client = None
+        else:
+            log.info("jarvis_slack_reply_started")
+
     # 7d. FEAT-JARVIS-005 (TASK-J005-008) — start the Forge stage-complete
     # subscriber over ``pipeline.stage-complete.>``. The subscriber is
     # constructed only when NATS is up (DDR-021 soft-fail keeps the
@@ -860,6 +895,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         forge_subscriber=forge_subscriber,
         notification_sink=notification_sink,
         approval_subscriber=approval_subscriber,
+        slack_reply_client=slack_reply_client,
     )
 
     log.info(
@@ -951,6 +987,20 @@ async def shutdown(state: AppState) -> None:
         except Exception as exc:
             log.warning(
                 "jarvis_approval_subscriber_stop_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 1b3. TASK-JNB-104 — stop the Socket Mode reply client alongside the
+    # other inbound surfaces so no click can arrive while the supervisor
+    # is tearing down. ``stop()`` is bounded and never raises; the
+    # wrapper is defensive belt-and-braces.
+    if state.slack_reply_client is not None:
+        try:
+            await state.slack_reply_client.stop()
+        except Exception as exc:
+            log.warning(
+                "jarvis_slack_reply_stop_warning",
                 error_class=type(exc).__name__,
                 error=str(exc),
             )

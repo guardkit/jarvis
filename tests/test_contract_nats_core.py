@@ -371,6 +371,31 @@ def _emit_chat_result_envelope() -> MessageEnvelope:
     )
 
 
+def _emit_approval_response_envelope() -> MessageEnvelope:
+    """Build the slack_reply-side ``MessageEnvelope`` (ApprovalResponsePayload).
+
+    Reconstructs the envelope
+    :meth:`jarvis.infrastructure.slack_reply.NatsApprovalResponsePublisher.publish`
+    emits on ``approval_subject + ".response"`` (TASK-JNB-104 — the Slack
+    Approve/Reject reply path). Keeping this builder isomorphic to the
+    runtime call keeps the API-events §5 ``source_id='jarvis'`` invariant
+    covered.
+    """
+    from nats_core.events import ApprovalResponsePayload as _ApprovalResponsePayload
+
+    payload = _ApprovalResponsePayload(
+        request_id="apr-contract-001",
+        decision="approve",
+        decided_by="jarvis-operator",
+    )
+    return MessageEnvelope(
+        source_id="jarvis",
+        event_type=EventType.APPROVAL_RESPONSE,
+        correlation_id="00000000-0000-4000-8000-00000000000d",
+        payload=payload.model_dump(mode="json"),
+    )
+
+
 # Every ``MessageEnvelope(source_id=...)`` construction site under
 # ``src/jarvis/`` is replayed here. The grep below the parametrisation pins
 # the count — adding a new emit site without registering it triggers a hard
@@ -379,6 +404,7 @@ _EMIT_SITES: tuple[tuple[str, Any], ...] = (
     ("dispatch.py:_build_command_envelope", _emit_command_envelope),
     ("dispatch.py:queue_build", _emit_queue_build_envelope),
     ("chat_handler.py:_dual_publish", _emit_chat_result_envelope),
+    ("slack_reply.py:NatsApprovalResponsePublisher.publish", _emit_approval_response_envelope),
 )
 
 
@@ -482,9 +508,7 @@ class TestNoHardcodedSubjectLiteralsInSrc:
 
     def test_src_tree_exists(self) -> None:
         """Fail fast if the source layout has shifted."""
-        assert _SRC_JARVIS.is_dir(), (
-            f"Expected src tree at {_SRC_JARVIS}; layout has changed."
-        )
+        assert _SRC_JARVIS.is_dir(), f"Expected src tree at {_SRC_JARVIS}; layout has changed."
 
     @pytest.mark.parametrize("forbidden", _FORBIDDEN_SUBJECT_LITERALS)
     def test_no_hardcoded_subject_literals_in_src(self, forbidden: str) -> None:
@@ -508,7 +532,7 @@ class TestNoHardcodedSubjectLiteralsInSrc:
                 if not in_docstring:
                     for delim in ('"""', "'''"):
                         if stripped.startswith(delim):
-                            rest = stripped[len(delim):]
+                            rest = stripped[len(delim) :]
                             if delim in rest:
                                 # Single-line docstring — do not flip.
                                 pass
@@ -536,9 +560,7 @@ class TestNoHardcodedSubjectLiteralsInSrc:
                     continue
 
                 # Allow-list: import lines mentioning Topics.
-                if stripped.startswith("from nats_core") or stripped.startswith(
-                    "import nats_core"
-                ):
+                if stripped.startswith("from nats_core") or stripped.startswith("import nats_core"):
                     continue
 
                 # Allow-list: lines that reference a ``Topics.*`` template
@@ -553,8 +575,7 @@ class TestNoHardcodedSubjectLiteralsInSrc:
         assert not offenders, (
             f"Hard-coded subject literal {forbidden!r} found in "
             f"src/jarvis/ outside the allow-list "
-            "(nats_core.Topics import + module-docstring commentary):\n"
-            + "\n".join(offenders)
+            "(nats_core.Topics import + module-docstring commentary):\n" + "\n".join(offenders)
         )
 
 
@@ -696,9 +717,7 @@ class TestBuildQueuedPayloadContract:
 
         # The ValueError raised inside the validator carries this message —
         # pydantic surfaces it under the ``msg`` of the resulting error tuple.
-        assert "originating_adapter is required when triggered_by == 'jarvis'" in str(
-            excinfo.value
-        )
+        assert "originating_adapter is required when triggered_by == 'jarvis'" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------
@@ -750,17 +769,11 @@ def _nats_subject_matches(pattern: str, subject: str) -> bool:
         head = pat_tokens[:-1]
         if len(sub_tokens) <= len(head):
             return False
-        for p, s in zip(head, sub_tokens, strict=False):
-            if p != "*" and p != s:
-                return False
-        return True
+        return all(p in ("*", s) for p, s in zip(head, sub_tokens, strict=False))
 
     if len(pat_tokens) != len(sub_tokens):
         return False
-    for p, s in zip(pat_tokens, sub_tokens, strict=True):
-        if p != "*" and p != s:
-            return False
-    return True
+    return all(p in ("*", s) for p, s in zip(pat_tokens, sub_tokens, strict=True))
 
 
 class TestTopicsPipelineFormatters:
@@ -771,8 +784,7 @@ class TestTopicsPipelineFormatters:
         ADR-SP-016 singular form ``pipeline.build-queued.X``."""
         produced = Topics.Pipeline.BUILD_QUEUED.format(feature_id="X")
         assert produced == "pipeline.build-queued.X", (
-            "ADR-SP-016 singular convention broken: BUILD_QUEUED format "
-            f"produced {produced!r}"
+            f"ADR-SP-016 singular convention broken: BUILD_QUEUED format produced {produced!r}"
         )
 
     def test_stage_complete_wildcard_matches_known_subject(self) -> None:
@@ -789,16 +801,12 @@ class TestTopicsPipelineFormatters:
         )
 
         # The pattern must match the worked example from the task description.
-        assert _nats_subject_matches(
-            pattern, "pipeline.stage-complete.FEAT-J005.plan-complete"
-        )
+        assert _nats_subject_matches(pattern, "pipeline.stage-complete.FEAT-J005.plan-complete")
         # Defensive: it must also match the simpler 3-token form (single
         # feature_id) since Forge may publish either depending on its v.
         assert _nats_subject_matches(pattern, "pipeline.stage-complete.FEAT-J005")
         # And it must NOT match a sibling subject family.
-        assert not _nats_subject_matches(
-            pattern, "pipeline.build-queued.FEAT-J005"
-        )
+        assert not _nats_subject_matches(pattern, "pipeline.build-queued.FEAT-J005")
 
 
 # ---------------------------------------------------------------------------
@@ -881,9 +889,7 @@ class TestSubscriberDropsMaliciousSourceId:
         )
         msg = MagicMock()
         msg.data = envelope.model_dump_json().encode("utf-8")
-        msg.subject = Topics.Pipeline.STAGE_COMPLETE.format(
-            feature_id=payload.feature_id
-        )
+        msg.subject = Topics.Pipeline.STAGE_COMPLETE.format(feature_id=payload.feature_id)
         msg.ack = AsyncMock()
 
         # The module's structlog logger routes through whatever the project

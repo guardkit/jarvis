@@ -1,9 +1,11 @@
 ---
 id: TASK-JNB-104
 title: "jarvis: Socket Mode reply path with operator-member-id authorization"
-status: backlog
+status: in_progress
 created: 2026-07-03T15:30:00Z
-updated: 2026-07-03T15:30:00Z
+updated: 2026-07-05T10:00:00Z
+previous_state: backlog
+state_transition_reason: "task-work execution (fable-window plan ACTION 4, second half)"
 priority: high
 task_type: feature
 parent_review: TASK-REV-C951
