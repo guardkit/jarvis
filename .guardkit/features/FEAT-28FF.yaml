@@ -1,0 +1,228 @@
+id: FEAT-28FF
+name: Jarvis Notification Bridge v1 (Slack one-way notify)
+description: 'v1 of FEAT-UBS-003: in-process SlackNotifier fed by a NotificationSink
+  seam from ForgeNotificationsSubscriber (correlation-independent fan-out), queued
+  hook at queue_build publish time, full-lifecycle phone notifications (queued/running/terminal/pauses),
+  hardening (dedup/throttling), plain-pytest scenario matrix, and two live operator
+  checkpoints. v1.1 (reply path) YAMLs are deliberately deferred until TASK-JNB-004
+  passes.'
+created: '2026-07-03T14:51:16.631583'
+status: completed
+complexity: 6
+estimated_tasks: 9
+tasks:
+- id: TASK-JNB-001
+  name: SlackNotifier component + Slack settings + slack-sdk dependency
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-001-slacknotifier-component-slack-settings-slack-sdk.md
+  complexity: 5
+  dependencies: []
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 75
+  requires_infrastructure: []
+  result:
+    total_turns: 2
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 2
+  current_turn: 0
+  started_at: '2026-07-03T17:02:52.019742'
+  completed_at: '2026-07-03T17:19:39.407769'
+- id: TASK-JNB-002
+  name: Notification-sink seam in ForgeNotificationsSubscriber + queued hook in queue_build
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-002-notification-sink-seam-in-forgenotificationssubs.md
+  complexity: 5
+  dependencies: []
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 75
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-07-03T17:02:52.025019'
+  completed_at: '2026-07-03T17:19:39.412920'
+- id: TASK-JNB-003
+  name: Lifecycle wiring - construct and bind SlackNotifier in build_app_state
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-003-lifecycle-wiring-construct-and-bind-slacknotifie.md
+  complexity: 3
+  dependencies:
+  - TASK-JNB-001
+  - TASK-JNB-002
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-07-03T17:44:01.257998'
+  completed_at: '2026-07-03T17:51:55.483027'
+- id: TASK-JNB-004
+  name: LIVE v1 checkpoint - toy feature Open WebUI to phone queued/running/terminal
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-004-live-v1-checkpoint-toy-feature-open-webui-phone-.md
+  complexity: 3
+  dependencies:
+  - TASK-JNB-003
+  status: deferred
+  implementation_mode: direct
+  estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 0
+    final_decision: deferred
+    error: null
+    deferred_reason: "operator follow-up \u2014 runtime verification required"
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: '2026-07-03T21:51:20.421020'
+- id: TASK-JNB-005
+  name: Pause + cancelled lifecycle - filter extension and rendering
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-005-pause-cancelled-lifecycle-filter-extension-and-r.md
+  complexity: 5
+  dependencies:
+  - TASK-JNB-003
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 75
+  requires_infrastructure: []
+  result:
+    total_turns: 2
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 2
+  current_turn: 0
+  started_at: '2026-07-03T17:53:17.470667'
+  completed_at: '2026-07-03T18:38:34.067059'
+- id: TASK-JNB-006
+  name: Hardening - 300s first-wins dedup, throttling backoff, overflow bounds
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-006-hardening-300s-first-wins-dedup-throttling-backo.md
+  complexity: 5
+  dependencies:
+  - TASK-JNB-003
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 75
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-07-03T20:14:21.627561'
+  completed_at: '2026-07-03T20:26:09.640659'
+- id: TASK-JNB-007
+  name: DDR set - sink seam, fan-out rationale, dedup placement, ASSUM-010 interim
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-007-ddr-set-sink-seam-correlation-independent-fan-ou.md
+  complexity: 2
+  dependencies:
+  - TASK-JNB-003
+  status: completed
+  implementation_mode: direct
+  estimated_minutes: 22
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-07-03T17:53:17.482031'
+  completed_at: '2026-07-03T18:38:34.076882'
+- id: TASK-JNB-008
+  name: v1 scenario test matrix (plain pytest, no BDD glue)
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-008-v1-scenario-test-matrix-plain-pytest-no-bdd-glue.md
+  complexity: 6
+  dependencies:
+  - TASK-JNB-005
+  - TASK-JNB-006
+  status: completed
+  implementation_mode: task-work
+  estimated_minutes: 113
+  requires_infrastructure: []
+  result:
+    total_turns: 1
+    final_decision: approved
+    error: null
+    deferred_reason: null
+  turns_completed: 1
+  current_turn: 0
+  started_at: '2026-07-03T21:53:35.118703'
+  completed_at: '2026-07-03T22:06:27.745559'
+- id: TASK-JNB-009
+  name: LIVE v1 hardening validation - pause on phone, burst, restart
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-009-live-v1-hardening-validation-pause-on-phone-burs.md
+  complexity: 3
+  dependencies:
+  - TASK-JNB-008
+  status: deferred
+  implementation_mode: direct
+  estimated_minutes: 33
+  requires_infrastructure: []
+  result:
+    total_turns: 0
+    final_decision: deferred
+    error: null
+    deferred_reason: "operator follow-up \u2014 runtime verification required"
+  turns_completed: 0
+  current_turn: 0
+  started_at: null
+  completed_at: '2026-07-03T22:08:42.149766'
+orchestration:
+  parallel_groups:
+  - - TASK-JNB-001
+    - TASK-JNB-002
+  - - TASK-JNB-003
+  - - TASK-JNB-004
+    - TASK-JNB-005
+    - TASK-JNB-006
+    - TASK-JNB-007
+  - - TASK-JNB-008
+  - - TASK-JNB-009
+  estimated_duration_minutes: 534
+  recommended_parallel: 4
+smoke_gates:
+  after_wave:
+  - 3
+  - 4
+  command: 'set -e
+
+    ./.venv/bin/python -m pytest tests -x -q
+
+    '
+  expected_exit: 0
+  timeout: 300
+  exit5_is_hard_fail: false
+preflight_strict: false
+evidence_repos: []
+execution:
+  started_at: '2026-07-03T17:02:49.805338'
+  completed_at: '2026-07-03T22:08:42.161718'
+  worktree_path: /Users/richardwoollcott/Projects/appmilla_github/jarvis/.guardkit/worktrees/FEAT-28FF
+  total_turns: 9
+  tasks_completed: 9
+  tasks_failed: 0
+  current_wave: 5
+  completed_waves:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  last_updated: '2026-07-03T22:08:42.156922'
+  archived_at: null
+  archived_to: null

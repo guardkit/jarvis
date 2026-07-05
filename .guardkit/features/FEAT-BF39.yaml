@@ -1,0 +1,70 @@
+id: FEAT-BF39
+name: Jarvis Notification Bridge v1.1 (Slack reply-to-resume, jarvis side)
+description: 'v1.1 jarvis half of FEAT-UBS-003: AGENTS-stream approval-request capture
+  keyed by build_id with request_id dedup, Block Kit Approve/Reject buttons on pause
+  messages (chat.update on defer-refresh), and the Socket Mode reply path authorized
+  solely by JARVIS_SLACK_OPERATOR_USER_ID publishing ApprovalResponsePayload. Gated
+  on the passed v1 checkpoint (TASK-JNB-004, 2026-07-04). Cross-repo wave discipline:
+  forge-side TASK-JNB-101/102/106 (FEAT in forge repo) should land before TASK-JNB-107
+  live validation.'
+created: '2026-07-04T11:10:32.960617'
+status: planned
+complexity: 6
+estimated_tasks: 4
+tasks:
+- id: TASK-JNB-103
+  name: Approval-request capture + Block Kit approve/reject buttons
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-103-jarvis-approval-request-capture-block-kit-approv.md
+  complexity: 6
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 113
+- id: TASK-JNB-104
+  name: Socket Mode reply path with operator-member-id authorization
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-104-jarvis-socket-mode-reply-path-with-operator-memb.md
+  complexity: 7
+  dependencies:
+  - TASK-JNB-103
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 170
+- id: TASK-JNB-105
+  name: v1.1 reply-path scenario tests (plain pytest)
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-105-jarvis-v1-1-reply-path-scenario-tests-plain-pyte.md
+  complexity: 5
+  dependencies:
+  - TASK-JNB-104
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 75
+- id: TASK-JNB-107
+  name: LIVE v1.1 validation - approve/reject from the phone
+  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-107-live-v1-1-validation-approve-reject-from-the-pho.md
+  complexity: 3
+  dependencies:
+  - TASK-JNB-104
+  - TASK-JNB-105
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 33
+orchestration:
+  parallel_groups:
+  - - TASK-JNB-103
+  - - TASK-JNB-104
+  - - TASK-JNB-105
+  - - TASK-JNB-107
+  estimated_duration_minutes: 391
+  recommended_parallel: 1
+
+smoke_gates:
+  after_wave: [2, 3]
+  command: |
+    set -e
+    ./.venv/bin/python -m pytest tests -x -q
+  expected_exit: 0
+  timeout: 300
