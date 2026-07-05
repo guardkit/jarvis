@@ -1,9 +1,10 @@
 ---
 id: TASK-JNB-105
 title: "jarvis: v1.1 reply-path scenario tests (plain pytest)"
-status: backlog
+status: in_review
 created: 2026-07-03T15:30:00Z
-updated: 2026-07-03T15:30:00Z
+updated: 2026-07-05T00:00:00Z
+previous_state: in_progress
 priority: high
 task_type: testing
 parent_review: TASK-REV-C951
@@ -35,7 +36,7 @@ Tests must be fully hermetic: mock the slack-sdk `SocketModeClient` surface (del
 - [ ] Approve-one-not-another: with two paused builds holding distinct button metadata, approving build A publishes exactly once to A's `approval_subject + '.response'` carrying A's `request_id` and `correlation_id`; nothing is published for build B and B's buttons remain live.
 - [ ] Unrecognised decision: the rendered Block Kit message offers only Approve and Reject actions, and a crafted `block_actions` payload carrying any other decision value publishes nothing.
 - [ ] Buttons-disabled-after-decision: after an authorized decision, `chat.update` is invoked replacing the buttons with a disabled/decided rendering.
-- [ ] Reply-after-ended: a click whose `request_id` is absent from the pending map (build ended or entry expired) follows the refusal path and publishes nothing.
+- [ ] Reply-after-ended: a click whose `request_id` is absent from the pending map (build ended or entry expired) follows the refusal path and publishes nothing. **RECONCILED (Rich, 2026-07-05 — Option A "faithful test"):** the delivered JNB-104 `ApprovalReplyHandler` has NO pending map (`__slots__ = _decided_request_ids, _decision_lock, _publisher, _settings, _web_client`; `create_slack_reply_client` passes none) and publishes self-containedly from the button value JSON — this is the deliberate DDR-027 posture (handoff §6 "old buttons after a jarvis restart still work; the reply path needs no in-memory state to publish"), with forge as the authoritative refuser (correlation mismatch / request_id 300s dedup / expected_approver). There is therefore NO jarvis-local stale-refusal path, and adding one would redesign JNB-104 (forbidden here) and break the post-restart invariant. This AC's original "publishes nothing" premise is **superseded**: the scenario test asserts the DELIVERED behaviour — a well-formed, authorized, first-time "stale" click STILL PUBLISHES, documenting that staleness enforcement lives forge-side (TASK-JNB-106). No production change.
 - [ ] Contract tests assert the published envelope deserializes and validates against the installed `nats_core` `ApprovalResponsePayload`, that `decided_by` equals `settings.slack_decided_by` verbatim, that `decision` is one of `approve|reject`, and that the publish subject is exactly `approval_subject + '.response'`.
 - [ ] No `.feature` files and no `pytest-bdd` import anywhere in the tests added by this task.
 - [ ] The verify step runs `.venv/bin/python -m pytest --collect-only -q` on the new test path(s) and asserts the collected count equals the number of tests written (pinned exact integer, not a minimum).
@@ -52,7 +53,7 @@ Explicit scenario list (each is one test class; the class name should be a direc
 3. **Approve one, not another** — two paused builds each hold buttons with distinct value JSON `{request_id, build_id, correlation_id, approval_subject}`: approving build A routes the publish to A's `approval_subject + '.response'` with A's `request_id`/`correlation_id`; assert no publish references build B.
 4. **Unrecognised decision never offered nor published** — assert the button blocks offer only `approve` and `reject`, and a synthetic action carrying an unknown decision value produces no publish.
 5. **Buttons disabled after decision** — after an authorized approve or reject, assert `chat.update` replaced the interactive blocks with a non-interactive decided rendering.
-6. **Reply after ended (stale buttons -> refusal path)** — a click carrying a `request_id` no longer present in the TTL'd pending map: assert refusal-path behaviour and zero publishes (forge remains the authoritative refuser for anything that slips past).
+6. **Reply after ended (stale buttons -> refusal path)** — a click carrying a `request_id` no longer present in the TTL'd pending map: assert refusal-path behaviour and zero publishes (forge remains the authoritative refuser for anything that slips past). **RECONCILED (see AC "Reply-after-ended" above):** the reply path holds no pending map (DDR-027), so this scenario tests the DELIVERED behaviour — a well-formed authorized stale click still publishes and forge is the sole refuser. The class name still mirrors the scenario ("ReplyAfterEnded"); the assertion is inverted from the original draft to match the implementation, not a redesign of it.
 
 Plus **contract tests** (may be one class): construct the reply path end-to-end with the fake JetStream, trigger an authorized approve, then take the captured bytes and validate them against the installed `nats_core` `ApprovalResponsePayload` model — field-level asserts on `request_id`, `decision`, `decided_by == settings.slack_decided_by`, carried `correlation_id`, and the exact `.response` subject suffix.
 
