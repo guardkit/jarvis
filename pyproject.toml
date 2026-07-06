@@ -47,7 +47,7 @@ dependencies = [
     # BuildQueuedPayload shape compliance. NOTE: Phase 2 imports the data
     # classes ONLY — `nats-py` (the live client) is forbidden until Phase 4
     # per the phase2-dispatch-foundations-scope §Scope Invariants.
-    "nats-core>=0.4",
+    "nats-core>=0.5",
     # ---- Phase 3 (FEAT-J003-006) — Anthropic SDK -------------------------
     # `anthropic` is a base dependency so `python -m langgraph dev` (the
     # default Claude-backed orchestrator path) works without requiring

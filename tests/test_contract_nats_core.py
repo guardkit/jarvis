@@ -396,6 +396,39 @@ def _emit_approval_response_envelope() -> MessageEnvelope:
     )
 
 
+def _emit_planning_queued_envelope() -> MessageEnvelope:
+    """Build the slack_planning_intake-side ``MessageEnvelope`` (PlanningQueuedPayload).
+
+    Reconstructs the envelope
+    :meth:`jarvis.infrastructure.slack_planning_intake.NatsPlanningQueuedPublisher.publish`
+    emits on ``pipeline.planning-queued.{correlation_id}`` (TASK-SPL-J01 —
+    FEAT-SPL-001 Slack planning intake). Keeping this builder isomorphic to
+    the runtime call keeps the API-events §5 ``source_id='jarvis'`` invariant
+    covered.
+    """
+    from datetime import UTC, datetime
+
+    from nats_core.events import PlanningQueuedPayload as _PlanningQueuedPayload
+
+    payload = _PlanningQueuedPayload(
+        request_text="contract-check planning idea",
+        triggered_by="jarvis",
+        # Explicit — the wire layer skips the required-when-jarvis validator
+        # when the field is omitted (TASK-REV-3240 F4).
+        originating_adapter="slack",
+        originating_user="U0CONTRACT",
+        correlation_id="00000000-0000-4000-8000-00000000000e",
+        requested_at=datetime.now(UTC),
+        queued_at=datetime.now(UTC),
+    )
+    return MessageEnvelope(
+        source_id="jarvis",
+        event_type=EventType.PLANNING_QUEUED,
+        correlation_id=payload.correlation_id,
+        payload=payload.model_dump(mode="json"),
+    )
+
+
 # Every ``MessageEnvelope(source_id=...)`` construction site under
 # ``src/jarvis/`` is replayed here. The grep below the parametrisation pins
 # the count — adding a new emit site without registering it triggers a hard
@@ -405,6 +438,10 @@ _EMIT_SITES: tuple[tuple[str, Any], ...] = (
     ("dispatch.py:queue_build", _emit_queue_build_envelope),
     ("chat_handler.py:_dual_publish", _emit_chat_result_envelope),
     ("slack_reply.py:NatsApprovalResponsePublisher.publish", _emit_approval_response_envelope),
+    (
+        "slack_planning_intake.py:NatsPlanningQueuedPublisher.publish",
+        _emit_planning_queued_envelope,
+    ),
 )
 
 

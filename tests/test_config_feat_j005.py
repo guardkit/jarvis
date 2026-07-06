@@ -134,8 +134,12 @@ class TestAC004NoOtherModuleConsumesNewFields:
     ALLOWED_CONSUMERS: ClassVar[dict[str, set[str]]] = {
         # TASK-J005-005 — queue_build wraps ``js.publish`` in
         # ``asyncio.wait_for(..., timeout=config.pipeline_publish_timeout_seconds)``.
+        # TASK-SPL-J01 — the planning-intake factory injects the same DDR-025
+        # timeout into NatsPlanningQueuedPublisher (TASK-REV-3240 F-PLAN-1:
+        # config-sourced, never dispatch's private _resolve_publish_timeout).
         "pipeline_publish_timeout_seconds": {
             "tools/dispatch.py",
+            "infrastructure/slack_planning_intake.py",
         },
         # TASK-J005-008 — lifecycle constructs ``ForgeNotificationsSubscriber``
         # with ``queue_cap=config.forge_notifications_queue_cap`` and

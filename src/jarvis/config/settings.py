@@ -269,6 +269,19 @@ class JarvisConfig(BaseSettings):
     # approval); aligned at TASK-JNB-107 live validation.
     slack_decided_by: str | None = None
 
+    # -- FEAT-SPL-001: Slack planning intake settings (TASK-SPL-J01) --------
+    # JARVIS_SLACK_PLANNING_CHANNEL_ID — the dedicated planning channel id
+    # (SPL scope §5: #factory-planning). None keeps planning intake a logged
+    # no-op; unset planning keys never affect the approval reply path
+    # (TASK-REV-3240 F1 union-gate contract).
+    slack_planning_channel_id: str | None = None
+
+    # JARVIS_SLACK_PLANNING_ORIGINATOR_USER_ID — Slack member id(s) authorized
+    # to originate planning requests. Comma-separated allow-list-ready
+    # (ASSUM-001 hedge); v1 is documented and operated as a single id (James
+    # for the exemplar). None keeps planning intake a logged no-op.
+    slack_planning_originator_user_id: str | None = None
+
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
         env_file=".env",
