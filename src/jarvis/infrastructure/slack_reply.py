@@ -62,6 +62,7 @@ import structlog
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.nats_client import NATSClient
+    from jarvis.infrastructure.slack_planning_intake import PlanningIntakeHandler
 
 logger = structlog.get_logger(__name__)
 
@@ -529,11 +530,24 @@ class SlackSocketModeReplyClient:
     across reconnects — do not "helpfully" re-register on reconnect.
     First-click-wins state lives on the handler instance, outside the
     SDK client, so it survives reconnects within the process.
+
+    TASK-SPL-J02: this client now hosts BOTH Slack Socket Mode features —
+    the approval reply path (``interactive`` requests → ``handler``) and
+    planning intake (``events_api`` requests → ``events_handler``,
+    FEAT-SPL-001). One connection per process is the only correct Slack
+    topology (Slack load-balances envelope deliveries across an app's open
+    connections, and this listener acks every envelope — a second
+    connection would ack-and-drop the other feature's traffic). Routing
+    happens INSIDE the single ack-first :meth:`_on_request`; exactly one
+    ack per envelope. Either handler may be ``None`` (that feature
+    unconfigured — the factory's union gate); the class name is kept for
+    diff-minimality while the JNB-107 live validation is pending.
     """
 
     __slots__ = (
         "_app_token",
         "_client",
+        "_events_handler",
         "_handler",
         "_started",
         "_stop_timeout",
@@ -544,12 +558,14 @@ class SlackSocketModeReplyClient:
         self,
         *,
         app_token: str,
-        handler: ApprovalReplyHandler,
+        handler: ApprovalReplyHandler | None,
         web_client: Any,
+        events_handler: PlanningIntakeHandler | None = None,
         stop_timeout: float = _DEFAULT_STOP_TIMEOUT,
     ) -> None:
         self._app_token = app_token
         self._handler = handler
+        self._events_handler = events_handler
         self._web_client = web_client
         self._stop_timeout = stop_timeout
         self._client: Any = None
@@ -634,13 +650,22 @@ class SlackSocketModeReplyClient:
             )
 
         try:
-            if req.type != "interactive":
-                return
-            payload = req.payload or {}
-            if payload.get("type") != "block_actions":
-                return
-            # handle_block_actions never raises (DDR-007).
-            await self._handler.handle_block_actions(payload)
+            # Request-type router (TASK-SPL-J02): one connection, one ack,
+            # then per-feature dispatch. Both handlers are None-safe — an
+            # unconfigured feature's requests are acked and dropped.
+            if req.type == "interactive":
+                if self._handler is None:
+                    return
+                payload = req.payload or {}
+                if payload.get("type") != "block_actions":
+                    return
+                # handle_block_actions never raises (DDR-007).
+                await self._handler.handle_block_actions(payload)
+            elif req.type == "events_api":
+                if self._events_handler is None:
+                    return
+                # handle_message_event never raises (DDR-007).
+                await self._events_handler.handle_message_event(req.payload or {})
         except Exception as exc:
             # Defensive backstop — the SDK's own listener catch-all would
             # swallow this anyway; logging here keeps the failure visible
@@ -661,18 +686,32 @@ def create_slack_reply_client(
     config: JarvisConfig,
     nats_client: NATSClient | None,
 ) -> SlackSocketModeReplyClient | None:
-    """Create the Socket Mode reply client, or a logged no-op (``None``).
+    """Create the shared Socket Mode client, or a logged no-op (``None``).
 
-    No-op conditions (each logged with its reason):
+    Union gate (TASK-SPL-J02 / TASK-REV-3240 F1): the ONE Socket Mode
+    connection is constructed when the shared prerequisites are met AND at
+    least one hosted feature is fully configured. Each feature is gated by
+    its OWN settings and logs its OWN no-op reason — an unset operator id
+    must never silently kill planning intake, and unset planning keys must
+    never touch the approval reply path.
 
-    * ``slack_app_token`` or ``slack_operator_user_id`` unset — the task's
-      own no-op gate.
-    * ``slack_bot_token`` unset — no web client for chat.update /
-      ephemeral refusals (and no button surface exists either, since the
-      notifier is a NoOpSink in that configuration).
-    * ``nats_client is None`` — nothing to publish decisions to
-      (DDR-021-style soft degradation).
+    Shared prerequisites (each logged as ``slack_reply_no_op``):
 
+    * ``slack_app_token`` unset — no Socket Mode surface at all.
+    * ``slack_bot_token`` unset — no web client for chat.* calls (and no
+      button/ack surface exists either).
+    * ``nats_client is None`` — nothing to publish to (DDR-021-style soft
+      degradation).
+
+    Per-feature gates:
+
+    * Approval reply path (``interactive``): ``slack_operator_user_id``
+      unset → ``slack_reply_no_op`` and no interactive handler.
+    * Planning intake (``events_api``, FEAT-SPL-001): its factory
+      (:func:`~jarvis.infrastructure.slack_planning_intake.create_slack_planning_intake_handler`)
+      logs ``slack_planning_intake_no_op`` naming the missing key(s).
+
+    Neither feature configured → ``None`` (no connection).
     The supervisor starts and runs normally in every no-op permutation.
     """
     app_token_secret = config.slack_app_token
@@ -681,40 +720,63 @@ def create_slack_reply_client(
     bot_token_secret = config.slack_bot_token
     bot_token = bot_token_secret.get_secret_value() if bot_token_secret is not None else None
 
-    if not app_token or not operator_id:
+    if not app_token:
         logger.info(
             "slack_reply_no_op",
-            reason=(
-                "slack_app_token or slack_operator_user_id not configured; "
-                "Slack reply path disabled"
-            ),
+            reason="slack_app_token not configured; Slack Socket Mode disabled",
         )
         return None
     if not bot_token:
         logger.info(
             "slack_reply_no_op",
-            reason="slack_bot_token not configured; Slack reply path disabled",
+            reason="slack_bot_token not configured; Slack Socket Mode disabled",
         )
         return None
     if nats_client is None:
         logger.info(
             "slack_reply_no_op",
-            reason="NATS unavailable; Slack reply path disabled",
+            reason="NATS unavailable; Slack Socket Mode disabled",
         )
         return None
 
     from slack_sdk.web.async_client import AsyncWebClient
 
-    web_client = AsyncWebClient(token=bot_token)
-    handler = build_reply_handler(
-        settings=config,
-        publisher=NatsApprovalResponsePublisher(nats_client),
-        web_client=web_client,
+    from jarvis.infrastructure.slack_planning_intake import (
+        create_slack_planning_intake_handler,
     )
+
+    web_client = AsyncWebClient(token=bot_token)
+
+    handler: ApprovalReplyHandler | None = None
+    if operator_id:
+        handler = build_reply_handler(
+            settings=config,
+            publisher=NatsApprovalResponsePublisher(nats_client),
+            web_client=web_client,
+        )
+    else:
+        logger.info(
+            "slack_reply_no_op",
+            reason=("slack_operator_user_id not configured; approval reply path disabled"),
+        )
+
+    events_handler = create_slack_planning_intake_handler(config, nats_client, web_client)
+
+    if handler is None and events_handler is None:
+        logger.info(
+            "slack_reply_no_op",
+            reason=(
+                "no Slack Socket Mode feature configured (approval reply "
+                "path and planning intake both disabled); connection not started"
+            ),
+        )
+        return None
+
     return SlackSocketModeReplyClient(
         app_token=app_token,
         handler=handler,
         web_client=web_client,
+        events_handler=events_handler,
     )
 
 

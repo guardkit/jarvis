@@ -648,3 +648,168 @@ class TestSettingsFields:
         config = JarvisConfig(_env_file=None)
         assert config.slack_planning_channel_id == "C0PLANNING"
         assert config.slack_planning_originator_user_id == "U0JAMES"
+
+
+# ---------------------------------------------------------------------------
+# TASK-SPL-J02 — union gate (F1) + request-type routing on the shared client
+# ---------------------------------------------------------------------------
+
+
+def _env_config(**env: str) -> Any:
+    from jarvis.config.settings import JarvisConfig
+
+    with patch.dict("os.environ", env, clear=True):
+        return JarvisConfig(_env_file=None)
+
+
+_BASE_ENV = {
+    "JARVIS_SLACK_BOT_TOKEN": "xoxb-t",
+    "JARVIS_SLACK_APP_TOKEN": "xapp-t",
+}
+_REPLY_ENV = {"JARVIS_SLACK_OPERATOR_USER_ID": "U0OPERATOR"}
+_PLANNING_ENV = {
+    "JARVIS_SLACK_PLANNING_CHANNEL_ID": _CHANNEL,
+    "JARVIS_SLACK_PLANNING_ORIGINATOR_USER_ID": _JAMES,
+}
+
+
+class TestUnionGateFactory:
+    """The four config permutations (TASK-REV-3240 F1, confirmed HIGH)."""
+
+    def test_both_features_configured_registers_both_handlers(self) -> None:
+        from jarvis.infrastructure.slack_reply import create_slack_reply_client
+
+        config = _env_config(**_BASE_ENV, **_REPLY_ENV, **_PLANNING_ENV)
+        client = create_slack_reply_client(config, MagicMock())
+        assert client is not None
+        assert client._handler is not None
+        assert client._events_handler is not None
+
+    def test_reply_only_runs_with_intake_as_its_own_logged_no_op(self) -> None:
+        from jarvis.infrastructure.slack_reply import create_slack_reply_client
+
+        config = _env_config(**_BASE_ENV, **_REPLY_ENV)
+        with capture_logs() as logs:
+            client = create_slack_reply_client(config, MagicMock())
+        assert client is not None
+        assert client._handler is not None
+        assert client._events_handler is None
+        assert [e for e in logs if e["event"] == "slack_planning_intake_no_op"]
+        # The reply path itself must NOT have logged a no-op.
+        assert not [e for e in logs if e["event"] == "slack_reply_no_op"]
+
+    def test_intake_only_runs_with_operator_id_unset(self) -> None:
+        # F1's exact failure permutation: operator id unset must NOT kill
+        # a fully configured planning intake.
+        from jarvis.infrastructure.slack_reply import create_slack_reply_client
+
+        config = _env_config(**_BASE_ENV, **_PLANNING_ENV)
+        with capture_logs() as logs:
+            client = create_slack_reply_client(config, MagicMock())
+        assert client is not None
+        assert client._handler is None
+        assert client._events_handler is not None
+        reply_noops = [e for e in logs if e["event"] == "slack_reply_no_op"]
+        assert len(reply_noops) == 1
+        assert "slack_operator_user_id" in reply_noops[0]["reason"]
+
+    def test_neither_feature_configured_returns_none_with_final_reason(self) -> None:
+        from jarvis.infrastructure.slack_reply import create_slack_reply_client
+
+        config = _env_config(**_BASE_ENV)
+        with capture_logs() as logs:
+            client = create_slack_reply_client(config, MagicMock())
+        assert client is None
+        reasons = [e["reason"] for e in logs if e["event"] == "slack_reply_no_op"]
+        assert any("no Slack Socket Mode feature configured" in r for r in reasons)
+
+    def test_shared_prerequisites_still_gate_everything(self) -> None:
+        # Planning fully configured but no app token: no connection at all.
+        from jarvis.infrastructure.slack_reply import create_slack_reply_client
+
+        config = _env_config(
+            JARVIS_SLACK_BOT_TOKEN="xoxb-t",
+            **_PLANNING_ENV,
+        )
+        assert create_slack_reply_client(config, MagicMock()) is None
+
+    def test_intake_only_with_nats_down_returns_none(self) -> None:
+        from jarvis.infrastructure.slack_reply import create_slack_reply_client
+
+        config = _env_config(**_BASE_ENV, **_PLANNING_ENV)
+        assert create_slack_reply_client(config, None) is None
+
+
+class TestRequestRouting:
+    """One connection, one ack, per-feature dispatch (F2)."""
+
+    def _client(
+        self,
+        *,
+        approval_handler: Any | None = "default",
+        intake_handler: Any | None = "default",
+    ) -> tuple[Any, Any, Any, AsyncMock]:
+        from jarvis.infrastructure.slack_reply import SlackSocketModeReplyClient
+
+        approval = MagicMock() if approval_handler == "default" else approval_handler
+        if approval is not None:
+            approval.handle_block_actions = AsyncMock()
+        intake = MagicMock() if intake_handler == "default" else intake_handler
+        if intake is not None:
+            intake.handle_message_event = AsyncMock()
+        client = SlackSocketModeReplyClient(
+            app_token="xapp-test",
+            handler=approval,
+            web_client=AsyncMock(),
+            events_handler=intake,
+        )
+        socket_client = MagicMock()
+        socket_client.send_socket_mode_response = AsyncMock()
+        return client, approval, intake, socket_client
+
+    @pytest.mark.asyncio
+    async def test_events_api_routes_to_intake_with_exactly_one_ack(self) -> None:
+        client, approval, intake, socket_client = self._client()
+        req = SimpleNamespace(type="events_api", envelope_id="env-e1", payload=_message_event())
+        await client._on_request(socket_client, req)
+        intake.handle_message_event.assert_awaited_once_with(req.payload)
+        approval.handle_block_actions.assert_not_awaited()
+        assert socket_client.send_socket_mode_response.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_interactive_routes_to_approval_handler_only(self) -> None:
+        client, approval, intake, socket_client = self._client()
+        payload = {"type": "block_actions", "user": {"id": "U0OPERATOR"}}
+        req = SimpleNamespace(type="interactive", envelope_id="env-i1", payload=payload)
+        await client._on_request(socket_client, req)
+        approval.handle_block_actions.assert_awaited_once_with(payload)
+        intake.handle_message_event.assert_not_awaited()
+        assert socket_client.send_socket_mode_response.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_events_api_without_intake_handler_is_acked_and_dropped(self) -> None:
+        client, approval, _, socket_client = self._client(intake_handler=None)
+        req = SimpleNamespace(type="events_api", envelope_id="env-e2", payload=_message_event())
+        await client._on_request(socket_client, req)
+        approval.handle_block_actions.assert_not_awaited()
+        socket_client.send_socket_mode_response.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_interactive_without_approval_handler_is_acked_and_dropped(self) -> None:
+        # The intake-only permutation must never crash on a stray click.
+        client, _, intake, socket_client = self._client(approval_handler=None)
+        req = SimpleNamespace(
+            type="interactive", envelope_id="env-i2", payload={"type": "block_actions"}
+        )
+        await client._on_request(socket_client, req)  # must not raise
+        intake.handle_message_event.assert_not_awaited()
+        socket_client.send_socket_mode_response.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_unknown_request_type_is_acked_only(self) -> None:
+        client, approval, intake, socket_client = self._client()
+        req = SimpleNamespace(type="slash_commands", envelope_id="env-x1", payload={})
+        await client._on_request(socket_client, req)
+        approval.handle_block_actions.assert_not_awaited()
+        intake.handle_message_event.assert_not_awaited()
+        socket_client.send_socket_mode_response.assert_awaited_once()

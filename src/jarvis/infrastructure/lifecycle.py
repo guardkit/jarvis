@@ -702,12 +702,17 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         else:
             log.info("jarvis_approval_subscriber_started")
 
-    # 7c3. TASK-JNB-104 — construct and start the Socket Mode reply client
+    # 7c3. TASK-JNB-104 — construct and start the Socket Mode client
     # (outbound WebSocket; publishes ApprovalResponsePayload to
     # ``approval_subject + ".response"`` on the AGENTS stream — publish
-    # only, never a consumer). ``create_slack_reply_client`` returns None
-    # (logged no-op) when the app token / operator id / bot token are
-    # unset or NATS is down; start failures soft-fail per DDR-021.
+    # only, never a consumer). TASK-SPL-J02: the same client also hosts
+    # planning intake (FEAT-SPL-001, ``events_api`` message events →
+    # PlanningQueuedPayload on the PIPELINE stream) behind the factory's
+    # union gate — each feature no-ops independently on its own missing
+    # config. ``create_slack_reply_client`` returns None (logged no-op)
+    # when the shared prerequisites (app token / bot token / NATS) are
+    # unmet or NEITHER feature is configured; start failures soft-fail
+    # per DDR-021.
     slack_reply_client: SlackSocketModeReplyClient | None = create_slack_reply_client(
         config, nats_client
     )
