@@ -1,9 +1,10 @@
 ---
 id: TASK-SPL-J03
 title: "jarvis: FEAT-SPL-001 scenario + contract test suite (JNB-105 pattern, plain pytest)"
-status: backlog
+status: in_review
+previous_state: backlog
 created: 2026-07-06T10:20:00Z
-updated: 2026-07-06T10:20:00Z
+updated: 2026-07-06T12:27:06Z
 priority: high
 task_type: testing
 parent_review: TASK-REV-3240

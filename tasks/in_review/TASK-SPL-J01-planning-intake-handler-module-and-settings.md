@@ -1,9 +1,10 @@
 ---
 id: TASK-SPL-J01
 title: "jarvis: planning intake handler module + settings keys (FEAT-SPL-001)"
-status: backlog
+status: in_review
+previous_state: backlog
 created: 2026-07-06T10:20:00Z
-updated: 2026-07-06T10:20:00Z
+updated: 2026-07-06T12:27:06Z
 priority: high
 task_type: feature
 parent_review: TASK-REV-3240
