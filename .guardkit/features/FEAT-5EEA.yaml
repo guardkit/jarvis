@@ -11,7 +11,7 @@ estimated_tasks: 4
 tasks:
 - id: TASK-SPL-J01
   name: Planning intake handler module + settings keys
-  file_path: tasks/in_review/TASK-SPL-J01-planning-intake-handler-module-and-settings.md
+  file_path: tasks/completed/2026-07/TASK-SPL-J01-planning-intake-handler-module-and-settings.md
   complexity: 6
   dependencies: []
   status: completed
@@ -20,7 +20,7 @@ tasks:
   estimated_minutes: 113
 - id: TASK-SPL-J02
   name: Shared Socket Mode routing + union gate + lifecycle + docs
-  file_path: tasks/in_review/TASK-SPL-J02-shared-socket-mode-routing-lifecycle-and-docs.md
+  file_path: tasks/completed/2026-07/TASK-SPL-J02-shared-socket-mode-routing-lifecycle-and-docs.md
   complexity: 5
   dependencies:
   - TASK-SPL-J01
@@ -30,7 +30,7 @@ tasks:
   estimated_minutes: 75
 - id: TASK-SPL-J03
   name: Scenario + contract test suite (JNB-105 pattern)
-  file_path: tasks/in_review/TASK-SPL-J03-scenario-and-contract-test-suite.md
+  file_path: tasks/completed/2026-07/TASK-SPL-J03-scenario-and-contract-test-suite.md
   complexity: 5
   dependencies:
   - TASK-SPL-J01
