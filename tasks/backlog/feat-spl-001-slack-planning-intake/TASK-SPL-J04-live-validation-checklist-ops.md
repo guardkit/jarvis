@@ -62,3 +62,9 @@ mark the task complete via `/task-complete`.
   at the PIPELINE stream's 7-day / 10k-message bound — do not queue ideas you
   need to survive longer before Mode P deploys.
 - Message edits do NOT update a queued run — repost instead (operator doc line).
+- Post ideas as plain typed messages: attachments (`file_share`) and
+  app-relayed posts (`bot_id`/`app_id` set) are ignored by design (F3 gate).
+- At-least-once caveat: a publish-timeout "failure" may still have landed on
+  the stream; before reposting after a failure notice, a paranoid check is
+  `nats stream info PIPELINE` / inspecting the subject. `parent_request_id`
+  (the Slack ts) is the stable dedup key handed to FEAT-SPL-002.

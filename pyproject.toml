@@ -136,7 +136,7 @@ dev = [
 # preserve in-place developer iteration on `nats-core` from `appmilla_github/`
 # — when the team is ready to consume `nats-core` purely from PyPI, this
 # `[tool.uv.sources]` entry can be deleted and the runtime dep above
-# (`nats-core>=0.4`) will resolve from PyPI.
+# (`nats-core>=0.5`) will resolve from PyPI.
 #
 # The canonical layout assumes `nats-core` is a sibling of `jarvis`:
 #

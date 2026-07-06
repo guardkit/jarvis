@@ -338,13 +338,18 @@ class AppState:
             NATS soft-failed, when Slack is unconfigured (NoOpSink), or
             when the subscriber's own start soft-failed.
         slack_reply_client: The
-            :class:`SlackSocketModeReplyClient` handling Approve/Reject
-            button clicks over Socket Mode and publishing
-            ``ApprovalResponsePayload`` to ``approval_subject +
-            ".response"`` (TASK-JNB-104). ``None`` when the app token /
-            operator id / bot token are unset, when NATS soft-failed, or
-            when the client's own start soft-failed — the supervisor
-            starts and runs normally in every no-op permutation.
+            :class:`SlackSocketModeReplyClient` — the ONE Slack Socket
+            Mode connection, hosting both features behind the factory's
+            union gate (TASK-SPL-J02): Approve/Reject button clicks
+            publishing ``ApprovalResponsePayload`` to ``approval_subject
+            + ".response"`` (TASK-JNB-104), and planning intake turning
+            channel messages into ``PlanningQueuedPayload`` on
+            ``pipeline.planning-queued.{correlation_id}`` (FEAT-SPL-001).
+            ``None`` when the app token / bot token are unset, when NATS
+            soft-failed, when NEITHER feature is configured, or when the
+            client's own start soft-failed — the supervisor starts and
+            runs normally in every no-op permutation; each unconfigured
+            feature logs its own no-op reason.
     """
 
     config: JarvisConfig

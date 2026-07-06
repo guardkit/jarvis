@@ -508,7 +508,7 @@ class TestReconnectExactlyOnce:
         # Reconnects are SDK-owned (auto_reconnect replaces the session, not
         # the listener list) — the hermetic invariant is registration-once
         # across start() calls plus dedup holding on the handler instance.
-        client, publisher, _ = _make_client()
+        client, publisher, wc = _make_client()
         fake_sdk_client = MagicMock()
         fake_sdk_client.socket_mode_request_listeners = []
         fake_sdk_client.connect = AsyncMock()
@@ -522,6 +522,10 @@ class TestReconnectExactlyOnce:
         ack = await _deliver(client, _message_envelope_payload())
         ack.assert_awaited_once()
         assert publisher.publish.await_count == 1
+        # 'exactly one acknowledgement should be posted in the thread' —
+        # asserted literally (review SPL-REV-F1).
+        assert wc.chat_postMessage.await_count == 1
+        assert wc.chat_postMessage.await_args.kwargs["thread_ts"] == _TS
 
 
 # ---------------------------------------------------------------------------

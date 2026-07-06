@@ -813,3 +813,115 @@ class TestRequestRouting:
         approval.handle_block_actions.assert_not_awaited()
         intake.handle_message_event.assert_not_awaited()
         socket_client.send_socket_mode_response.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Review fixes (spl001-build-review): SPL-R1 channel strip, SPL-REV-F2
+# ValidationError backstop, SEC-1 safe error detail, lifecycle start smoke
+# ---------------------------------------------------------------------------
+
+
+class TestChannelIdStripped:
+    def test_trailing_space_in_channel_id_does_not_kill_intake(self) -> None:
+        # Review SPL-R1 (confirmed MEDIUM): the JNB-107 verbatim-config
+        # lesson applied to the channel key — a mis-copied trailing space
+        # must not silently drop every legitimate post.
+        handler = create_slack_planning_intake_handler(
+            _config(planning_channel=f"{_CHANNEL} "), SimpleNamespace(js=None), AsyncMock()
+        )
+        assert handler is not None
+        assert handler._channel_id == _CHANNEL
+
+    def test_whitespace_only_channel_id_is_a_no_op_not_a_dead_handler(self) -> None:
+        with capture_logs() as logs:
+            handler = create_slack_planning_intake_handler(
+                _config(planning_channel="   "), SimpleNamespace(js=None), AsyncMock()
+            )
+        assert handler is None
+        noop = next(e for e in logs if e["event"] == "slack_planning_intake_no_op")
+        assert "slack_planning_channel_id" in noop["reason"]
+
+
+class TestValidationErrorBackstop:
+    _SECRET = "sk-BACKSTOP-SECRET-999"
+
+    def _real_validation_error(self) -> Exception:
+        from pydantic import BaseModel, ValidationError
+
+        class _Probe(BaseModel):
+            x: int
+
+        try:
+            _Probe(x=self._SECRET)  # type: ignore[arg-type]
+        except ValidationError as exc:
+            return exc
+        raise AssertionError("expected ValidationError")
+
+    @pytest.mark.asyncio
+    async def test_construction_validation_error_is_a_logged_metadata_discard(self) -> None:
+        # Review SPL-REV-F2: the defensive backstop branch had no coverage.
+        # No natural input reaches it today (blank text is pre-filtered), so
+        # the payload class is patched to raise a REAL ValidationError.
+        handler, publisher, wc = _make_handler()
+        err = self._real_validation_error()
+        with (
+            patch(
+                "nats_core.events.PlanningQueuedPayload",
+                MagicMock(side_effect=err),
+            ),
+            capture_logs() as logs,
+        ):
+            await handler.handle_message_event(_message_event(text=self._SECRET))
+        publisher.publish.assert_not_awaited()
+        wc.chat_postMessage.assert_not_awaited()
+        discards = [e for e in logs if e["event"] == "planning_intake_invalid_dropped"]
+        assert len(discards) == 1
+        assert discards[0]["text_length"] == len(self._SECRET)
+        assert self._SECRET not in json.dumps(list(logs), default=str)
+        # The dedup mark is KEPT: a redelivery would fail identically.
+        with patch(
+            "nats_core.events.PlanningQueuedPayload",
+            MagicMock(side_effect=err),
+        ):
+            await handler.handle_message_event(_message_event(text=self._SECRET))
+        publisher.publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_publisher_side_validation_error_never_leaks_text_into_logs(self) -> None:
+        # Review SEC-1: an in-publisher pydantic error string embeds input
+        # values; _safe_error_detail must suppress it on the publish-failure
+        # WARNING (and the failure notice must still post).
+        handler, publisher, wc = _make_handler()
+        publisher.publish = AsyncMock(side_effect=self._real_validation_error())
+        with capture_logs() as logs:
+            await handler.handle_message_event(_message_event(text=self._SECRET))
+        failures = [e for e in logs if e["event"] == "planning_intake_publish_failed"]
+        assert len(failures) == 1
+        assert "detail suppressed" in failures[0]["error"]
+        assert self._SECRET not in json.dumps(list(logs), default=str)
+        wc.chat_postMessage.assert_awaited_once()  # failure notice still posted
+
+
+class TestIntakeOnlyClientLifecycle:
+    @pytest.mark.asyncio
+    async def test_intake_only_client_starts_and_stops_cleanly(self) -> None:
+        # Review SPL-REV-F3 / house SPL-R2: close the lifecycle chain for
+        # the intake-only permutation — the factory-built client must
+        # actually start (register exactly one listener) and stop.
+        from jarvis.infrastructure.slack_reply import create_slack_reply_client
+
+        config = _env_config(**_BASE_ENV, **_PLANNING_ENV)
+        client = create_slack_reply_client(config, MagicMock())
+        assert client is not None
+        fake_sdk_client = MagicMock()
+        fake_sdk_client.socket_mode_request_listeners = []
+        fake_sdk_client.connect = AsyncMock()
+        fake_sdk_client.close = AsyncMock()
+        with patch(
+            "slack_sdk.socket_mode.aiohttp.SocketModeClient",
+            return_value=fake_sdk_client,
+        ):
+            await client.start()
+        assert len(fake_sdk_client.socket_mode_request_listeners) == 1
+        await client.stop()
+        fake_sdk_client.close.assert_awaited_once()

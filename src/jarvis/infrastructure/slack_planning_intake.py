@@ -25,10 +25,18 @@ Behaviour invariants (TASK-REV-3240 findings F3-F6, F10-F12):
 * Dedup check-and-mark is synchronous — no ``await`` between them (F5): the
   SDK dispatches each WS message as its own task, so a Socket Mode
   redelivery can run concurrently with the original. The entry is un-marked
-  ONLY on publish failure (nothing was queued, so a redelivery may retry —
-  the JNB-104 discard-on-publish-failure posture); a ``ValidationError``
-  keeps the mark (a redelivery would fail identically). State is in-process
-  and lost on restart by design (ADR-ARCH-004 / ASSUM-005).
+  ONLY on publish failure (nothing was locally confirmed queued) — the
+  JNB-104 discard-on-publish-failure posture. NB the un-mark helps only the
+  narrow not-yet-acked redelivery window (ack failure/reconnect): ack-first
+  means Slack normally never redelivers, so the PRIMARY recovery is the
+  in-thread failure notice inviting a repost. A ``ValidationError`` keeps
+  the mark (a redelivery would fail identically). State is in-process and
+  lost on restart by design (ADR-ARCH-004 / ASSUM-005). At-least-once
+  caveat: a bounded-timeout publish "failure" may still have durably landed
+  on the stream (the PUB frame can flush before the local cancel), so a
+  repost after the failure notice can yield two planning runs with
+  different correlation ids — ``parent_request_id`` (the Slack ts) is the
+  stable key Mode P can dedup on if this ever bites (FEAT-SPL-002 note).
 * ``originating_adapter="slack"`` is hard-coded (F4): the wire layer
   verifiably skips its required-when-jarvis validator when the field is
   omitted, so jarvis must never rely on it.
@@ -36,7 +44,13 @@ Behaviour invariants (TASK-REV-3240 findings F3-F6, F10-F12):
   records are metadata-only ({channel, ts, user_id, event_id,
   correlation_id, text_length, reason}). ``request_text`` goes to JetStream
   verbatim (modulo the contract's outer-whitespace strip, F10) and nowhere
-  else.
+  else. Exception detail is rendered via :func:`_safe_error_detail`, which
+  suppresses pydantic ``ValidationError`` bodies (they embed input values,
+  i.e. the message text) and caps everything else.
+
+* Event naming: factory-level events mirror the ``slack_reply`` factory
+  convention (``slack_planning_intake_no_op`` / ``_configured``); runtime
+  handler events use the feature prefix (``planning_intake_*``).
 * DDR-007/C2: nothing raises into the Socket Mode client. The publish is
   authoritative; the threaded ack and the publish-failure notice are each
   independently wrapped best-effort ``chat.postMessage`` calls, and success
@@ -100,6 +114,21 @@ def parse_originator_ids(raw: str | None) -> frozenset[str]:
     if not raw:
         return frozenset()
     return frozenset(part.strip() for part in raw.split(",") if part.strip())
+
+
+def _safe_error_detail(exc: BaseException) -> str:
+    """Exception detail that can never leak the message text (F6).
+
+    pydantic ``ValidationError`` messages embed the offending INPUT values —
+    for this module that means ``request_text`` — so they are reduced to
+    their error count; everything else (transport/timeout/slack-sdk errors,
+    which carry no user text on this path) is rendered and capped.
+    """
+    from pydantic import ValidationError
+
+    if isinstance(exc, ValidationError):
+        return f"{exc.error_count()} validation error(s); detail suppressed (log hygiene)"
+    return str(exc)[:500]
 
 
 def _requested_at_from_ts(ts: str | None) -> datetime:
@@ -232,7 +261,7 @@ class PlanningIntakeHandler:
             logger.warning(
                 "planning_intake_handler_error",
                 error_class=type(exc).__name__,
-                error=str(exc),
+                error=_safe_error_detail(exc),
             )
 
     async def _handle(self, payload: dict[str, Any]) -> None:
@@ -325,6 +354,9 @@ class PlanningIntakeHandler:
                 correlation_id=correlation_id,
                 parent_request_id=ts,
                 requested_at=_requested_at_from_ts(ts),
+                # Stamped at construction, microseconds before the publish
+                # call — the closest the immutable wire bytes can get to the
+                # contract's "when published".
                 queued_at=datetime.now(UTC),
             )
         except ValidationError as exc:
@@ -360,7 +392,7 @@ class PlanningIntakeHandler:
                 correlation_id=correlation_id,
                 event_id=dedup_key,
                 error_class=type(exc).__name__,
-                error=str(exc),
+                error=_safe_error_detail(exc),
             )
             self._seen_events.pop(dedup_key, None)
             await self._post_thread(
@@ -427,8 +459,10 @@ class PlanningIntakeHandler:
     ) -> None:
         """One independently wrapped threaded ``chat.postMessage``.
 
-        A ``None`` web client (or unresolvable channel/ts) degrades to a
-        logged no-op — the publish never depends on Slack UI calls (C2).
+        A ``None`` web client is a SILENT no-op (the factory already logged
+        that configuration state at startup); an unresolvable channel/ts or
+        a failed post is a logged no-op. The publish never depends on Slack
+        UI calls succeeding (C2).
         """
         if self._web_client is None:
             return
@@ -447,7 +481,7 @@ class PlanningIntakeHandler:
                 channel=channel,
                 thread_ts=thread_ts,
                 error_class=type(exc).__name__,
-                error=str(exc),
+                error=_safe_error_detail(exc),
             )
 
 
@@ -483,7 +517,11 @@ def create_slack_planning_intake_handler(
     Returns:
         A ready :class:`PlanningIntakeHandler`, or ``None``.
     """
-    channel_id = config.slack_planning_channel_id
+    # Strip once (review SPL-R1 — the JNB-107 verbatim-config lesson applied
+    # to the channel too): a mis-copied trailing space would otherwise pass
+    # every factory gate, echo invisibly in the startup log, and silently
+    # drop every legitimate post at the (deliberately silent) channel gate.
+    channel_id = (config.slack_planning_channel_id or "").strip() or None
     originator_ids = parse_originator_ids(config.slack_planning_originator_user_id)
 
     if not channel_id or not originator_ids:
@@ -544,3 +582,16 @@ def create_slack_planning_intake_handler(
         originator_ids=sorted(originator_ids),
     )
     return handler
+
+
+# ---------------------------------------------------------------------------
+# Public surface
+# ---------------------------------------------------------------------------
+
+__all__ = [
+    "NatsPlanningQueuedPublisher",
+    "PlanningIntakeHandler",
+    "PlanningQueuedPublisher",
+    "create_slack_planning_intake_handler",
+    "parse_originator_ids",
+]
