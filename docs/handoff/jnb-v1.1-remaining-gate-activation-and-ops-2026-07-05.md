@@ -5,6 +5,20 @@
 first for the full loop and contracts; this doc is the two remaining
 non-live pieces plus the model/effort guidance for the forge session.
 
+> **⚠️ ANNOTATION 2026-07-06 — §2 and §3 are DONE; do NOT paste the §3 kickoff prompt.**
+> The forge gate-activation shipped as **TASK-GATE-D659** (forge `75e0c5c`, all 3
+> waves + review-hardened fix pass; in_review, pushed): `gate_check` now has its
+> first production caller (`maybe_gate_build` in the daemon dispatch flow), SQLite
+> GateRepository/StateMachine adapters, `reconcile_on_boot` binding, and the C1
+> `mark_resume_pending` mechanism **removed** (dead-and-broken — do not look for
+> it; approve resumes via the subscriber resume-emit seam). DF-007 filed +
+> accepted 2026-07-05. **Remaining from this doc: §1 (still load-bearing) and §4
+> (OPS-001) → then TASK-JNB-107.** Pre-flight additions found by the 2026-07-06
+> audit: verify the GB10 PIPELINE durable `ack_wait=1h` via `nats consumer info`
+> (no runtime artifact exists), and assess forge TASK-FWD-002/003/004
+> (`forge/tasks/backlog/forge-wire-dispatch-fixes/`) — open defects on the exact
+> dispatch path the gated toy build traverses.
+
 ## Where the whole loop stands (2026-07-05)
 
 Both **code** halves of the v1.1 approve/reject loop are done and in_review:
@@ -13,9 +27,9 @@ Both **code** halves of the v1.1 approve/reject loop are done and in_review:
 |---|---|
 | jarvis JNB-103/104/105 — buttons + Socket Mode reply path + v1.1 reply-path scenario tests | ✅ in_review on jarvis main (`0b2d1bf`, `51305d7`+`8f52775`, `af11a42`) |
 | forge JNB-101/102/106 — ApprovalSubscriber production wiring + build-cancelled + scenario tests | ✅ in_review on forge main, **pushed** (`e003201`, `bc1366d`, `3fc6d41`+`ff2489c`) |
-| **forge gate-activation** (§2/§3) — the load-bearing blocker | ⛔ not started |
-| **TASK-JNB-OPS-001** (§4) — secrets out of repo `.env` | ⛔ operator, parallel-able now |
-| **TASK-JNB-107** — live round-trip → SPL Gate G1 PASS | gated on the two above |
+| **forge gate-activation** (§2/§3) — ~~the load-bearing blocker~~ | ✅ **DONE 2026-07-05/06 — TASK-GATE-D659** (forge `75e0c5c`; see the 2026-07-06 annotation above) |
+| **TASK-JNB-OPS-001** (§4) — secrets out of repo `.env` | ⛔ operator, **now the sole remaining prerequisite** |
+| **TASK-JNB-107** — live round-trip → SPL Gate G1 PASS | gated on OPS-001 only (code blockers all cleared) |
 
 **The blocker (why JNB-107 can't run yet):** `gate_check` has **no production
 caller** — nothing in the live forge daemon pauses a build (the autobuild runner

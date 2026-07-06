@@ -17,16 +17,35 @@ gitignored .env and posted ~a dozen synthetic FEAT-TEST messages to the live
 #forge-builds channel. Worktrees do not isolate secrets from SDK-harness
 agents; any secret in a repo-adjacent .env is reachable.
 
+> **Amended 2026-07-06:** the canonical, expanded checklist is
+> `docs/handoff/jnb-v1.1-remaining-gate-activation-and-ops-2026-07-05.md` §4
+> (written after this task was filed). Deltas vs the list below: there are now
+> **FIVE** keys (JNB-104 added `JARVIS_SLACK_DECIDED_BY` — set it to `rich`,
+> verbatim-equal to forge `ApprovalConfig.expected_approver`; jarvis refuses
+> every phone approval while it is unset), token rotation is a **required**
+> numbered step (not "consider"), `chmod 600` the env file, and verify via the
+> boot-log event table (`slack_reply_socket_mode_started` is the strongest
+> signal). This task must land **before any live Slack traffic (TASK-JNB-107)**.
+>
+> See also (same window, different credential): the fleet-memory relay
+> container still holds the pre-rotation `FLEET_MEMORY_PG_DSN` — the relay env
+> update is the open remainder of the 2026-07-05 guardkit ABL-001 leak
+> remediation (guardkit `420b2440`; retro
+> `guardkit/docs/retro/abl001-run3-honest-fail-and-credential-leak-2026-07-04.md`).
+> A single operator secrets session can close both.
+
 ## Required operator follow-up
 
 This task is task_type: operator_handoff — AutoBuild will not attempt it.
 
-- Move JARVIS_SLACK_BOT_TOKEN / CHANNEL_ID / APP_TOKEN / OPERATOR_USER_ID out
+- Move JARVIS_SLACK_BOT_TOKEN / CHANNEL_ID / APP_TOKEN / OPERATOR_USER_ID
+  **/ DECIDED_BY (five keys)** out
   of jarvis/.env into ~/.config/guardkit/jarvis.env on BOTH hosts (Mac + GB10
   — the GB10 unit already loads that file; on the Mac export them per-session
   or mirror the file).
 - Confirm pydantic-settings still resolves them (env vars beat .env values,
   so the unit's EnvironmentFile wins by construction).
-- Consider rotating the bot token afterwards (it was live in a worktree
+- **Rotate the bot token** (required — it was live in a worktree
   agents could read).
-- Restart jarvis-serve-nats; verify slack_notifier_started is not no-op.
+- Restart jarvis-serve-nats; verify slack_notifier_started is not no-op and
+  slack_reply_socket_mode_started appears.
