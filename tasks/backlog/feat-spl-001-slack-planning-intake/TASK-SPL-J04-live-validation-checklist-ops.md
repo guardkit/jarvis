@@ -56,6 +56,16 @@ mark the task complete via `/task-complete`.
   redelivered envelope carries a stable `event_id` (validates the dedup key
   choice; ASSUM-005).
 
+## Operator runbook
+
+Full copy-paste step-by-step (Slack app config incl. the scope-reinstall
+gotcha, env wiring into `~/.config/guardkit/jarvis.env` + systemd, the
+work-queue-safe `nats stream get` inspection commands, and a
+symptom→cause table):
+`../ai-transition/docs/fable-window-execution-plan-2026-07-04.md`
+§"TASK-SPL-J04 + OPS-001 — operator runbook" (added 2026-07-06).
+Do OPS-001 (§Step 0) first in the same session — it also unblocks JNB-107.
+
 ## Notes
 
 - Durability caveat until FEAT-SPL-002 lands: queued planning requests expire
