@@ -27,12 +27,12 @@ agents; any secret in a repo-adjacent .env is reachable.
 > boot-log event table (`slack_reply_socket_mode_started` is the strongest
 > signal). This task must land **before any live Slack traffic (TASK-JNB-107)**.
 >
-> See also (same window, different credential): the fleet-memory relay
-> container still holds the pre-rotation `FLEET_MEMORY_PG_DSN` — the relay env
-> update is the open remainder of the 2026-07-05 guardkit ABL-001 leak
-> remediation (guardkit `420b2440`; retro
-> `guardkit/docs/retro/abl001-run3-honest-fail-and-credential-leak-2026-07-04.md`).
-> A single operator secrets session can close both.
+> ~~See also (same window, different credential): the fleet-memory relay
+> container still holds the pre-rotation `FLEET_MEMORY_PG_DSN`…~~
+> **[Resolved 2026-07-06: the relay had already been recreated with the new
+> DSN on 07-05 15:12 UTC — verified by container-env vs `.env.deploy` hash
+> comparison; the retro's "pending" note was stale (closed, guardkit
+> `28587b61`). Nothing extra to fold into this task.]**
 
 ## Required operator follow-up
 
