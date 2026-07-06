@@ -84,7 +84,11 @@ from jarvis.infrastructure.fleet_registration import (
     heartbeat_loop,
     register_on_fleet,
 )
-from jarvis.infrastructure.forge_notifications import ForgeNotificationsSubscriber
+from jarvis.infrastructure.forge_notifications import (
+    PIPELINE_WORKQUEUE_OVERLAP_ERR_CODE,
+    ForgeNotificationsSubscriber,
+    is_workqueue_overlap_error,
+)
 from jarvis.infrastructure.logging import configure
 from jarvis.infrastructure.nats_client import NATSClient
 from jarvis.infrastructure.routing_history import (
@@ -275,6 +279,119 @@ def emit_voice_ack_and_queue(
     return VoiceAckOutcome(emitted=False, queued=False, ack_text=None)
 
 
+# ---------------------------------------------------------------------------
+# TASK-JNB-108 — forge-subscriber PIPELINE bind retry policy.
+#
+# A fast restart (systemctl restart, ``RestartSec`` crash-loop, deploy) SIGINTs
+# the old process and starts the successor ~1s later. The predecessor's
+# ephemeral PIPELINE consumer can still be registered broker-side when the
+# successor binds; the workqueue stream then rejects the identical filter with
+# ``err_code=10100`` until the broker reaps the stale consumer. The shutdown
+# drain (``forge_subscriber.stop()`` → ``unsubscribe()``, run BEFORE
+# ``nats_client.drain()``) removes *client-side* interest but does not force a
+# JetStream ``delete_consumer`` — the ephemeral consumer lingers until the
+# server's inactivity threshold elapses, which outlasts the ~1s restart gap
+# (AC-3: the drain exists; broker-side reap latency is why it is not enough,
+# so AC-1's retry is the real fix). We therefore retry the SAME bind — never a
+# widened filter or a durable (AC-4) — with backoff long enough to outlive the
+# reap latency.
+#
+# The delays are the sleeps BEFORE each *background* retry (attempts 2..N); the
+# first attempt is the synchronous boot-path bind. Four background retries
+# spread across ~30s (5+7+8+10) give five total attempts before the terminal
+# degradation event (AC-1/AC-2). Held as a module constant so the AC-5 tests
+# can monkeypatch it to zero-delay for speed.
+FORGE_SUBSCRIBER_BIND_RETRY_DELAYS_SECONDS: tuple[float, ...] = (5.0, 7.0, 8.0, 10.0)
+
+
+async def _retry_forge_subscriber_bind(
+    forge_subscriber: ForgeNotificationsSubscriber,
+    *,
+    delays: tuple[float, ...],
+    queue_cap: int,
+    correlation_cap: int,
+) -> None:
+    """Bounded background retry of the forge subscriber's PIPELINE bind.
+
+    Spawned by :func:`build_app_state` after the first (synchronous) bind is
+    rejected with ``err_code=10100`` (TASK-JNB-108 boot restart race). Retries
+    the SAME ``forge_subscriber.start()`` — identical ephemeral filter, no
+    durable, no widened subjects (AC-4) — with backoff, binding the live
+    consumer as soon as an attempt succeeds (the subscriber is already wired to
+    the session manager, notification sink and dispatch snapshot, so a
+    late-binding consumer routes normally). If every attempt is exhausted it
+    emits the loud terminal ``jarvis_forge_subscriber_degraded`` event (AC-2).
+
+    Invariants:
+
+    * DDR-021 — runs as a background task; never blocks supervisor boot.
+    * DDR-007 — swallow-and-log; no exception escapes into the event loop's
+      task machinery. ``asyncio.CancelledError`` is a ``BaseException`` and is
+      intentionally re-raised so a shutdown-time cancel propagates cleanly.
+    * Idempotent-safe — ``start()`` leaves ``_started`` False on failure, so
+      each retry re-enters the bind cleanly and a success leaves exactly one
+      live consumer (single-consumer rule — AC-4).
+    """
+    log = structlog.get_logger(__name__)
+    max_attempts = len(delays) + 1
+    for attempt, delay in enumerate(delays, start=2):
+        await asyncio.sleep(delay)
+        try:
+            await forge_subscriber.start()
+        except asyncio.CancelledError:
+            # Shutdown cancelled us mid-wait / mid-bind — propagate so the
+            # task machinery records the cancellation (never swallowed).
+            raise
+        except Exception as exc:
+            if is_workqueue_overlap_error(exc):
+                # Still racing the predecessor's ephemeral consumer — keep
+                # retrying. Transient WARN (deliberately the SAME event name
+                # as the boot-path warning, and distinct from the terminal
+                # ``jarvis_forge_subscriber_degraded`` error) so an operator
+                # grep tells a still-recovering boot from a dead surface.
+                log.warning(
+                    "jarvis_forge_subscriber_start_failed",
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    err_code=getattr(exc, "err_code", None),
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                    retry="pending",
+                )
+                continue
+            # A *different* failure appeared mid-retry (broker went away, auth,
+            # deliver-policy). Not the boot race — stop retrying (no storm) and
+            # degrade loudly.
+            log.error(
+                "jarvis_forge_subscriber_degraded",
+                reason="non_overlap_error_during_retry",
+                consequence="build lifecycle notifications OFF until restart",
+                attempt=attempt,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            return
+        else:
+            log.info(
+                "jarvis_forge_subscriber_started",
+                queue_cap=queue_cap,
+                correlation_cap=correlation_cap,
+                attempt=attempt,
+                recovered_after_boot_race=True,
+            )
+            return
+    # Every attempt exhausted — loud terminal degradation (AC-2). An operator
+    # grep for ``jarvis_forge_subscriber_degraded`` (error) catches the dead
+    # phone surface that the transient warnings alone would not distinguish.
+    log.error(
+        "jarvis_forge_subscriber_degraded",
+        reason="pipeline_bind_retries_exhausted",
+        consequence="build lifecycle notifications OFF until restart",
+        attempts=max_attempts,
+        err_code=PIPELINE_WORKQUEUE_OVERLAP_ERR_CODE,
+    )
+
+
 @dataclasses.dataclass(frozen=True)
 class AppState:
     """Immutable container for fully-wired runtime dependencies.
@@ -323,7 +440,19 @@ class AppState:
             stage-complete events back to the originating session FIFO
             (FEAT-JARVIS-005 / TASK-J005-008). ``None`` when NATS soft-
             failed at startup — ``shutdown`` skips the ``stop()`` step in
-            that case.
+            that case. On a TASK-JNB-108 boot restart race (the first bind
+            rejected with ``err_code=10100``) the subscriber is retained
+            (not ``None``) so its downstream wiring stays intact while
+            ``forge_subscriber_retry_task`` re-attempts the consumer bind in
+            the background.
+        forge_subscriber_retry_task: The :class:`asyncio.Task` running
+            :func:`_retry_forge_subscriber_bind` after a boot restart race
+            rejected the first PIPELINE bind with ``err_code=10100``
+            (TASK-JNB-108). ``None`` on the happy path (bind succeeded first
+            try), on the NATS-down path, and on a non-10100 startup error
+            (single-shot soft-fail). ``shutdown`` cancels it BEFORE stopping
+            the subscriber so a pending background bind cannot create a live
+            consumer after the stop path has already unsubscribed.
         notification_sink: The :class:`NotificationSink` (SlackNotifier
             or NoOpSink) constructed at startup for Forge build event
             notifications (TASK-JNB-003). Always populated (never ``None``)
@@ -364,6 +493,7 @@ class AppState:
     fleet_heartbeat_task: asyncio.Task[None] | None = None
     capabilities_registry: CapabilitiesRegistry | None = None
     forge_subscriber: ForgeNotificationsSubscriber | None = None
+    forge_subscriber_retry_task: asyncio.Task[None] | None = None
     notification_sink: Any = None  # NotificationSink protocol (TASK-JNB-003)
     approval_subscriber: ApprovalRequestsSubscriber | None = None
     slack_reply_client: SlackSocketModeReplyClient | None = None
@@ -747,6 +877,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # _handle_build_lifecycle can invoke sink.notify() for build_started,
     # build_complete, and build_failed events (AC-002).
     forge_subscriber: ForgeNotificationsSubscriber | None = None
+    forge_subscriber_retry_task: asyncio.Task[None] | None = None
     if nats_client is not None:
         forge_subscriber = ForgeNotificationsSubscriber(
             nats_client=nats_client,
@@ -764,12 +895,46 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         except Exception as exc:
             # DDR-021-style soft-fail at the subscriber boundary — a flaky
             # JetStream consumer must not block the supervisor process.
-            log.warning(
-                "jarvis_forge_subscriber_start_failed",
-                error_class=type(exc).__name__,
-                error=str(exc),
-            )
-            forge_subscriber = None
+            if is_workqueue_overlap_error(exc):
+                # TASK-JNB-108 boot restart race: the predecessor's ephemeral
+                # PIPELINE consumer is still registered broker-side and the
+                # workqueue stream rejected the identical filter with
+                # err_code=10100. Retry the same bind in the background
+                # (AC-1) — and KEEP ``forge_subscriber`` non-None so the
+                # session-manager bind (11a) and dispatch snapshot (8/9)
+                # still wire the live object the retry activates when the
+                # broker finishes reaping the stale consumer. This first WARN
+                # is the transient boot-path failure seen in the journal; the
+                # retry loop escalates to ``jarvis_forge_subscriber_degraded``
+                # (error) only if every attempt is exhausted (AC-2).
+                log.warning(
+                    "jarvis_forge_subscriber_start_failed",
+                    attempt=1,
+                    max_attempts=len(FORGE_SUBSCRIBER_BIND_RETRY_DELAYS_SECONDS) + 1,
+                    err_code=getattr(exc, "err_code", None),
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                    retry="scheduled",
+                )
+                forge_subscriber_retry_task = asyncio.create_task(
+                    _retry_forge_subscriber_bind(
+                        forge_subscriber,
+                        delays=FORGE_SUBSCRIBER_BIND_RETRY_DELAYS_SECONDS,
+                        queue_cap=config.forge_notifications_queue_cap,
+                        correlation_cap=config.forge_correlation_map_cap,
+                    ),
+                    name="jarvis_forge_subscriber_bind_retry",
+                )
+            else:
+                # Non-10100 startup error (auth, deliver-policy 10101, broker
+                # down). These are permanent for this boot — keep today's
+                # single-shot soft-fail so there is no retry storm (AC-5c).
+                log.warning(
+                    "jarvis_forge_subscriber_start_failed",
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                )
+                forge_subscriber = None
         else:
             log.info(
                 "jarvis_forge_subscriber_started",
@@ -903,6 +1068,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         fleet_heartbeat_task=fleet_heartbeat_task,
         capabilities_registry=capabilities_registry,
         forge_subscriber=forge_subscriber,
+        forge_subscriber_retry_task=forge_subscriber_retry_task,
         notification_sink=notification_sink,
         approval_subscriber=approval_subscriber,
         slack_reply_client=slack_reply_client,
@@ -934,6 +1100,9 @@ async def shutdown(state: AppState) -> None:
     Sequence (per FEAT-JARVIS-004 / FEAT-JARVIS-005 design §8 wiring):
 
         1. Cancel ``fleet_heartbeat_task`` (if running).
+        1a. Cancel ``forge_subscriber_retry_task`` (TASK-JNB-108 — if a boot
+           restart race scheduled one) before stopping the subscriber, so no
+           pending background bind can outlive the stop. No-op when ``None``.
         2. ``await state.forge_subscriber.stop()`` (FEAT-JARVIS-005 — bounded
            at 5s; idempotent on double-shutdown; skipped when ``None``).
         3. ``await deregister_from_fleet(nats_client, "jarvis")``.
@@ -965,6 +1134,29 @@ async def shutdown(state: AppState) -> None:
         except Exception as exc:
             log.warning(
                 "jarvis_heartbeat_cancel_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 1a. TASK-JNB-108 — cancel the forge-subscriber bind-retry task (if a
+    # boot restart race scheduled one) BEFORE stopping the subscriber. A
+    # pending background ``start()`` must not create a live PIPELINE consumer
+    # after ``forge_subscriber.stop()`` has already unsubscribed — that would
+    # leak the ephemeral consumer past shutdown and re-arm the very race this
+    # task exists to fix. No-op when the field is ``None`` (the common case),
+    # so the canonical shutdown-order sequence is unchanged.
+    retry_task = state.forge_subscriber_retry_task
+    if retry_task is not None and not retry_task.done():
+        retry_task.cancel()
+        try:
+            await retry_task
+        except asyncio.CancelledError:
+            # Expected — ``_retry_forge_subscriber_bind`` re-raises
+            # CancelledError so the task machinery records the cancellation.
+            pass
+        except Exception as exc:
+            log.warning(
+                "jarvis_forge_subscriber_retry_cancel_warning",
                 error_class=type(exc).__name__,
                 error=str(exc),
             )

@@ -444,6 +444,39 @@ class BuildCorrelation(BaseModel):
 # the map is at capacity and emits one WARN per eviction.
 _DEFAULT_CORRELATION_CAP = 1000
 
+# TASK-JNB-108 — workqueue-overlap rejection code. JetStream answers
+# ``err_code=10100 'filtered consumer not unique on workqueue stream'`` when a
+# filtered consumer's subject set overlaps an existing consumer on a
+# workqueue-retention stream. On a fast Jarvis restart (systemctl restart,
+# ``RestartSec`` crash-loop, deploy) the predecessor process's ephemeral
+# PIPELINE consumer can still be registered broker-side when the successor
+# binds, so the successor's *identical* lifecycle filter is briefly "not
+# unique" and the bind is rejected with this code — until the broker reaps the
+# stale ephemeral consumer. This is a *transient* boot race, distinct from the
+# permanent ``10101`` (deliver-policy) mismatch and from auth/permission
+# failures, and is the one condition the TASK-JNB-108 bounded retry targets.
+PIPELINE_WORKQUEUE_OVERLAP_ERR_CODE = 10100
+
+
+def is_workqueue_overlap_error(exc: BaseException) -> bool:
+    """Return ``True`` iff ``exc`` is the JetStream err_code=10100 rejection.
+
+    nats-py raises :class:`nats.js.errors.BadRequestError` (an ``APIError``
+    subclass) carrying an integer ``err_code`` attribute. TASK-JNB-108's boot
+    restart race surfaces as ``err_code=10100`` — a transient overlap with the
+    predecessor's not-yet-reaped ephemeral consumer. ``10101``
+    (deliver-policy) and auth/permission failures are permanent and must *not*
+    trigger the retry loop (AC-5c), so callers gate the bounded retry on this
+    predicate.
+
+    Detection is attribute-based (``getattr(exc, "err_code", None)``) rather
+    than ``isinstance`` so the helper stays free of a top-level ``nats`` import
+    (the schema-import-isolation invariant in
+    ``tests/test_forge_notification_schema.py``) and tolerates any exception
+    type that carries the JetStream error code.
+    """
+    return getattr(exc, "err_code", None) == PIPELINE_WORKQUEUE_OVERLAP_ERR_CODE
+
 
 def _get_deliver_policy_all() -> Any:
     """Lazy-load ``nats.js.api.DeliverPolicy.ALL``.
@@ -1322,7 +1355,9 @@ def _parse_completed_at(value: str | datetime) -> datetime:
 # ---------------------------------------------------------------------------
 
 __all__ = [
+    "PIPELINE_WORKQUEUE_OVERLAP_ERR_CODE",
     "BuildCorrelation",
     "ForgeNotification",
     "ForgeNotificationsSubscriber",
+    "is_workqueue_overlap_error",
 ]
