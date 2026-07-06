@@ -126,9 +126,7 @@ def _make_handler(
     publisher = MagicMock()
     publisher.publish = AsyncMock()
     client = AsyncMock() if web_client == "default" else web_client
-    handler = build_reply_handler(
-        operator_ids=operator_ids, publisher=publisher, web_client=client
-    )
+    handler = build_reply_handler(operator_ids=operator_ids, publisher=publisher, web_client=client)
     return handler, publisher, client, operator_ids
 
 
@@ -895,9 +893,7 @@ class TestJnb110DeprecationWarnings:
         )
         with capture_logs() as logs:
             create_slack_reply_client(config, MagicMock())
-        notices = [
-            e for e in logs if e["event"] == "slack_reply_operator_user_id_deprecated"
-        ]
+        notices = [e for e in logs if e["event"] == "slack_reply_operator_user_id_deprecated"]
         assert len(notices) == 1
         # Deliberate split: the still-honoured singular is INFO, while the
         # now-ignored decided_by is a WARNING (asserted above).
@@ -906,7 +902,7 @@ class TestJnb110DeprecationWarnings:
 
 class TestJnb110IdentityContractEndToEnd:
     """AC1 + AC4 end-to-end through the REAL factory + publisher + fake
-    JetStream: a still-set JARVIS_SLACK_DECIDED_BY is behaviourally IGNORED,
+    core NATS client: a still-set JARVIS_SLACK_DECIDED_BY is behaviourally IGNORED,
     and the clicker's member id round-trips VERBATIM (mixed case preserved)
     through the installed nats_core model."""
 
@@ -932,8 +928,11 @@ class TestJnb110IdentityContractEndToEnd:
             # Decoy config constant from the OLD scheme — must be IGNORED.
             JARVIS_SLACK_DECIDED_BY="rich",
         )
+        # Core-publish seam (TASK-JNB-111) — the AGENTS stream is no-ack,
+        # so the real publisher uses nc.publish + flush, never js.publish.
         fake_nats = MagicMock()
-        fake_nats.js.publish = AsyncMock()
+        fake_nats.client.publish = AsyncMock()
+        fake_nats.client.flush = AsyncMock()
 
         client = create_slack_reply_client(config, fake_nats)
         assert client is not None and client._handler is not None
@@ -942,8 +941,8 @@ class TestJnb110IdentityContractEndToEnd:
             _click_payload(user_id=clicker, action_id="forge_approve")
         )
 
-        fake_nats.js.publish.assert_awaited_once()
-        _subject, data = fake_nats.js.publish.await_args.args
+        fake_nats.client.publish.assert_awaited_once()
+        _subject, data = fake_nats.client.publish.await_args.args
         envelope = MessageEnvelope.model_validate_json(data)
         payload = ApprovalResponsePayload.model_validate(envelope.payload)
         assert payload.decided_by == clicker  # the actual clicker, verbatim (AC1/AC4)
@@ -957,14 +956,27 @@ class TestJnb110IdentityContractEndToEnd:
 
 
 class TestNatsApprovalResponsePublisher:
+    """TASK-JNB-111: the AGENTS stream is no-ack, so the publisher must use
+    CORE publish (``nc.publish`` + bounded ``flush``) — a ``js.publish``
+    would store the message yet time out waiting for a PubAck that never
+    comes, mis-reporting every delivered decision as a failure."""
+
+    @staticmethod
+    def _core_nats() -> MagicMock:
+        """A NATSClient-shaped mock exposing the raw core client seam."""
+        nc = MagicMock()
+        nc.publish = AsyncMock()
+        nc.flush = AsyncMock()
+        nats_client = MagicMock()
+        nats_client.client = nc
+        return nats_client
+
     @pytest.mark.asyncio
     async def test_publishes_enveloped_payload_to_subject(self) -> None:
         from nats_core.events import ApprovalResponsePayload
 
-        js = MagicMock()
-        js.publish = AsyncMock()
-        nats_client = MagicMock()
-        nats_client.js = js
+        nats_client = self._core_nats()
+        nc = nats_client.client
 
         publisher = NatsApprovalResponsePublisher(nats_client)
         payload = ApprovalResponsePayload(
@@ -978,8 +990,8 @@ class TestNatsApprovalResponsePublisher:
             correlation_id="corr-1",
         )
 
-        js.publish.assert_awaited_once()
-        subject, data = js.publish.await_args.args
+        nc.publish.assert_awaited_once()
+        subject, data = nc.publish.await_args.args
         assert subject == "agents.approval.forge.build-abc123.response"
         envelope = json.loads(data.decode("utf-8"))
         assert envelope["source_id"] == "jarvis"
@@ -988,13 +1000,40 @@ class TestNatsApprovalResponsePublisher:
         assert envelope["payload"]["request_id"] == "apr-001"
         assert envelope["payload"]["decision"] == "approve"
         assert envelope["payload"]["decided_by"] == "jarvis-op"
+        # The flush round-trip is what confirms broker receipt on the
+        # no-ack AGENTS stream — publish alone only buffers locally.
+        nc.flush.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_never_uses_jetstream_publish(self) -> None:
+        """Regression pin (TASK-JNB-111): a js.publish on agents.> always
+        times out (no PubAck on a no_ack stream) — the publisher must not
+        touch the JetStream context at all."""
+        from nats_core.events import ApprovalResponsePayload
+
+        nats_client = self._core_nats()
+        js = MagicMock()
+        js.publish = AsyncMock()
+        nats_client.js = js
+
+        publisher = NatsApprovalResponsePublisher(nats_client)
+        await publisher.publish(
+            subject="agents.approval.forge.build-abc123.response",
+            payload=ApprovalResponsePayload(
+                request_id="apr-001",
+                decision="approve",
+                decided_by="jarvis-op",
+            ),
+            correlation_id=None,
+        )
+
+        js.publish.assert_not_awaited()
+        nats_client.client.publish.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_publish_failure_propagates_to_caller(self) -> None:
-        js = MagicMock()
-        js.publish = AsyncMock(side_effect=RuntimeError("broker gone"))
-        nats_client = MagicMock()
-        nats_client.js = js
+        nats_client = self._core_nats()
+        nats_client.client.publish = AsyncMock(side_effect=RuntimeError("broker gone"))
 
         from nats_core.events import ApprovalResponsePayload
 
@@ -1009,6 +1048,37 @@ class TestNatsApprovalResponsePublisher:
                 ),
                 correlation_id=None,
             )
+
+    @pytest.mark.asyncio
+    async def test_flush_timeout_propagates_to_caller(self) -> None:
+        """A hung flush (connection-level failure) surfaces as TimeoutError
+        so the handler's restore-buttons branch still fires."""
+        from nats_core.events import ApprovalResponsePayload
+
+        async def _hang() -> None:
+            await asyncio.sleep(3600)
+
+        nats_client = self._core_nats()
+        nats_client.client.flush = AsyncMock(side_effect=_hang)
+
+        publisher = NatsApprovalResponsePublisher(nats_client)
+        with (
+            patch("jarvis.infrastructure.slack_reply._PUBLISH_TIMEOUT_SECONDS", 0.01),
+            pytest.raises(TimeoutError),
+        ):
+            await publisher.publish(
+                subject="agents.approval.forge.b.response",
+                payload=ApprovalResponsePayload(
+                    request_id="apr-001",
+                    decision="approve",
+                    decided_by="jarvis-op",
+                ),
+                correlation_id=None,
+            )
+        # publish succeeded before the flush hung — the bytes may be
+        # stored broker-side; the handler treats this as a failure and
+        # restores, and forge's request_id dedup absorbs any retry.
+        nats_client.client.publish.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -1251,13 +1321,9 @@ async def test_published_decided_by_equals_interaction_user_id_verbatim(
     # A mixed-case member id proves the clicker's id is passed through, not
     # lowercased/normalised on the way out.
     clicker = "U0RichCASE123"
-    handler = build_reply_handler(
-        operator_ids=frozenset({clicker}), publisher=publisher_mock
-    )
+    handler = build_reply_handler(operator_ids=frozenset({clicker}), publisher=publisher_mock)
 
-    await handler.handle_block_actions(
-        _click_payload(user_id=clicker, action_id="forge_approve")
-    )
+    await handler.handle_block_actions(_click_payload(user_id=clicker, action_id="forge_approve"))
 
     published = publisher_mock.publish.await_args.kwargs["payload"]
     assert published.decided_by == clicker  # verbatim — the interaction user id

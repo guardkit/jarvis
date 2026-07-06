@@ -12,10 +12,14 @@ Block Kit buttons); this module consumes those buttons' clicks:
   first-click-wins, ``ApprovalResponsePayload`` publish to
   ``approval_subject + ".response"`` (``decided_by`` = the actual clicker's
   Slack member id — TASK-JNB-110), and in-place ``chat.update``s.
-* :class:`NatsApprovalResponsePublisher` — envelope + JetStream publish
-  (AGENTS stream, limits retention — publish only; this module never
-  creates any NATS consumer, and specifically never touches the PIPELINE
-  stream's single ephemeral consumer).
+* :class:`NatsApprovalResponsePublisher` — envelope + CORE publish +
+  flush (TASK-JNB-111: the AGENTS stream is ``no_ack: true``, so a
+  ``js.publish`` would store the message but time out waiting for a
+  PubAck that never comes — every live tap "failed" while actually
+  delivering; forge's own ApprovalPublisher uses core publish for the
+  same reason). Publish only — this module never creates any NATS
+  consumer, and specifically never touches the PIPELINE stream's single
+  ephemeral consumer.
 * :class:`SlackSocketModeReplyClient` — lifecycle wrapper around
   slack-sdk's aiohttp ``SocketModeClient`` (outbound WebSocket — no
   public endpoint), constructed in ``lifecycle.build_app_state``.
@@ -79,8 +83,10 @@ _ACTION_DECISIONS: dict[str, str] = {
 # The exact BUTTON_METADATA keys (producer contract, TASK-JNB-103).
 _BUTTON_VALUE_KEYS = ("request_id", "build_id", "correlation_id", "approval_subject")
 
-# Bounded publish timeout — mirrors the DDR-025 posture used by
-# ``jarvis.tools.dispatch.queue_build``.
+# Bounded flush timeout — mirrors the DDR-025 bounded-transport posture
+# used by ``jarvis.tools.dispatch.queue_build``. Bounds the core-publish
+# flush round-trip (TASK-JNB-111), not a PubAck wait (the AGENTS stream
+# is no-ack; there is no PubAck to wait for).
 _PUBLISH_TIMEOUT_SECONDS = 5.0
 
 # Bounded Socket Mode close timeout.
@@ -161,14 +167,22 @@ class ApprovalResponsePublisher(Protocol):
 
 
 class NatsApprovalResponsePublisher:
-    """JetStream-backed :class:`ApprovalResponsePublisher`.
+    """Core-publish-backed :class:`ApprovalResponsePublisher`.
 
     Wraps the response payload in the canonical ``MessageEnvelope``
     (``source_id="jarvis"``, ``event_type="approval_response"``, the
-    request's ``correlation_id``) and publishes with a bounded timeout —
-    the same convention as ``jarvis.tools.dispatch.queue_build``. The
-    AGENTS stream is limits-retention, so a publish-only interaction is
-    always legal (no consumer is created anywhere in this module).
+    request's ``correlation_id``) and publishes with CORE publish +
+    bounded flush — NOT ``js.publish`` (TASK-JNB-111). The AGENTS stream
+    is ``no_ack: true`` (``agents.>`` carries request-reply chat traffic
+    where PubAcks would collide with replies): a JetStream publish to it
+    is STORED but never acked, so ``js.publish`` always times out and
+    the handler mis-reported every delivered decision as a failure.
+    Core publish + flush is the fleet convention for ``agents.>``
+    (forge's ApprovalPublisher does the same); the wire bytes and
+    subject are identical — JetStream still captures the message.
+
+    The AGENTS stream is limits-retention, so a publish-only interaction
+    is always legal (no consumer is created anywhere in this module).
     """
 
     __slots__ = ("_nats_client",)
@@ -183,7 +197,12 @@ class NatsApprovalResponsePublisher:
         payload: Any,
         correlation_id: str | None,
     ) -> None:
-        """Publish; raises on any transport failure (caller handles)."""
+        """Publish; raises on any transport failure (caller handles).
+
+        ``nc.publish`` buffers locally (raises only on a closed/broken
+        connection); the bounded ``flush`` round-trips the server so a
+        success return means the broker actually received the bytes.
+        """
         # Local imports keep the nats_core chain off this module's cold
         # import path (schema-import-isolation convention).
         from nats_core import EventType, MessageEnvelope
@@ -194,10 +213,9 @@ class NatsApprovalResponsePublisher:
             correlation_id=correlation_id,
             payload=payload.model_dump(mode="json"),
         )
-        await asyncio.wait_for(
-            self._nats_client.js.publish(subject, envelope.model_dump_json().encode("utf-8")),
-            timeout=_PUBLISH_TIMEOUT_SECONDS,
-        )
+        nc = self._nats_client.client
+        await nc.publish(subject, envelope.model_dump_json().encode("utf-8"))
+        await asyncio.wait_for(nc.flush(), timeout=_PUBLISH_TIMEOUT_SECONDS)
 
 
 # ---------------------------------------------------------------------------

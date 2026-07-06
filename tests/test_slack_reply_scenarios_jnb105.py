@@ -379,14 +379,21 @@ class TestReplyAfterEnded:
 
 
 class TestReplyPathEnvelopeContract:
-    """Drive an authorized click through the REAL publisher + fake JetStream,
-    then validate the captured wire bytes against the installed ``nats_core``
-    ``ApprovalResponsePayload`` / ``MessageEnvelope`` models."""
+    """Drive an authorized click through the REAL publisher + fake core NATS
+    client, then validate the captured wire bytes against the installed
+    ``nats_core`` ``ApprovalResponsePayload`` / ``MessageEnvelope`` models.
+
+    TASK-JNB-111: the publisher uses CORE publish + flush (the AGENTS
+    stream is no-ack — a js.publish stores but never PubAcks), so the
+    contract is captured off ``nc.publish``; the bytes and subject are
+    identical to the old JetStream-publish path (G2 unchanged).
+    """
 
     @staticmethod
     def _wired() -> tuple[Any, MagicMock]:
         fake_nats = MagicMock()
-        fake_nats.js.publish = AsyncMock()
+        fake_nats.client.publish = AsyncMock()
+        fake_nats.client.flush = AsyncMock()
         publisher = NatsApprovalResponsePublisher(fake_nats)
         web_client = AsyncMock()
         handler = build_reply_handler(
@@ -413,9 +420,11 @@ class TestReplyPathEnvelopeContract:
             )
         )
 
-        fake_nats.js.publish.assert_awaited_once()
-        subject, data = fake_nats.js.publish.await_args.args
+        fake_nats.client.publish.assert_awaited_once()
+        subject, data = fake_nats.client.publish.await_args.args
         assert subject == "agents.approval.forge.build-xyz.response"
+        # Broker receipt on the no-ack stream is confirmed by flush.
+        fake_nats.client.flush.assert_awaited_once()
 
         # Validate the envelope + payload against the INSTALLED nats_core models.
         envelope = MessageEnvelope.model_validate_json(data)
@@ -449,9 +458,10 @@ class TestReplyPathEnvelopeContract:
             )
         )
 
-        fake_nats.js.publish.assert_awaited_once()
-        subject, data = fake_nats.js.publish.await_args.args
+        fake_nats.client.publish.assert_awaited_once()
+        subject, data = fake_nats.client.publish.await_args.args
         assert subject == "agents.approval.forge.build-zzz.response"
+        fake_nats.client.flush.assert_awaited_once()
 
         envelope = MessageEnvelope.model_validate_json(data)
         payload = ApprovalResponsePayload.model_validate(envelope.payload)
