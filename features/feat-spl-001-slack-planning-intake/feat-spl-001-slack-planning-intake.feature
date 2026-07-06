@@ -23,6 +23,7 @@ Feature: Slack Planning Intake
   # ─── GROUP A: Key Examples ──────────────────────────────────────────────
 
   # Why: The core intake path — a channel message becomes a durable planning request
+  @task:TASK-SPL-J01
   @key-example @smoke
   Scenario: A planning idea posted in the channel is queued for planning
     Given James posts "Add PDF export to the reporting dashboard" in the planning channel
@@ -35,6 +36,7 @@ Feature: Slack Planning Intake
     And the planning request should be marked as a planning-stage request
 
   # Why: The originator must see that intake worked without leaving Slack
+  @task:TASK-SPL-J01
   @key-example @smoke
   Scenario: The originator receives an in-thread acknowledgement carrying the correlation identifier
     Given James posts a planning idea in the planning channel
@@ -44,6 +46,7 @@ Feature: Slack Planning Intake
     And no acknowledgement should be posted outside that thread
 
   # Why: DF-009 audit trail — every planning run must trace back to its originating conversation
+  @task:TASK-SPL-J01
   @key-example
   Scenario: The queued planning request is traceable back to the originating Slack message
     Given James posts a planning idea in the planning channel
@@ -53,6 +56,7 @@ Feature: Slack Planning Intake
     And the planning request should record when the message was posted and when it was queued
 
   # Why: The feature's defining constraint — no reasoning in Jarvis, intake only
+  @task:TASK-SPL-J01
   @key-example @smoke
   Scenario: Intake publishes the idea verbatim without any reasoning
     Given James posts a planning idea in the planning channel
@@ -63,6 +67,7 @@ Feature: Slack Planning Intake
     And the planning request should leave the target repository unset
 
   # Why: JNB-105 G2 precedent — the wire bytes must round-trip through the installed event contract
+  @task:TASK-SPL-J03
   @key-example
   Scenario: The queued planning request is valid against the installed event contract
     Given James posts a planning idea in the planning channel
@@ -74,6 +79,7 @@ Feature: Slack Planning Intake
 
   # Why: Just-inside boundaries — intake must not impose its own length rules on ideas
   # [ASSUMPTION: confidence=low] No truncation is applied; Slack's own maximum message length is the only upper bound
+  @task:TASK-SPL-J01
   @boundary
   Scenario Outline: Ideas of any practical length are queued verbatim
     Given James posts a planning idea of <length> in the planning channel
@@ -88,6 +94,7 @@ Feature: Slack Planning Intake
       | Slack's maximum message length          |
 
   # Why: Just-outside boundary — the planning contract rejects blank request text
+  @task:TASK-SPL-J01
   @boundary @negative
   Scenario: A whitespace-only message is not queued
     Given James posts a message containing only whitespace in the planning channel
@@ -99,6 +106,7 @@ Feature: Slack Planning Intake
   # ─── GROUP C: Negative Cases ────────────────────────────────────────────
 
   # Why: DF-009 — planning attendance is identity-pinned; only the authorized originator may originate
+  @task:TASK-SPL-J01
   @negative @smoke
   Scenario: A message from anyone other than the authorized originator is ignored
     Given a channel member other than James posts an idea in the planning channel
@@ -109,6 +117,7 @@ Feature: Slack Planning Intake
     And the refused message should be recorded in the intake log
 
   # Why: The intake surface is one dedicated channel; the bot may be present in others
+  @task:TASK-SPL-J01
   @negative
   Scenario: A message in a channel other than the planning channel is ignored
     Given James posts an idea in a channel that is not the planning channel
@@ -117,6 +126,7 @@ Feature: Slack Planning Intake
     And no reply of any kind should be posted
 
   # Why: Loop prevention — the in-thread acknowledgement is itself a channel message
+  @task:TASK-SPL-J01
   @negative
   Scenario: Bot-authored messages are ignored including Jarvis's own acknowledgements
     Given an acknowledgement posted by Jarvis appears in the planning channel
@@ -125,6 +135,7 @@ Feature: Slack Planning Intake
     And no further reply should be posted
 
   # Why: v1 intake is top-level messages only; threads belong to the future assumption dialogue
+  @task:TASK-SPL-J01
   @negative
   Scenario: A reply inside a thread is not planning intake
     Given James replies inside an existing thread in the planning channel
@@ -132,6 +143,7 @@ Feature: Slack Planning Intake
     Then no planning request should be queued
 
   # Why: Edits and deletions are notifications about old messages, not new ideas
+  @task:TASK-SPL-J01
   @negative
   Scenario: Message edit and delete notifications are not planning intake
     Given James edits a previously posted idea in the planning channel
@@ -139,6 +151,7 @@ Feature: Slack Planning Intake
     Then no planning request should be queued
 
   # Why: House no-op-gate convention — unconfigured features degrade to logged no-ops, never boot failures
+  @task:TASK-SPL-J02
   @negative
   Scenario: Planning intake left unconfigured disables intake without affecting the rest of Jarvis
     Given no planning channel or authorized originator is configured
@@ -150,6 +163,7 @@ Feature: Slack Planning Intake
   # ─── GROUP D: Edge Cases ────────────────────────────────────────────────
 
   # Why: The originator must learn about a failed intake without leaving Slack; never-raises discipline
+  @task:TASK-SPL-J01
   @edge-case @smoke
   Scenario: A pipeline outage produces an in-thread failure notice instead of a silent loss
     Given the pipeline is unavailable
@@ -160,6 +174,7 @@ Feature: Slack Planning Intake
     And Jarvis should continue running normally
 
   # Why: Socket Mode redelivers unacknowledged events; a duplicate must not start two planning runs
+  @task:TASK-SPL-J01
   @edge-case
   Scenario: A redelivered message event is queued exactly once
     Given James posts a planning idea in the planning channel
@@ -169,6 +184,7 @@ Feature: Slack Planning Intake
     And the duplicate delivery should be recorded in the intake log
 
   # Why: The queue is authoritative; the acknowledgement is best-effort (DDR-007 posture)
+  @task:TASK-SPL-J01
   @edge-case
   Scenario: A failed acknowledgement post does not undo the queued planning request
     Given James posts a planning idea in the planning channel
@@ -179,6 +195,7 @@ Feature: Slack Planning Intake
     And Jarvis should continue running normally
 
   # Why: JNB-104 lesson — reconnects must not duplicate listeners or publishes
+  @task:TASK-SPL-J02
   @edge-case
   Scenario: Messages arriving after a Socket Mode reconnect are queued exactly once
     Given the Socket Mode connection has dropped and reconnected
@@ -188,6 +205,7 @@ Feature: Slack Planning Intake
     And exactly one acknowledgement should be posted in the thread
 
   # Why: Intake shares the Slack surface with the approval reply path; neither may break the other
+  @task:TASK-SPL-J02
   @edge-case
   Scenario: Approval button clicks continue to work while planning intake is active
     Given planning intake is active

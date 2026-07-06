@@ -1,0 +1,68 @@
+id: FEAT-5EEA
+name: Slack Planning Intake (FEAT-SPL-001)
+description: Free-text message from the identity-pinned originator in the dedicated
+  Slack planning channel becomes a PlanningQueuedPayload published to JetStream (pipeline.planning-queued.{correlation_id}),
+  acknowledged in-thread; one shared Socket Mode connection with union no-op gate;
+  no reasoning in jarvis — intake only
+created: '2026-07-06T11:14:17.114949'
+status: planned
+complexity: 5
+estimated_tasks: 4
+tasks:
+- id: TASK-SPL-J01
+  name: Planning intake handler module + settings keys
+  file_path: tasks/backlog/feat-spl-001-slack-planning-intake/TASK-SPL-J01-planning-intake-handler-module-and-settings.md
+  complexity: 6
+  dependencies: []
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 113
+- id: TASK-SPL-J02
+  name: Shared Socket Mode routing + union gate + lifecycle + docs
+  file_path: tasks/backlog/feat-spl-001-slack-planning-intake/TASK-SPL-J02-shared-socket-mode-routing-lifecycle-and-docs.md
+  complexity: 5
+  dependencies:
+  - TASK-SPL-J01
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 75
+- id: TASK-SPL-J03
+  name: Scenario + contract test suite (JNB-105 pattern)
+  file_path: tasks/backlog/feat-spl-001-slack-planning-intake/TASK-SPL-J03-scenario-and-contract-test-suite.md
+  complexity: 5
+  dependencies:
+  - TASK-SPL-J01
+  - TASK-SPL-J02
+  status: pending
+  description: ''
+  implementation_mode: task-work
+  estimated_minutes: 75
+- id: TASK-SPL-J04
+  name: Live-validation checklist (operator)
+  file_path: tasks/backlog/feat-spl-001-slack-planning-intake/TASK-SPL-J04-live-validation-checklist-ops.md
+  complexity: 2
+  dependencies:
+  - TASK-SPL-J01
+  - TASK-SPL-J02
+  - TASK-SPL-J03
+  status: pending
+  description: ''
+  implementation_mode: direct
+  estimated_minutes: 22
+smoke_gates:
+  after_wave: "all"
+  command: |
+    set -e
+    .venv/bin/python -m pytest tests/test_slack_reply.py tests/test_slack_reply_scenarios_jnb105.py tests/test_slack_approval_buttons.py -x -q
+  expected_exit: 0
+  timeout: 300
+orchestration:
+  parallel_groups:
+  - - TASK-SPL-J01
+  - - TASK-SPL-J02
+  - - TASK-SPL-J03
+  - - TASK-SPL-J04
+  estimated_duration_minutes: 285
+  recommended_parallel: 1
