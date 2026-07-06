@@ -542,10 +542,9 @@ class TestApprovalButtonsCoexist:
         # approval path exactly as before; no planning request is queued.
         approval_publisher = MagicMock()
         approval_publisher.publish = AsyncMock()
-        settings = SimpleNamespace(slack_operator_user_id=_OPERATOR, slack_decided_by="rich")
         wc = AsyncMock()
         approval_handler = build_reply_handler(
-            settings=settings, publisher=approval_publisher, web_client=wc
+            operator_ids=frozenset({_OPERATOR}), publisher=approval_publisher, web_client=wc
         )
         client, intake_publisher, _ = _make_client(approval_handler=approval_handler, web_client=wc)
         click = {

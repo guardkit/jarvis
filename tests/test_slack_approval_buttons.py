@@ -175,7 +175,12 @@ async def _capture(
 
 
 class TestApprovalSettingsFields:
-    """The three new pydantic-settings fields exist under JARVIS_ prefix."""
+    """The Slack reply-path pydantic-settings fields under JARVIS_ prefix.
+
+    TASK-JNB-110: ``slack_operator_user_ids`` (plural allowlist) is the
+    canonical authorization field; ``slack_operator_user_id`` (singular) and
+    ``slack_decided_by`` remain loadable but are DEPRECATED.
+    """
 
     def test_fields_load_from_env(self) -> None:
         from pydantic import SecretStr
@@ -186,6 +191,8 @@ class TestApprovalSettingsFields:
             "os.environ",
             {
                 "JARVIS_SLACK_APP_TOKEN": "xapp-test-token",
+                "JARVIS_SLACK_OPERATOR_USER_IDS": "U0RICH,U0JAMES",
+                # Deprecated fields still parse (retained for migration).
                 "JARVIS_SLACK_OPERATOR_USER_ID": "U0EXAMPLE",
                 "JARVIS_SLACK_DECIDED_BY": "Jarvis-Operator",
             },
@@ -195,6 +202,7 @@ class TestApprovalSettingsFields:
 
         assert isinstance(config.slack_app_token, SecretStr)
         assert config.slack_app_token.get_secret_value() == "xapp-test-token"
+        assert config.slack_operator_user_ids == "U0RICH,U0JAMES"
         assert config.slack_operator_user_id == "U0EXAMPLE"
         assert config.slack_decided_by == "Jarvis-Operator"
 
@@ -205,8 +213,52 @@ class TestApprovalSettingsFields:
             config = JarvisConfig()
 
         assert config.slack_app_token is None
+        assert config.slack_operator_user_ids is None
         assert config.slack_operator_user_id is None
         assert config.slack_decided_by is None
+
+    def test_resolve_operator_allowlist_merges_plural_and_deprecated_singular(
+        self,
+    ) -> None:
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict(
+            "os.environ",
+            {
+                "JARVIS_SLACK_OPERATOR_USER_IDS": " U0RICH , U0JAMES ,",
+                "JARVIS_SLACK_OPERATOR_USER_ID": "U0LEGACY",
+            },
+            clear=True,
+        ):
+            config = JarvisConfig()
+
+        # Blank-stripped, deprecated singular folded in.
+        assert config.resolve_operator_allowlist() == frozenset(
+            {"U0RICH", "U0JAMES", "U0LEGACY"}
+        )
+
+    def test_resolve_operator_allowlist_empty_when_unset(self) -> None:
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict("os.environ", {}, clear=True):
+            config = JarvisConfig()
+
+        assert config.resolve_operator_allowlist() == frozenset()
+
+    def test_resolve_operator_allowlist_blank_and_comma_only_is_empty(self) -> None:
+        # The blank-stripping guard the code calls out: an empty value or a
+        # stray-comma value must NOT smuggle an empty id into the allowlist
+        # (an empty id would never match a click and would blur the no-op gate).
+        from jarvis.config.settings import JarvisConfig
+
+        for value in ("", "   ", ",", " , , "):
+            with patch.dict(
+                "os.environ",
+                {"JARVIS_SLACK_OPERATOR_USER_IDS": value},
+                clear=True,
+            ):
+                config = JarvisConfig()
+            assert config.resolve_operator_allowlist() == frozenset(), repr(value)
 
     def test_app_token_masked_in_repr(self) -> None:
         from pydantic import SecretStr

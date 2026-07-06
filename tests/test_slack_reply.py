@@ -114,18 +114,22 @@ def _click_payload(
 def _make_handler(
     *,
     operator: str | None = _OPERATOR,
-    decided_by: str | None = "jarvis-op",
+    operator_ids: frozenset[str] | None = None,
     web_client: Any | None = "default",
-) -> tuple[Any, MagicMock, Any, Any]:
-    settings = SimpleNamespace(
-        slack_operator_user_id=operator,
-        slack_decided_by=decided_by,
-    )
+) -> tuple[Any, MagicMock, Any, frozenset[str]]:
+    # TASK-JNB-110: the handler authorizes via an operator allowlist and
+    # publishes the clicker's own member id as decided_by (no config
+    # constant). ``operator`` is the single-operator convenience; pass
+    # ``operator_ids`` for a multi-member allowlist.
+    if operator_ids is None:
+        operator_ids = frozenset({operator}) if operator else frozenset()
     publisher = MagicMock()
     publisher.publish = AsyncMock()
     client = AsyncMock() if web_client == "default" else web_client
-    handler = build_reply_handler(settings=settings, publisher=publisher, web_client=client)
-    return handler, publisher, client, settings
+    handler = build_reply_handler(
+        operator_ids=operator_ids, publisher=publisher, web_client=client
+    )
+    return handler, publisher, client, operator_ids
 
 
 def _actions_in(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -266,7 +270,7 @@ class TestAuthorizedApprovePublishes:
     async def test_approve_publishes_correct_payload_subject_and_correlation(
         self,
     ) -> None:
-        handler, publisher, _web_client, _ = _make_handler(decided_by="jarvis-op")
+        handler, publisher, _web_client, _ = _make_handler()
 
         await handler.handle_block_actions(_click_payload(action_id="forge_approve"))
 
@@ -277,7 +281,9 @@ class TestAuthorizedApprovePublishes:
         published = kwargs["payload"]
         assert published.request_id == "apr-001"
         assert published.decision == "approve"
-        assert published.decided_by == "jarvis-op"
+        # decided_by is the ACTUAL clicker's member id (TASK-JNB-110), not a
+        # config constant.
+        assert published.decided_by == _OPERATOR
 
     @pytest.mark.asyncio
     async def test_success_update_disables_buttons_and_shows_decision(self) -> None:
@@ -480,25 +486,45 @@ class TestPublishFailureReenablesButtons:
 
 
 # ---------------------------------------------------------------------------
-# decided_by guard
+# Identity — decided_by is the actual clicker (TASK-JNB-110)
 # ---------------------------------------------------------------------------
 
 
-class TestDecidedByUnsetRefusesToPublish:
+class TestDecidedByIsActualClicker:
+    """The published decided_by is the clicking member's id, not a config
+    constant — even when several members share the operator allowlist."""
+
     @pytest.mark.asyncio
-    async def test_unset_decided_by_warns_and_publishes_nothing(self) -> None:
-        handler, publisher, _, _ = _make_handler(decided_by=None)
+    async def test_each_allowlisted_member_publishes_their_own_id(self) -> None:
+        rich, james = "U0RICH", "U0JAMES"
+        handler, publisher, _, _ = _make_handler(operator_ids=frozenset({rich, james}))
+
+        await handler.handle_block_actions(
+            _click_payload(user_id=james, value=_button_value(request_id="apr-j"))
+        )
+        await handler.handle_block_actions(
+            _click_payload(user_id=rich, value=_button_value(request_id="apr-r"))
+        )
+
+        assert publisher.publish.await_count == 2
+        by_request = {
+            call.kwargs["payload"].request_id: call.kwargs["payload"].decided_by
+            for call in publisher.publish.await_args_list
+        }
+        assert by_request == {"apr-j": james, "apr-r": rich}
+
+    @pytest.mark.asyncio
+    async def test_no_decided_by_unset_path_remains(self) -> None:
+        # There is no config source for decided_by any more, so an authorized
+        # click always publishes with the clicker's id — the old
+        # ``slack_reply_decided_by_unset`` refusal is gone.
+        handler, publisher, _, _ = _make_handler()
 
         with capture_logs() as logs:
             await handler.handle_block_actions(_click_payload())
 
-        publisher.publish.assert_not_awaited()
-        assert any(log["event"] == "slack_reply_decided_by_unset" for log in logs)
-
-        # Not permanently consumed: once configured, a re-click publishes
-        handler._settings.slack_decided_by = "jarvis-op"
-        await handler.handle_block_actions(_click_payload())
         publisher.publish.assert_awaited_once()
+        assert not any(log["event"] == "slack_reply_decided_by_unset" for log in logs)
 
 
 # ---------------------------------------------------------------------------
@@ -806,6 +832,8 @@ class TestNoOpModeWhenConfigAbsent:
         assert create_slack_reply_client(config, None) is None
 
     def test_constructed_when_fully_configured(self) -> None:
+        # The DEPRECATED singular still activates the reply path (folds into
+        # the allowlist), so existing deployments keep working.
         config = self._config(
             JARVIS_SLACK_BOT_TOKEN="xoxb-t",
             JARVIS_SLACK_APP_TOKEN="xapp-t",
@@ -813,6 +841,114 @@ class TestNoOpModeWhenConfigAbsent:
         )
         client = create_slack_reply_client(config, MagicMock())
         assert isinstance(client, SlackSocketModeReplyClient)
+        assert client._handler is not None
+
+    def test_constructed_from_plural_allowlist_only(self) -> None:
+        # TASK-JNB-110: the canonical plural field activates the reply path
+        # with no singular set, and the handler authorizes every listed id.
+        config = self._config(
+            JARVIS_SLACK_BOT_TOKEN="xoxb-t",
+            JARVIS_SLACK_APP_TOKEN="xapp-t",
+            JARVIS_SLACK_OPERATOR_USER_IDS="U0RICH,U0JAMES",
+        )
+        client = create_slack_reply_client(config, MagicMock())
+        assert isinstance(client, SlackSocketModeReplyClient)
+        assert client._handler is not None
+        assert client._handler._operator_ids == frozenset({"U0RICH", "U0JAMES"})
+
+
+class TestJnb110DeprecationWarnings:
+    """The factory surfaces the TASK-JNB-110 identity-config deprecations."""
+
+    def _config(self, **env: str) -> Any:
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict("os.environ", env, clear=True):
+            return JarvisConfig()
+
+    def test_decided_by_set_warns_and_is_ignored(self) -> None:
+        config = self._config(
+            JARVIS_SLACK_BOT_TOKEN="xoxb-t",
+            JARVIS_SLACK_APP_TOKEN="xapp-t",
+            JARVIS_SLACK_OPERATOR_USER_IDS="U0RICH",
+            JARVIS_SLACK_DECIDED_BY="rich",
+        )
+        with capture_logs() as logs:
+            create_slack_reply_client(config, MagicMock())
+        warn = [e for e in logs if e["event"] == "slack_reply_decided_by_deprecated"]
+        assert len(warn) == 1
+        assert warn[0]["log_level"] == "warning"
+
+    def test_deprecation_fires_even_when_reply_path_unconfigured(self) -> None:
+        # No app token → early no-op return; the deprecation must still fire
+        # so a stale DECIDED_BY value is never silently swallowed.
+        config = self._config(JARVIS_SLACK_DECIDED_BY="rich")
+        with capture_logs() as logs:
+            assert create_slack_reply_client(config, MagicMock()) is None
+        assert any(e["event"] == "slack_reply_decided_by_deprecated" for e in logs)
+
+    def test_singular_operator_id_logs_deprecation_notice(self) -> None:
+        config = self._config(
+            JARVIS_SLACK_BOT_TOKEN="xoxb-t",
+            JARVIS_SLACK_APP_TOKEN="xapp-t",
+            JARVIS_SLACK_OPERATOR_USER_ID=_OPERATOR,
+        )
+        with capture_logs() as logs:
+            create_slack_reply_client(config, MagicMock())
+        notices = [
+            e for e in logs if e["event"] == "slack_reply_operator_user_id_deprecated"
+        ]
+        assert len(notices) == 1
+        # Deliberate split: the still-honoured singular is INFO, while the
+        # now-ignored decided_by is a WARNING (asserted above).
+        assert notices[0]["log_level"] == "info"
+
+
+class TestJnb110IdentityContractEndToEnd:
+    """AC1 + AC4 end-to-end through the REAL factory + publisher + fake
+    JetStream: a still-set JARVIS_SLACK_DECIDED_BY is behaviourally IGNORED,
+    and the clicker's member id round-trips VERBATIM (mixed case preserved)
+    through the installed nats_core model."""
+
+    def _config(self, **env: str) -> Any:
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict("os.environ", env, clear=True):
+            return JarvisConfig()
+
+    @pytest.mark.asyncio
+    async def test_decided_by_is_clicker_not_config_constant_through_model(
+        self,
+    ) -> None:
+        from nats_core import MessageEnvelope
+        from nats_core.events import ApprovalResponsePayload
+
+        # Mixed-case member id proves no normalisation on the way out.
+        clicker = "U0RichCASE123"
+        config = self._config(
+            JARVIS_SLACK_BOT_TOKEN="xoxb-t",
+            JARVIS_SLACK_APP_TOKEN="xapp-t",
+            JARVIS_SLACK_OPERATOR_USER_IDS=clicker,
+            # Decoy config constant from the OLD scheme — must be IGNORED.
+            JARVIS_SLACK_DECIDED_BY="rich",
+        )
+        fake_nats = MagicMock()
+        fake_nats.js.publish = AsyncMock()
+
+        client = create_slack_reply_client(config, fake_nats)
+        assert client is not None and client._handler is not None
+
+        await client._handler.handle_block_actions(
+            _click_payload(user_id=clicker, action_id="forge_approve")
+        )
+
+        fake_nats.js.publish.assert_awaited_once()
+        _subject, data = fake_nats.js.publish.await_args.args
+        envelope = MessageEnvelope.model_validate_json(data)
+        payload = ApprovalResponsePayload.model_validate(envelope.payload)
+        assert payload.decided_by == clicker  # the actual clicker, verbatim (AC1/AC4)
+        assert payload.decided_by != "rich"  # the config constant is IGNORED (AC1)
+        assert payload.decided_by != clicker.lower()  # no normalisation (AC4)
 
 
 # ---------------------------------------------------------------------------
@@ -1054,23 +1190,10 @@ class TestBuildAppStateReplyWiring:
 
 
 @pytest.fixture()
-def settings() -> Any:
-    return SimpleNamespace(
-        slack_operator_user_id=_OPERATOR,
-        slack_decided_by="initial-identity",
-    )
-
-
-@pytest.fixture()
 def publisher_mock() -> MagicMock:
     publisher = MagicMock()
     publisher.publish = AsyncMock()
     return publisher
-
-
-@pytest.fixture()
-def authorized_click_payload() -> dict[str, Any]:
-    return _click_payload(user_id=_OPERATOR, action_id="forge_approve")
 
 
 @pytest.mark.seam
@@ -1117,20 +1240,25 @@ def test_producer_value_parses_with_this_tasks_parser() -> None:
 @pytest.mark.seam
 @pytest.mark.integration_contract("APPROVER_IDENTITY")
 @pytest.mark.asyncio
-async def test_published_decided_by_equals_slack_decided_by_verbatim(
-    settings: Any,
-    authorized_click_payload: dict[str, Any],
+async def test_published_decided_by_equals_interaction_user_id_verbatim(
     publisher_mock: MagicMock,
 ) -> None:
-    """APPROVER_IDENTITY from TASK-JNB-101: forge accepts the response only
-    if decided_by string-equals its expected_approver — exact match, no
-    normalisation. A mismatch silently refuses every phone approval."""
-    settings.slack_decided_by = "Jarvis-Operator"  # deliberate mixed case
-    handler = build_reply_handler(settings=settings, publisher=publisher_mock)
+    """APPROVER_IDENTITY contract v2 (TASK-JNB-110 / JNB-107): decided_by is
+    the actual clicker's Slack member id, published VERBATIM — no trimming,
+    casing, or normalisation. Forge compares it to the run's expected_approver
+    (also a member id) by exact string equality, so any normalisation here
+    would silently refuse the decision."""
+    # A mixed-case member id proves the clicker's id is passed through, not
+    # lowercased/normalised on the way out.
+    clicker = "U0RichCASE123"
+    handler = build_reply_handler(
+        operator_ids=frozenset({clicker}), publisher=publisher_mock
+    )
 
-    await handler.handle_block_actions(authorized_click_payload)
+    await handler.handle_block_actions(
+        _click_payload(user_id=clicker, action_id="forge_approve")
+    )
 
     published = publisher_mock.publish.await_args.kwargs["payload"]
-    assert published.decided_by == settings.slack_decided_by  # verbatim
-    assert published.decided_by == "Jarvis-Operator"  # not lowercased
-    assert published.decided_by != "jarvis-operator"  # no normalisation
+    assert published.decided_by == clicker  # verbatim — the interaction user id
+    assert published.decided_by != clicker.lower()  # no normalisation

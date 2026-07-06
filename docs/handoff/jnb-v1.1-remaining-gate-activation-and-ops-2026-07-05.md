@@ -44,6 +44,32 @@ parallel; JNB-107 needs both complete.
 
 ## 1. Alignment value that silently breaks everything
 
+> **⚠️ SUPERSEDED 2026-07-06 by TASK-JNB-110 — the `rich` literal is gone.**
+> jarvis no longer publishes a config constant for `decided_by`. It now publishes
+> the **actual clicker's Slack member id** (`U…`) — a factual claim about who
+> clicked, one identity scheme (Slack member ids) fleet-wide. The alignment is
+> still exact-string-equality on forge's side, but the value both sides use is now
+> a **member id**, not `rich`:
+>
+> - **forge:** set the build-gate `approval.expected_approver` in GB10 `forge.yaml`
+>   to **Rich's Slack member id** (`U…`) — a config-only change; the forge code
+>   default `"rich"` is untouched. (When James approves planning/Mode-P runs, that
+>   run's `expected_approver` is the originator's member id, which now matches the
+>   clicker's published id by construction.)
+> - **jarvis:** nothing to pin for identity — `decided_by` is derived from the
+>   click. `JARVIS_SLACK_DECIDED_BY` is **deprecated and ignored** (a startup
+>   WARNING if still set). Authorization moved to the allowlist
+>   `JARVIS_SLACK_OPERATOR_USER_IDS` (comma-separated member ids; the singular
+>   `JARVIS_SLACK_OPERATOR_USER_ID` still folds in, deprecated).
+> - **Mismatch symptom is unchanged:** if forge's `expected_approver` is not the
+>   clicker's member id, Approve does nothing — jarvis logs
+>   `slack_reply_decision_published`, forge logs `unrecognised responder … NOT
+>   resuming`, the build stays paused. So the one value to get right is now forge
+>   `expected_approver` == the approver's `U…` member id.
+>
+> Original (pre-JNB-110) text retained below for history — do **not** set
+> `JARVIS_SLACK_DECIDED_BY=rich` any more.
+
 forge `ApprovalConfig.expected_approver` was pinned to **`rich`** by JNB-101
 (`e003201`). jarvis publishes `decided_by = JARVIS_SLACK_DECIDED_BY` untouched;
 forge compares it to `expected_approver` by **exact string equality**. So
@@ -134,6 +160,10 @@ ACCEPTANCE (what "done" unblocks JNB-107):
   daemon restart. Prove with scenario tests over the production wiring.
 
 ALIGNMENT (load-bearing for the eventual live run — don't change casually):
+  [SUPERSEDED 2026-07-06 by TASK-JNB-110 — see §1's superseded box. jarvis no
+  longer sends the "rich" literal; decided_by is the clicker's Slack member id,
+  and forge's expected_approver must be set to the approver's member id. The
+  paragraph below is the pre-JNB-110 contract, kept for history.]
   forge ApprovalConfig.expected_approver was pinned to "rich" by JNB-101
   (e003201). jarvis JARVIS_SLACK_DECIDED_BY must string-equal it VERBATIM or every
   phone approval silently no-ops. Keep it "rich" unless you deliberately re-pin it
@@ -167,8 +197,16 @@ synthetic messages to `#forge-builds`. Worktrees do not isolate secrets. Must la
 AutoBuild will not attempt it. **Do this on BOTH hosts — Mac + GB10.** Task file:
 `tasks/backlog/TASK-JNB-OPS-001-move-slack-secrets-out-of-repo-env.md`.
 
-**1. Create the out-of-repo secrets file** `~/.config/guardkit/jarvis.env` with
-all five keys (note the **new** `DECIDED_BY = rich`):
+**1. Create the out-of-repo secrets file** `~/.config/guardkit/jarvis.env`.
+
+> **⚠️ Updated 2026-07-06 by TASK-JNB-110 — `DECIDED_BY` is gone; identity is now
+> the clicker's Slack member id.** There are now **four** keys, not five: drop
+> `JARVIS_SLACK_DECIDED_BY` entirely (it is deprecated and ignored — a leftover
+> value only produces a startup WARNING). The former `JARVIS_SLACK_OPERATOR_USER_ID`
+> is superseded by the comma-separated allowlist `JARVIS_SLACK_OPERATOR_USER_IDS`
+> (the singular still works but logs a deprecation notice). The identity alignment
+> now lives entirely on the **forge** side — set `approval.expected_approver` to
+> the approver's `U…` member id (step 7).
 
 ```bash
 mkdir -p ~/.config/guardkit
@@ -176,11 +214,16 @@ cat > ~/.config/guardkit/jarvis.env <<'EOF'
 JARVIS_SLACK_BOT_TOKEN=xoxb-...            # the ROTATED token (step 3)
 JARVIS_SLACK_CHANNEL_ID=C...               # #forge-builds
 JARVIS_SLACK_APP_TOKEN=xapp-...            # Socket Mode app token
-JARVIS_SLACK_OPERATOR_USER_ID=U...         # your Slack member id
-JARVIS_SLACK_DECIDED_BY=rich               # MUST string-equal forge expected_approver VERBATIM
+JARVIS_SLACK_OPERATOR_USER_IDS=U...        # allowlist of member ids that MAY click (comma-separated)
+# JARVIS_SLACK_DECIDED_BY is REMOVED (TASK-JNB-110) — do not set it.
 EOF
 chmod 600 ~/.config/guardkit/jarvis.env
 ```
+
+If the live file created during OPS-001 (2026-07-06) still has
+`JARVIS_SLACK_DECIDED_BY=rich`, delete that line and rename
+`JARVIS_SLACK_OPERATOR_USER_ID` → `JARVIS_SLACK_OPERATOR_USER_IDS` (or leave the
+singular — it still resolves, with a deprecation notice) on **both** hosts.
 
 **2. Remove the `JARVIS_SLACK_*` lines from `jarvis/.env`** on both hosts. *This is
 the actual security fix* — real env vars already beat `.env` by pydantic-settings
@@ -215,10 +258,16 @@ on GB10, or stdout on Mac):
 | `jarvis_slack_reply_started` **and** `slack_reply_socket_mode_started` | `slack_reply_no_op` |
 
 The reply-path started event is the strongest signal — it proves **all four**
-reply-path vars (`BOT_TOKEN`, `APP_TOKEN`, `OPERATOR_USER_ID`, and NATS) resolved.
+reply-path vars (`BOT_TOKEN`, `APP_TOKEN`, `OPERATOR_USER_IDS`, and NATS)
+resolved. Also confirm you do **not** see `slack_reply_decided_by_deprecated`
+(TASK-JNB-110) — if you do, a stale `JARVIS_SLACK_DECIDED_BY` is still set; remove
+it (it is ignored, but the WARNING means the env file was not fully migrated).
 
-**7. Confirm the alignment (§1):** `JARVIS_SLACK_DECIDED_BY` == forge
-`expected_approver` == `rich`, verbatim.
+**7. Confirm the alignment (§1, post-JNB-110):** forge's build-gate
+`approval.expected_approver` (GB10 `forge.yaml`) == the approver's **Slack member
+id** (`U…`), verbatim. jarvis publishes that same member id as `decided_by` (the
+clicker's own id), so the two match by construction. There is no
+`JARVIS_SLACK_DECIDED_BY` to check any more.
 
 **Also re-verify these perishable prereqs before the JNB-107 run:** the bot is
 still **invited to `#forge-builds`**, and the `ships-computer-nats` broker is
@@ -236,4 +285,28 @@ healthy on both hosts.
 | OPS-001 task | `tasks/backlog/TASK-JNB-OPS-001-move-slack-secrets-out-of-repo-env.md` |
 | JNB-105 (this session) | `tests/test_slack_reply_scenarios_jnb105.py`, `docs/state/TASK-JNB-105/implementation_plan.md` |
 | Fleet status tracker | `../ai-transition/docs/fable-window-execution-plan-2026-07-04.md` (updated `542aeec`) |
-| Env keys | `.env.example` (JARVIS_SLACK_* incl. `JARVIS_SLACK_DECIDED_BY`) |
+| Env keys | `.env.example` (JARVIS_SLACK_*; post-JNB-110: `JARVIS_SLACK_OPERATOR_USER_IDS` allowlist; `JARVIS_SLACK_DECIDED_BY` deprecated/ignored) |
+
+---
+
+## 6. Coordinated forge-side changes (TASK-JNB-110) — deploy record
+
+The jarvis half of the member-id identity scheme is code-complete (TASK-JNB-110:
+`slack_reply` publishes the clicker's member id as `decided_by`; allowlist auth;
+`JARVIS_SLACK_DECIDED_BY` deprecated). These **forge-side** changes must land in
+the same coordinated deploy so the loop stays aligned — they are cross-repo, so
+make them in a forge session (one-repo-per-session):
+
+1. **Config (GB10 `forge.yaml`):** set `approval.expected_approver` to Rich's
+   Slack member id (`U…`). Config-only — the forge code default `"rich"` in
+   `ApprovalConfig` is untouched. For Mode-P/planning runs the per-run
+   `expected_approver` is the originator's member id (already a `U…`), so it
+   matches the clicker's published id by construction.
+2. **Docs (move the literal `rich` contract to the member-id scheme):** forge's
+   NATS approval-protocol contract and the **FORGE-008** runbook — where JNB-101
+   documented the verbatim-`rich` `decided_by`/`expected_approver` pairing — must
+   be updated to say "member id" (the clicker's `U…`), matching this doc's §1
+   superseded box.
+3. **Sequencing (JNB-110 AC-5):** land JNB-110 (both repos) BEFORE the JNB-107 /
+   TASK-MP-010 live round-trips, so the final identity contract is validated once
+   — both live validations assert member-id equality, not `rich`.

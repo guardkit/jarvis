@@ -1,5 +1,19 @@
 # Handoff: complete the FEAT-BF39 v1.1 live approve/reject round-trip
 
+> **⚠️ SUPERSEDED IDENTITY CONTRACT 2026-07-06 (TASK-JNB-110) — applies to this
+> WHOLE document.** Everywhere below that tells you to set `JARVIS_SLACK_DECIDED_BY`
+> (to `rich`, `rich-slack-operator`, or forge's `expected_approver`) is
+> **obsolete** — §3's env table, §4's OPS-001 steps, §5's execution order, and §6's
+> troubleshooting included. jarvis now publishes the **actual clicker's Slack
+> member id** as `decided_by` (one identity scheme fleet-wide); authorization is
+> the allowlist `JARVIS_SLACK_OPERATOR_USER_IDS`; `JARVIS_SLACK_DECIDED_BY` is
+> deprecated/ignored; and the `slack_reply_decided_by_unset` behaviour referenced
+> here is **removed**. The one value to align is now forge
+> `approval.expected_approver` == the approver's Slack member id (`U…`). Current
+> contract: `jnb-v1.1-remaining-gate-activation-and-ops-2026-07-05.md` §1 + §6.
+> Do **not** follow this doc's DECIDED_BY instructions; the rest (loop shape,
+> OPS-001 secrets-move rationale, gate-activation) still holds.
+
 **Written**: 2026-07-05, end of the jarvis ACTION-4 Fable session (context
 nearly full — this doc is the bridge to a fresh conversation).
 **Goal for the next session(s)**: get from "jarvis reply path code-complete"
@@ -156,6 +170,16 @@ Hard-won fixes already in (do not regress; each has a regression test):
 ---
 
 ## 3. Config alignment — the thing that silently breaks everything
+
+> **⚠️ SUPERSEDED 2026-07-06 by TASK-JNB-110.** This whole section describes the
+> pre-JNB-110 `JARVIS_SLACK_DECIDED_BY` = `rich`/`rich-slack-operator` contract,
+> which no longer exists. jarvis now publishes the **actual clicker's Slack member
+> id** as `decided_by`; forge `expected_approver` must be the approver's **member
+> id** (`U…`); authorization is the allowlist `JARVIS_SLACK_OPERATOR_USER_IDS`;
+> `JARVIS_SLACK_DECIDED_BY` is deprecated/ignored (and the
+> `slack_reply_decided_by_unset` refusal path referenced below is **removed**).
+> See `jnb-v1.1-remaining-gate-activation-and-ops-2026-07-05.md` §1 + §6 for the
+> current contract. Text below kept for history only.
 
 jarvis side (`JarvisConfig`, prefix `JARVIS_`, fields in
 `src/jarvis/config/settings.py`):

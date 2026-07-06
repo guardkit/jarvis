@@ -56,9 +56,10 @@ from jarvis.infrastructure.slack_reply import (
 
 _OPERATOR = "U0OPERATOR"
 
-# JNB-105 contract AC: forge compares decided_by against expected_approver by
-# exact string equality, so the contract test pins the verbatim round-trip.
-_DECIDED_BY = "rich-slack-operator"
+# TASK-JNB-110 contract v2: decided_by is the actual clicker's Slack member
+# id (published verbatim), not a config constant. Forge compares it against
+# the run's expected_approver (also a member id) by exact string equality, so
+# the contract test pins the verbatim round-trip of the clicker's id.
 
 
 # ---------------------------------------------------------------------------
@@ -130,18 +131,20 @@ def _click_payload(
 def _make_handler(
     *,
     operator: str | None = _OPERATOR,
-    decided_by: str | None = "jarvis-op",
-) -> tuple[Any, MagicMock, AsyncMock, Any]:
-    """Handler over a ``MagicMock`` publisher seam + ``AsyncMock`` web client."""
-    settings = SimpleNamespace(
-        slack_operator_user_id=operator,
-        slack_decided_by=decided_by,
-    )
+) -> tuple[Any, MagicMock, AsyncMock, frozenset[str]]:
+    """Handler over a ``MagicMock`` publisher seam + ``AsyncMock`` web client.
+
+    TASK-JNB-110: authorization is an operator allowlist; decided_by is the
+    clicker's own member id, so there is no decided_by config to inject.
+    """
+    operator_ids = frozenset({operator}) if operator else frozenset()
     publisher = MagicMock()
     publisher.publish = AsyncMock()
     web_client = AsyncMock()
-    handler = build_reply_handler(settings=settings, publisher=publisher, web_client=web_client)
-    return handler, publisher, web_client, settings
+    handler = build_reply_handler(
+        operator_ids=operator_ids, publisher=publisher, web_client=web_client
+    )
+    return handler, publisher, web_client, operator_ids
 
 
 def _actions_in(blocks: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -381,24 +384,22 @@ class TestReplyPathEnvelopeContract:
     ``ApprovalResponsePayload`` / ``MessageEnvelope`` models."""
 
     @staticmethod
-    def _wired() -> tuple[Any, MagicMock, Any]:
-        settings = SimpleNamespace(
-            slack_operator_user_id=_OPERATOR,
-            slack_decided_by=_DECIDED_BY,
-        )
+    def _wired() -> tuple[Any, MagicMock]:
         fake_nats = MagicMock()
         fake_nats.js.publish = AsyncMock()
         publisher = NatsApprovalResponsePublisher(fake_nats)
         web_client = AsyncMock()
-        handler = build_reply_handler(settings=settings, publisher=publisher, web_client=web_client)
-        return handler, fake_nats, settings
+        handler = build_reply_handler(
+            operator_ids=frozenset({_OPERATOR}), publisher=publisher, web_client=web_client
+        )
+        return handler, fake_nats
 
     @pytest.mark.asyncio
     async def test_approve_bytes_validate_and_decided_by_verbatim(self) -> None:
         from nats_core import EventType, MessageEnvelope
         from nats_core.events import ApprovalResponsePayload
 
-        handler, fake_nats, settings = self._wired()
+        handler, fake_nats = self._wired()
 
         await handler.handle_block_actions(
             _click_payload(
@@ -425,16 +426,16 @@ class TestReplyPathEnvelopeContract:
         assert payload.request_id == "apr-777"
         assert payload.decision in {"approve", "reject"}
         assert payload.decision == "approve"
-        # decided_by must equal settings.slack_decided_by VERBATIM (forge
-        # compares it against expected_approver by exact string equality).
-        assert payload.decided_by == settings.slack_decided_by == _DECIDED_BY
+        # decided_by must equal the CLICKER's member id VERBATIM (TASK-JNB-110;
+        # forge compares it against expected_approver by exact string equality).
+        assert payload.decided_by == _OPERATOR
 
     @pytest.mark.asyncio
     async def test_reject_bytes_validate_against_installed_nats_core(self) -> None:
         from nats_core import MessageEnvelope
         from nats_core.events import ApprovalResponsePayload
 
-        handler, fake_nats, settings = self._wired()
+        handler, fake_nats = self._wired()
 
         await handler.handle_block_actions(
             _click_payload(
@@ -456,4 +457,4 @@ class TestReplyPathEnvelopeContract:
         payload = ApprovalResponsePayload.model_validate(envelope.payload)
         assert payload.request_id == "apr-888"
         assert payload.decision == "reject"
-        assert payload.decided_by == settings.slack_decided_by == _DECIDED_BY
+        assert payload.decided_by == _OPERATOR

@@ -258,15 +258,31 @@ class JarvisConfig(BaseSettings):
     # logged no-op. SecretStr masks in logs.
     slack_app_token: SecretStr | None = None
 
-    # JARVIS_SLACK_OPERATOR_USER_ID — the sole Slack member id authorized to
-    # click Approve/Reject (TASK-JNB-104 authorization gate). None keeps the
-    # reply path a logged no-op.
+    # JARVIS_SLACK_OPERATOR_USER_IDS — comma-separated allowlist of Slack
+    # member ids permitted to click Approve/Reject (TASK-JNB-110). This is the
+    # AUTHORIZATION gate ("who MAY decide"); it is deliberately separate from
+    # IDENTITY ("who DID decide"), which is now the clicker's own member id
+    # published verbatim as ``decided_by`` — never a config constant. Empty /
+    # unset keeps the reply path a logged no-op. Resolution (merging the
+    # DEPRECATED singular below, blank-stripping) lives in
+    # :meth:`resolve_operator_allowlist` so every caller sees one allowlist.
+    slack_operator_user_ids: str | None = None
+
+    # JARVIS_SLACK_OPERATOR_USER_ID — DEPRECATED (TASK-JNB-110) singular
+    # predecessor of ``slack_operator_user_ids``. Still honoured (folded into
+    # the allowlist as a single entry) so existing deployments keep working;
+    # ``create_slack_reply_client`` logs a deprecation notice when it is set.
+    # Prefer the plural ``JARVIS_SLACK_OPERATOR_USER_IDS``.
     slack_operator_user_id: str | None = None
 
-    # JARVIS_SLACK_DECIDED_BY — the decided_by identity published on
-    # ApprovalResponsePayload (TASK-JNB-104). Must string-equal forge's
-    # expected_approver verbatim (a mismatch silently refuses every phone
-    # approval); aligned at TASK-JNB-107 live validation.
+    # JARVIS_SLACK_DECIDED_BY — DEPRECATED and IGNORED (TASK-JNB-110). Under
+    # the fleet-wide member-id identity scheme, ``decided_by`` is a factual
+    # claim about who clicked (the interaction payload's user id), NOT a config
+    # constant, so this field no longer feeds the published response. It is
+    # retained only so a stale environment value does not raise on load;
+    # ``create_slack_reply_client`` emits a deprecation WARNING when it is set.
+    # Forge's build-gate ``approval.expected_approver`` must now be set to the
+    # approver's Slack member id (config-only forge change — see TASK-JNB-110).
     slack_decided_by: str | None = None
 
     # -- FEAT-SPL-001: Slack planning intake settings (TASK-SPL-J01) --------
@@ -354,6 +370,35 @@ class JarvisConfig(BaseSettings):
         if not user or not password:
             return None
         return user, password
+
+    # -- Slack operator allowlist resolution ---------------------------------
+
+    def resolve_operator_allowlist(self) -> frozenset[str]:
+        """Resolve the set of Slack member ids permitted to decide approvals.
+
+        The single source of truth for the reply-path AUTHORIZATION gate
+        (TASK-JNB-110). Merges the canonical comma-separated
+        ``slack_operator_user_ids`` with the DEPRECATED singular
+        ``slack_operator_user_id`` (folded in as one entry) so both surfaces
+        keep working during migration. Blank / whitespace-only entries are
+        dropped, so ``JARVIS_SLACK_OPERATOR_USER_IDS=`` or a stray trailing
+        comma cannot smuggle an empty id into the allowlist (an empty id would
+        never match a real click and would blur the no-op gate). Returns a
+        frozenset; empty means "no operator configured" — the caller then
+        keeps the approval reply path a logged no-op.
+
+        Identity is deliberately NOT derived from this allowlist: the published
+        ``decided_by`` is the clicker's own member id, so the allowlist answers
+        only "who MAY decide", never "who DID".
+        """
+        ids: set[str] = set()
+        if self.slack_operator_user_ids:
+            ids.update(
+                entry.strip() for entry in self.slack_operator_user_ids.split(",") if entry.strip()
+            )
+        if self.slack_operator_user_id and self.slack_operator_user_id.strip():
+            ids.add(self.slack_operator_user_id.strip())
+        return frozenset(ids)
 
     # -- Runtime validation --------------------------------------------------
 

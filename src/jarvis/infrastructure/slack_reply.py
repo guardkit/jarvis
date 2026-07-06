@@ -8,9 +8,10 @@ Block Kit buttons); this module consumes those buttons' clicks:
   produced by TASK-JNB-103 (``{request_id, build_id, correlation_id,
   approval_subject}``).
 * :class:`ApprovalReplyHandler` (via :func:`build_reply_handler`) — the
-  ``block_actions`` handler: operator-member-id authorization, local
+  ``block_actions`` handler: operator-allowlist authorization, local
   first-click-wins, ``ApprovalResponsePayload`` publish to
-  ``approval_subject + ".response"``, and in-place ``chat.update``s.
+  ``approval_subject + ".response"`` (``decided_by`` = the actual clicker's
+  Slack member id — TASK-JNB-110), and in-place ``chat.update``s.
 * :class:`NatsApprovalResponsePublisher` — envelope + JetStream publish
   (AGENTS stream, limits retention — publish only; this module never
   creates any NATS consumer, and specifically never touches the PIPELINE
@@ -23,9 +24,12 @@ Behaviour invariants (task ACs + Phase 2.5B review C1/C2):
 
 * Every Socket Mode envelope is acked immediately — before any
   authorization, parsing, or publish work.
-* The SOLE Slack-side authorization gate is
-  ``payload["user"]["id"] == settings.slack_operator_user_id``; a
-  mismatch is WARN + ephemeral refusal, nothing published.
+* The SOLE Slack-side authorization gate is allowlist membership:
+  ``payload["user"]["id"] in operator_ids`` (TASK-JNB-110 — the singular
+  ``slack_operator_user_id`` folds into that set); a non-member is WARN +
+  ephemeral refusal, nothing published. Authorization ("who MAY decide")
+  is separate from identity ("who DID"): the published ``decided_by`` is
+  the clicker's own member id, a factual claim, never a config constant.
 * Local first-click-wins is a client-side courtesy only; forge's
   ``request_id`` dedup remains the authoritative guard (DDR-027 — this
   state is in-process and lost on restart by design). The
@@ -210,20 +214,20 @@ class ApprovalReplyHandler:
     __slots__ = (
         "_decided_request_ids",
         "_decision_lock",
+        "_operator_ids",
         "_publisher",
-        "_settings",
         "_web_client",
     )
 
     def __init__(
         self,
         *,
-        settings: Any,
+        operator_ids: frozenset[str],
         publisher: ApprovalResponsePublisher,
         web_client: Any | None = None,
     ) -> None:
         """See :func:`build_reply_handler` (the public factory)."""
-        self._settings = settings
+        self._operator_ids = operator_ids
         self._publisher = publisher
         self._web_client = web_client
         # First-click-wins state — in-process only (DDR-027); forge's
@@ -256,8 +260,10 @@ class ApprovalReplyHandler:
         user_id = (payload.get("user") or {}).get("id")
 
         # --- 1. Authorization — the SOLE Slack-side gate ----------------
-        operator_id = self._settings.slack_operator_user_id
-        if not operator_id or user_id != operator_id:
+        # Allowlist membership (TASK-JNB-110): identity says who DID, this
+        # gate says who MAY. An empty allowlist (no operator configured)
+        # refuses everyone; a falsy user_id can never be a member.
+        if not user_id or user_id not in self._operator_ids:
             logger.warning(
                 "slack_reply_unauthorized_click",
                 user_id=user_id,
@@ -307,23 +313,15 @@ class ApprovalReplyHandler:
                 return
             self._decided_request_ids.add(request_id)
 
-            # --- 3b. decided_by presence guard ----------------------------
-            # The no-op factory gate is app_token/operator_id only (task
-            # AC); an unset decided_by fails loud here instead — forge
-            # would refuse the response anyway (expected_approver
-            # mismatch).
-            decided_by = self._settings.slack_decided_by
-            if not decided_by:
-                logger.warning(
-                    "slack_reply_decided_by_unset",
-                    request_id=request_id,
-                    detail=(
-                        "JARVIS_SLACK_DECIDED_BY is not configured; "
-                        "refusing to publish an approval response"
-                    ),
-                )
-                self._decided_request_ids.discard(request_id)
-                return
+            # --- 3b. Identity — the ACTUAL clicker (TASK-JNB-110) ---------
+            # ``decided_by`` is a factual claim about who clicked, not a
+            # config constant. It is the interaction payload's user id,
+            # already proven a member of the operator allowlist by step 1,
+            # so it is always a non-empty string here (no unset guard is
+            # needed — the old ``slack_reply_decided_by_unset`` path is
+            # gone). Forge's build-gate ``expected_approver`` is now set to
+            # this same member id, so the audit trail and the gate agree.
+            decided_by = user_id
 
             # --- 4. Optimistic disable (independent wrap — C2) ------------
             # Skipped when the interaction payload carries no
@@ -346,8 +344,9 @@ class ApprovalReplyHandler:
             response = ApprovalResponsePayload(
                 request_id=request_id,
                 decision=decision,  # type: ignore[arg-type]
-                # Verbatim — no trimming, casing, or normalisation. Must
-                # string-equal forge's expected_approver (config contract).
+                # The clicker's Slack member id, verbatim — no trimming,
+                # casing, or normalisation. Forge compares it to the run's
+                # ``expected_approver`` (now a member id) by exact equality.
                 decided_by=decided_by,
             )
             subject = button["approval_subject"] + ".response"
@@ -495,15 +494,19 @@ def _blocks_with_status(
 
 def build_reply_handler(
     *,
-    settings: Any,
+    operator_ids: frozenset[str],
     publisher: ApprovalResponsePublisher,
     web_client: Any | None = None,
 ) -> ApprovalReplyHandler:
     """Public factory for :class:`ApprovalReplyHandler`.
 
     Args:
-        settings: Any object exposing ``slack_operator_user_id`` and
-            ``slack_decided_by`` (normally :class:`JarvisConfig`).
+        operator_ids: The resolved allowlist of Slack member ids permitted
+            to decide approvals (the AUTHORIZATION gate). Normally
+            :meth:`JarvisConfig.resolve_operator_allowlist`. Empty means the
+            handler refuses every click — but the factory
+            :func:`create_slack_reply_client` short-circuits to a logged
+            no-op before building a handler in that case (TASK-JNB-110).
         publisher: The :class:`ApprovalResponsePublisher` seam.
         web_client: Optional Slack ``AsyncWebClient`` for ``chat.update``
             / ``chat.postEphemeral``. ``None`` degrades those to logged
@@ -512,7 +515,9 @@ def build_reply_handler(
     Returns:
         A ready :class:`ApprovalReplyHandler`.
     """
-    return ApprovalReplyHandler(settings=settings, publisher=publisher, web_client=web_client)
+    return ApprovalReplyHandler(
+        operator_ids=operator_ids, publisher=publisher, web_client=web_client
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -682,6 +687,39 @@ class SlackSocketModeReplyClient:
 # ---------------------------------------------------------------------------
 
 
+def _warn_deprecated_identity_settings(config: JarvisConfig) -> None:
+    """Emit TASK-JNB-110 deprecation notices for superseded identity config.
+
+    ``JARVIS_SLACK_DECIDED_BY`` is now IGNORED — decided_by is the clicker's
+    member id — so a still-set value is a WARNING (a real behaviour change the
+    operator must act on). The singular ``JARVIS_SLACK_OPERATOR_USER_ID`` is
+    still honoured (folded into the allowlist), so its supersession is a
+    gentler info-level notice. Both fire regardless of whether the reply path
+    is otherwise configured, so the signal is never swallowed by an early
+    no-op return.
+    """
+    if config.slack_decided_by:
+        logger.warning(
+            "slack_reply_decided_by_deprecated",
+            detail=(
+                "JARVIS_SLACK_DECIDED_BY is deprecated and IGNORED (TASK-JNB-110): "
+                "decided_by is now the actual clicker's Slack member id, not a "
+                "config constant. Remove it from your environment; set forge's "
+                "approval.expected_approver to the approver's Slack member id."
+            ),
+        )
+    if config.slack_operator_user_id:
+        logger.info(
+            "slack_reply_operator_user_id_deprecated",
+            detail=(
+                "JARVIS_SLACK_OPERATOR_USER_ID (singular) is deprecated "
+                "(TASK-JNB-110); prefer the comma-separated allowlist "
+                "JARVIS_SLACK_OPERATOR_USER_IDS. The singular value is still "
+                "honoured as one allowlist entry."
+            ),
+        )
+
+
 def create_slack_reply_client(
     config: JarvisConfig,
     nats_client: NATSClient | None,
@@ -705,18 +743,28 @@ def create_slack_reply_client(
 
     Per-feature gates:
 
-    * Approval reply path (``interactive``): ``slack_operator_user_id``
-      unset → ``slack_reply_no_op`` and no interactive handler.
+    * Approval reply path (``interactive``): an EMPTY operator allowlist
+      (:meth:`~jarvis.config.settings.JarvisConfig.resolve_operator_allowlist`
+      — neither ``slack_operator_user_ids`` nor the deprecated singular
+      ``slack_operator_user_id`` set) → ``slack_reply_no_op`` and no
+      interactive handler.
     * Planning intake (``events_api``, FEAT-SPL-001): its factory
       (:func:`~jarvis.infrastructure.slack_planning_intake.create_slack_planning_intake_handler`)
       logs ``slack_planning_intake_no_op`` naming the missing key(s).
 
     Neither feature configured → ``None`` (no connection).
     The supervisor starts and runs normally in every no-op permutation.
+
+    TASK-JNB-110 deprecations (emitted before any early return so operators
+    always see them): ``JARVIS_SLACK_DECIDED_BY`` is now ignored (a WARNING),
+    and the singular ``JARVIS_SLACK_OPERATOR_USER_ID`` is superseded by the
+    plural allowlist (an info-level notice — the value is still honoured).
     """
+    _warn_deprecated_identity_settings(config)
+
     app_token_secret = config.slack_app_token
     app_token = app_token_secret.get_secret_value() if app_token_secret is not None else None
-    operator_id = config.slack_operator_user_id
+    operator_ids = config.resolve_operator_allowlist()
     bot_token_secret = config.slack_bot_token
     bot_token = bot_token_secret.get_secret_value() if bot_token_secret is not None else None
 
@@ -748,16 +796,19 @@ def create_slack_reply_client(
     web_client = AsyncWebClient(token=bot_token)
 
     handler: ApprovalReplyHandler | None = None
-    if operator_id:
+    if operator_ids:
         handler = build_reply_handler(
-            settings=config,
+            operator_ids=operator_ids,
             publisher=NatsApprovalResponsePublisher(nats_client),
             web_client=web_client,
         )
     else:
         logger.info(
             "slack_reply_no_op",
-            reason=("slack_operator_user_id not configured; approval reply path disabled"),
+            reason=(
+                "no slack_operator_user_ids configured (and no deprecated "
+                "slack_operator_user_id); approval reply path disabled"
+            ),
         )
 
     events_handler = create_slack_planning_intake_handler(config, nats_client, web_client)

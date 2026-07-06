@@ -19,13 +19,23 @@ agents; any secret in a repo-adjacent .env is reachable.
 
 > **Amended 2026-07-06:** the canonical, expanded checklist is
 > `docs/handoff/jnb-v1.1-remaining-gate-activation-and-ops-2026-07-05.md` §4
-> (written after this task was filed). Deltas vs the list below: there are now
-> **FIVE** keys (JNB-104 added `JARVIS_SLACK_DECIDED_BY` — set it to `rich`,
-> verbatim-equal to forge `ApprovalConfig.expected_approver`; jarvis refuses
-> every phone approval while it is unset), token rotation is a **required**
-> numbered step (not "consider"), `chmod 600` the env file, and verify via the
-> boot-log event table (`slack_reply_socket_mode_started` is the strongest
-> signal). This task must land **before any live Slack traffic (TASK-JNB-107)**.
+> (written after this task was filed). Deltas vs the list below: token rotation is
+> a **required** numbered step (not "consider"), `chmod 600` the env file, and
+> verify via the boot-log event table (`slack_reply_socket_mode_started` is the
+> strongest signal). This task must land **before any live Slack traffic
+> (TASK-JNB-107)**.
+>
+> **Superseded 2026-07-06 by TASK-JNB-110 (identity contract v2):** there are now
+> **FOUR** Slack keys, not five — `JARVIS_SLACK_DECIDED_BY` is **removed/deprecated
+> and ignored** (do not set it; a leftover value only logs a startup WARNING).
+> Identity is now the **actual clicker's Slack member id**, published verbatim as
+> `decided_by`; the value that must equal it lives on the **forge** side —
+> `approval.expected_approver` = the approver's Slack member id (config-only forge
+> change). Authorization moved to the allowlist `JARVIS_SLACK_OPERATOR_USER_IDS`
+> (comma-separated member ids); the singular `JARVIS_SLACK_OPERATOR_USER_ID` still
+> resolves (folded into the allowlist) but is deprecated. If the live
+> `~/.config/guardkit/jarvis.env` created under this task still has
+> `JARVIS_SLACK_DECIDED_BY=rich`, delete that line on both hosts.
 >
 > ~~See also (same window, different credential): the fleet-memory relay
 > container still holds the pre-rotation `FLEET_MEMORY_PG_DSN`…~~
@@ -38,8 +48,9 @@ agents; any secret in a repo-adjacent .env is reachable.
 
 This task is task_type: operator_handoff — AutoBuild will not attempt it.
 
-- Move JARVIS_SLACK_BOT_TOKEN / CHANNEL_ID / APP_TOKEN / OPERATOR_USER_ID
-  **/ DECIDED_BY (five keys)** out
+- Move JARVIS_SLACK_BOT_TOKEN / CHANNEL_ID / APP_TOKEN / **OPERATOR_USER_IDS
+  (four keys — post-JNB-110; DECIDED_BY dropped, OPERATOR_USER_ID → the plural
+  allowlist)** out
   of jarvis/.env into ~/.config/guardkit/jarvis.env on BOTH hosts (Mac + GB10
   — the GB10 unit already loads that file; on the Mac export them per-session
   or mirror the file).
