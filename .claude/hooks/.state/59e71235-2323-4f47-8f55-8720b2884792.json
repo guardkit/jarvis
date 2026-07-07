@@ -1,0 +1,11 @@
+{
+  "session_id": "59e71235-2323-4f47-8f55-8720b2884792",
+  "command": "task-complete",
+  "slug": "TASK-JNB-110",
+  "prompt": "/task-complete TASK-JNB-110 then commit directly to main",
+  "transcript_path": "/home/richardwoollcott/.claude/projects/-home-richardwoollcott-Projects-appmilla-github-jarvis/59e71235-2323-4f47-8f55-8720b2884792.jsonl",
+  "started_at": "2026-07-06T20:52:50Z",
+  "started_at_epoch": 1783371170.2064946,
+  "completion_written": true,
+  "completed_at": "2026-07-06T20:55:58Z"
+}
