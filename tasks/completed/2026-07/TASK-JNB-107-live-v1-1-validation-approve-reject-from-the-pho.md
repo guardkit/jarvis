@@ -1,9 +1,10 @@
 ---
 id: TASK-JNB-107
 title: "LIVE v1.1 validation: approve/reject from the phone"
-status: backlog
+status: completed
 created: 2026-07-03T15:30:00Z
-updated: 2026-07-06T21:30:00Z
+updated: 2026-07-07T08:30:00Z
+completed: 2026-07-07T08:30:00Z
 priority: high
 task_type: operator_handoff
 parent_review: TASK-REV-C951
@@ -43,15 +44,15 @@ This is the final wave-10 gate: it requires the merged output of BOTH repos (jar
 
 ## Acceptance Criteria
 
-- [ ] Preconditions confirmed: forge-serve running with ApprovalSubscriber wiring (TASK-JNB-101/102 merged) AND gate activation deployed (TASK-GATE-D659), TASK-JNB-OPS-001 done, TASK-JNB-110 landed on both repos, jarvis supervisor restarted with the JARVIS_SLACK_* env vars set — `JARVIS_SLACK_OPERATOR_USER_IDS` (allowlist of member ids; NO `JARVIS_SLACK_DECIDED_BY`) — and the Socket Mode client connected, forge `approval.expected_approver` set to the approver's Slack member id, bot present in the Slack channel, ships-computer-nats broker healthy, GB10 PIPELINE durable `ack_wait` verified, and the TASK-JNB-105/106 test suites green on the deployed commits.
-- [ ] Approve loop: a gated toy build reaches a pause; the phone shows the pause message with live Approve/Reject buttons; tapping Approve produces a build-resumed notification followed by a terminal notification on the phone, and the buttons are disabled in place via chat.update.
-- [ ] Reject loop (ASSUM-010 closed live): a second gated toy build is paused; tapping Reject transitions the build to CANCELLED in the forge SQLite ledger AND the phone receives the build-cancelled terminal notification.
-- [ ] Config alignment proven live (identity contract v2, TASK-JNB-110): the accepted approve/reject decisions confirm forge `expected_approver` == the approver's Slack member id == the published `decided_by` (the clicker's own id) exactly (any mismatch would surface as forge silently refusing the phone decision — the build would stay paused).
-- [ ] Unauthorized click refused: a non-operator Slack account taps a button and receives an ephemeral refusal; jarvis logs a WARN, publishes nothing, and the build remains paused and still approvable by the operator.
-- [ ] Window breach: one pause is left to breach the approval window (REASON_MAX_WAIT); forge cancels the build and the phone receives the build-cancelled terminal signal.
-- [ ] Each notification in the above runs arrives exactly once on the phone (dedup from TASK-JNB-006 holding under live at-least-once delivery).
-- [ ] jarvis supervisor logs across the session show no err_code 10100 (still exactly one PIPELINE consumer; the approval-request capture binds only the AGENTS stream).
-- [ ] v1.1 marked complete once all of the above are observed.
+- [x] Preconditions confirmed: forge-serve running with ApprovalSubscriber wiring (TASK-JNB-101/102 merged) AND gate activation deployed (TASK-GATE-D659), TASK-JNB-OPS-001 done, TASK-JNB-110 landed on both repos, jarvis supervisor restarted with the JARVIS_SLACK_* env vars set — `JARVIS_SLACK_OPERATOR_USER_IDS` (allowlist of member ids; NO `JARVIS_SLACK_DECIDED_BY`) — and the Socket Mode client connected, forge `approval.expected_approver` set to the approver's Slack member id, bot present in the Slack channel, ships-computer-nats broker healthy, GB10 PIPELINE durable `ack_wait` verified, and the TASK-JNB-105/106 test suites green on the deployed commits.
+- [x] Approve loop: a gated toy build reaches a pause; the phone shows the pause message with live Approve/Reject buttons; tapping Approve produces a build-resumed notification followed by a terminal notification on the phone, and the buttons are disabled in place via chat.update.
+- [x] Reject loop (ASSUM-010 closed live): a second gated toy build is paused; tapping Reject transitions the build to CANCELLED in the forge SQLite ledger AND the phone receives the build-cancelled terminal notification.
+- [x] Config alignment proven live (identity contract v2, TASK-JNB-110): the accepted approve/reject decisions confirm forge `expected_approver` == the approver's Slack member id == the published `decided_by` (the clicker's own id) exactly (any mismatch would surface as forge silently refusing the phone decision — the build would stay paused).
+- [x] Unauthorized click refused: a non-operator Slack account taps a button and receives an ephemeral refusal; jarvis logs a WARN, publishes nothing, and the build remains paused and still approvable by the operator.
+- [x] Window breach: one pause is left to breach the approval window (REASON_MAX_WAIT); forge cancels the build and the phone receives the build-cancelled terminal signal.
+- [x] Each notification in the above runs arrives exactly once on the phone (dedup from TASK-JNB-006 holding under live at-least-once delivery).
+- [x] jarvis supervisor logs across the session show no err_code 10100 (still exactly one PIPELINE consumer; the approval-request capture binds only the AGENTS stream).
+- [x] v1.1 marked complete once all of the above are observed.
 
 ## Test Requirements
 
@@ -88,3 +89,40 @@ This task is task_type: operator_handoff — AutoBuild will not attempt it. The 
 - Have a non-operator Slack account tap a button — refused with the build still paused.
 - Let one pause breach the window — cancelled with a phone terminal signal.
 - Marks v1.1 complete.
+
+## Live validation record (2026-07-07, operator: Rich)
+
+All four live scenarios validated on production (forge-prod image `43402d07`,
+jarvis redeployed on JNB-110/JNB-111 code). Canonical evidence: forge
+`docs/state/TASK-MP-012/deploy-verification-2026-07-06-evening.md` addenda
+5-7 (forge commits `99c36e8`, `482b5de`, `3041621` — "ALL FOUR SCENARIOS
+COMPLETE; Gate G1 condition met").
+
+- **Scenario 1 (approve loop)** ✅ 06:48 UTC — first completed phone approval
+  round-trip: tap → `slack_reply_decision_published` → forge
+  `gate decided outcome=RESUMED` → autobuild launched → terminal signal on
+  the phone (toy build's expected failure IS the terminal signal).
+- **Scenario 2 (reject, ASSUM-010 closed live)** ✅ 07:00 UTC — one second
+  tap-to-CANCELLED: ledger CANCELLED authoritative-first (DDR-007 ordering
+  held), no launch, build-cancelled terminal on the phone.
+- **Scenario 3 (unauthorized click)** ✅ 07:16 UTC — non-allowlisted account
+  (U0BFNQ969U1) refused: WARN `slack_reply_unauthorized_click`, ephemeral
+  refusal operator-confirmed, ZERO publishes, build stayed PAUSED; the
+  operator's real account then approved the SAME prompt → RESUMED →
+  RUNNING ("paused and still approvable" proven on one prompt).
+- **Scenario 4 (window breach)** ✅ ×11 (2026-07-06 evening + overnight) —
+  REASON_MAX_WAIT cancel with phone terminal signal each time.
+- **Identity contract v2 alignment proven live**: accepted decisions confirm
+  forge `expected_approver` == the approver's Slack member id == published
+  `decided_by` (clicker's own id, verbatim).
+- **Zero `err_code 10100` across the session** (single-PIPELINE-consumer
+  rule held; approval capture bound only the AGENTS stream).
+- **Dedup clean** under live at-least-once delivery (addendum `123f1f7`).
+
+Dependencies at completion: JNB-102/104/105/106, OPS-001, GATE-D659,
+JNB-110 all landed/deployed; JNB-111 (core-publish on the no-ack AGENTS
+stream) completed 2026-07-07 before the formal scenarios, so taps reported
+success truthfully.
+
+**v1.1 is marked complete. SPL Gate G1: PASS — UBS-003 v1.1 formally
+shipped.**
