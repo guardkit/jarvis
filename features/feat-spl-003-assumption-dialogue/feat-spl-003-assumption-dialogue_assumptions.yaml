@@ -3,6 +3,13 @@
 # deferred for Rich's review per the autonomous-session precedent — WS1 build
 # plan §5, Session E)
 #
+# REVIEWED & ACCEPTED 2026-07-07 (Rich, decision-queue curation session):
+#   13 confirmed, 1 overridden (ASSUM-007). Confidence reconciled to
+#   8 high / 6 medium / 0 low. Rationale captured per item (human_rationale) —
+#   this review IS the anti-rubber-stamp ritual FEAT-SPL-003 exists to seed
+#   (harvest: 0 'considered' across 31 sessions). ASSUM-014 confirmed -> forge
+#   /task-create note filed as a forge task. See _summary.md header for counts.
+#
 # NOT ASSUMPTIONS (settled, do not re-open here):
 # - correlation_id -> Slack thread-ts mapping = Slack-ts-in-payload round-trip,
 #   decided 2026-07-07 with dated rationale in the _summary.md §Design Decision.
@@ -15,12 +22,12 @@
 # nats-core Session I session (WS1 §9 items 2/3) — nats-core is NOT edited
 # from this venue. ASSUM-014 is the forge-half delta (WS1 §5: falls out of
 # SPL-002's checkpoint design; where it does not, a forge /task-create note,
-# never a second feature — draft note in the _summary.md §Forge Half).
+# never a second feature — filed 2026-07-07, see _summary.md §Forge Half).
 
 feature: "Assumption Dialogue"
 generated: "2026-07-07T15:21:48Z"
-stack: "python"
-review_required: true
+reviewed: "2026-07-07"
+review_required: false
 
 assumptions:
   - id: "ASSUM-001"
@@ -35,13 +42,17 @@ assumptions:
       channel post when absent; unknown fields today are ignored by the
       frozen 0.5.0 model (extra="ignore"), so the consumer can ship before
       the field lands and upgrade transparently.
-    confidence: low
+    confidence: high
     basis: >-
       WS1 §9 item 3 names exactly these needs; PlanningQueuedPayload's
       parent_request_id docstring says it exists so acks can thread back;
       field names/optionality are Session I's call, pinned here as that
       session's input.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed against the pinned contracts as presented; cross-venue pin
+      to Session I holds (Session I owns final field names/optionality).
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-002"
     scenario: "A planning checkpoint renders as a per-assumption decision prompt"
@@ -53,14 +64,18 @@ assumptions:
       (checkpoint_type beginning product_docs / gate_mode), NEVER by parsing
       the run-id shape out of the subject. The plan-{cid} topic convention
       is documented as normative in the topic registry by Session I (item 2).
-    confidence: low
+    confidence: high
     basis: >-
       Canon Session 2 consumer note ("jarvis renders Mode P's plan-{cid}
       approval requests through the existing JNB-103 capture unchanged");
       forge checkpoint.py builds build_id = plan-{cid} and
       checkpoint_type=product_docs*; the subscriber already treats the 4th
       subject token opaquely.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed against canon Session 2 + forge checkpoint.py as presented;
+      detect-by-details (never by run-id shape) corroboration holds.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-003"
     scenario: "Approving every assumption publishes one decision carrying per-item dispositions"
@@ -74,14 +89,20 @@ assumptions:
       dispositions field (extend or companion the payload) is flagged to
       Session I as the clean follow-up; the notes carrier lets FEAT-SPL-003
       ship against the frozen contract.
-    confidence: low
+    confidence: medium
     basis: >-
       ApprovalResponsePayload has exactly {request_id, decision, decided_by,
       notes}; extra fields are dropped on parse (extra="ignore"), so notes is
       the only in-contract carrier; the manifest disposition vocabulary
       matches the scope §64 schema (confirmed | overridden: <value> |
       deferred).
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed as presented; the frozen 0.5.0 contract forces notes as the
+      only in-contract carrier. Held at medium (not high) for the wire-hygiene
+      risk: JSON-in-notes leaks if notes is ever surfaced as human-facing text.
+      Clean follow-up = structured dispositions field to Session I.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-004"
     scenario: "A decision prompt rendered before a restart remains fully decidable after it"
@@ -95,13 +116,19 @@ assumptions:
       decisions restart-survivable with zero jarvis-side persistence
       (ADR-ARCH-004), extending the JNB-105 "reply path has no pending map"
       design to the multi-item case.
-    confidence: low
+    confidence: high
     basis: >-
       Slack block_actions payloads carry the full source message; the
       existing reply handler already operates map-free (DDR-027, JNB-105
       scenario 6); no other state location is ADR-ARCH-004-compliant
       jarvis-side.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed as presented; the only ADR-ARCH-004-compliant option
+      jarvis-side and a direct extension of the proven map-free reply path
+      (DDR-027, JNB-105 s6). No override exists that isn't a re-opening of a
+      frozen constraint.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-005"
     scenario: "Editing an assumption records an overridden disposition carrying the replacement"
@@ -111,12 +138,16 @@ assumptions:
       proposed assumption text; submitting records
       overridden: <submitted text> for that item. Modal cancel leaves the
       item undecided.
-    confidence: low
+    confidence: high
     basis: >-
       Buttons cannot carry free-text input; a modal is the only native
       Slack primitive for prefilled text entry from a button; Socket Mode
       supports view submissions on the same connection.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed as presented; a modal is the only native Slack primitive for
+      prefilled free-text entry from a button. Corroboration holds.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-006"
     scenario: "Deferring an assumption records a deferred disposition and asks for another cycle"
@@ -129,13 +160,20 @@ assumptions:
       cycle). There is NO per-item reject. A checkpoint proposing zero
       assumptions renders a single whole-checkpoint approve (the only case
       where one control resolves the checkpoint).
-    confidence: low
+    confidence: medium
     basis: >-
       forge _dispatch_approval_response accepts approve/reject/defer/
       override today; defer already re-anchors the wait window and
       re-publishes; the revision-vs-proceed choice on edits is forge-half
       SPL-003 logic keyed on dispositions, not on the decision literal.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed as presented. Held at medium: the load-bearing choice
+      (overridden -> approve, revise-vs-proceed decided by forge's assembler
+      keyed on dispositions, not the decision literal) is a handshake with the
+      forge half that must match the ASSUM-014 forge task — asserted here, not
+      yet independently pinned forge-side.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-007"
     scenario: "A planned handoff notification is rendered into the originating thread"
@@ -149,13 +187,29 @@ assumptions:
       DDR-027 ephemeral-NEW pattern used for approvals, because approvals
       are re-published by forge on defer/escalation while notifications are
       published exactly once.
-    confidence: low
+    confidence: medium
     basis: >-
       JARVIS stream is limits-retention 1h/1000 (nats-infrastructure
       stream-definitions.json); the whole point of the feature is that these
       messages currently evaporate — an ephemeral NEW consumer would
       re-open a smaller version of the same hole across restarts.
-    human_response: "deferred"
+    human_response: "overridden: ephemeral NEW consumer (DDR-027 pattern), NOT durable"
+    human_rationale: >-
+      Rich, 2026-07-07: these notifications are build/status updates — noisy,
+      and a missed one is recoverable by asking Jarvis for current status. So
+      restart-replay is low marginal value and not worth departing from the
+      established DDR-027 ephemeral-NEW pattern (which also avoids the extra
+      durable-consumer ops surface and redelivery-storm risk on the shared
+      stream). Note: deliverable-1 (a consumer exists at all) is unchanged —
+      only durable-vs-ephemeral flipped. No pinned scenario requires replay:
+      "The thread mapping survives a Jarvis restart" tests post-restart
+      threading (ephemeral-NEW satisfies it); nothing requires replaying
+      messages published during downtime. PREMISE + REVISIT TRIGGER: this
+      relies on a "query Jarvis for forge/build status" capability actually
+      existing — a research prompt was drafted to verify it. If that path does
+      not exist, restart-window gaps become unrecoverable and this override
+      should be revisited (back to durable).
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-008"
     scenario: "A duplicate delivery of the same notification renders only once"
@@ -164,13 +218,18 @@ assumptions:
       keyed on the envelope's identity (correlation_id + event timestamp),
       mirroring the planning-intake dedup pattern (TTL 300s, cap 1000).
       A duplicate arriving after a restart may re-render — accepted cost,
-      consistent with DDR-027 and with the durable-consumer replay in
-      ASSUM-007.
-    confidence: low
+      consistent with DDR-027 and with the ephemeral consumer in ASSUM-007.
+    confidence: high
     basis: >-
       Matches PlanningIntakeHandler._seen_events exactly; a durable dedup
       store would violate the no-session-store constraint.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed as presented; mirrors PlanningIntakeHandler._seen_events
+      exactly and a durable dedup store would violate no-session-store.
+      Consistent with the ASSUM-007 ephemeral decision (post-restart dup may
+      re-render — accepted).
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-009"
     scenario: "A checkpoint too large for one message continues across messages in the same thread"
@@ -181,12 +240,17 @@ assumptions:
       "continued (2/3)" context marker; item action metadata stays under the
       2000-character action-value limit by carrying only {correlation_id,
       request_id, assumption_id, cycle}, never the assumption text.
-    confidence: low
+    confidence: medium
     basis: >-
       Slack hard limits (50 blocks, 2000-char action value — the latter
       already handled in JNB-103 by _SLACK_ACTION_VALUE_LIMIT); 8/message
       is a readability guess.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed as presented; chunking approach sound (hard limits are 50
+      blocks / 2000-char action value). Held at medium because 8/message is
+      an explicit readability guess — tunable at build time, not a hard pin.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-010"
     scenario: "Approving every assumption publishes one decision carrying per-item dispositions"
@@ -197,12 +261,19 @@ assumptions:
       final undecided item is decided — there is no separate submit control.
       After publish, further clicks are stale (ASSUM-004 state shows the
       prompt as resolved; forge is the authoritative refuser).
-    confidence: low
+    confidence: medium
     basis: >-
       A submit button reintroduces a whole-checkpoint control adjacent to
       the mega-Approve smell and adds a state the message must carry;
       auto-publish-on-completion needs none. Genuine UX call for Rich.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Rich, 2026-07-07: go lowest-friction — no submit gate, auto-publish on
+      the final item. "We'll see how it plays out in real use." Held at medium
+      with real-use as the validation trigger. Note: this only removes the
+      extra submit step; the per-item forced decisions (no mega-Approve) are
+      frozen and unaffected — the fat-finger-on-last-item cost is accepted.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-011"
     scenario: "The decision prompt never offers an approve-all control"
@@ -212,12 +283,19 @@ assumptions:
       It is an abort, not a decision shortcut — it records no per-assumption
       dispositions and does not count against the anti-rubber-stamp rule,
       which governs deciding assumptions, not aborting runs.
-    confidence: low
+    confidence: high
     basis: >-
       Without it the only way to stop a bad run mid-dialogue is to let it
       time out; forge's reject path already exists (tap-to-CANCELLED
       validated live in JNB-107 scenario 2).
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Rich, 2026-07-07: keep the cancel button. Confirmed after walking the
+      abort-vs-shortcut distinction: it records zero dispositions and approves
+      nothing, so it does not violate the anti-rubber-stamp rule (which governs
+      deciding assumptions, not aborting runs). A clean single-click abort is
+      genuinely useful vs the timeout/defer-everything alternative.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-012"
     scenario: "An escalated checkpoint is addressed to Rich and only Rich's decision is accepted"
@@ -229,13 +307,18 @@ assumptions:
       attempt count. Jarvis-side authorization stays the operator allowlist;
       forge's per-run expected_approver remains the authoritative identity
       gate (identity contract v2).
-    confidence: low
+    confidence: high
     basis: >-
       forge escalation.py already durably re-targets expected_approver and
       re-publishes with checkpoint_type=product_docs_escalated; JNB-110
       fixed the allowlist-vs-expected-approver split; rendering specifics
       unstated anywhere.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed as presented; forge escalation.py re-targets/re-publishes and
+      JNB-110 fixed the allowlist-vs-expected-approver split. identity
+      contract v2 (forge expected_approver authoritative) holds.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-013"
     scenario: "A planned handoff notification is rendered into the originating thread"
@@ -245,11 +328,16 @@ assumptions:
       no reasoning of its own — intake-only discipline extended to output),
       correlation identifier rendered in monospace, posted with the
       existing retry/rate-limit budget (_post_with_retry parity).
-    confidence: low
+    confidence: medium
     basis: >-
       Mirrors the FEAT-SPL-001 ack copy conventions and the notifier's
       existing 429/Retry-After handling; exact copy unstated.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Reviewed as presented; mirrors FEAT-SPL-001 ack copy + existing
+      429/Retry-After handling. Held at medium — exact copy is unstated and
+      settles at build time.
+    reviewed: "2026-07-07"
 
   - id: "ASSUM-014"
     scenario: "A planning checkpoint renders as a per-assumption decision prompt"
@@ -263,7 +351,7 @@ assumptions:
       of SPL-002's checkpoint design. Per WS1 §5 the delta is a forge
       /task-create note (drafted ready-to-file in the _summary.md §Forge
       Half), never a second feature; no forge edits from this venue.
-    confidence: low
+    confidence: high
     basis: >-
       forge checkpoint.py details keys enumerated 2026-07-07 (build_id,
       feature_id, stage_label, gate_mode, coach_score, rationale, summary,
@@ -271,4 +359,10 @@ assumptions:
       schema carries parent_request_id durably; the revision assembler
       (dispositions -> EnrichmentBatch -> stateless PO re-invoke) is
       likewise forge-half and unbuilt.
-    human_response: "deferred"
+    human_response: "confirmed"
+    human_rationale: >-
+      Rich, 2026-07-07: confirmed the forge-half delta is real (verified
+      against forge HEAD — details lack parent_request_id and a cycle number
+      today) -> forge /task-create note FILED as a forge task this session.
+      Delta stays a task, never a second feature (WS1 §5).
+    reviewed: "2026-07-07"

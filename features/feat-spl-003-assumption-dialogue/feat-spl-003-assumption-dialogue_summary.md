@@ -3,8 +3,10 @@
 **Stack**: python
 **Generated**: 2026-07-07T15:21:48Z
 **Scenarios**: 25 total (4 smoke, 1 regression)
-**Assumptions**: 14 total (0 high / 0 medium / 14 low confidence)
-**Review required**: Yes — `--auto` mode: all assumptions unconfirmed, deferred for Rich
+**Assumptions**: 14 total (8 high / 6 medium / 0 low confidence)
+**Review required**: No — reviewed & accepted 2026-07-07 (Rich, decision-queue
+curation): 13 confirmed, 1 overridden (ASSUM-007 → ephemeral consumer).
+Per-item rationale captured in the manifest (`human_rationale`).
 
 ## Scope
 
@@ -130,8 +132,9 @@ first scenario).
 Verified 2026-07-07 against forge HEAD: SPL-002's checkpoint design supplies
 the approval surface (`plan-{cid}` requests, expected_approver pinning,
 defer/escalation machinery) but does **not** fully cover FEAT-SPL-003's forge
-half. Ready-to-file `/task-create` note for the next forge session (per WS1
-§5 — no forge edits from this venue):
+half. **FILED as a forge task 2026-07-07** (Rich confirmed ASSUM-014 in the
+decision-queue curation session; per WS1 §5 the delta is a task, never a
+feature — no forge *code* edits from this venue). The filed note:
 
 > **TASK (forge): Mode P assumption-dialogue support — checkpoint detail
 > projection + revision assembler.** (1) Project into
@@ -151,24 +154,39 @@ half. Ready-to-file `/task-create` note for the next forge session (per WS1
 
 ## Deferred Items
 
-None — `--auto` accepted all four groups. Out of scope by design: any
+None — all 14 reviewed & resolved 2026-07-07 (13 confirmed, 1 overridden).
+Out of scope by design: any
 jarvis-side reasoning or enrichment (forge assembles revisions); the PO
 clarification engine (architect-only, must not leak — scope §3.3); durable
 jarvis-side dedup or session state (ADR-ARCH-004); editing nats-core or
 forge from this venue; Mode P dispatch/PO serving (SPL-002/DF-001).
 
-## Open Assumptions (low confidence)
+## Assumption Review Outcome (2026-07-07 — Rich, decision-queue curation)
 
-All fourteen — `--auto` mode. The load-bearing ones for Rich's review:
-**ASSUM-003** (dispositions ride `notes` as JSON until Session I),
-**ASSUM-004** (the Slack message IS the dialogue state — no pending map),
-**ASSUM-006** (aggregate decision mapping approve/defer semantics),
-**ASSUM-007** (durable consumer for notifications — deliberate departure
-from the DDR-027 ephemeral pattern), **ASSUM-010** (auto-publish on final
-item, no submit button), **ASSUM-014** (the forge-half delta is real:
-checkpoint details lack the thread anchor and cycle number today).
+Reviewed one at a time; the six load-bearing items got fullest treatment.
+**13 confirmed, 1 overridden.** Confidence reconciled 8 high / 6 medium /
+0 low. Per-item rationale is in the manifest (`human_rationale`).
 
-REVIEW REQUIRED: all assumptions unconfirmed (--auto mode)
+Load-bearing dispositions:
+- **ASSUM-003** (dispositions ride `notes` as JSON until Session I) —
+  **confirmed** (medium; wire-hygiene risk noted, structured field → Session I).
+- **ASSUM-004** (the Slack message IS the dialogue state — no pending map) —
+  **confirmed** (high; only ADR-ARCH-004-compliant option).
+- **ASSUM-006** (aggregate decision mapping) — **confirmed** (medium;
+  overridden→approve is a handshake that must match the ASSUM-014 forge task).
+- **ASSUM-007** (notification consumer durability) — **OVERRIDDEN →
+  ephemeral NEW consumer (DDR-027 pattern), not durable.** Rich: status
+  updates are noisy and recoverable by querying Jarvis, so restart-replay
+  isn't worth departing from the ephemeral pattern. Deliverable-1 (a consumer
+  exists at all) is unchanged. Revisit trigger: verify a "query Jarvis for
+  forge/build status" capability exists (research prompt drafted) — if it does
+  not, restart-window gaps are unrecoverable and durability should return.
+- **ASSUM-010** (auto-publish on final item, no submit button) — **confirmed**
+  (medium; lowest-friction UX, "we'll see in real use").
+- **ASSUM-014** (the forge-half delta is real) — **confirmed** (high) →
+  the §Forge Half `/task-create` note was FILED as a forge task this session.
+
+All 14 resolved (13 confirmed, 1 overridden); no item was defer-with-reason.
 
 ## Integration with /feature-plan
 
