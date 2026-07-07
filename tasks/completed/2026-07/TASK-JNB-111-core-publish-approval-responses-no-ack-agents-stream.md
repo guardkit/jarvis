@@ -1,9 +1,10 @@
 ---
 id: TASK-JNB-111
 title: "Approval-response publish must match the no-ack AGENTS stream: core publish + flush (forge precedent); stop mis-reporting stored publishes as failures"
-status: in_review
+status: completed
 created: 2026-07-06T22:30:00Z
-updated: 2026-07-06T23:55:00Z
+updated: 2026-07-07T00:05:00Z
+completed: 2026-07-07T00:05:00Z
 priority: high
 task_type: implementation
 repo: jarvis
@@ -59,7 +60,7 @@ and pointless 2s stalls + restore churn on every tap.
 Deploy record: forge `docs/state/TASK-MP-012/deploy-verification-2026-07-06-evening.md`
 (addendum 3). Stream config: `no_ack=true, retention=limits, subjects=[agents.>]`.
 
-## Implementation (2026-07-06, moved to in_review)
+## Implementation (2026-07-06, completed 2026-07-07)
 
 ### Change
 
