@@ -8,47 +8,47 @@ description: 'v1.1 jarvis half of FEAT-UBS-003: AGENTS-stream approval-request c
   forge-side TASK-JNB-101/102/106 (FEAT in forge repo) should land before TASK-JNB-107
   live validation.'
 created: '2026-07-04T11:10:32.960617'
-status: planned
+status: completed  # rollup 2026-07-07: all 4 tasks done; JNB-107 live validation passed (Gate G1 PASS)
 complexity: 6
 estimated_tasks: 4
 tasks:
 - id: TASK-JNB-103
   name: Approval-request capture + Block Kit approve/reject buttons
-  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-103-jarvis-approval-request-capture-block-kit-approv.md
+  file_path: tasks/completed/2026-07/TASK-JNB-103-jarvis-approval-request-capture-block-kit-approv.md
   complexity: 6
   dependencies: []
-  status: pending
+  status: completed
   description: ''
   implementation_mode: task-work
   estimated_minutes: 113
 - id: TASK-JNB-104
   name: Socket Mode reply path with operator-member-id authorization
-  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-104-jarvis-socket-mode-reply-path-with-operator-memb.md
+  file_path: tasks/completed/2026-07/TASK-JNB-104-jarvis-socket-mode-reply-path-with-operator-memb.md
   complexity: 7
   dependencies:
   - TASK-JNB-103
-  status: pending
+  status: completed
   description: ''
   implementation_mode: task-work
   estimated_minutes: 170
 - id: TASK-JNB-105
   name: v1.1 reply-path scenario tests (plain pytest)
-  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-105-jarvis-v1-1-reply-path-scenario-tests-plain-pyte.md
+  file_path: tasks/completed/2026-07/TASK-JNB-105-jarvis-v1-1-reply-path-scenario-tests-plain-pyte.md
   complexity: 5
   dependencies:
   - TASK-JNB-104
-  status: pending
+  status: completed
   description: ''
   implementation_mode: task-work
   estimated_minutes: 75
 - id: TASK-JNB-107
   name: LIVE v1.1 validation - approve/reject from the phone
-  file_path: tasks/backlog/jarvis-notification-bridge/TASK-JNB-107-live-v1-1-validation-approve-reject-from-the-pho.md
+  file_path: tasks/completed/2026-07/TASK-JNB-107-live-v1-1-validation-approve-reject-from-the-pho.md
   complexity: 3
   dependencies:
   - TASK-JNB-104
   - TASK-JNB-105
-  status: pending
+  status: completed
   description: ''
   implementation_mode: direct
   estimated_minutes: 33

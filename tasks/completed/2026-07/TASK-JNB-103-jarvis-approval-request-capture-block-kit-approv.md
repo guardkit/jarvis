@@ -1,11 +1,12 @@
 ---
 id: TASK-JNB-103
 title: "jarvis: approval-request capture + Block Kit approve/reject buttons"
-status: in_review
+status: completed
 created: 2026-07-03T15:30:00Z
-updated: 2026-07-05T09:30:00Z
-previous_state: in_progress
-state_transition_reason: "task-work complete: all quality gates passed (suite 2483 green, review findings fixed)"
+updated: 2026-07-07T09:05:00Z
+completed: 2026-07-07T09:05:00Z
+previous_state: in_review
+state_transition_reason: "FEAT-BF39 v1.1 rollup (Rich, 2026-07-07): JNB-107 live validation complete — all four scenarios; SPL Gate G1 PASS. Completed by the ops session on Rich's instruction."
 priority: high
 task_type: feature
 parent_review: TASK-REV-C951
