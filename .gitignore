@@ -50,3 +50,6 @@ htmlcov/
 # Per-machine Claude Code overrides
 .claude/settings.local.json
 .claude/worktrees/
+
+# hook runtime state — never commit (forge precedent; JNB-110 review note)
+.claude/hooks/.state/

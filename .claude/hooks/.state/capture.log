@@ -1,8 +1,0 @@
-2026-07-06T20:52:50Z queued: /task-complete (TASK-JNB-110) session=59e71235-2323-4f47-8f55-8720b2884792
-2026-07-06T20:55:58Z captured: /task-complete (TASK-JNB-110) -> 1600 chars
-2026-07-06T22:04:05Z queued: /task-work (TASK-JNB-111) session=30ca590b-d40b-47da-9c6e-71e8c362245f
-2026-07-06T22:23:06Z captured: /task-work (TASK-JNB-111) -> 325 chars
-2026-07-07T06:06:15Z queued: /task-complete (TASK-JNB-111) session=30ca590b-d40b-47da-9c6e-71e8c362245f
-2026-07-07T06:08:29Z captured: /task-complete (TASK-JNB-111) -> 173 chars
-2026-07-07T07:18:36Z queued: /task-complete (TASK-JNB-107) session=30ca590b-d40b-47da-9c6e-71e8c362245f
-2026-07-07T07:20:44Z empty response for /task-complete (TASK-JNB-107)
