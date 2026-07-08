@@ -37,7 +37,7 @@ Feature: Assumption Dialogue
   # Why: The feature's first deliverable — today Mode P's messages to the human
   # expire unread (no consumer; JARVIS stream retains 1h/1000). This is the
   # missing return channel, gate criterion for the WS1 §5 session.
-  @key-example @smoke
+  @key-example @smoke @task:TASK-SPL003-J01
   Scenario: A planned handoff notification is rendered into the originating thread
     Given the planning run has reached its planned handoff
     When forge publishes a planning notification announcing the handoff
@@ -48,7 +48,7 @@ Feature: Assumption Dialogue
 
   # Why: The core dialogue surface — one item per assumption, forced per-item
   # decisions; the anti-rubber-stamp UX is load-bearing for WS4 preference pairs.
-  @key-example @smoke
+  @key-example @smoke @task:TASK-SPL003-J02
   Scenario: A planning checkpoint renders as a per-assumption decision prompt
     Given forge pauses the planning run at the assumption checkpoint
     When Jarvis receives the planning approval request
@@ -61,7 +61,7 @@ Feature: Assumption Dialogue
 
   # Why: The approve disposition path — distinct per-item dispositions in the
   # published decision are the WS4 curation signal (harvest: 0 'considered').
-  @key-example @smoke
+  @key-example @smoke @task:TASK-SPL003-J03a
   Scenario: Approving every assumption publishes one decision carrying per-item dispositions
     Given a decision prompt with three proposed assumptions is displayed
     When Rich approves each assumption one by one
@@ -74,7 +74,7 @@ Feature: Assumption Dialogue
 
   # Why: The edit disposition path — an overridden value is the highest-value
   # curation signal and the input to the forge revision cycle.
-  @key-example
+  @key-example @task:TASK-SPL003-J03b
   Scenario: Editing an assumption records an overridden disposition carrying the replacement
     Given a decision prompt with three proposed assumptions is displayed
     When Rich chooses edit on one assumption and provides a corrected value
@@ -83,7 +83,7 @@ Feature: Assumption Dialogue
 
   # Why: The defer disposition path — defer is a real disposition, not a dropped
   # signal; it drives another dialogue cycle on the forge side.
-  @key-example
+  @key-example @task:TASK-SPL003-J03a
   Scenario: Deferring an assumption records a deferred disposition and asks for another cycle
     Given a decision prompt with three proposed assumptions is displayed
     When Rich defers one assumption and approves the others
@@ -93,7 +93,7 @@ Feature: Assumption Dialogue
 
   # Why: Dialogue continuity — revision cycles stay in the one conversation the
   # originator is watching, with the cycle number visible.
-  @key-example
+  @key-example @task:TASK-SPL003-J02
   Scenario: A revision cycle re-renders in the same originating thread with its cycle number
     Given a first dialogue cycle completed with one assumption overridden
     When forge publishes the revised checkpoint for the next cycle
@@ -102,7 +102,7 @@ Feature: Assumption Dialogue
 
   # Why: The WS4 join — dispositions must be recoverable from the durable trace,
   # keyed by assumption, or preference pairs cannot be built.
-  @key-example
+  @key-example @task:TASK-SPL003-J03a
   Scenario: Per-assumption dispositions land in the planning trace record
     Given a decision prompt has been fully decided with a mix of approvals and one edit
     When the decision is published
@@ -113,7 +113,7 @@ Feature: Assumption Dialogue
 
   # Why: Just-inside boundaries on item count — one item and a full real-world
   # manifest must both render as individually decidable items.
-  @boundary
+  @boundary @task:TASK-SPL003-J02
   Scenario Outline: Every proposed assumption renders as its own decision item regardless of count
     Given forge pauses the planning run proposing <count> assumptions
     When Jarvis renders the decision prompt
@@ -127,7 +127,7 @@ Feature: Assumption Dialogue
 
   # Why: Just-outside boundary on message capacity — a large manifest must not
   # silently drop items when it exceeds what one message can carry.
-  @boundary
+  @boundary @task:TASK-SPL003-J02
   Scenario: A checkpoint too large for one message continues across messages in the same thread
     # [ASSUMPTION: confidence=low] ASSUM-009 — chunk size bounded by the platform's per-message block limit
     Given forge pauses the planning run proposing more assumptions than fit in a single message
@@ -137,7 +137,7 @@ Feature: Assumption Dialogue
     And no assumption should be dropped
 
   # Why: Just-inside the cycle cap — the third cycle is still a normal dialogue.
-  @boundary
+  @boundary @task:TASK-SPL003-J02
   Scenario: The third dialogue cycle still renders as a normal decision prompt
     Given two dialogue cycles have already completed for the planning run
     When forge publishes the checkpoint for the third cycle
@@ -145,7 +145,7 @@ Feature: Assumption Dialogue
 
   # Why: Just-outside the cycle cap — cap 3 then escalate is the frozen contract;
   # the originator is never offered a fourth cycle.
-  @boundary @negative
+  @boundary @negative @task:TASK-SPL003-J02
   Scenario: Reaching the cycle cap escalates to Rich instead of a fourth cycle
     Given three dialogue cycles have already completed for the planning run
     When the dialogue would require a fourth cycle
@@ -155,7 +155,7 @@ Feature: Assumption Dialogue
 
   # Why: Zero-item boundary — with nothing to decide per-item, the checkpoint
   # still needs one explicit human approval, and only then.
-  @boundary
+  @boundary @task:TASK-SPL003-J02
   Scenario: A checkpoint proposing no assumptions offers a single whole-checkpoint approval
     Given forge pauses the planning run proposing no assumptions
     When Jarvis renders the decision prompt
@@ -165,7 +165,7 @@ Feature: Assumption Dialogue
   # ─── GROUP C: Negative Cases ────────────────────────────────────────────
 
   # Why: JNB-104 parity — the allowlist is the sole Slack-side authorization gate.
-  @negative
+  @negative @task:TASK-SPL003-J03a
   Scenario: A click from outside the operator allowlist is refused
     Given a decision prompt is displayed for the planning checkpoint
     When someone outside the operator allowlist clicks approve on an assumption
@@ -175,7 +175,7 @@ Feature: Assumption Dialogue
 
   # Why: Completeness is the anti-rubber-stamp enforcement point — no decision
   # leaves Jarvis while any item is undecided.
-  @negative
+  @negative @task:TASK-SPL003-J03a
   Scenario: No decision is published while any assumption is undecided
     Given a decision prompt with three assumptions where only two have decisions
     When Jarvis evaluates whether the checkpoint is complete
@@ -184,7 +184,7 @@ Feature: Assumption Dialogue
 
   # Why: The anti-rubber-stamp rule pinned on the rendered output itself —
   # this is what makes 'considered' curation data exist at all (WS4).
-  @negative
+  @negative @task:TASK-SPL003-J02
   Scenario: The decision prompt never offers an approve-all control
     Given forge pauses the planning run proposing several assumptions
     When Jarvis renders the decision prompt
@@ -193,7 +193,7 @@ Feature: Assumption Dialogue
 
   # Why: Degraded threading must never become message loss — a thin notification
   # still reaches a human, traceably.
-  @negative
+  @negative @task:TASK-SPL003-J01
   Scenario: A notification without a thread anchor degrades to the channel and is never dropped
     Given forge publishes a planning notification that carries no thread anchor
     When Jarvis receives the notification
@@ -202,7 +202,7 @@ Feature: Assumption Dialogue
     And the notification should not be dropped
 
   # Why: A poisoned message must not kill the return channel.
-  @negative
+  @negative @task:TASK-SPL003-J01
   Scenario: A malformed notification is skipped and the consumer keeps running
     Given the planning notification consumer is running
     When a malformed planning notification arrives
@@ -211,7 +211,7 @@ Feature: Assumption Dialogue
 
   # Why: Propose-never-elicit is a frozen constraint (SPL scope §3.3) — the
   # dialogue renders proposals for decision; nobody gets asked open questions.
-  @negative
+  @negative @task:TASK-SPL003-J02
   Scenario: Open questions render as decidable proposals, never as questions from Jarvis
     Given the product owner's proposals include open questions
     When Jarvis renders the decision prompt
@@ -220,7 +220,7 @@ Feature: Assumption Dialogue
 
   # Why: JNB-105 parity for the planning surface — jarvis publishes faithfully,
   # forge is the authoritative refuser (no pending map, by design).
-  @negative @regression
+  @negative @regression @task:TASK-SPL003-J03a
   Scenario: A stale click after the run reached a terminal state is refused authoritatively downstream
     Given the planning run has already reached a terminal state
     When Rich clicks approve on an old decision item for that run
@@ -231,7 +231,7 @@ Feature: Assumption Dialogue
 
   # Why: Restart-survival of the dialogue — old buttons must keep working
   # because the dialogue state lives in the message, not in Jarvis memory.
-  @edge-case
+  @edge-case @task:TASK-SPL003-J03a
   Scenario: A decision prompt rendered before a restart remains fully decidable after it
     Given a decision prompt was rendered before Jarvis last restarted
     When Rich decides the remaining assumptions after the restart
@@ -241,7 +241,7 @@ Feature: Assumption Dialogue
 
   # Why: THE named validation criterion (WS1 §5) — the thread mapping must
   # survive a Jarvis restart; the round-trip design makes this by construction.
-  @edge-case @smoke
+  @edge-case @smoke @task:TASK-SPL003-J01
   Scenario: The thread mapping survives a Jarvis restart
     Given James originated the planning run before Jarvis last restarted
     When forge publishes a planning notification for that run after the restart
@@ -250,7 +250,7 @@ Feature: Assumption Dialogue
 
   # Why: Partial dialogue state must also survive — decisions already made are
   # curation signal and must not be silently lost.
-  @edge-case
+  @edge-case @task:TASK-SPL003-J03a
   Scenario: Decisions made before a restart are preserved in the final published decision
     Given two of three assumptions were decided before Jarvis restarted
     When Rich decides the third assumption after the restart
@@ -259,7 +259,7 @@ Feature: Assumption Dialogue
 
   # Why: JetStream is at-least-once — duplicate deliveries must not double-post
   # into the human's thread.
-  @edge-case
+  @edge-case @task:TASK-SPL003-J01
   Scenario: A duplicate delivery of the same notification renders only once
     # [ASSUMPTION: confidence=low] ASSUM-008 — best-effort in-process dedup, matching the intake pattern
     Given the same planning notification is delivered twice in quick succession
@@ -268,7 +268,7 @@ Feature: Assumption Dialogue
 
   # Why: Escalation continuity — the escalated prompt reaches Rich in the same
   # conversation, and forge's pinned approver stays authoritative.
-  @edge-case
+  @edge-case @task:TASK-SPL003-J03a
   Scenario: An escalated checkpoint is addressed to Rich and only Rich's decision is accepted
     Given the planning checkpoint has been escalated to Rich
     When Jarvis renders the escalated decision prompt
@@ -277,7 +277,7 @@ Feature: Assumption Dialogue
 
   # Why: Lifecycle updates arrive in bursts around checkpoints and handoffs —
   # the return channel must keep up without losing or reordering messages.
-  @edge-case
+  @edge-case @task:TASK-SPL003-J01
   Scenario: A burst of notifications for the same run all render in order
     Given forge publishes several planning notifications for the same run in quick succession
     When Jarvis renders them

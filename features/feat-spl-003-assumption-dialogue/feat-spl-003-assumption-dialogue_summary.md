@@ -152,6 +152,32 @@ feature — no forge *code* edits from this venue). The filed note:
 > project `parent_request_id`/`target_user` into outbound
 > `NotificationPayload`s once Session I lands the fields.
 
+### Dated amendment (2026-07-08, FEAT-SPL-003 jarvis build session) — backward-edge §7 producer obligations
+
+Per WS1 §5's dated build input, the backward-edge episode schema contract
+(`fleet-memory/docs/design/backward-edge-episode-schema-contract-2026-07-07.md`,
+`974669c`) §7 item 6 places **additional producer obligations on the WS1-E forge
+half** beyond the thread-anchor / cycle-number / revision-assembler delta above —
+flagged here as this note requires, to be executed in the forge task
+`TASK-SPL003F-001` (forge venue; jarvis writes no forge code):
+
+- Wire the **`planning_outcome`** producer at Mode P's terminal path (contract §4.1)
+  — one row per planning run, carrying the per-assumption `disposition` + `edit_delta`
+  block that is the WS4 curation signal. The structured dispositions jarvis now
+  publishes (nats-core 0.6.0 `ApprovalResponsePayload.dispositions`, refinement R4)
+  map **verbatim** onto `planning_outcome.assumptions[]` — no reshaping (contract §4.1
+  "first-class by design").
+- Wire the **`approval_decision`** producer at the gate path (§4.2), carrying the
+  *observed* approver member id (identity v2 — the `decided_by` jarvis publishes).
+- Write the **`spec_survival`** v1/v2 edges (§4.6, forge as sole writer) keyed on the
+  Mode-P-minted `feat_id` (008-006).
+
+Per contract §5, the corresponding fleet-memory registry entries do not merge until
+this lands (WS4-S7, gated on the WS1-E forge build). `spec_survival`'s v1 edge is
+written from forge's own SQLite state — forge emits `SpecReadyForBuildPayload`
+(nats-core 0.6.0, carrying `feat_id`) but does not read it back. This is a documentation
+amendment only; the jarvis half (this feature) is unchanged by it.
+
 ## Deferred Items
 
 None — all 14 reviewed & resolved 2026-07-07 (13 confirmed, 1 overridden).

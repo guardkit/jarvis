@@ -398,3 +398,50 @@ assumptions:
       today) -> forge /task-create note FILED as a forge task this session.
       Delta stays a task, never a second feature (WS1 §5).
     reviewed: "2026-07-07"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUILD-TIME REFINEMENTS (2026-07-08, FEAT-SPL-003 jarvis BUILD session, Opus 4.8)
+#
+# Filed per WS1 §9's "implement verbatim or file a dated deviation" rule. The
+# house 3-agent decision panel (TASK-REV-A387: architecture-fit 77 / red-team 56 /
+# plan-critique 78) surfaced four refinements. Each PRESERVES the owning
+# assumption's INTENT; none reopens a frozen decision. Full rationale +
+# file:line evidence in tasks/backlog/feat-spl-003-assumption-dialogue/
+# TASK-REV-A387-plan-assumption-dialogue.md.
+#
+# R1 (refines ASSUM-008): dedup keys on the envelope's globally-unique
+#   `message_id` (uuid4, redelivery-stable), NOT `correlation_id + timestamp`.
+#   Intent preserved: best-effort in-process dedup mirroring the intake pattern
+#   (which actually keys on the unique event_id, not a coarse composite). A burst
+#   shares correlation_id; a timestamp collision under the ASSUM-008 literal key
+#   would DROP a distinct notification, violating the never-drop invariant and the
+#   burst-in-order scenario. message_id is the faithful analogue.
+#
+# R2 (strengthens ASSUM-007): the ephemeral NEW consumer uses MANUAL ack — ack
+#   after a successful post (or a logged-skip of a malformed message), NAK with
+#   bounded max_deliver on a transient post failure, ack+ERROR on exhaustion.
+#   ASSUM-007 (ephemeral, NEW, no durable restart-replay, DDR-027) is UNCHANGED;
+#   this only closes the red-team-found silent-loss hole where an auto-ack-on-
+#   delivery consumer loses a valid message whose Slack post fails. Never-drop
+#   within the 1h retention window, no redelivery storm.
+#
+# R3 (refines ASSUM-004/010): dialogue completeness is derived from the
+#   AUTHORITATIVE current message re-fetched via conversations.history inside the
+#   decision lock, NOT the possibly-stale inbound payload["message"] snapshot.
+#   Intent preserved: the Slack message IS the dialogue state (no jarvis session
+#   store, ADR-ARCH-004). Two concurrent final clicks each carry a stale snapshot
+#   under the literal reading → the checkpoint would never auto-publish (silent
+#   stall). Re-fetching the message forge/Slack already holds is still
+#   message-as-state, just the current copy.
+#
+# R4 (realises ASSUM-003 via the Session I structured field): per-assumption
+#   dispositions are written ONLY as the structured nats-core 0.6.0
+#   ApprovalResponsePayload.dispositions field (approve->accepted, edit->modified
+#   +edit_delta, defer->deferred; NO per-item rejected per ASSUM-006). The
+#   JSON-in-notes bridge is NOT written AND NOT read by jarvis (jarvis is the
+#   writer, never the reader of its own responses — a notes-JSON read path has no
+#   consumer and no scenario; YAGNI). ASSUM-003's medium-confidence wire-hygiene
+#   risk (JSON leaking if notes is surfaced as human text) is thereby retired.
+#   This is exactly the migration the Session I outcome note (top of file)
+#   anticipated ("FEAT-SPL-003 may migrate at its own pace").
+# ─────────────────────────────────────────────────────────────────────────────

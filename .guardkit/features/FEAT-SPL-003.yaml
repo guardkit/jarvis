@@ -1,0 +1,98 @@
+id: FEAT-SPL-003
+name: Assumption Dialogue (jarvis half)
+description: >-
+  Jarvis's half of the Sovereign Planning Loop assumption dialogue. (1) A
+  jarvis.notification.slack return-channel consumer (ephemeral NEW, manual-ack,
+  thread render, graceful top-level degrade — never dropped). (2) Per-assumption
+  Block Kit decision prompts (forced per-item approve/edit/defer, no mega-Approve)
+  rendered directly from the plan-{cid} ApprovalRequestPayload.details, with the
+  binary build-paused mirror suppressed; aggregate ApprovalResponsePayload carrying
+  the structured nats-core 0.6.0 dispositions field. jarvis holds zero mapping state
+  (DD-SPL003-1 round-trip); no reasoning — render and capture only.
+created: '2026-07-08T20:45:27Z'
+status: planned
+complexity: 7
+estimated_tasks: 6
+tasks:
+- id: TASK-SPL003-J01
+  name: jarvis.notification.slack return-channel consumer + shared threaded-post helper + wiring
+  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J01-notification-return-channel-consumer.md
+  complexity: 6
+  dependencies: []
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 90
+- id: TASK-SPL003-J02
+  name: Assumption-dialogue render + binary-mirror suppression
+  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J02-assumption-dialogue-render.md
+  complexity: 7
+  dependencies:
+  - TASK-SPL003-J01
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 110
+- id: TASK-SPL003-J03a
+  name: Dialogue click engine + structured dispositions (no modal)
+  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J03a-dialogue-click-engine-dispositions.md
+  complexity: 6
+  dependencies:
+  - TASK-SPL003-J02
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 100
+- id: TASK-SPL003-J03b
+  name: Assumption edit modal (views.open + view_submission)
+  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J03b-edit-modal.md
+  complexity: 5
+  dependencies:
+  - TASK-SPL003-J03a
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 75
+- id: TASK-SPL003-J04
+  name: Scenario + contract test suite + forge details fixture
+  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J04-scenario-contract-suite.md
+  complexity: 5
+  dependencies:
+  - TASK-SPL003-J01
+  - TASK-SPL003-J02
+  - TASK-SPL003-J03a
+  - TASK-SPL003-J03b
+  status: pending
+  implementation_mode: task-work
+  estimated_minutes: 60
+- id: TASK-SPL003-J05
+  name: Operator live-validation checklist (modal + return channel + E2E)
+  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J05-operator-live-validation.md
+  complexity: 2
+  dependencies:
+  - TASK-SPL003-J01
+  - TASK-SPL003-J02
+  - TASK-SPL003-J03a
+  - TASK-SPL003-J03b
+  - TASK-SPL003-J04
+  status: pending
+  implementation_mode: direct
+  estimated_minutes: 30
+smoke_gates:
+  after_wave: "all"
+  # Cross-wave regression surface (the build-pause path J02 edits + the reply
+  # path J03 edits + the nats-core contract). All paths exist at plan time. The
+  # NEW spl003 scenario files run in each task's own Coach Validation; adding
+  # them here would fail the plan-time smoke-gate path check (they are created
+  # by J01/J02). after_wave "all" so this fires once the shared-path edits land.
+  command: |
+    set -e
+    .venv/bin/python -m pytest tests/test_slack_notifier.py tests/test_slack_approval_buttons.py tests/test_forge_notifications_subscriber.py tests/infrastructure/test_slack_notifier_hardening.py tests/test_slack_reply.py tests/test_slack_reply_scenarios_jnb105.py tests/test_contract_nats_core.py -x -q
+  expected_exit: 0
+  timeout: 300
+orchestration:
+  parallel_groups:
+  - - TASK-SPL003-J01
+  - - TASK-SPL003-J02
+  - - TASK-SPL003-J03a
+  - - TASK-SPL003-J03b
+  - - TASK-SPL003-J04
+  - - TASK-SPL003-J05
+  estimated_duration_minutes: 465
+  recommended_parallel: 1
