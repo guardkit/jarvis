@@ -47,7 +47,11 @@ dependencies = [
     # BuildQueuedPayload shape compliance. NOTE: Phase 2 imports the data
     # classes ONLY — `nats-py` (the live client) is forbidden until Phase 4
     # per the phase2-dispatch-foundations-scope §Scope Invariants.
-    "nats-core>=0.5",
+    # Bumped >=0.5 -> >=0.6 (WS1 Session I): FEAT-SPL-003 consumes the new
+    # planning contract surface — NotificationPayload thread_ts/parent_request_id/
+    # target_user/blocks, ApprovalResponsePayload.dispositions, and the planning
+    # lifecycle + spec-ready handoff events. Delta is purely additive.
+    "nats-core>=0.6",
     # ---- Phase 3 (FEAT-J003-006) — Anthropic SDK -------------------------
     # `anthropic` is a base dependency so `python -m langgraph dev` (the
     # default Claude-backed orchestrator path) works without requiring

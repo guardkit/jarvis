@@ -23,6 +23,38 @@
 # from this venue. ASSUM-014 is the forge-half delta (WS1 §5: falls out of
 # SPL-002's checkpoint design; where it does not, a forge /task-create note,
 # never a second feature — filed 2026-07-07, see _summary.md §Forge Half).
+#
+# WS1 SESSION I OUTCOME (2026-07-08, nats-core 0.6.0 @ e60d41d, pushed):
+#   ASSUM-001/002/003 all IMPLEMENTED VERBATIM as pinned:
+#   - ASSUM-001 (item 3): NotificationPayload gained OPTIONAL thread_ts /
+#     parent_request_id / target_user / blocks. (Superset: §9 also names
+#     thread_ts alongside parent_request_id; all four landed.)
+#   - ASSUM-002 (item 2): the plan-{correlation_id} approval-topic convention is
+#     documented as NORMATIVE in Topics.Agents, with explicit
+#     PLANNING_APPROVAL_REQUEST/RESPONSE templates.
+#   - ASSUM-003 (item 5): a first-class structured dispositions field landed on
+#     ApprovalResponsePayload (AssumptionDisposition list; vocabulary
+#     accepted|modified|rejected|deferred + approve/edit/reject/defer synonym
+#     map). The JSON-in-notes bridge is PRESERVED (notes untouched), so
+#     FEAT-SPL-003 may migrate at its own pace — the medium-confidence
+#     wire-hygiene risk in ASSUM-003 is retired for producers that adopt the
+#     structured field.
+#   Plus item 1 (planning lifecycle + SpecReadyForBuildPayload carrying the
+#   Mode-P-minted feat_id) and item 4 (originating_adapter validate_default).
+#
+#   ONE DATED DEVIATION (per WS1 §9's "implement verbatim or file a dated
+#   deviation" rule) — backward-edge contract §7 item 5 (the *fifth §7
+#   obligation*, distinct from the fifth Session-I item): "where a
+#   BuildOutcome-class bus event exists/lands it should carry the corresponding
+#   build_outcome natural key." DEFERRED, not implemented, because the WS1-I
+#   guardrail explicitly keeps BuildOutcome/ReviewReport (and the
+#   BuildComplete/BuildFailed payloads) UNTOUCHED, and §7 item 5 is conditional
+#   ("where ... exists/lands"). Rationale it is safe to defer: forge is the sole
+#   writer of spec_survival (contract §4.6) and writes the build edge from its
+#   own SQLite state; the build_outcome natural key
+#   build_outcome:{project}:{feat_id} is derivable from feat_id, which is now
+#   carried on SpecReadyForBuildPayload — so no wire field is required now. When
+#   a BuildComplete-class carrier is next revised, add the natural key there.
 
 feature: "Assumption Dialogue"
 generated: "2026-07-07T15:21:48Z"
