@@ -2,8 +2,18 @@
 
 **Date:** 19 May 2026  
 **Author:** Rich Woollcott (with Claude AI research assistance)  
-**Status:** Research — Decision Pending  
+**Status:** SUPERSEDED — decision made; see banner below *(was: Research — Decision Pending)*  
 **Related:** ADR-ARCH-016 (NATS-only transport), distributed_agent_orchestration_architecture.md, fleet-master-index.md
+
+> **Refreshed 2026-07-07 / decision filed 2026-07-08.** This assessment was re-verified by
+> `ai-transition/docs/a2a-adoption-assessment-and-scope-2026-07-07.md`: A2A went **1.0 on
+> 2026-03-12** (maturity trigger already met); this doc's "Q3 2026 joint MCP/A2A spec" claim
+> traced to hedged secondary reporting only; and its ADK-preferred recommendation is **refuted**
+> — the fleet's harness bet went DeepAgents (DF-015), and a2a-sdk is framework-agnostic, so the
+> ADK pairing is dropped. Placement is now DECIDED as **DF-010 (ACCEPTED 2026-07-08)**:
+> trigger-gated role-services seat (T1–T3, in writing); internal dispatch stays NATS (D4/D13);
+> the planning front door stays human (DF-009). **Read the register record, not this doc, for
+> current posture.**
 
 ---
 

@@ -4,9 +4,9 @@ title: "Review: Build-incident responder capability gap — no fleet agent owns 
 task_type: review
 review_mode: decision
 review_depth: standard
-status: backlog
+status: completed
 created: 2026-05-12T00:00:00Z
-updated: 2026-05-12T00:00:00Z
+updated: 2026-07-08T00:00:00Z
 priority: normal
 tags: [architecture-review, agent-fleet, gap-analysis, autobuild, forge, capability-design, dddsw-post-demo]
 complexity: 0
@@ -39,6 +39,19 @@ test_results:
 ---
 
 # Task: Review — Build-incident responder capability gap
+
+> **CLOSED AS SUPERSEDED-WITH-POINTER — 2026-07-08.** The decision review this task demanded was
+> held and filed as **DF-017**
+> (`ai-transition/docs/decisions/DECISION-DF-017-runtime-incident-ownership-qa-verifier-owns-verdict-and-attribution.md`,
+> **ACCEPTED by Rich 2026-07-08**, B13 curation). Verdict: **no `build_responder`/`forge_monitor`
+> agent in v1** — the responder function decomposes into machinery that now exists or is in WS2's
+> plan: QA Verifier verdict + attribution (`pass|fail|instrument_fail|environment_fail` + F8
+> disposition against the F6 arbiter), class-routed dispositions (app → forge fix task through
+> normal gates / infra → operator runbook / instrument → runner backlog), and the proven phone
+> loop for route-and-notify. This task's six required decisions are answered in DF-017 §3; its
+> proposed build was **not done and is not owed** (closed-as-superseded, not closed-as-done —
+> Rich's confirmed wording). Shape C (a registered core-tier responder agent) survives as DF-017
+> revisit condition 1, triggered by routed-incident volume/latency.
 
 ## Description
 
