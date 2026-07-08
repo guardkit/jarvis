@@ -81,9 +81,15 @@ smoke_gates:
   # NEW spl003 scenario files run in each task's own Coach Validation; adding
   # them here would fail the plan-time smoke-gate path check (they are created
   # by J01/J02). after_wave "all" so this fires once the shared-path edits land.
+  # NB: test_slack_notifier_hardening.py runs FIRST — it has a PRE-EXISTING
+  # (not FEAT-SPL-003) test-isolation flake: test_slack_approval_buttons.py
+  # leaks module state that breaks the hardening 429/overflow warning-count
+  # assertions. Ordering hardening first makes the gate deterministic without
+  # masking the underlying pre-existing issue (noted-not-fixed; jarvis
+  # test-hygiene, orthogonal to this feature).
   command: |
     set -e
-    .venv/bin/python -m pytest tests/test_slack_notifier.py tests/test_slack_approval_buttons.py tests/test_forge_notifications_subscriber.py tests/infrastructure/test_slack_notifier_hardening.py tests/test_slack_reply.py tests/test_slack_reply_scenarios_jnb105.py tests/test_contract_nats_core.py -x -q
+    .venv/bin/python -m pytest tests/infrastructure/test_slack_notifier_hardening.py tests/test_slack_notifier.py tests/test_slack_approval_buttons.py tests/test_forge_notifications_subscriber.py tests/test_slack_reply.py tests/test_slack_reply_scenarios_jnb105.py tests/test_contract_nats_core.py -x -q
   expected_exit: 0
   timeout: 300
 orchestration:

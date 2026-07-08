@@ -91,6 +91,10 @@ from jarvis.infrastructure.forge_notifications import (
 )
 from jarvis.infrastructure.logging import configure
 from jarvis.infrastructure.nats_client import NATSClient
+from jarvis.infrastructure.planning_notifier import (
+    PlanningNotificationConsumer,
+    create_planning_notification_consumer,
+)
 from jarvis.infrastructure.routing_history import (
     MemoryClientProtocol,
     RoutingHistoryWriter,
@@ -497,6 +501,7 @@ class AppState:
     notification_sink: Any = None  # NotificationSink protocol (TASK-JNB-003)
     approval_subscriber: ApprovalRequestsSubscriber | None = None
     slack_reply_client: SlackSocketModeReplyClient | None = None
+    planning_notification_consumer: PlanningNotificationConsumer | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -864,6 +869,32 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         else:
             log.info("jarvis_slack_reply_started")
 
+    # 7c4. FEAT-SPL-003 (TASK-SPL003-J01) — the jarvis.notification.slack
+    # return channel. forge Mode P core-publishes NotificationPayload there;
+    # before this consumer the JARVIS stream (limits 1h/1000) let planning
+    # notifications to the human evaporate unread. Ephemeral NEW push consumer
+    # (ASSUM-007 / DDR-027), manual-ack (ack-after-post), renders into the
+    # originating thread and degrades to a top-level planning-channel post
+    # (never dropped). Gated on its OWN config (nats + planning channel + bot
+    # token), independent of the forge-notification sink (arch F2). DDR-021
+    # soft-fail; a JNB-108-style transient bind race just leaves the consumer
+    # off for this boot (notifications degrade, never crash the supervisor).
+    planning_notification_consumer: PlanningNotificationConsumer | None = (
+        create_planning_notification_consumer(config, nats_client)
+    )
+    if planning_notification_consumer is not None:
+        try:
+            await planning_notification_consumer.start()
+        except Exception as exc:
+            log.warning(
+                "jarvis_planning_notification_consumer_start_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            planning_notification_consumer = None
+        else:
+            log.info("jarvis_planning_notification_consumer_started")
+
     # 7d. FEAT-JARVIS-005 (TASK-J005-008) — start the Forge stage-complete
     # subscriber over ``pipeline.stage-complete.>``. The subscriber is
     # constructed only when NATS is up (DDR-021 soft-fail keeps the
@@ -1072,6 +1103,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         notification_sink=notification_sink,
         approval_subscriber=approval_subscriber,
         slack_reply_client=slack_reply_client,
+        planning_notification_consumer=planning_notification_consumer,
     )
 
     log.info(
@@ -1203,6 +1235,19 @@ async def shutdown(state: AppState) -> None:
         except Exception as exc:
             log.warning(
                 "jarvis_slack_reply_stop_warning",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    # 1b4. FEAT-SPL-003 (TASK-SPL003-J01) — stop the planning notification
+    # consumer alongside the other JetStream consumers. ``stop()`` is bounded
+    # and never raises; the wrapper is defensive belt-and-braces.
+    if state.planning_notification_consumer is not None:
+        try:
+            await state.planning_notification_consumer.stop()
+        except Exception as exc:
+            log.warning(
+                "jarvis_planning_notification_consumer_stop_warning",
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
