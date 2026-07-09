@@ -19,6 +19,21 @@ tags: [ubs-003, jarvis-notification-bridge, slack, v1]
 
 # Task: LIVE v1 hardening validation: pause on phone, burst, restart
 
+> **📌 DISPOSITION 2026-07-09 (WS3-S7) — FOLDED into the Session A / TASK-SPL-J04
+> operator bundle (disposition (a), the recorded single disposition).** JNB-107
+> live-validated the *reply loop* only; this task's burst/restart/pause hardening
+> was never live-validated — the un-dispositioned middle state WS3-S7 §3 names as
+> itself the defect. Rather than a standalone operator session, the three probes
+> below are carried as concrete runbook steps in the WS5 canon bundle that runs
+> **tomorrow, 2026-07-10**:
+> `ai-transition/docs/handoff-2026-07-07-post-gate-g1-remaining-work.md` §2
+> (dated 2026-07-09 note under "Bundle TASK-SPL-J04"). The operator is already at
+> the phone with a live forge+jarvis for MP-010/J04, so it is the cheapest live
+> venue. This file stays `backlog` (operator_handoff, unrun) until Session A
+> executes the probes; on all-green it "marks v1 complete" per the ACs below and
+> is closed via `/task-complete`. **No supersession** — the validation is still
+> owed; it is now scheduled, not orphaned.
+
 ## Description
 
 Operator: run a gated toy build that pauses — the phone shows stage, verbatim rationale, and 'score unavailable' (the live ADR-ARCH-033 default); queue two toy builds finishing close together — both terminals arrive with correct per-build fields and no wedge; restart jarvis mid-build — no replayed notifications, and post-restart events still reach the phone (fan-out is not correlation-gated). This task marks v1 complete.
