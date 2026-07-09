@@ -293,6 +293,23 @@ class ApprovalReplyHandler:
         actions = payload.get("actions") or []
         action = actions[0] if actions else {}
         action_id = action.get("action_id")
+
+        # --- 2a. SPL-003 dialogue routing (TASK-SPL003-J03a) ------------
+        # Per-assumption clicks and the whole-run cancel/zero-assumption
+        # approve go to the dialogue engine (which takes the decision lock
+        # itself). ``assumption_edit`` opens the J03b modal (routed there);
+        # until J03b lands it falls through to the unknown-action drop.
+        from jarvis.infrastructure.assumption_dialogue import (
+            ACTION_APPROVE,
+            ACTION_CANCEL,
+            ACTION_DEFER,
+            ACTION_WHOLE_APPROVE,
+        )
+
+        if action_id in (ACTION_APPROVE, ACTION_DEFER, ACTION_CANCEL, ACTION_WHOLE_APPROVE):
+            await self._handle_dialogue_click(payload, action, action_id, user_id)
+            return
+
         decision = _ACTION_DECISIONS.get(action_id or "")
         if decision is None:
             logger.warning(
@@ -308,6 +325,18 @@ class ApprovalReplyHandler:
                 "slack_reply_malformed_value_dropped",
                 action_id=action_id,
                 error=str(exc),
+            )
+            return
+
+        # Belt-and-braces with J02's mirror suppression: a binary
+        # forge_approve/forge_reject click on a planning (``plan-``) subject is
+        # ignored — planning decisions travel only through the per-assumption
+        # dialogue, never a binary approve/reject (scenario 15).
+        if button["approval_subject"].startswith("agents.approval.forge.plan-"):
+            logger.info(
+                "slack_reply_binary_plan_click_ignored",
+                action_id=action_id,
+                approval_subject=button["approval_subject"],
             )
             return
 
@@ -420,6 +449,264 @@ class ApprovalReplyHandler:
             )
 
     # ------------------------------------------------------------------
+    # SPL-003 per-assumption dialogue engine (TASK-SPL003-J03a)
+    # ------------------------------------------------------------------
+
+    async def _handle_dialogue_click(
+        self,
+        payload: dict[str, Any],
+        action: dict[str, Any],
+        action_id: str | None,
+        user_id: str,
+    ) -> None:
+        """Handle one per-assumption dialogue click (post-auth). Never raises.
+
+        The Slack message IS the dialogue state (ADR-ARCH-004 — jarvis keeps no
+        pending-dialogue map). Under the handler-wide ``_decision_lock`` this
+        re-derives per-item state from the AUTHORITATIVE re-fetched message (not
+        the possibly-stale inbound snapshot — two concurrent final clicks each
+        carry a stale copy and the checkpoint would otherwise never publish),
+        applies this click, and publishes exactly ONE aggregate
+        ``ApprovalResponsePayload`` when the last undecided item is decided.
+        """
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        raw_value = _extract_action_value(action)
+        try:
+            button = ad.parse_item_value(raw_value)
+        except ValueError as exc:
+            logger.warning(
+                "dialogue_click_malformed_value_dropped",
+                action_id=action_id,
+                error=str(exc),
+            )
+            return
+
+        approval_subject = str(button["approval_subject"])
+        request_id = str(button["request_id"])
+        assumption_id = str(button["assumption_id"])
+        correlation_id = button["correlation_id"] or None
+
+        container = payload.get("container") or {}
+        channel_id = (payload.get("channel") or {}).get("id") or container.get("channel_id")
+        message_ts = container.get("message_ts")
+
+        async with self._decision_lock:
+            # Whole-run terminal clicks publish immediately (guarded by
+            # first-publish-wins on request_id): cancel is a reject abort,
+            # the zero-assumption whole-approve an approve.
+            if action_id == ad.ACTION_CANCEL:
+                blocks = await self._fetch_dialogue_blocks(channel_id, message_ts, payload)
+                dispositions = self._dispositions_from_state(ad.parse_dialogue_blocks(blocks))
+                await self._publish_dialogue_decision(
+                    request_id=request_id,
+                    approval_subject=approval_subject,
+                    correlation_id=correlation_id,
+                    decided_by=user_id,
+                    decision="reject",
+                    dispositions=dispositions,
+                )
+                await self._dialogue_status_update(
+                    channel_id, message_ts, payload, "Planning run cancelled."
+                )
+                return
+
+            if action_id == ad.ACTION_WHOLE_APPROVE:
+                await self._publish_dialogue_decision(
+                    request_id=request_id,
+                    approval_subject=approval_subject,
+                    correlation_id=correlation_id,
+                    decided_by=user_id,
+                    decision="approve",
+                    dispositions=[],
+                )
+                await self._dialogue_status_update(
+                    channel_id, message_ts, payload, "Checkpoint approved."
+                )
+                return
+
+            disposition = "accepted" if action_id == ad.ACTION_APPROVE else "deferred"
+
+            blocks = await self._fetch_dialogue_blocks(channel_id, message_ts, payload)
+            state = ad.parse_dialogue_blocks(blocks)
+            current = state.get(assumption_id)
+            if current is not None and current["disposition"] != "undecided":
+                # The authoritative message already records a decision for this
+                # item — idempotent under redelivery / a double-click.
+                logger.info(
+                    "dialogue_item_already_decided",
+                    assumption_id=assumption_id,
+                    request_id=request_id,
+                )
+                return
+
+            updated = ad.apply_disposition(
+                blocks, assumption_id=assumption_id, disposition=disposition
+            )
+            await self._chat_update_blocks(
+                channel_id,
+                message_ts,
+                updated,
+                text=f"Recorded {disposition} for {assumption_id}",
+            )
+
+            # Completeness gate — no decision published while any item undecided.
+            if not ad.is_complete(updated):
+                return
+
+            final_state = ad.parse_dialogue_blocks(updated)
+            await self._publish_dialogue_decision(
+                request_id=request_id,
+                approval_subject=approval_subject,
+                correlation_id=correlation_id,
+                decided_by=user_id,
+                decision=ad.aggregate_decision(final_state),
+                dispositions=self._dispositions_from_state(final_state),
+            )
+
+    @staticmethod
+    def _dispositions_from_state(state: dict[str, dict[str, Any]]) -> list[Any]:
+        """Build ``AssumptionDisposition`` models for every DECIDED item."""
+        from nats_core.events import AssumptionDisposition
+
+        out: list[Any] = []
+        for assumption_id, item in state.items():
+            if item["disposition"] == "undecided":
+                continue
+            out.append(
+                AssumptionDisposition(
+                    assumption_id=assumption_id,
+                    disposition=item["disposition"],
+                    edit_delta=item.get("edit_delta"),
+                )
+            )
+        return out
+
+    async def _publish_dialogue_decision(
+        self,
+        *,
+        request_id: str,
+        approval_subject: str,
+        correlation_id: str | None,
+        decided_by: str,
+        decision: str,
+        dispositions: list[Any],
+    ) -> bool:
+        """Publish exactly one aggregate decision (first-publish-wins)."""
+        if request_id in self._decided_request_ids:
+            logger.info("dialogue_duplicate_publish_dropped", request_id=request_id)
+            return False
+        self._decided_request_ids.add(request_id)
+
+        from nats_core.events import ApprovalResponsePayload
+
+        response = ApprovalResponsePayload(
+            request_id=request_id,
+            decision=decision,  # type: ignore[arg-type]
+            decided_by=decided_by,
+            dispositions=dispositions or None,
+        )
+        subject = approval_subject + ".response"
+        try:
+            await self._publisher.publish(
+                subject=subject,
+                payload=response,
+                correlation_id=correlation_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "dialogue_publish_failed",
+                request_id=request_id,
+                subject=subject,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            self._decided_request_ids.discard(request_id)
+            return False
+        logger.info(
+            "dialogue_decision_published",
+            request_id=request_id,
+            decision=decision,
+            subject=subject,
+            n_dispositions=len(dispositions),
+            decided_by=decided_by,
+        )
+        return True
+
+    async def _fetch_dialogue_blocks(
+        self,
+        channel_id: str | None,
+        message_ts: str | None,
+        payload: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Re-fetch the AUTHORITATIVE message blocks (ASSUM-004, race-safe F4).
+
+        Falls back to the inbound snapshot only when no web client / channel /
+        ts is available (a degraded no-Slack path); the authoritative fetch is
+        what makes concurrent final clicks converge instead of stalling.
+        """
+        if self._web_client is not None and channel_id and message_ts:
+            try:
+                resp = await self._web_client.conversations_history(
+                    channel=channel_id,
+                    latest=message_ts,
+                    inclusive=True,
+                    limit=1,
+                )
+                messages = resp["messages"]
+                if messages:
+                    return messages[0].get("blocks") or []
+            except Exception as exc:
+                logger.warning(
+                    "dialogue_history_fetch_failed",
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                )
+        return (payload.get("message") or {}).get("blocks") or []
+
+    async def _chat_update_blocks(
+        self,
+        channel_id: str | None,
+        message_ts: str | None,
+        blocks: list[dict[str, Any]],
+        *,
+        text: str,
+    ) -> None:
+        """``chat.update`` the dialogue message with new blocks; WARNING-only."""
+        if self._web_client is None or not channel_id or not message_ts:
+            return
+        try:
+            await self._web_client.chat_update(
+                channel=channel_id, ts=message_ts, text=text, blocks=blocks
+            )
+        except Exception as exc:
+            logger.warning(
+                "dialogue_chat_update_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    async def _dialogue_status_update(
+        self,
+        channel_id: str | None,
+        message_ts: str | None,
+        payload: dict[str, Any],
+        status: str,
+    ) -> None:
+        """Replace the dialogue's action controls with a plain status line."""
+        blocks = (payload.get("message") or {}).get("blocks")
+        if blocks is None and self._web_client is not None and channel_id and message_ts:
+            blocks = await self._fetch_dialogue_blocks(channel_id, message_ts, payload)
+        remaining = [b for b in (blocks or []) if b.get("type") != "actions"]
+        remaining.append(
+            {
+                "type": "section",
+                "text": {"type": "plain_text", "text": status, "emoji": False},
+            }
+        )
+        await self._chat_update_blocks(channel_id, message_ts, remaining, text=status)
+
+    # ------------------------------------------------------------------
     # Slack side-effects — every call independently wrapped (C2)
     # ------------------------------------------------------------------
 
@@ -487,6 +774,17 @@ class ApprovalReplyHandler:
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
+
+
+def _extract_action_value(action: dict[str, Any]) -> str:
+    """The clicked control's ``value`` — button or overflow (SPL-003 J03a).
+
+    A plain button carries ``value`` directly; an overflow menu (the
+    ``planning_cancel`` abort) carries it under ``selected_option.value``.
+    """
+    if action.get("type") == "overflow":
+        return str((action.get("selected_option") or {}).get("value") or "")
+    return str(action.get("value") or "")
 
 
 def _blocks_with_status(

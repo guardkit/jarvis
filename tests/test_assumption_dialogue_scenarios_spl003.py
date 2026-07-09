@@ -344,3 +344,299 @@ class TestJ02MirrorSuppression:
         )
         await notifier._deliver_pause_message(note)
         notifier._client.chat_postMessage.assert_awaited()
+
+
+# ---------------------------------------------------------------------------
+# TASK-SPL003-J03a — click engine + structured dispositions
+# ---------------------------------------------------------------------------
+
+_OP = "U_RICH"
+
+
+class _FakeSlack:
+    """A mutable-message fake: conversations_history returns the current blocks,
+    chat_update mutates them — models the Slack message-as-state (ADR-ARCH-004)."""
+
+    def __init__(self, blocks: list[dict[str, Any]]) -> None:
+        self.blocks = blocks
+        self.web = AsyncMock()
+        self.web.conversations_history = AsyncMock(side_effect=self._history)
+        self.web.chat_update = AsyncMock(side_effect=self._update)
+        self.web.chat_postEphemeral = AsyncMock()
+
+    async def _history(self, **_: Any) -> dict[str, Any]:
+        return {"messages": [{"blocks": self.blocks}]}
+
+    async def _update(
+        self, *, channel: str, ts: str, text: str, blocks: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        self.blocks = blocks
+        return {"ok": True}
+
+
+def _make_dialogue_handler(
+    fake: _FakeSlack, *, operator_ids: frozenset[str] | None = None
+) -> tuple[Any, AsyncMock]:
+    from jarvis.infrastructure.slack_reply import build_reply_handler
+
+    publisher = AsyncMock()
+    publisher.publish = AsyncMock()
+    handler = build_reply_handler(
+        operator_ids=(operator_ids if operator_ids is not None else frozenset({_OP})),
+        publisher=publisher,
+        web_client=fake.web,
+    )
+    return handler, publisher
+
+
+def _dialogue_render(n: int = 3, **kw: Any) -> list[dict[str, Any]]:
+    return ad.build_dialogue_blocks(
+        make_details(n, **kw),
+        correlation_id="cid123",
+        request_id="req-1",
+        approval_subject=_SUBJECT,
+    )
+
+
+def _click(
+    action_id: str,
+    *,
+    assumption_id: str = "A1",
+    request_id: str = "req-1",
+    approval_subject: str = _SUBJECT,
+    cycle: int = 1,
+    user_id: str = _OP,
+    channel: str = "C1",
+    message_ts: str = "1720.1",
+    overflow: bool = False,
+) -> dict[str, Any]:
+    value = json.dumps(
+        {
+            "correlation_id": "cid123",
+            "request_id": request_id,
+            "assumption_id": assumption_id,
+            "cycle": cycle,
+            "approval_subject": approval_subject,
+        },
+        separators=(",", ":"),
+    )
+    action: dict[str, Any] = {"action_id": action_id, "block_id": f"{assumption_id}::act"}
+    if overflow:
+        action["type"] = "overflow"
+        action["selected_option"] = {"value": value}
+    else:
+        action["value"] = value
+    return {
+        "type": "block_actions",
+        "user": {"id": user_id},
+        "container": {"channel_id": channel, "message_ts": message_ts},
+        "channel": {"id": channel},
+        "actions": [action],
+    }
+
+
+def _published(publisher: AsyncMock) -> Any:
+    return publisher.publish.await_args.kwargs["payload"]
+
+
+def _dispo_map(payload: Any) -> dict[str, Any]:
+    return {d.assumption_id: d for d in (payload.dispositions or [])}
+
+
+class TestJ03aApproveEach:
+    @pytest.mark.asyncio
+    async def test_approving_each_publishes_one_decision_distinct_dispositions(self) -> None:
+        """@smoke — approve one-by-one → exactly one decision, per-item accepted."""
+        fake = _FakeSlack(_dialogue_render(3))
+        handler, publisher = _make_dialogue_handler(fake)
+
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A1"))
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A2"))
+        publisher.publish.assert_not_awaited()  # incomplete → no publish
+
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A3"))
+        publisher.publish.assert_awaited_once()
+        payload = _published(publisher)
+        assert payload.decision == "approve"
+        assert payload.decided_by == _OP
+        dispo = _dispo_map(payload)
+        assert set(dispo) == {"A1", "A2", "A3"}
+        assert all(d.disposition == "accepted" for d in dispo.values())
+        # published subject is {approval_subject}.response
+        assert publisher.publish.await_args.kwargs["subject"] == _SUBJECT + ".response"
+
+
+class TestJ03aDeferAndMixed:
+    @pytest.mark.asyncio
+    async def test_defer_one_approve_rest_asks_another_cycle(self) -> None:
+        """@key-example — defer one → decision=defer, that item deferred, rest kept."""
+        fake = _FakeSlack(_dialogue_render(3))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A1"))
+        await handler.handle_block_actions(_click(ad.ACTION_DEFER, assumption_id="A2"))
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A3"))
+        payload = _published(publisher)
+        assert payload.decision == "defer"
+        dispo = _dispo_map(payload)
+        assert dispo["A2"].disposition == "deferred"
+        assert dispo["A1"].disposition == "accepted"
+        assert dispo["A3"].disposition == "accepted"
+
+    @pytest.mark.asyncio
+    async def test_dispositions_keyed_by_assumption_id(self) -> None:
+        """@key-example — every disposition keyed by its assumption identifier."""
+        fake = _FakeSlack(_dialogue_render(3))
+        handler, publisher = _make_dialogue_handler(fake)
+        for aid in ("A1", "A2", "A3"):
+            await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id=aid))
+        dispo = _dispo_map(_published(publisher))
+        assert sorted(dispo) == ["A1", "A2", "A3"]
+
+
+class TestJ03aAuthorization:
+    @pytest.mark.asyncio
+    async def test_click_outside_allowlist_refused_nothing_published(self) -> None:
+        """@negative — non-member click refused with a private notice, no publish."""
+        fake = _FakeSlack(_dialogue_render(3))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(
+            _click(ad.ACTION_APPROVE, assumption_id="A1", user_id="U_STRANGER")
+        )
+        publisher.publish.assert_not_awaited()
+        fake.web.chat_postEphemeral.assert_awaited()  # ephemeral refusal
+        # no disposition recorded — the message was never chat.updated
+        fake.web.chat_update.assert_not_awaited()
+
+
+class TestJ03aCompletenessGate:
+    @pytest.mark.asyncio
+    async def test_no_publish_while_any_undecided(self) -> None:
+        """@negative — completeness is the anti-rubber-stamp enforcement point."""
+        fake = _FakeSlack(_dialogue_render(3))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A1"))
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A2"))
+        publisher.publish.assert_not_awaited()
+        # A3 still undecided in the authoritative message
+        assert ad.parse_dialogue_blocks(fake.blocks)["A3"]["disposition"] == "undecided"
+
+
+class TestJ03aRestartSurvival:
+    @pytest.mark.asyncio
+    async def test_prompt_decidable_after_restart(self) -> None:
+        """@edge — decide two pre-restart, third post-restart (fresh handler);
+        the published decision carries all three, earlier two preserved exactly."""
+        fake = _FakeSlack(_dialogue_render(3))
+        handler1, _ = _make_dialogue_handler(fake)
+        await handler1.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A1"))
+        await handler1.handle_block_actions(_click(ad.ACTION_DEFER, assumption_id="A2"))
+
+        # "Restart": a brand-new handler with empty first-click-wins state,
+        # re-deriving purely from the (mutated) authoritative message.
+        handler2, publisher2 = _make_dialogue_handler(fake)
+        await handler2.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A3"))
+        publisher2.publish.assert_awaited_once()
+        dispo = _dispo_map(_published(publisher2))
+        assert dispo["A1"].disposition == "accepted"
+        assert dispo["A2"].disposition == "deferred"
+        assert dispo["A3"].disposition == "accepted"
+
+
+class TestJ03aConcurrency:
+    @pytest.mark.asyncio
+    async def test_concurrent_final_clicks_publish_once(self) -> None:
+        """Two concurrent final clicks do not stall or double-publish."""
+        import asyncio
+
+        fake = _FakeSlack(_dialogue_render(3))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A1"))
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A2"))
+        # Two near-simultaneous clicks on the final item.
+        await asyncio.gather(
+            handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A3")),
+            handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A3")),
+        )
+        publisher.publish.assert_awaited_once()
+
+
+class TestJ03aStaleAndEscalated:
+    @pytest.mark.asyncio
+    async def test_stale_click_published_faithfully_no_local_refusal(self) -> None:
+        """@regression — jarvis has no pending map; a well-formed authorized
+        click is published faithfully (forge is the authoritative refuser)."""
+        fake = _FakeSlack(_dialogue_render(1))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A1"))
+        publisher.publish.assert_awaited_once()  # published, not locally refused
+
+    @pytest.mark.asyncio
+    async def test_escalated_publishes_faithfully(self) -> None:
+        """@edge — escalated checkpoint: jarvis publishes; identity is forge's gate."""
+        blocks = _dialogue_render(2, checkpoint_type="product_docs_escalated", attempt_count=3)
+        fake = _FakeSlack(blocks)
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A1"))
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A2"))
+        payload = _published(publisher)
+        assert payload.decided_by == _OP
+        assert payload.decision == "approve"
+
+
+class TestJ03aVocabularyAndCancel:
+    @pytest.mark.asyncio
+    async def test_dispositions_vocabulary_only_accepted_or_deferred(self) -> None:
+        """Published dispositions ∈ {accepted, deferred}; never confirmed/overridden."""
+        fake = _FakeSlack(_dialogue_render(2))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A1"))
+        await handler.handle_block_actions(_click(ad.ACTION_DEFER, assumption_id="A2"))
+        for d in _published(publisher).dispositions:
+            assert d.disposition in ("accepted", "deferred")
+
+    @pytest.mark.asyncio
+    async def test_cancel_publishes_reject(self) -> None:
+        """The whole-run cancel abort publishes decision=reject."""
+        fake = _FakeSlack(_dialogue_render(3))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_click(ad.ACTION_CANCEL, overflow=True))
+        publisher.publish.assert_awaited_once()
+        assert _published(publisher).decision == "reject"
+
+    @pytest.mark.asyncio
+    async def test_whole_checkpoint_approve_publishes_approve(self) -> None:
+        """Zero-assumption whole-checkpoint approve → decision=approve, no dispositions."""
+        fake = _FakeSlack(_dialogue_render(0))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(
+            _click(ad.ACTION_WHOLE_APPROVE, assumption_id=ad.WHOLE_CHECKPOINT_ID)
+        )
+        payload = _published(publisher)
+        assert payload.decision == "approve"
+        assert payload.dispositions is None
+
+    @pytest.mark.asyncio
+    async def test_binary_forge_click_on_plan_subject_ignored(self) -> None:
+        """A binary forge_approve on a plan- subject is ignored (belt-and-braces)."""
+        fake = _FakeSlack(_dialogue_render(1))
+        handler, publisher = _make_dialogue_handler(fake)
+        value = json.dumps(
+            {
+                "request_id": "req-1",
+                "build_id": "plan-cid123",
+                "correlation_id": "cid123",
+                "approval_subject": _SUBJECT,
+            },
+            separators=(",", ":"),
+        )
+        payload = {
+            "type": "block_actions",
+            "user": {"id": _OP},
+            "container": {"channel_id": "C1", "message_ts": "1720.1"},
+            "channel": {"id": "C1"},
+            "actions": [
+                {"action_id": "forge_approve", "block_id": "forge_approval", "value": value}
+            ],
+        }
+        await handler.handle_block_actions(payload)
+        publisher.publish.assert_not_awaited()

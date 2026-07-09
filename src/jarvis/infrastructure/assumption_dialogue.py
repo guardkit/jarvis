@@ -199,6 +199,38 @@ def build_item_value(
     return value
 
 
+def parse_item_value(value: str) -> dict[str, Any]:
+    """Decode + validate a dialogue button ``value`` (the §4 decode side).
+
+    The inverse of :func:`build_item_value`. ``request_id`` and
+    ``approval_subject`` are load-bearing (publish routing) and must be
+    non-empty strings.
+
+    Raises:
+        ValueError: on unparseable JSON, a non-object, missing keys, or empty
+            load-bearing fields. J03a/J03b catch this and drop the click
+            (DDR-007) — it never propagates.
+    """
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"dialogue value is not valid JSON: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("dialogue value JSON is not an object")
+
+    missing = [k for k in _VALUE_KEYS if k not in parsed]
+    if missing:
+        raise ValueError(f"dialogue value JSON missing keys: {missing}")
+
+    result = {k: parsed[k] for k in _VALUE_KEYS}
+    for load_bearing in ("request_id", "approval_subject"):
+        field = result[load_bearing]
+        if not isinstance(field, str) or not field:
+            raise ValueError(f"dialogue value field {load_bearing!r} must be a non-empty string")
+    return result
+
+
 def _encode_state(disposition: str, edit_delta: str | None) -> str:
     """Encode a decided item's machine-readable state token."""
     return _STATE_TOKEN_PREFIX + json.dumps(
@@ -558,6 +590,21 @@ def apply_disposition(
     return updated
 
 
+def aggregate_decision(state: dict[str, dict[str, Any]]) -> str:
+    """The aggregate ``decision`` literal from a fully-decided item map (ASSUM-006).
+
+    all ``accepted`` → ``approve``; any ``modified`` and none ``deferred`` →
+    ``approve``; any ``deferred`` → ``defer``. (Whole-run ``planning_cancel`` →
+    ``reject`` is handled at the click site, not here — cancel is an abort, not
+    an aggregation over items.) An empty map defaults to ``approve`` (the
+    zero-assumption whole-checkpoint approval).
+    """
+    dispositions = [item["disposition"] for item in state.values()]
+    if any(d == "deferred" for d in dispositions):
+        return "defer"
+    return "approve"
+
+
 def is_complete(message_blocks: list[Any] | None) -> bool:
     """True when every per-assumption item in the message is decided.
 
@@ -709,6 +756,7 @@ __all__ = [
     "DIALOGUE_ACTION_IDS",
     "WHOLE_CHECKPOINT_ID",
     "PlanningCheckpointRenderer",
+    "aggregate_decision",
     "apply_disposition",
     "build_dialogue_blocks",
     "build_item_value",
@@ -718,4 +766,5 @@ __all__ = [
     "is_escalated",
     "is_planning_checkpoint",
     "parse_dialogue_blocks",
+    "parse_item_value",
 ]

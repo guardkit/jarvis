@@ -1,7 +1,7 @@
 ---
 id: TASK-SPL003-J03a
 title: "jarvis: dialogue click engine + structured dispositions (FEAT-SPL-003)"
-status: backlog
+status: in_review
 priority: high
 task_type: feature
 parent_review: TASK-REV-A387
