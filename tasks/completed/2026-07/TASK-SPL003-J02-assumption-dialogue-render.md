@@ -1,7 +1,8 @@
 ---
 id: TASK-SPL003-J02
 title: "jarvis: assumption-dialogue render + binary-mirror suppression (FEAT-SPL-003)"
-status: in_review
+status: completed
+completed: 2026-07-09
 priority: high
 task_type: feature
 parent_review: TASK-REV-A387
@@ -19,6 +20,24 @@ consumer_context:
     driver: "slack_sdk"
     format_note: "post_threaded(web_client, *, channel, text, thread_ts, blocks) — J02 posts the dialogue into the planning thread through this helper"
 ---
+
+> **✅ COMPLETED 2026-07-09 (WS3-S7 tracker rollup).** Shipped + reviewed +
+> accepted on jarvis `origin/main` at `34c8f4d`
+> (`feat(FEAT-SPL-003 J02): per-assumption dialogue render + binary-mirror
+> suppression`). Acceptance criteria verified against the merged code:
+> `src/jarvis/infrastructure/assumption_dialogue.py` (per-item render,
+> confidence tag, action-value < 2000 carrying `approval_subject`, no
+> approve-all, cancel-in-overflow, 8-item chunking, zero-item whole-approve,
+> escalation full-list + Rich mention, open-questions-as-items) plus the
+> `slack_notifier.py` `_handle_message` planning branch and `plan-` binary-mirror
+> suppression. Coach suites re-run green this session:
+> `test_assumption_dialogue_render.py`, `test_assumption_dialogue_scenarios_spl003.py`,
+> and the four build-pause regression files (`test_slack_notifier.py`,
+> `test_slack_approval_buttons.py`, `test_forge_notifications_subscriber.py`,
+> `test_slack_notifier_hardening.py` — the last passes in gate order / isolation;
+> the pre-existing ordering flake is documented in the feature-YAML smoke_gate).
+> Moved in_review → `tasks/completed/2026-07/`. Live E2E of scenarios
+> 1/2/6/11/21/24 remains deferred to J05 (forge-half gated).
 
 # Task: Assumption-dialogue render + binary-mirror suppression
 

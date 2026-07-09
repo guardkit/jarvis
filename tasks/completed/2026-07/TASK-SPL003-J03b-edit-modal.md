@@ -1,7 +1,8 @@
 ---
 id: TASK-SPL003-J03b
 title: "jarvis: assumption edit modal (views.open + view_submission) (FEAT-SPL-003)"
-status: in_review
+status: completed
+completed: 2026-07-09
 priority: high
 task_type: feature
 parent_review: TASK-REV-A387
@@ -13,6 +14,20 @@ complexity: 5
 dependencies: [TASK-SPL003-J03a]
 tags: [sovereign-planning-loop, feat-spl-003, slack, modal]
 ---
+
+> **✅ COMPLETED 2026-07-09 (WS3-S7 tracker rollup).** Shipped + reviewed +
+> accepted on jarvis `origin/main` at `9be78db`
+> (`feat(FEAT-SPL-003 J03b): assumption edit modal (views.open + view_submission)`).
+> Acceptance criteria verified against the merged `slack_reply.py`: the
+> `view_submission` routing branch in `_on_request` (previously dropped),
+> `views.open` on `assumption_edit` before taking `_decision_lock` (trigger_id TTL),
+> `private_metadata` round-trip, `modified` disposition + byte-exact `edit_delta`
+> re-derived across a later (post-restart) click, `decision=approve` when any item
+> modified / none deferred, and modal-cancel-leaves-undecided. Coach suites re-run
+> green this session: `test_assumption_dialogue_scenarios_spl003.py` (modal half),
+> `test_slack_reply.py`. Moved in_review → `tasks/completed/2026-07/`. The modal's
+> live-only facts (trigger_id window, Interactivity manifest flag) remain deferred
+> to J05.
 
 # Task: Assumption edit modal (views.open + view_submission)
 

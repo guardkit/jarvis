@@ -1,7 +1,8 @@
 ---
 id: TASK-SPL003-J03a
 title: "jarvis: dialogue click engine + structured dispositions (FEAT-SPL-003)"
-status: in_review
+status: completed
+completed: 2026-07-09
 priority: high
 task_type: feature
 parent_review: TASK-REV-A387
@@ -19,6 +20,20 @@ consumer_context:
     driver: "slack_sdk Socket Mode"
     format_note: "action value {correlation_id,request_id,assumption_id,cycle,approval_subject}; per-item disposition re-derived via assumption_dialogue.parse_dialogue_blocks(message.blocks)"
 ---
+
+> **✅ COMPLETED 2026-07-09 (WS3-S7 tracker rollup).** Shipped + reviewed +
+> accepted on jarvis `origin/main` at `1bf70da`
+> (`feat(FEAT-SPL-003 J03a): dialogue click engine + structured dispositions`).
+> Acceptance criteria verified against the merged `slack_reply.py` click engine:
+> allowlist-gated `assumption_approve`/`assumption_defer`/`planning_cancel`
+> routing, authoritative `conversations_history` re-fetch inside `_decision_lock`,
+> message-as-state re-derivation (no pending map), completeness gate, first-click-wins
+> auto-publish of one aggregate `ApprovalResponsePayload` with structured
+> `dispositions` (accepted/deferred this task) + decision literal, and the
+> `plan-` `forge_approve`/`forge_reject` ignore. Coach suites re-run green this
+> session: `test_assumption_dialogue_scenarios_spl003.py` (reply half),
+> `test_slack_reply.py`, `test_slack_reply_scenarios_jnb105.py`. Moved in_review →
+> `tasks/completed/2026-07/`.
 
 # Task: Dialogue click engine + structured dispositions (no modal)
 

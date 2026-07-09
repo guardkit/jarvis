@@ -1,7 +1,8 @@
 ---
 id: TASK-SPL003-J04
 title: "jarvis: scenario + contract test suite + forge details fixture (FEAT-SPL-003)"
-status: in_review
+status: completed
+completed: 2026-07-09
 priority: high
 task_type: testing
 parent_review: TASK-REV-A387
@@ -13,6 +14,20 @@ complexity: 5
 dependencies: [TASK-SPL003-J01, TASK-SPL003-J02, TASK-SPL003-J03a, TASK-SPL003-J03b]
 tags: [sovereign-planning-loop, feat-spl-003, contract, tests]
 ---
+
+> **✅ COMPLETED 2026-07-09 (WS3-S7 tracker rollup).** Shipped + reviewed +
+> accepted on jarvis `origin/main` at `ebe320e`
+> (`test(FEAT-SPL-003 J04): contract suite + forge details fixture + scenario
+> guard`). Acceptance criteria verified against the merged tests:
+> `test_contract_spl003.py` round-trips the published `ApprovalResponsePayload`
+> through installed `nats_core` 0.6.0 with the {accepted, modified, deferred}
+> vocabulary guard and decision-literal rule; `tests/fixtures/spl003_forge_details.json`
+> is the forge-half `details` contract fixture that J02 renders end-to-end; and
+> `test_spl003_scenario_coverage.py` pins the 25-scenario `@task:`-tagged coverage
+> (25 scenarios confirmed in the `.feature` file this session). Coach suite re-run
+> green this session: `test_contract_spl003.py`, `test_spl003_scenario_coverage.py`,
+> `test_contract_nats_core.py`. L11 exec-plan verification (25-scenario contract
+> suite, 2775/0) recorded upstream. Moved in_review → `tasks/completed/2026-07/`.
 
 # Task: Scenario + contract test suite + forge details fixture
 
