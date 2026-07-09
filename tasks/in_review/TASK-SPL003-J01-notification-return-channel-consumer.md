@@ -1,7 +1,7 @@
 ---
 id: TASK-SPL003-J01
 title: "jarvis: jarvis.notification.slack return-channel consumer (FEAT-SPL-003)"
-status: backlog
+status: in_review
 priority: high
 task_type: feature
 parent_review: TASK-REV-A387
