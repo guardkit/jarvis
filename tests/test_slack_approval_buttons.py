@@ -1247,7 +1247,10 @@ def _stub_config() -> Any:
 
 class TestBuildAppStateApprovalWiring:
     """build_app_state constructs + starts the subscriber iff NATS is up
-    AND the sink is a live SlackNotifier (gate exercised for real)."""
+    AND at least one consumer surface (a live SlackNotifier for build pauses,
+    OR the TASK-SPL003-J02 planning-checkpoint renderer) is configured. With no
+    planning channel in the stub config the renderer is None and the subscriber
+    is wired for the build-pause surface only (``planning_renderer=None``)."""
 
     @pytest.mark.asyncio
     async def test_constructed_and_started_with_nats_and_slack_notifier(
@@ -1285,7 +1288,9 @@ class TestBuildAppStateApprovalWiring:
                 stack.enter_context(p)
             state = await build_app_state(_stub_config())
 
-        fake_cls.assert_called_once_with(nats_client=fake_nats, notifier=real_sink)
+        fake_cls.assert_called_once_with(
+            nats_client=fake_nats, notifier=real_sink, planning_renderer=None
+        )
         fake_instance.start.assert_awaited_once()
         assert state.approval_subscriber is fake_instance
 
@@ -1328,6 +1333,59 @@ class TestBuildAppStateApprovalWiring:
 
         fake_cls.assert_not_called()
         assert state.approval_subscriber is None
+
+        if state.fleet_heartbeat_task is not None:
+            state.fleet_heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await state.fleet_heartbeat_task
+
+    @pytest.mark.asyncio
+    async def test_constructed_for_planning_renderer_even_when_sink_is_noop(self) -> None:
+        """TASK-SPL003-J02: a NoOp forge sink but a configured planning renderer
+        still wires the subscriber — with notifier=None, planning_renderer set —
+        so the assumption dialogue is not gated behind the forge sink (arch F2)."""
+        import contextlib
+
+        from jarvis.infrastructure.lifecycle import build_app_state
+        from jarvis.infrastructure.slack_notifier import NoOpSink
+
+        fake_nats = MagicMock()
+        fake_nats.drain = AsyncMock()
+
+        fake_cls = MagicMock()
+        fake_instance = MagicMock()
+        fake_instance.start = AsyncMock()
+        fake_instance.stop = AsyncMock()
+        fake_cls.return_value = fake_instance
+        fake_renderer = MagicMock()
+
+        patches = [
+            *_lifecycle_patches(fake_nats),
+            patch(
+                "jarvis.infrastructure.lifecycle.create_slack_sink",
+                return_value=NoOpSink(),
+            ),
+            patch(
+                "jarvis.infrastructure.lifecycle.create_planning_checkpoint_renderer",
+                return_value=fake_renderer,
+            ),
+            patch(
+                "jarvis.infrastructure.lifecycle.ApprovalRequestsSubscriber",
+                fake_cls,
+            ),
+        ]
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            state = await build_app_state(_stub_config())
+
+        fake_cls.assert_called_once_with(
+            nats_client=fake_nats, notifier=None, planning_renderer=fake_renderer
+        )
+        fake_instance.start.assert_awaited_once()
+        assert state.approval_subscriber is fake_instance
 
         if state.fleet_heartbeat_task is not None:
             state.fleet_heartbeat_task.cancel()

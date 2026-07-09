@@ -812,6 +812,24 @@ class SlackNotifier:
         text = self._render(notification)
         build_id = notification.build_id
 
+        # TASK-SPL003-J02 — suppress the binary pause mirror for planning
+        # checkpoints. forge Mode P also publishes a
+        # ``pipeline.build-paused.FEAT-PLANNING`` mirror; rendering it as a
+        # binary Approve/Reject message is exactly the approve-all rubber-stamp
+        # scenario 15 forbids. The per-assumption dialogue (rendered from the
+        # ApprovalRequestPayload at capture time) is the ONLY planning surface.
+        # Detected on the build_id / feature_id, never posted for a checkpoint.
+        if (build_id is not None and build_id.startswith("plan-")) or (
+            notification.feature_id == "FEAT-PLANNING"
+        ):
+            logger.debug(
+                "planning_pause_mirror_suppressed",
+                build_id=build_id,
+                feature_id=notification.feature_id,
+                correlation_id=notification.correlation_id,
+            )
+            return
+
         if build_id is None:
             # No join key — defensive; render the v1 fallback verbatim.
             await self._post_with_retry(notification, text=text)
@@ -1234,6 +1252,7 @@ class ApprovalRequestsSubscriber:
     __slots__ = (
         "_nats_client",
         "_notifier",
+        "_planning_renderer",
         "_started",
         "_stop_timeout",
         "_subscription",
@@ -1242,8 +1261,9 @@ class ApprovalRequestsSubscriber:
     def __init__(
         self,
         nats_client: NATSClient,
-        notifier: SlackNotifier,
+        notifier: SlackNotifier | None,
         *,
+        planning_renderer: Any | None = None,
         stop_timeout: float = 5.0,
     ) -> None:
         """Construct the subscriber.
@@ -1253,14 +1273,24 @@ class ApprovalRequestsSubscriber:
                 property exposes the JetStream context. The subscriber
                 does not own the connection.
             notifier: The live :class:`SlackNotifier` receiving captured
-                approval requests. Wiring constructs this subscriber only
-                when the sink is a real ``SlackNotifier`` (a no-op sink
-                has no button surface to feed).
+                *build-pause* approval requests, or ``None`` when only the
+                planning dialogue (TASK-SPL003-J02) is configured (a NoOp
+                forge sink has no button surface to feed). Build-pause
+                capture is skipped when this is ``None``.
+            planning_renderer: Optional
+                :class:`~jarvis.infrastructure.assumption_dialogue.PlanningCheckpointRenderer`
+                (TASK-SPL003-J02). When present, a planning-assumption
+                checkpoint (``details.checkpoint_type`` starts ``product_docs``)
+                is rendered as a per-assumption dialogue at capture time and
+                the request is NOT parked in ``_pending_approvals`` — the
+                build-pause path stays byte-for-byte unchanged for every
+                non-planning request.
             stop_timeout: Maximum seconds :meth:`stop` waits for the
                 unsubscribe before returning unconditionally.
         """
         self._nats_client = nats_client
         self._notifier = notifier
+        self._planning_renderer = planning_renderer
         self._stop_timeout = stop_timeout
         self._subscription: Any = None
         self._started = False
@@ -1378,6 +1408,43 @@ class ApprovalRequestsSubscriber:
                 subject=msg.subject,
                 error_class=type(exc).__name__,
                 error=str(exc),
+            )
+            return
+
+        # TASK-SPL003-J02 — planning-assumption checkpoint branch. Detection is
+        # by ``details.checkpoint_type`` (ASSUM-002), never by parsing the
+        # ``plan-<cid>`` run-id out of the subject. A planning checkpoint is
+        # rendered at CAPTURE TIME (this is the only place ``payload.details``,
+        # where the assumptions live, is available — ``capture_approval_request``
+        # discards it) as a per-assumption dialogue, and the request is NEVER
+        # parked in ``_pending_approvals``. Everything below stays byte-for-byte
+        # unchanged for non-planning requests (the ~112 build-pause tests).
+        from jarvis.infrastructure.assumption_dialogue import is_planning_checkpoint
+
+        if is_planning_checkpoint(payload.details):
+            if self._planning_renderer is not None:
+                # render() never raises (DDR-007).
+                await self._planning_renderer.render(
+                    details=payload.details,
+                    correlation_id=envelope.correlation_id,
+                    request_id=payload.request_id,
+                    approval_subject=msg.subject,
+                )
+            else:
+                logger.debug(
+                    "approval_request_planning_no_renderer",
+                    subject=msg.subject,
+                    correlation_id=envelope.correlation_id,
+                )
+            return
+
+        # Build-pause capture path. Skipped when no forge sink is wired (a
+        # planning-only deployment): the request simply is not captured.
+        if self._notifier is None:
+            logger.debug(
+                "approval_request_no_sink_dropped",
+                subject=msg.subject,
+                correlation_id=envelope.correlation_id,
             )
             return
 

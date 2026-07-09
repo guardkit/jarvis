@@ -70,6 +70,9 @@ from jarvis.adapters.types import SwapStatus
 from jarvis.agents import build_supervisor
 from jarvis.agents.subagent_registry import build_async_subagents
 from jarvis.config.settings import JarvisConfig
+from jarvis.infrastructure.assumption_dialogue import (
+    create_planning_checkpoint_renderer,
+)
 from jarvis.infrastructure.capabilities_registry import (
     CapabilitiesRegistry,
     LiveCapabilitiesRegistry,
@@ -818,17 +821,26 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     else:
         log.info("jarvis_notification_sink_started")
 
-    # 7c2. TASK-JNB-103 — construct and start the approval-request subscriber
-    # on ``agents.approval.forge.>`` (AGENTS stream — limits retention,
-    # overlap legal; never the PIPELINE stream). Only wired when NATS is up
-    # AND the sink is a live SlackNotifier (a NoOpSink has no button surface
-    # to feed). DDR-021-style soft-fail: a flaky JetStream consumer must not
-    # block the supervisor — pauses then render the text-only fallback.
+    # 7c2. TASK-JNB-103 / TASK-SPL003-J02 — construct and start the
+    # approval-request subscriber on ``agents.approval.forge.>`` (AGENTS stream
+    # — limits retention, overlap legal; never the PIPELINE stream). Wired when
+    # NATS is up AND at least one consumer surface is configured:
+    #   * the forge sink is a live SlackNotifier (build-pause buttons), OR
+    #   * the planning-checkpoint renderer is configured (SPL-003 dialogue —
+    #     its own bot token + planning channel, independent of the forge sink,
+    #     arch F2: the dialogue must not go dark when only the planning channel
+    #     is set and the forge sink is a NoOp).
+    # DDR-021-style soft-fail: a flaky JetStream consumer must not block the
+    # supervisor — build pauses then render the text-only fallback; planning
+    # checkpoints degrade to unrendered (never a crash).
+    planning_checkpoint_renderer = create_planning_checkpoint_renderer(config)
+    sink_is_slack = isinstance(notification_sink, SlackNotifier)
     approval_subscriber: ApprovalRequestsSubscriber | None = None
-    if nats_client is not None and isinstance(notification_sink, SlackNotifier):
+    if nats_client is not None and (sink_is_slack or planning_checkpoint_renderer is not None):
         approval_subscriber = ApprovalRequestsSubscriber(
             nats_client=nats_client,
-            notifier=notification_sink,
+            notifier=notification_sink if sink_is_slack else None,
+            planning_renderer=planning_checkpoint_renderer,
         )
         try:
             await approval_subscriber.start()
