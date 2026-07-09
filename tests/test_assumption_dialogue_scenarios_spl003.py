@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -640,3 +640,210 @@ class TestJ03aVocabularyAndCancel:
         }
         await handler.handle_block_actions(payload)
         publisher.publish.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# TASK-SPL003-J03b — edit modal (views.open + view_submission)
+# ---------------------------------------------------------------------------
+
+
+def _edit_click(
+    *,
+    assumption_id: str = "A1",
+    request_id: str = "req-1",
+    approval_subject: str = _SUBJECT,
+    user_id: str = _OP,
+    channel: str = "C1",
+    message_ts: str = "1720.1",
+    blocks: list[dict[str, Any]] | None = None,
+    trigger_id: str | None = "trig-123",
+) -> dict[str, Any]:
+    value = json.dumps(
+        {
+            "correlation_id": "cid123",
+            "request_id": request_id,
+            "assumption_id": assumption_id,
+            "cycle": 1,
+            "approval_subject": approval_subject,
+        },
+        separators=(",", ":"),
+    )
+    payload: dict[str, Any] = {
+        "type": "block_actions",
+        "user": {"id": user_id},
+        "container": {"channel_id": channel, "message_ts": message_ts},
+        "channel": {"id": channel},
+        "message": {"blocks": blocks if blocks is not None else _dialogue_render(3)},
+        "actions": [
+            {"action_id": ad.ACTION_EDIT, "block_id": f"{assumption_id}::act", "value": value}
+        ],
+    }
+    if trigger_id is not None:
+        payload["trigger_id"] = trigger_id
+    return payload
+
+
+def _view_submission(
+    *,
+    assumption_id: str = "A1",
+    request_id: str = "req-1",
+    approval_subject: str = _SUBJECT,
+    channel: str = "C1",
+    message_ts: str = "1720.1",
+    value: str = "corrected value",
+    user_id: str = _OP,
+    callback_id: str | None = None,
+) -> dict[str, Any]:
+    private_metadata = json.dumps(
+        {
+            "correlation_id": "cid123",
+            "request_id": request_id,
+            "assumption_id": assumption_id,
+            "cycle": 1,
+            "approval_subject": approval_subject,
+            "channel": channel,
+            "message_ts": message_ts,
+        },
+        separators=(",", ":"),
+    )
+    return {
+        "type": "view_submission",
+        "user": {"id": user_id},
+        "view": {
+            "callback_id": callback_id if callback_id is not None else ad.EDIT_MODAL_CALLBACK_ID,
+            "private_metadata": private_metadata,
+            "state": {"values": {"spl3_edit_input": {"spl3_edit_value": {"value": value}}}},
+        },
+    }
+
+
+class TestJ03bEditModalOpen:
+    @pytest.mark.asyncio
+    async def test_edit_click_opens_prefilled_modal(self) -> None:
+        """@key-example — edit opens a modal prefilled with the assumption text."""
+        blocks = _dialogue_render(3, texts=["Use REST for the API", "b2", "b3"])
+        fake = _FakeSlack(blocks)
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_edit_click(assumption_id="A1", blocks=blocks))
+        fake.web.views_open.assert_awaited_once()
+        view = fake.web.views_open.await_args.kwargs["view"]
+        assert view["callback_id"] == ad.EDIT_MODAL_CALLBACK_ID
+        assert fake.web.views_open.await_args.kwargs["trigger_id"] == "trig-123"
+        prefill = view["blocks"][0]["element"]["initial_value"]
+        assert "Use REST for the API" in prefill
+        # private_metadata carries the routing + message anchor
+        meta = json.loads(view["private_metadata"])
+        assert meta["assumption_id"] == "A1"
+        assert meta["channel"] == "C1"
+        assert meta["message_ts"] == "1720.1"
+        publisher.publish.assert_not_awaited()  # opening a modal never publishes
+
+    @pytest.mark.asyncio
+    async def test_edit_click_without_trigger_no_modal(self) -> None:
+        fake = _FakeSlack(_dialogue_render(1))
+        handler, _ = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_edit_click(trigger_id=None))
+        fake.web.views_open.assert_not_awaited()
+
+
+class TestJ03bEditSubmission:
+    @pytest.mark.asyncio
+    async def test_submission_records_modified_others_unaffected(self) -> None:
+        """@key-example — submit records that item modified w/ the corrected value;
+        others unaffected."""
+        fake = _FakeSlack(_dialogue_render(3))
+        handler, publisher = _make_dialogue_handler(fake)
+        # decide A2, A3 first so the edit completes the checkpoint
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A2"))
+        await handler.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A3"))
+        await handler.handle_view_submission(
+            _view_submission(assumption_id="A1", value="the corrected assumption")
+        )
+        publisher.publish.assert_awaited_once()
+        payload = _published(publisher)
+        dispo = _dispo_map(payload)
+        assert dispo["A1"].disposition == "modified"
+        assert dispo["A1"].edit_delta == "the corrected assumption"
+        assert dispo["A2"].disposition == "accepted"
+        assert dispo["A3"].disposition == "accepted"
+        # any modified + none deferred → aggregate decision approve
+        assert payload.decision == "approve"
+
+    @pytest.mark.asyncio
+    async def test_edit_delta_byte_exact_after_restart(self) -> None:
+        """@key-example — a 500-char edit is byte-exact, re-derived across a later
+        click (simulated restart with a fresh handler)."""
+        long_edit = "Z" * 500
+        fake = _FakeSlack(_dialogue_render(3))
+        handler1, _ = _make_dialogue_handler(fake)
+        await handler1.handle_view_submission(_view_submission(assumption_id="A1", value=long_edit))
+        await handler1.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A2"))
+        # restart — fresh handler re-derives the modified edit_delta from the message
+        handler2, publisher2 = _make_dialogue_handler(fake)
+        await handler2.handle_block_actions(_click(ad.ACTION_APPROVE, assumption_id="A3"))
+        publisher2.publish.assert_awaited_once()
+        dispo = _dispo_map(_published(publisher2))
+        assert dispo["A1"].disposition == "modified"
+        assert dispo["A1"].edit_delta == long_edit
+
+    @pytest.mark.asyncio
+    async def test_modal_cancel_leaves_item_undecided(self) -> None:
+        """@negative — a cancelled modal (no submission) leaves the item undecided."""
+        fake = _FakeSlack(_dialogue_render(2))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_block_actions(_edit_click(assumption_id="A1"))
+        # no view_submission arrives (modal closed)
+        publisher.publish.assert_not_awaited()
+        assert ad.parse_dialogue_blocks(fake.blocks)["A1"]["disposition"] == "undecided"
+
+    @pytest.mark.asyncio
+    async def test_submission_wrong_callback_ignored(self) -> None:
+        fake = _FakeSlack(_dialogue_render(1))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_view_submission(_view_submission(callback_id="other_modal"))
+        publisher.publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_submission_outside_allowlist_ignored(self) -> None:
+        fake = _FakeSlack(_dialogue_render(1))
+        handler, publisher = _make_dialogue_handler(fake)
+        await handler.handle_view_submission(_view_submission(user_id="U_STRANGER"))
+        publisher.publish.assert_not_awaited()
+
+
+class TestJ03bViewSubmissionRouting:
+    @pytest.mark.asyncio
+    async def test_view_submission_routed_and_block_actions_still_work(self) -> None:
+        """@negative — view_submission is routed (was dropped); block_actions works."""
+        from jarvis.infrastructure.slack_reply import SlackSocketModeReplyClient
+
+        calls: list[str] = []
+
+        class SpyHandler:
+            async def handle_block_actions(self, payload: dict[str, Any]) -> None:
+                calls.append("block_actions")
+
+            async def handle_view_submission(self, payload: dict[str, Any]) -> None:
+                calls.append("view_submission")
+
+        client = SlackSocketModeReplyClient(
+            app_token="xapp-test",
+            handler=SpyHandler(),  # type: ignore[arg-type]
+            web_client=AsyncMock(),
+        )
+        socket_client = MagicMock()
+        socket_client.send_socket_mode_response = AsyncMock()
+
+        await client._on_request(
+            socket_client,
+            SimpleNamespace(
+                type="interactive", envelope_id="e1", payload={"type": "view_submission"}
+            ),
+        )
+        await client._on_request(
+            socket_client,
+            SimpleNamespace(
+                type="interactive", envelope_id="e2", payload={"type": "block_actions"}
+            ),
+        )
+        assert calls == ["view_submission", "block_actions"]

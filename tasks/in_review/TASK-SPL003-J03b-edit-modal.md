@@ -1,7 +1,7 @@
 ---
 id: TASK-SPL003-J03b
 title: "jarvis: assumption edit modal (views.open + view_submission) (FEAT-SPL-003)"
-status: backlog
+status: in_review
 priority: high
 task_type: feature
 parent_review: TASK-REV-A387

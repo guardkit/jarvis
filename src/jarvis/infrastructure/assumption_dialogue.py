@@ -97,6 +97,11 @@ _STATE_SUFFIX = "::state"
 # Machine-readable state-token prefix inside the decided item's context block.
 _STATE_TOKEN_PREFIX = "spl3state:"
 
+# Edit modal (TASK-SPL003-J03b) — callback + input identifiers.
+EDIT_MODAL_CALLBACK_ID = "spl3_edit_modal"
+_EDIT_INPUT_BLOCK = "spl3_edit_input"
+_EDIT_INPUT_ACTION = "spl3_edit_value"
+
 # The value-JSON keys (ITEM_ACTION_VALUE contract, §4).
 _VALUE_KEYS = ("correlation_id", "request_id", "assumption_id", "cycle", "approval_subject")
 
@@ -590,6 +595,73 @@ def apply_disposition(
     return updated
 
 
+def extract_assumption_text(message_blocks: list[Any] | None, assumption_id: str) -> str:
+    """Recover an assumption's proposed text from its rendered section block.
+
+    Used by J03b to prefill the edit modal. The section (``block_id ==
+    assumption_id``) renders ``*{aid}*\\n{text}\\n_confidence: …_`` plus an
+    optional ``*Decision:* …`` line; this strips the title, confidence, and any
+    decision line, returning the middle proposal text. Empty string if absent.
+    """
+    for block in message_blocks or []:
+        if not isinstance(block, dict):
+            continue
+        if block.get("block_id") == assumption_id and block.get("type") == "section":
+            text = str((block.get("text") or {}).get("text") or "")
+            lines = text.split("\n")
+            body = [
+                ln
+                for ln in lines[1:]
+                if not ln.startswith("_confidence:") and not ln.startswith("*Decision:*")
+            ]
+            return "\n".join(body).strip()
+    return ""
+
+
+def build_edit_modal(
+    *, assumption_id: str, prefill: str, private_metadata: str
+) -> dict[str, Any]:
+    """The Slack modal view for editing one assumption (TASK-SPL003-J03b).
+
+    ``private_metadata`` (a JSON string) carries the routing identifiers +
+    ``channel``/``message_ts`` so the submission can locate and update the
+    originating message. Prefilled with the assumption's proposed text.
+    """
+    return {
+        "type": "modal",
+        "callback_id": EDIT_MODAL_CALLBACK_ID,
+        "private_metadata": private_metadata,
+        "title": {"type": "plain_text", "text": "Edit assumption", "emoji": False},
+        "submit": {"type": "plain_text", "text": "Save", "emoji": False},
+        "close": {"type": "plain_text", "text": "Cancel", "emoji": False},
+        "blocks": [
+            {
+                "type": "input",
+                "block_id": _EDIT_INPUT_BLOCK,
+                "label": {
+                    "type": "plain_text",
+                    "text": f"Replacement value for {assumption_id}",
+                    "emoji": False,
+                },
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": _EDIT_INPUT_ACTION,
+                    "multiline": True,
+                    "initial_value": prefill,
+                },
+            }
+        ],
+    }
+
+
+def read_edit_submission(view: dict[str, Any]) -> str:
+    """Extract the submitted replacement text from a ``view_submission`` view."""
+    values = (view.get("state") or {}).get("values") or {}
+    block = values.get(_EDIT_INPUT_BLOCK) or {}
+    element = block.get(_EDIT_INPUT_ACTION) or {}
+    return str(element.get("value") or "")
+
+
 def aggregate_decision(state: dict[str, dict[str, Any]]) -> str:
     """The aggregate ``decision`` literal from a fully-decided item map (ASSUM-006).
 
@@ -754,17 +826,21 @@ __all__ = [
     "ACTION_EDIT",
     "ACTION_WHOLE_APPROVE",
     "DIALOGUE_ACTION_IDS",
+    "EDIT_MODAL_CALLBACK_ID",
     "WHOLE_CHECKPOINT_ID",
     "PlanningCheckpointRenderer",
     "aggregate_decision",
     "apply_disposition",
     "build_dialogue_blocks",
+    "build_edit_modal",
     "build_item_value",
     "chunk_count_for",
     "create_planning_checkpoint_renderer",
+    "extract_assumption_text",
     "is_complete",
     "is_escalated",
     "is_planning_checkpoint",
     "parse_dialogue_blocks",
     "parse_item_value",
+    "read_edit_submission",
 ]

@@ -303,9 +303,14 @@ class ApprovalReplyHandler:
             ACTION_APPROVE,
             ACTION_CANCEL,
             ACTION_DEFER,
+            ACTION_EDIT,
             ACTION_WHOLE_APPROVE,
         )
 
+        if action_id == ACTION_EDIT:
+            # Open the modal BEFORE any lock (arch F4 — trigger_id ~3s TTL).
+            await self._handle_edit_open(payload, action, user_id)
+            return
         if action_id in (ACTION_APPROVE, ACTION_DEFER, ACTION_CANCEL, ACTION_WHOLE_APPROVE):
             await self._handle_dialogue_click(payload, action, action_id, user_id)
             return
@@ -707,6 +712,141 @@ class ApprovalReplyHandler:
         await self._chat_update_blocks(channel_id, message_ts, remaining, text=status)
 
     # ------------------------------------------------------------------
+    # SPL-003 edit modal (TASK-SPL003-J03b)
+    # ------------------------------------------------------------------
+
+    async def _handle_edit_open(
+        self, payload: dict[str, Any], action: dict[str, Any], user_id: str
+    ) -> None:
+        """Open the edit modal for an assumption (pre-lock — trigger TTL). Never raises."""
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        raw_value = _extract_action_value(action)
+        try:
+            button = ad.parse_item_value(raw_value)
+        except ValueError as exc:
+            logger.warning("dialogue_edit_malformed_value_dropped", error=str(exc))
+            return
+
+        trigger_id = payload.get("trigger_id")
+        if self._web_client is None or not trigger_id:
+            logger.warning("dialogue_edit_no_trigger_or_client")
+            return
+
+        assumption_id = str(button["assumption_id"])
+        container = payload.get("container") or {}
+        channel_id = (payload.get("channel") or {}).get("id") or container.get("channel_id")
+        message_ts = container.get("message_ts")
+
+        message_blocks = (payload.get("message") or {}).get("blocks")
+        prefill = ad.extract_assumption_text(message_blocks, assumption_id)
+        private_metadata = json.dumps(
+            {
+                "correlation_id": button["correlation_id"],
+                "request_id": button["request_id"],
+                "assumption_id": assumption_id,
+                "cycle": button["cycle"],
+                "approval_subject": button["approval_subject"],
+                "channel": channel_id,
+                "message_ts": message_ts,
+            },
+            separators=(",", ":"),
+        )
+        view = ad.build_edit_modal(
+            assumption_id=assumption_id, prefill=prefill, private_metadata=private_metadata
+        )
+        try:
+            await self._web_client.views_open(trigger_id=trigger_id, view=view)
+        except Exception as exc:
+            logger.warning(
+                "dialogue_edit_modal_open_failed",
+                assumption_id=assumption_id,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    async def handle_view_submission(self, payload: dict[str, Any]) -> None:
+        """Handle one edit-modal submission. Never raises (DDR-007)."""
+        try:
+            await self._handle_view_submission(payload)
+        except Exception as exc:
+            logger.warning(
+                "dialogue_view_submission_error",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    async def _handle_view_submission(self, payload: dict[str, Any]) -> None:
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        view = payload.get("view") or {}
+        if view.get("callback_id") != ad.EDIT_MODAL_CALLBACK_ID:
+            return
+
+        user_id = (payload.get("user") or {}).get("id")
+        # Authorization parity with block_actions (the sole Slack-side gate):
+        # only allowlist members can record a decision.
+        if not user_id or user_id not in self._operator_ids:
+            logger.warning("dialogue_edit_unauthorized_submission", user_id=user_id)
+            return
+
+        try:
+            meta = json.loads(view.get("private_metadata") or "")
+        except (TypeError, ValueError):
+            logger.warning("dialogue_edit_bad_private_metadata")
+            return
+
+        assumption_id = str(meta.get("assumption_id") or "")
+        request_id = str(meta.get("request_id") or "")
+        approval_subject = str(meta.get("approval_subject") or "")
+        correlation_id = meta.get("correlation_id") or None
+        channel_id = meta.get("channel")
+        message_ts = meta.get("message_ts")
+        edit_delta = ad.read_edit_submission(view)
+
+        if not assumption_id or not request_id or not approval_subject:
+            logger.warning("dialogue_edit_incomplete_metadata", request_id=request_id)
+            return
+
+        async with self._decision_lock:
+            blocks = await self._fetch_dialogue_blocks(channel_id, message_ts, payload)
+            state = ad.parse_dialogue_blocks(blocks)
+            current = state.get(assumption_id)
+            if current is not None and current["disposition"] != "undecided":
+                logger.info(
+                    "dialogue_item_already_decided",
+                    assumption_id=assumption_id,
+                    request_id=request_id,
+                )
+                return
+
+            updated = ad.apply_disposition(
+                blocks,
+                assumption_id=assumption_id,
+                disposition="modified",
+                edit_delta=edit_delta,
+            )
+            await self._chat_update_blocks(
+                channel_id,
+                message_ts,
+                updated,
+                text=f"Recorded edit for {assumption_id}",
+            )
+
+            if not ad.is_complete(updated):
+                return
+
+            final_state = ad.parse_dialogue_blocks(updated)
+            await self._publish_dialogue_decision(
+                request_id=request_id,
+                approval_subject=approval_subject,
+                correlation_id=correlation_id,
+                decided_by=user_id,
+                decision=ad.aggregate_decision(final_state),
+                dispositions=self._dispositions_from_state(final_state),
+            )
+
+    # ------------------------------------------------------------------
     # Slack side-effects — every call independently wrapped (C2)
     # ------------------------------------------------------------------
 
@@ -978,10 +1118,16 @@ class SlackSocketModeReplyClient:
                 if self._handler is None:
                     return
                 payload = req.payload or {}
-                if payload.get("type") != "block_actions":
+                ptype = payload.get("type")
+                if ptype == "block_actions":
+                    # handle_block_actions never raises (DDR-007).
+                    await self._handler.handle_block_actions(payload)
+                elif ptype == "view_submission":
+                    # TASK-SPL003-J03b — the edit-modal submission (previously
+                    # dropped). Acked upstream already; never raises (DDR-007).
+                    await self._handler.handle_view_submission(payload)
+                else:
                     return
-                # handle_block_actions never raises (DDR-007).
-                await self._handler.handle_block_actions(payload)
             elif req.type == "events_api":
                 if self._events_handler is None:
                     return
