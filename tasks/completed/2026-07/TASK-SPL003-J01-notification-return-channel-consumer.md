@@ -1,7 +1,8 @@
 ---
 id: TASK-SPL003-J01
 title: "jarvis: jarvis.notification.slack return-channel consumer (FEAT-SPL-003)"
-status: in_review
+status: completed
+completed: 2026-07-09
 priority: high
 task_type: feature
 parent_review: TASK-REV-A387
@@ -13,6 +14,19 @@ complexity: 6
 dependencies: []
 tags: [sovereign-planning-loop, feat-spl-003, slack, notification, return-channel]
 ---
+
+> **✅ COMPLETED 2026-07-09 (WS3-S7 tracker tidy).** Shipped + reviewed +
+> accepted on jarvis `origin/main` at `9059412`
+> (`feat(FEAT-SPL-003 J01): jarvis.notification.slack return channel`). The
+> file was left in the backlog feature dir (`status: backlog`) by the
+> split-point session, then parked in `tasks/in_review/` by the 2026-07-09
+> interim tidy `73b4b66` to align with the still-in-review J02/J03a/J03b/J04
+> surfaces. Because J01 is the accepted foundation (not merely built), WS3-S7
+> moves it the rest of the way into the completed convention:
+> `tasks/completed/2026-07/`, `status: completed`, feature-YAML pointer +
+> per-task status flipped to match. The unbuilt J05 (operator live-validation,
+> gated on forge TASK-SPL003F-001) and the IMPLEMENTATION-GUIDE / TASK-REV-A387
+> plan docs stay in the backlog dir; J02/J03a/J03b/J04 stay `in_review`.
 
 # Task: jarvis.notification.slack return-channel consumer
 

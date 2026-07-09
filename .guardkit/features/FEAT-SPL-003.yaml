@@ -16,10 +16,10 @@ estimated_tasks: 6
 tasks:
 - id: TASK-SPL003-J01
   name: jarvis.notification.slack return-channel consumer + shared threaded-post helper + wiring
-  file_path: tasks/in_review/TASK-SPL003-J01-notification-return-channel-consumer.md
+  file_path: tasks/completed/2026-07/TASK-SPL003-J01-notification-return-channel-consumer.md
   complexity: 6
   dependencies: []
-  status: pending
+  status: completed
   implementation_mode: task-work
   estimated_minutes: 90
 - id: TASK-SPL003-J02
