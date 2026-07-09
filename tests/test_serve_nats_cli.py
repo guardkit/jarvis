@@ -87,6 +87,13 @@ def _make_state(*, nats_client: Any | None) -> MagicMock:
 
     state.nats_client = nats_client
     state.fleet_heartbeat_task = None
+    # TASK-J006-011 — no terminal-close race by default (signal-driven
+    # shutdown path); ``active_heartbeat_task`` mirrors the real AppState
+    # helper, reading the current ``fleet_heartbeat_task`` at call time so
+    # tests that assign a task after construction still see it.
+    state.terminal_close_event = None
+    state.reconnect_context = None
+    state.active_heartbeat_task = lambda: state.fleet_heartbeat_task
     return state
 
 
@@ -281,9 +288,7 @@ class TestNoDoubleRegistration:
         signal.raise_signal(signal.SIGINT)
         await asyncio.wait_for(task, timeout=2.0)
 
-        state.session_manager.start_session.assert_called_once_with(
-            Adapter.NATS, "nats-shared"
-        )
+        state.session_manager.start_session.assert_called_once_with(Adapter.NATS, "nats-shared")
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +461,68 @@ class TestShutdownOrdering:
         nats_client.drain.assert_awaited_once()
 
 
+class TestTerminalCloseExit:
+    """AC-J006-011-05: a terminal broker close races the shutdown signal and,
+    when it wins, exits the process non-zero after a best-effort graceful
+    teardown so an external supervisor can recover with a fresh registration.
+    """
+
+    @pytest.mark.asyncio
+    async def test_terminal_close_raises_system_exit_after_graceful_shutdown(
+        self,
+    ) -> None:
+        """A steady-state bounce that exhausts nats-py's reconnect loop fires
+        ``closed_cb`` → sets ``terminal_close_event`` → ``_serve_adapter``
+        raises ``SystemExit(1)`` AFTER running the graceful shutdown steps."""
+        nats_client = _make_nats_client_mock()
+        subscription = AsyncMock()
+        nats_client.subscribe_with_reply = AsyncMock(return_value=subscription)
+
+        state = _make_state(nats_client=nats_client)
+        # A real event the bound closed callback would set on a terminal
+        # close, pre-set so the FIRST_COMPLETED race resolves to the
+        # terminal path immediately. Awaiting ``_serve_adapter`` directly
+        # (rather than via a Task) lets the ``SystemExit`` — a
+        # BaseException — propagate cleanly through the await chain instead
+        # of escaping the event loop.
+        state.terminal_close_event = asyncio.Event()
+        state.terminal_close_event.set()
+
+        with (
+            patch("jarvis.cli.main.deregister_from_fleet", new=AsyncMock()) as dereg,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            await _serve_adapter(state, drain_timeout=0.05)
+
+        assert exc_info.value.code == 1
+        # Graceful teardown still ran before the non-zero exit.
+        subscription.unsubscribe.assert_awaited_once()
+        dereg.assert_awaited_once()
+        nats_client.drain.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_signal_shutdown_exits_zero_when_terminal_event_unset(
+        self,
+    ) -> None:
+        """The signal-driven path (terminal event never set) exits cleanly —
+        no ``SystemExit`` is raised even though the race machinery is wired."""
+        nats_client = _make_nats_client_mock()
+        subscription = AsyncMock()
+        nats_client.subscribe_with_reply = AsyncMock(return_value=subscription)
+
+        state = _make_state(nats_client=nats_client)
+        state.terminal_close_event = asyncio.Event()  # present but never set
+
+        task = asyncio.create_task(_serve_adapter(state, drain_timeout=0.05))
+        await asyncio.sleep(0.01)
+        signal.raise_signal(signal.SIGINT)
+        # A clean return (no SystemExit) is the pass condition.
+        await asyncio.wait_for(task, timeout=2.0)
+
+        subscription.unsubscribe.assert_awaited_once()
+        assert not state.terminal_close_event.is_set()
+
+
 # ---------------------------------------------------------------------------
 # AC-002: _run_serve_nats reuses _create_app_state — no second supervisor.
 # ---------------------------------------------------------------------------
@@ -515,6 +582,9 @@ async def test_integration_serve_nats_end_to_end_with_fake_broker(
     state.config.nats_url = "nats://in-process"
     state.nats_client = nats_client
     state.fleet_heartbeat_task = None
+    state.terminal_close_event = None  # TASK-J006-011 — signal-driven path
+    state.reconnect_context = None
+    state.active_heartbeat_task = lambda: state.fleet_heartbeat_task
     state.session_manager = MagicMock()
     state.session_manager.start_session.return_value = Session(
         session_id="nats-shared-e2e",
@@ -534,9 +604,7 @@ async def test_integration_serve_nats_end_to_end_with_fake_broker(
         "jarvis.infrastructure.fleet_registration.register_on_fleet",
         new=AsyncMock(return_value=None),
     ) as mock_register:
-        adapter_task = asyncio.create_task(
-            _serve_adapter(state, drain_timeout=0.5)
-        )
+        adapter_task = asyncio.create_task(_serve_adapter(state, drain_timeout=0.5))
         try:
             # Give the subscription a beat to register on the broker.
             await asyncio.sleep(0.1)
@@ -550,9 +618,7 @@ async def test_integration_serve_nats_end_to_end_with_fake_broker(
                 result_envelopes.append(msg.data)
                 result_sub_event.set()
 
-            result_sub = await nats_client.client.subscribe(
-                "agents.result.jarvis", cb=_on_result
-            )
+            result_sub = await nats_client.client.subscribe("agents.result.jarvis", cb=_on_result)
             await asyncio.sleep(0.05)
 
             # Issue the command via request/reply so we exercise the

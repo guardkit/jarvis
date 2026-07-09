@@ -486,14 +486,32 @@ async def _serve_adapter(
     )
 
     # ------------------------------------------------------------------
-    # 4. Await shutdown signal
+    # 4. Await shutdown signal OR a terminal broker close (TASK-J006-011)
     # ------------------------------------------------------------------
-    await shutdown_event.wait()
+    # A steady-state broker outage that exhausts nats-py's reconnect loop
+    # fires the bound ``closed_cb``, which sets ``terminal_close_event``.
+    # Racing it against the signal-driven ``shutdown_event`` means a
+    # prolonged outage exits the process non-zero (recoverable by a
+    # process/container restart) instead of the pre-J006-011 behaviour where
+    # the gateway sat wedged in a ``fleet_heartbeat_failed`` loop, silently
+    # off the fleet.
+    terminal_close_event = state.terminal_close_event
+    wait_tasks = [asyncio.create_task(shutdown_event.wait())]
+    if terminal_close_event is not None:
+        wait_tasks.append(asyncio.create_task(terminal_close_event.wait()))
+    _, pending = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
+    for task in pending:
+        task.cancel()
+    terminal_close = terminal_close_event is not None and terminal_close_event.is_set()
 
     # ------------------------------------------------------------------
     # 5. Graceful shutdown — strict ordering per TASK-J006-004 AC-005
     # ------------------------------------------------------------------
-    log.info("jarvis_serve_nats_shutdown_begin", agent_id=agent_id)
+    log.info(
+        "jarvis_serve_nats_shutdown_begin",
+        agent_id=agent_id,
+        terminal_close=terminal_close,
+    )
 
     # 5a. Unsubscribe — stop accepting new commands.
     try:
@@ -523,8 +541,10 @@ async def _serve_adapter(
 
     # 5c. Cancel the heartbeat task BEFORE the deregister hop so the
     # next heartbeat tick cannot race-resurrect the manifest after we
-    # deregister it.
-    heartbeat_task = state.fleet_heartbeat_task
+    # deregister it. TASK-J006-011: read the *current* task from the
+    # reconnect holder so a reconnect-respawned heartbeat is cancelled,
+    # not the stale boot task.
+    heartbeat_task = state.active_heartbeat_task()
     if heartbeat_task is not None and not heartbeat_task.done():
         heartbeat_task.cancel()
         try:
@@ -563,6 +583,15 @@ async def _serve_adapter(
         )
 
     log.info("jarvis_serve_nats_shutdown_complete", agent_id=agent_id)
+
+    # 5f. TASK-J006-011 — a terminal broker close is NOT a graceful exit.
+    # Exit non-zero AFTER the best-effort graceful teardown so an external
+    # supervisor (Docker restart policy, systemd) recovers the process with
+    # a fresh registration. A signal-driven shutdown falls through to the
+    # normal zero exit.
+    if terminal_close:
+        log.error("jarvis_serve_nats_terminal_close_exit", agent_id=agent_id)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

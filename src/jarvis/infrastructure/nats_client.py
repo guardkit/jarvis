@@ -47,6 +47,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import nats
@@ -63,6 +64,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.msg import Msg
     from nats.aio.subscription import Subscription
     from nats.js import JetStreamContext
+    from nats_core import AgentManifest
 
 # Type alias for the user-facing handler signature. The handler receives
 # both the decoded ``CommandPayload`` AND the raw NATS ``reply`` inbox so
@@ -83,7 +85,13 @@ _nats_connect = nats.connect
 logger = structlog.get_logger(__name__)
 
 
-__all__ = ["BrokerUnreachableError", "NATSClient", "NATSConnectionError"]
+__all__ = [
+    "BrokerUnreachableError",
+    "NATSClient",
+    "NATSConnectionError",
+    "ReconnectContext",
+    "build_lifecycle_callbacks",
+]
 
 
 class NATSClient:
@@ -119,7 +127,11 @@ class NATSClient:
     # ------------------------------------------------------------------
 
     @classmethod
-    async def connect(cls, config: JarvisConfig) -> NATSClient | None:
+    async def connect(
+        cls,
+        config: JarvisConfig,
+        lifecycle_callbacks: dict[str, Callable[..., Awaitable[None]]] | None = None,
+    ) -> NATSClient | None:
         """Connect to NATS using ``config.nats_url`` (and credentials).
 
         Two posture lanes at the boot boundary:
@@ -157,6 +169,16 @@ class NATSClient:
             config: The validated :class:`JarvisConfig`. Reads
                 ``config.nats_url``, ``config.nats_credentials_path``,
                 and ``config.startup_connect_timeout_seconds``.
+            lifecycle_callbacks: Optional override for the transport
+                lifecycle hooks (``reconnected_cb`` / ``disconnected_cb``
+                / ``closed_cb`` / ``error_cb``). When ``None`` the
+                module-level log-only stubs are wired (test / boot-path
+                default). When supplied — e.g. the bound callbacks from
+                :func:`build_lifecycle_callbacks` — the provided keys
+                replace the corresponding stubs so a steady-state broker
+                bounce can re-register the manifest and signal the CLI
+                (TASK-J006-011). Keys absent from the dict keep their
+                stub default.
 
         Returns:
             A connected :class:`NATSClient` on success; ``None`` on
@@ -176,6 +198,13 @@ class NATSClient:
             "reconnected_cb": _on_reconnect,
             "closed_cb": _on_closed,
         }
+
+        # TASK-J006-011: bound lifecycle callbacks (re-register + terminal
+        # close signalling) replace the log-only stubs when the caller
+        # supplies them. ``update`` is key-wise so an override dict carrying
+        # only ``reconnected_cb`` keeps the stub ``error_cb`` etc.
+        if lifecycle_callbacks is not None:
+            kwargs.update(lifecycle_callbacks)
 
         # ``nats-py`` accepts ``user_credentials`` as either a path or a
         # callable. Forwarding the configured ``Path`` keeps the file-
@@ -586,3 +615,128 @@ async def _on_error(exc: Exception) -> None:
 async def _on_closed() -> None:
     """Log a structured ``nats_closed`` event on connection close."""
     logger.info("nats_closed")
+
+
+# ---------------------------------------------------------------------------
+# TASK-J006-011 — steady-state broker-bounce survival.
+#
+# The module-level callbacks above are log-only: they surface transport
+# events but cannot re-register the manifest on reconnect or signal the CLI
+# on a terminal close, because they have no path to the live runtime state
+# (registry client, manifest, heartbeat task). ``ReconnectContext`` carries
+# exactly that state, and ``build_lifecycle_callbacks`` closes bound
+# callbacks over it. The lifecycle passes the result to
+# :meth:`NATSClient.connect` via its ``lifecycle_callbacks`` override.
+#
+# ``nats_client`` is populated *after* ``connect`` returns (the wrapper does
+# not exist until then), so it is a mutable, late-bound field. Reconnect
+# events only fire post-boot — by then the field is set — but the reconnect
+# callback still guards on ``None`` for the vanishingly small window where a
+# transport blip races the initial connect.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ReconnectContext:
+    """Live runtime state the bound lifecycle callbacks close over.
+
+    Attributes:
+        manifest: The Jarvis :class:`AgentManifest` re-published to the
+            ``agent-registry`` KV bucket on reconnect.
+        config: The validated :class:`JarvisConfig` — source of
+            ``heartbeat_interval_seconds`` when a dead heartbeat task is
+            respawned.
+        heartbeat_task_holder: A one-element mutable slot holding the
+            *current* fleet heartbeat task (or ``None``). The reconnect
+            callback replaces ``[0]`` when the prior task has died, so
+            shutdown paths must cancel ``[0]`` — not the task captured at
+            boot — to avoid leaking a respawned heartbeat.
+        terminal_close_event: Set by the closed callback when nats-py's
+            reconnect loop is exhausted (a terminal close). The serve-nats
+            CLI races this against its shutdown signal so a prolonged outage
+            exits non-zero instead of hanging silently.
+        nats_client: The connected wrapper, late-bound by the lifecycle
+            after :meth:`NATSClient.connect` returns. ``None`` until then.
+    """
+
+    manifest: AgentManifest
+    config: JarvisConfig
+    heartbeat_task_holder: list[asyncio.Task[None] | None]
+    terminal_close_event: asyncio.Event
+    nats_client: NATSClient | None = None
+
+
+def build_lifecycle_callbacks(
+    ctx: ReconnectContext,
+) -> dict[str, Callable[..., Awaitable[None]]]:
+    """Build transport lifecycle callbacks bound to *ctx*.
+
+    Returns a dict suitable for :meth:`NATSClient.connect`'s
+    ``lifecycle_callbacks`` override. The callbacks:
+
+    * ``reconnected_cb`` — re-publish the manifest to ``agent-registry``
+      (a steady-state bounce staled the KV entry) and respawn the fleet
+      heartbeat task if it died during the disconnect.
+    * ``disconnected_cb`` — WARN-log the drop (operator-relevant even when
+      the next event is a clean reconnect).
+    * ``closed_cb`` — ERROR-log the terminal close and set
+      ``ctx.terminal_close_event`` so the CLI can exit non-zero.
+    * ``error_cb`` — reuse the module-level structured error logger.
+
+    Args:
+        ctx: The :class:`ReconnectContext` carrying the live runtime state.
+
+    Returns:
+        A callback dict keyed by the nats-py callback kwarg names.
+    """
+    # Local import keeps the module-load graph acyclic and matches the
+    # factory's runtime-only need for the registration helpers.
+    from jarvis.infrastructure.fleet_registration import (
+        heartbeat_loop,
+        register_on_fleet,
+    )
+
+    async def _bound_on_reconnect() -> None:
+        logger.info("nats_reconnect", agent_id=ctx.manifest.agent_id)
+        client = ctx.nats_client
+        if client is None:
+            # A transport blip raced the initial connect before the
+            # lifecycle late-bound the wrapper. Nothing to re-register yet;
+            # the boot-path registration will run once connect returns.
+            return
+        try:
+            await register_on_fleet(client, ctx.manifest)
+            logger.info("fleet_reregister_published", agent_id=ctx.manifest.agent_id)
+        except NATSConnectionError as exc:
+            # A reconnect that immediately re-drops must not kill the
+            # callback — nats-py will fire another reconnect if the broker
+            # comes back.
+            logger.warning(
+                "fleet_reregister_failed",
+                agent_id=ctx.manifest.agent_id,
+                error=str(exc),
+            )
+        # Respawn the heartbeat task if it died during the disconnect. The
+        # loop normally survives a bounce (it swallows publish failures), so
+        # this is the defensive edge — a crashed/completed task.
+        old_task = ctx.heartbeat_task_holder[0]
+        if old_task is None or old_task.done():
+            ctx.heartbeat_task_holder[0] = asyncio.create_task(
+                heartbeat_loop(client, ctx.manifest, ctx.config),
+                name="jarvis_fleet_heartbeat",
+            )
+            logger.info("fleet_heartbeat_restarted", agent_id=ctx.manifest.agent_id)
+
+    async def _bound_on_disconnect() -> None:
+        logger.warning("nats_disconnect", agent_id=ctx.manifest.agent_id)
+
+    async def _bound_on_closed() -> None:
+        logger.error("nats_terminally_closed", agent_id=ctx.manifest.agent_id)
+        ctx.terminal_close_event.set()
+
+    return {
+        "reconnected_cb": _bound_on_reconnect,
+        "disconnected_cb": _bound_on_disconnect,
+        "closed_cb": _bound_on_closed,
+        "error_cb": _on_error,
+    }

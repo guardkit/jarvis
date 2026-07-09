@@ -27,6 +27,35 @@ implementation_reference:
 created: 2026-05-12
 ---
 
+> **🟡 IN REVIEW 2026-07-09 (WS3-S7) — code + hermetic tests landed; AC-07/AC-08
+> GB10 live probes remain operator follow-up.** Ported the study-tutor
+> TASK-NATS-FIX-006 pattern, adapted to jarvis's three-module lifecycle split:
+> - `src/jarvis/infrastructure/nats_client.py` — `ReconnectContext` +
+>   `build_lifecycle_callbacks(ctx)` factory (bound re-register + heartbeat
+>   respawn + `terminal_close_event`); `NATSClient.connect` gains an optional
+>   `lifecycle_callbacks` key-wise override (log-only stubs stay the default →
+>   AC-01, test-path stability preserved).
+> - `src/jarvis/infrastructure/lifecycle.py` — `build_app_state` builds the
+>   context + bound callbacks BEFORE connect, late-binds the wrapper, tracks the
+>   current heartbeat task in a mutable holder; new `AppState.reconnect_context`
+>   + `AppState.terminal_close_event` + `active_heartbeat_task()`; shutdown
+>   cancels the *current* (possibly respawned) heartbeat.
+> - `src/jarvis/cli/main.py` — `_serve_adapter` races `shutdown_event` vs
+>   `terminal_close_event` (FIRST_COMPLETED); a terminal close runs the graceful
+>   teardown then `raise SystemExit(1)` (AC-05) so an external supervisor
+>   recovers with a fresh registration.
+>
+> Hermetic broker-bounce coverage (no live broker from this session):
+> `tests/test_j006_011_reconnect_callbacks.py` (AC-01/02/03/04/06) +
+> `tests/test_serve_nats_cli.py::TestTerminalCloseExit` (AC-05). Full jarvis
+> suite green (2787 passed / 2 skipped / 0 failed), ruff + format clean, mypy on
+> the three touched modules clean bar one pre-existing `notifier` type finding.
+> **Remaining (operator, GB10): AC-J006-011-07** (transient bounce →
+> `nats_reconnect` → `fleet_reregister_published` → `fleet_heartbeat_restarted`,
+> KV revision increments, chat still replies, no restart) and **AC-J006-011-08**
+> (prolonged outage → `nats_terminally_closed` → `jarvis_serve_nats_terminal_close_exit`,
+> exit code 1). Bundle those with the next GB10 jarvis operator session.
+
 # Task: Wire reconnect callbacks so jarvis survives steady-state broker bounces
 
 ## Severity / impact

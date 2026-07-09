@@ -93,7 +93,11 @@ from jarvis.infrastructure.forge_notifications import (
     is_workqueue_overlap_error,
 )
 from jarvis.infrastructure.logging import configure
-from jarvis.infrastructure.nats_client import NATSClient
+from jarvis.infrastructure.nats_client import (
+    NATSClient,
+    ReconnectContext,
+    build_lifecycle_callbacks,
+)
 from jarvis.infrastructure.planning_notifier import (
     PlanningNotificationConsumer,
     create_planning_notification_consumer,
@@ -486,6 +490,19 @@ class AppState:
             client's own start soft-failed — the supervisor starts and
             runs normally in every no-op permutation; each unconfigured
             feature logs its own no-op reason.
+        reconnect_context: The :class:`ReconnectContext` (TASK-J006-011)
+            the bound transport lifecycle callbacks close over — carries
+            the manifest, the mutable heartbeat-task holder, and the
+            terminal-close event so a steady-state broker bounce
+            re-registers Jarvis on the fleet. ``None`` when NATS soft-failed
+            at startup. Shutdown reads its holder via
+            :meth:`active_heartbeat_task` to cancel the current heartbeat.
+        terminal_close_event: The :class:`asyncio.Event` set by the closed
+            callback when nats-py's reconnect loop is exhausted
+            (TASK-J006-011). The serve-nats CLI races this against its
+            shutdown signal so a prolonged broker outage exits non-zero
+            (recoverable by a process/container restart) rather than hanging
+            silently on the fleet. ``None`` when NATS soft-failed at startup.
     """
 
     config: JarvisConfig
@@ -505,6 +522,22 @@ class AppState:
     approval_subscriber: ApprovalRequestsSubscriber | None = None
     slack_reply_client: SlackSocketModeReplyClient | None = None
     planning_notification_consumer: PlanningNotificationConsumer | None = None
+    reconnect_context: ReconnectContext | None = None
+    terminal_close_event: asyncio.Event | None = None
+
+    def active_heartbeat_task(self) -> asyncio.Task[None] | None:
+        """The currently-live fleet heartbeat task.
+
+        TASK-J006-011: ``_on_reconnect`` may replace the heartbeat task in
+        the reconnect context's mutable holder when the original died during
+        a disconnect, so shutdown paths must cancel the *current* task — not
+        the one captured at boot (``fleet_heartbeat_task``) — to avoid
+        leaking a respawned heartbeat past deregister. Falls back to the
+        boot task when no reconnect context is wired (NATS soft-failed).
+        """
+        if self.reconnect_context is not None:
+            return self.reconnect_context.heartbeat_task_holder[0]
+        return self.fleet_heartbeat_task
 
 
 # ---------------------------------------------------------------------------
@@ -574,14 +607,22 @@ def _build_stub_capabilities_registry(
         return _PreloadedCapabilitiesRegistry(preloaded)
 
 
-async def _connect_nats(config: JarvisConfig) -> NATSClient | None:
+async def _connect_nats(
+    config: JarvisConfig,
+    lifecycle_callbacks: dict[str, Any] | None = None,
+) -> NATSClient | None:
     """Lifecycle-side seam for :meth:`NATSClient.connect`.
 
     Tests patch this thin wrapper rather than the class method so the
     NATSClient unit tests (which exercise the real ``connect`` surface)
     are unaffected by the lifecycle's autouse stub.
+
+    ``lifecycle_callbacks`` (TASK-J006-011) threads the bound
+    reconnect/close callbacks through to ``connect`` so a steady-state
+    broker bounce re-registers the manifest and a terminal close signals
+    the CLI. ``None`` keeps the log-only stub behaviour.
     """
-    return await NATSClient.connect(config)
+    return await NATSClient.connect(config, lifecycle_callbacks=lifecycle_callbacks)
 
 
 async def _connect_memory(config: JarvisConfig) -> MemoryClientProtocol | None:
@@ -754,7 +795,26 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # consume. ``register_on_fleet`` failures convert to a startup WARN so
     # a degraded broker (e.g. JetStream offline) does not block the
     # supervisor process.
-    nats_client = await _connect_nats(config)
+    # TASK-J006-011 — build the reconnect context + bound lifecycle
+    # callbacks BEFORE connecting so nats-py wires them at connect time.
+    # ``build_jarvis_manifest`` is cheap and I/O-free, so constructing it
+    # (and the context) unconditionally — even on the NATS soft-fail path,
+    # where the callbacks are simply discarded — keeps the connect call
+    # site single-branch. ``nats_client`` on the context is late-bound
+    # after ``connect`` returns (the wrapper does not exist until then).
+    manifest = build_jarvis_manifest(config)
+    heartbeat_task_holder: list[asyncio.Task[None] | None] = [None]
+    # Non-optional here so the factory and the late-bind below type cleanly;
+    # the AppState field is narrowed to ``None`` on the NATS soft-fail path.
+    reconnect_context = ReconnectContext(
+        manifest=manifest,
+        config=config,
+        heartbeat_task_holder=heartbeat_task_holder,
+        terminal_close_event=asyncio.Event(),
+    )
+    lifecycle_callbacks = build_lifecycle_callbacks(reconnect_context)
+
+    nats_client = await _connect_nats(config, lifecycle_callbacks=lifecycle_callbacks)
     memory_client = await _connect_memory(config)
     routing_history_writer = RoutingHistoryWriter(memory_client, config)
     log.info(
@@ -765,7 +825,9 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     fleet_heartbeat_task: asyncio.Task[None] | None = None
     capabilities_registry: CapabilitiesRegistry
     if nats_client is not None:
-        manifest = build_jarvis_manifest(config)
+        # Late-bind the connected wrapper so the reconnect callback can
+        # re-register the manifest and respawn the heartbeat.
+        reconnect_context.nats_client = nats_client
         try:
             await register_on_fleet(nats_client, manifest)
         except Exception as exc:
@@ -782,6 +844,10 @@ async def build_app_state(config: JarvisConfig) -> AppState:
             heartbeat_loop(nats_client, manifest, config),
             name="jarvis_fleet_heartbeat",
         )
+        # The context holder tracks the *current* heartbeat task so a
+        # reconnect-driven respawn (TASK-J006-011) and shutdown cancel the
+        # same object.
+        heartbeat_task_holder[0] = fleet_heartbeat_task
         try:
             capabilities_registry = await LiveCapabilitiesRegistry.create(nats_client)
         except Exception as exc:
@@ -794,6 +860,10 @@ async def build_app_state(config: JarvisConfig) -> AppState:
             )
             capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
     else:
+        # NATS soft-failed — the bound callbacks were never wired to a live
+        # client. The context is dropped from the AppState below so shutdown
+        # does not look for a heartbeat that never ran (serve-nats requires a
+        # live broker regardless).
         capabilities_registry = _build_stub_capabilities_registry(config, capability_registry)
 
     dispatch_semaphore = DispatchSemaphore(cap=config.dispatch_concurrent_cap)
@@ -1116,6 +1186,10 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         approval_subscriber=approval_subscriber,
         slack_reply_client=slack_reply_client,
         planning_notification_consumer=planning_notification_consumer,
+        reconnect_context=reconnect_context if nats_client is not None else None,
+        terminal_close_event=(
+            reconnect_context.terminal_close_event if nats_client is not None else None
+        ),
     )
 
     log.info(
@@ -1165,7 +1239,10 @@ async def shutdown(state: AppState) -> None:
     # 1. Cancel the fleet heartbeat task — must run first so the
     # subsequent deregister write is the last fleet observation the
     # broker records (no race against an in-flight heartbeat re-register).
-    heartbeat_task = state.fleet_heartbeat_task
+    # TASK-J006-011: read the *current* task from the reconnect holder so a
+    # reconnect-respawned heartbeat is the one cancelled, not the stale boot
+    # task.
+    heartbeat_task = state.active_heartbeat_task()
     if heartbeat_task is not None and not heartbeat_task.done():
         heartbeat_task.cancel()
         try:
