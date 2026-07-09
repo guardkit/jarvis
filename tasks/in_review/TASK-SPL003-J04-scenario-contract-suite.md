@@ -1,7 +1,7 @@
 ---
 id: TASK-SPL003-J04
 title: "jarvis: scenario + contract test suite + forge details fixture (FEAT-SPL-003)"
-status: backlog
+status: in_review
 priority: high
 task_type: testing
 parent_review: TASK-REV-A387

@@ -24,7 +24,7 @@ tasks:
   estimated_minutes: 90
 - id: TASK-SPL003-J02
   name: Assumption-dialogue render + binary-mirror suppression
-  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J02-assumption-dialogue-render.md
+  file_path: tasks/in_review/TASK-SPL003-J02-assumption-dialogue-render.md
   complexity: 7
   dependencies:
   - TASK-SPL003-J01
@@ -33,7 +33,7 @@ tasks:
   estimated_minutes: 110
 - id: TASK-SPL003-J03a
   name: Dialogue click engine + structured dispositions (no modal)
-  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J03a-dialogue-click-engine-dispositions.md
+  file_path: tasks/in_review/TASK-SPL003-J03a-dialogue-click-engine-dispositions.md
   complexity: 6
   dependencies:
   - TASK-SPL003-J02
@@ -42,7 +42,7 @@ tasks:
   estimated_minutes: 100
 - id: TASK-SPL003-J03b
   name: Assumption edit modal (views.open + view_submission)
-  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J03b-edit-modal.md
+  file_path: tasks/in_review/TASK-SPL003-J03b-edit-modal.md
   complexity: 5
   dependencies:
   - TASK-SPL003-J03a
@@ -51,7 +51,7 @@ tasks:
   estimated_minutes: 75
 - id: TASK-SPL003-J04
   name: Scenario + contract test suite + forge details fixture
-  file_path: tasks/backlog/feat-spl-003-assumption-dialogue/TASK-SPL003-J04-scenario-contract-suite.md
+  file_path: tasks/in_review/TASK-SPL003-J04-scenario-contract-suite.md
   complexity: 5
   dependencies:
   - TASK-SPL003-J01
