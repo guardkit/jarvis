@@ -3,7 +3,9 @@ id: TASK-J006-011
 title: "Wire reconnect callbacks so jarvis survives steady-state broker bounces"
 task_type: bug
 feature_id: FEAT-JARVIS-006
-status: pending
+status: completed
+completed: 2026-07-10
+completed_location: tasks/completed/feat-jarvis-006-nats-chat-gateway/
 priority: critical
 complexity: 3
 wave: 6
@@ -27,6 +29,12 @@ implementation_reference:
 created: 2026-05-12
 ---
 
+> **✅ COMPLETED 2026-07-10 (WS3-S7) — code + hermetic tests landed and green
+> (AC-01..AC-06); AC-07/AC-08 GB10 live probes deferred to the next jarvis
+> operator session (bundle with GB10). Task tests re-run at completion:
+> `tests/test_j006_011_reconnect_callbacks.py` + `tests/test_serve_nats_cli.py`
+> = 34 passed.**
+>
 > **🟡 IN REVIEW 2026-07-09 (WS3-S7) — code + hermetic tests landed; AC-07/AC-08
 > GB10 live probes remain operator follow-up.** Ported the study-tutor
 > TASK-NATS-FIX-006 pattern, adapted to jarvis's three-module lifecycle split:
