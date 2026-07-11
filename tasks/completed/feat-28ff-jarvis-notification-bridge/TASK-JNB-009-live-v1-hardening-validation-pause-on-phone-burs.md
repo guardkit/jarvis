@@ -1,9 +1,10 @@
 ---
 id: TASK-JNB-009
 title: "LIVE v1 hardening validation: pause on phone, burst, restart"
-status: backlog
+status: completed
 created: 2026-07-03T15:30:00Z
-updated: 2026-07-03T15:30:00Z
+updated: 2026-07-11T21:30:00Z
+completed: 2026-07-11T21:30:00Z
 priority: high
 task_type: operator_handoff
 parent_review: TASK-REV-C951
@@ -44,11 +45,49 @@ Hardening from TASK-JNB-006 is now live and is what the burst and restart probes
 
 ## Acceptance Criteria
 
-- [ ] A gated toy build reaches its pause: the phone shows the pause message with the correct stage, the coach rationale rendered verbatim (inert text, intact even if long), and 'score unavailable' where `coach_score` is None (today's live ADR-ARCH-033 default).
-- [ ] Two toy builds queued to finish close together: both terminal notifications arrive on the phone, each carrying the correct per-build fields (no cross-build field bleed), and the notifier does not wedge — subsequent notifications continue to flow.
-- [ ] jarvis restarted mid-build: no previously delivered notifications are replayed after restart (DDR-027), and events emitted after the restart still reach the phone even though the correlation map was lost — confirming fan-out is not correlation-gated.
-- [ ] Each expected notification arrives exactly once (dedup active); any at-least-once redelivery during the run is absorbed by the 300s first-wins dedup rather than double-posting.
-- [ ] v1 is declared complete on the strength of the above.
+- [x] A gated toy build reaches its pause: the phone shows the pause message with the correct stage, the coach rationale rendered verbatim (inert text, intact even if long), and 'score unavailable' where `coach_score` is None (today's live ADR-ARCH-033 default).
+- [x] Two toy builds queued to finish close together: both terminal notifications arrive on the phone, each carrying the correct per-build fields (no cross-build field bleed), and the notifier does not wedge — subsequent notifications continue to flow.
+- [x] jarvis restarted mid-build: no previously delivered notifications are replayed after restart (DDR-027), and events emitted after the restart still reach the phone even though the correlation map was lost — confirming fan-out is not correlation-gated.
+- [x] Each expected notification arrives exactly once (dedup active); any at-least-once redelivery during the run is absorbed by the 300s first-wins dedup rather than double-posting.
+- [x] v1 is declared complete on the strength of the above.
+
+## Live validation record — ALL GREEN (2026-07-11 evening, GB10)
+
+Run per the fold-in spec (ai-transition `ways-of-working/mode-p-forge-specialist-execution-
+integration-handoff.md` §8, with its two dated 2026-07-11 corrections): no phone in the loop —
+every assertion evidenced from jarvis journal + forge-prod docker logs + the live forge db
+(read-only) + Slack `conversations.history` on `C0BF2FPQXAM`. Orchestrated as workflow
+`wf_4c27d46d-089` (Opus driver + independent Opus evidence-coach per probe; driver AND coach
+pass on every probe; evidence dirs in the session scratchpad `jnb009/`).
+
+- **Probe 1 — pause rendering (FEAT-3CC2, build-FEAT-3CC2-20260711201118):** pause message
+  ts `1783802623.630599`: `Stage: autobuild` (matches request_id + stage_log), the 202-char
+  ADR-ARCH-019 degraded rationale rendered verbatim as inert `plain_text` (byte-identical to
+  the db `stage_log.details_json.gate.rationale`), `Coach score: score unavailable` with db
+  `coach_score=NULL` (ADR-ARCH-033), exactly once. Terminal `build-cancelled` ts
+  `1783802784.960349` (`Cancelled by: U03QR8WKT29`), exactly once, post-dating the pause.
+  Bonus negative datum: a wrong-identity synthetic reject (`responder 'rich'`) was held by the
+  gate (`unrecognised responder — anomaly, NOT resuming`) and produced NO Slack post — the
+  identity pin holds silently.
+- **Probe 2 — burst / no-wedge (FEAT-947C + FEAT-9E59):** strictly-serial worker (Max Ack
+  Pending 1) paused 947C while 9E59 waited; rapid identity-pinned cancels drove all four
+  messages — pause-947C, terminal-947C, pause-9E59, terminal-9E59 — exactly once, in order,
+  correct per-build fields, no cross-build bleed, no wedge; spacing consistent with the
+  ~1 msg/s serialised worker. Both builds db-confirmed CANCELLED, nothing launched.
+- **Probe 3 — restart no-replay + correlation-independent fan-out (FEAT-B2D7):** pause
+  delivered → the ONE deliberate restart (`systemctl --user stop/start`, PID 612110→2860676,
+  clean boot, no `err_code 10100`, 6 `filter_subjects` re-established) → post-restart history
+  ts-set identical (NO replay, DDR-027) → post-restart cancel's terminal DELIVERED despite the
+  lost correlation map (fan-out not correlation-gated) → whole-session exactly-once table
+  holds across P1+P2+P3. DDR-007 observed-not-forced: zero WARNING/drop events all session.
+
+**v1 is declared complete.** Operational notes that fell out of the run (filed forge-side as
+`TASK-FWD-005`): `forge cancel` is unusable against the identity-pinned gate (stale
+`/var/forge/forge.db` shadow · `os.getlogin()` OSError under docker exec · hardcoded
+`SYNTHETIC_RESPONDER='rich'` rejected by the pin while the CLI reports success); the working
+cancel is an identity-pinned synthetic reject via forge's own injector. Also: a gate-paused
+build ACKS its PIPELINE message, so `nats consumer info` reads idle while the single serial
+worker is occupied — check forge logs/db, not the consumer, for worker freeness.
 
 ## Test Requirements
 
