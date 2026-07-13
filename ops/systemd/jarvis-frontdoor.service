@@ -1,0 +1,51 @@
+# jarvis-frontdoor.service — supervised jarvis Slack front door (O-30, Phase E2-S3)
+#
+# WHAT: the live jarvis front door is a bare `uv run python -m langgraph dev`
+#   (README §Quickstart step 6) with NO supervisor — on an overnight power blip
+#   / kernel-update reboot / user-session restart it silently does not come back,
+#   and a James/Rich Slack request goes nowhere. This unit supervises it with an
+#   auto-restart policy so the front door recovers on failure and on boot.
+#
+# SCOPE: a systemd **USER** unit (runs as the login user, no root) — the front
+#   door binds the developer venv (`uv run`) and reads the repo-local `.env`,
+#   both of which are user-scoped. Install/enable is a coordinator step (see
+#   ops/systemd/README.md); this file is AUTHORED + `systemd-analyze verify`-clean,
+#   NOT installed.
+#
+# BOOT ORDER (see ops/systemd/README.md §Boot order): this front door is LAST —
+#   it must come up after nats + forge-prod + the specialists. A user unit cannot
+#   hard-order against system-scoped docker containers, so the ordering below is
+#   best-effort (network-online) and the restart policy is what actually closes
+#   the race: if the front door starts before its NATS broker is reachable and
+#   the process exits, Restart=on-failure brings it back until the broker answers.
+
+[Unit]
+Description=jarvis Slack front door (langgraph dev — jarvis + jarvis_reasoner graphs)
+Documentation=file:///home/richardwoollcott/Projects/appmilla_github/jarvis/ops/systemd/README.md
+Documentation=file:///home/richardwoollcott/Projects/appmilla_github/ai-transition/docs/factory-gap-analysis-2026-07-13.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+# The repo root: langgraph.json, forge-relative paths and the .env all resolve
+# from here (langgraph dev is invoked with no --config, so it reads ./langgraph.json).
+WorkingDirectory=%h/Projects/appmilla_github/jarvis
+# Belt-and-suspenders env sourcing. langgraph itself loads the file named in
+# langgraph.json ("env": ".env"); sourcing it here too makes NATS/Slack/Graphiti
+# credentials present to the process before langgraph starts. `-` => optional:
+# a missing .env does not fail the unit (systemd-analyze / a fresh checkout).
+EnvironmentFile=-%h/Projects/appmilla_github/jarvis/.env
+# Canonical runtime command (README §Quickstart step 6), through `uv run` so it
+# binds the pinned 3.12 interpreter in .venv/. --no-browser: a supervised
+# headless service must never try to open a browser.
+ExecStart=%h/.local/bin/uv run python -m langgraph dev --no-browser
+# The O-30 requirement: auto-recover a crashed front door. on-failure (not
+# always) so a clean operator `systemctl --user stop` stays stopped.
+Restart=on-failure
+RestartSec=5
+# Give langgraph time to boot both graphs before the start is judged.
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target
