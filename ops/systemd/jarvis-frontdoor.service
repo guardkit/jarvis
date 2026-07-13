@@ -39,7 +39,7 @@ EnvironmentFile=-%h/Projects/appmilla_github/jarvis/.env
 # Canonical runtime command (README §Quickstart step 6), through `uv run` so it
 # binds the pinned 3.12 interpreter in .venv/. --no-browser: a supervised
 # headless service must never try to open a browser.
-ExecStart=%h/.local/bin/uv run python -m langgraph dev --no-browser
+ExecStart=%h/Projects/appmilla_github/jarvis/.venv/bin/langgraph dev --no-browser
 # The O-30 requirement: auto-recover a crashed front door. on-failure (not
 # always) so a clean operator `systemctl --user stop` stays stopped.
 Restart=on-failure
