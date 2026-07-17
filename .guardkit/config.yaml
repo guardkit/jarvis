@@ -16,3 +16,11 @@
 autobuild:
   coach:
     test_execution: subprocess
+
+# QA surface (HB-1, 2026-07-17). jarvis is NOT a DCL venue (register: "clean"),
+# so spec_track stays gherkin — DCL is opt-in per repo and not adopted here.
+# enforce_tier1 turns on the Tier-1 QA gate (F2 suite-vs-ledger + the registered
+# F4 gates in qa/gates/registry.yaml).
+qa:
+  enforce_tier1: true
+  spec_track: gherkin

@@ -1,0 +1,40 @@
+# F1 · pass-bar (guardkit qa kind: pass-bar) for the SERVE-NATS-LIVENESS gate.
+# The criteria ARE the gate qa/gates/liveness_gate.py: the `jarvis serve-nats`
+# systemd user unit (the real Slack door, src/jarvis/cli/main.py:263) reports
+# `active` via `systemctl --user is-active`, and its journal carries a dated entry
+# within the freshness window. auth_surface_bearing:false — the gate only READS
+# host-process state (systemctl/journalctl); it exposes no auth surface, so
+# dependency_down_degradation is the sole required negative path.
+#
+# dependency_down_degradation basis: serve-nats has a HARD NATS-broker dependency
+# — it refuses to start when the broker is unreachable (src/jarvis/cli/main.py:354
+# exits SystemExit(1)). So the honest degradation story is NOT graceful in-process
+# fallback: when NATS is down the unit is inactive/failed, and the live-gate
+# driver's F16 probe (qa/gates/local_live_gate.py) classifies that as
+# environment_fail BEFORE this gate runs — never a false product-fail.
+#
+# This bar is the GATE's own bar (required for the registered gate to pre-flight);
+# it is NOT a per-feature build bar (those are machine-registered at pilot time).
+format_version: "2.0"
+task_id: HB-1-SERVE-NATS-LIVENESS-GATE
+registered_at:
+  sha: "7dfd63b"
+  date: "2026-07-17"
+auth_surface_bearing: false
+preconditions:
+  - suite_green_vs_ledger
+criteria:
+  - id: C-SERVE-NATS-ACTIVE
+    text: "`systemctl --user is-active jarvis-serve-nats` reports active"
+    class: machine
+    evidence_kind: log
+  - id: C-SERVE-NATS-JOURNAL-FRESH
+    text: "journalctl carries a dated entry for the unit within the freshness window (a silent unit is a wedged door)"
+    class: machine
+    evidence_kind: log
+# Negative path names are plain strings (pass-bar v2.0 schema).
+# dependency_down_degradation is mandatory for every pass bar (PB-14); for
+# serve-nats the honest story is a HARD dependency — a down NATS broker makes the
+# unit inactive, surfaced by the driver as environment_fail (not a product red).
+negative_paths:
+  - dependency_down_degradation

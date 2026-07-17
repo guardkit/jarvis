@@ -1,0 +1,7 @@
+# Run artifacts produced by the live-gate driver / gate scripts are transient —
+# regenerated on every run (mirrors the study-tutor port convention). The
+# authored QA surface (gate scripts, registry, pass bar, ledger) is tracked; the
+# per-run evidence + history receipts are not.
+evidence/
+history/
+__pycache__/

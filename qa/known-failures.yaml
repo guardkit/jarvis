@@ -1,0 +1,33 @@
+# F2 · jarvis known-failure ledger (guardkit qa kind: known-failures)
+# The DOCUMENTED expected outcome of the FULL default pytest suite, plus every
+# pre-existing, triaged failure. This is the FIRST QA-surface artifact for the
+# repo: every later suite run is compared against THIS ledger, not against "all
+# green". An un-ledgered failure fails the gate; a ledgered entry that starts
+# passing is a stale-ledger finding to be struck. Zero net-new vs this ledger is
+# the bar — that is what makes each later green honest.
+#
+# Suite of record (the README-documented invocation, README.md:59-60,83; run with
+# --no-sync per the standing uv-CI lesson to avoid the .venv prune footgun):
+#   uv run --no-sync pytest
+# Observed baseline 2026-07-17 @ 7dfd63b (working tree; the only working-tree
+# drift is a pre-existing modified uv.lock, a fenced file this baseline does NOT
+# touch): 2787 passed, 0 failed, 0 errored, 2 skipped in 135.94s. Re-run
+# reproduced identical counts (2787 passed, 2 skipped).
+#
+# The 2 skips are HONEST env-gated soft-prereq skips (they skip cleanly, they are
+# NOT failures), recorded here for completeness — NOT as known_failures:
+#   - tests/test_end_to_end_forge_roundtrip.py:283 — e2e Forge round-trip needs
+#     real GB10 infra (JARVIS_NATS_URL + JARVIS_FLEET_MEMORY_ENABLED unset).
+#   - tests/test_fleet_memory_client.py:301 — fleet-memory store not enabled
+#     (JARVIS_FLEET_MEMORY_ENABLED unset).
+# The default suite makes NO real LLM/network call: conftest routes models through
+# FakeListChatModel and stubs OPENAI_API_KEY (tests/conftest.py:41-71,178-185).
+format_version: "1.0"
+suite_id: jarvis-pytest-suite
+framework: pytest
+language: python
+expected:
+  passed: 2787
+# Zero pre-existing reds: the full suite is green against this baseline. An
+# empty known_failures list is the honest state — any future red is net-new.
+known_failures: []
