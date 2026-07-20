@@ -1,0 +1,40 @@
+# jarvis-serve-nats-watchdog.service — staleness watchdog for the Slack door (HB-4 L1)
+#
+# WHAT: a oneshot that READS jarvis-serve-nats state (systemctl --user is-active +
+#   its journal) and posts a Slack alert when the door's Socket-Mode subscription
+#   is wedged (see ops/systemd/serve_nats_watchdog.py for the staleness rule). It
+#   NEVER starts/stops/restarts serve-nats and touches no seat/GPU/keepalive — it
+#   is CPU- and journal-only. Driven periodically by jarvis-serve-nats-watchdog.timer.
+#
+# SCOPE: a systemd USER unit (runs as the login user, no root) — it reads the
+#   user manager's journal and the user unit's is-active, both user-scoped.
+#   Install/enable is a coordinator step (see ops/systemd/README.md); this file is
+#   AUTHORED + `systemd-analyze verify`-clean, NOT installed by this pass.
+#
+# CREDENTIALS: the Slack alert reuses jarvis's OWN bot token + channel by sourcing
+#   the SAME EnvironmentFile the serve-nats unit uses (%h/.config/guardkit/jarvis.env).
+#   No secret lives in the repo and no new secret path is introduced.
+
+[Unit]
+Description=jarvis serve-nats staleness watchdog (journalctl -> Slack alert)
+Documentation=file:///home/richardwoollcott/Projects/appmilla_github/jarvis/ops/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Reuse jarvis's own Slack credentials — the SAME file jarvis-serve-nats sources.
+# No `-`: the watchdog needs JARVIS_SLACK_BOT_TOKEN present to post an alert.
+EnvironmentFile=%h/.config/guardkit/jarvis.env
+WorkingDirectory=%h/Projects/appmilla_github/jarvis
+# Deliberately the SYSTEM interpreter, not jarvis's venv: the watchdog is
+# stdlib-only and must stay independent of the thing it watches.
+ExecStart=/usr/bin/python3 %h/Projects/appmilla_github/jarvis/ops/systemd/serve_nats_watchdog.py
+# The script exits 10 when it detects a stale door AND successfully dispatches the
+# alert — that is a SUCCESSFUL watchdog run (the alert is the signal), so it must
+# not read as a unit failure. Exit 20 (watchdog-internal-error) is NOT listed here,
+# so it still fails the unit and surfaces in `systemctl --user status`.
+SuccessExitStatus=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,20 @@
+[Unit]
+Description=jarvis serve-nats (Jarvis NATS supervisor gateway)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/guardkit/jarvis.env
+Environment=JARVIS_LOG_LEVEL=INFO
+WorkingDirectory=%h/Projects/appmilla_github/jarvis
+ExecStart=%h/Projects/appmilla_github/jarvis/.venv/bin/jarvis serve-nats --nats ${JARVIS_NATS_URL}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillSignal=SIGINT
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

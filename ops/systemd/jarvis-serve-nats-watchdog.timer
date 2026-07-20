@@ -1,0 +1,23 @@
+# jarvis-serve-nats-watchdog.timer — periodic driver for the serve-nats watchdog (HB-4 L1)
+#
+# Fires jarvis-serve-nats-watchdog.service on a cadence so a wedged Slack door is
+# caught within one interval. Enabling THIS timer (not the .service) is the single
+# install action — the oneshot is inert until the timer triggers it (see
+# ops/systemd/README.md). AUTHORED + `systemd-analyze verify`-clean, NOT installed
+# by this pass.
+
+[Unit]
+Description=periodic jarvis serve-nats staleness watchdog
+Documentation=file:///home/richardwoollcott/Projects/appmilla_github/jarvis/ops/systemd/README.md
+
+[Timer]
+# First run shortly after boot (let the door settle), then every 15 minutes.
+OnBootSec=5min
+OnUnitActiveSec=15min
+# Catch up one missed run after the box was asleep/off rather than waiting a full
+# interval — a door that wedged overnight is still surfaced promptly at wake.
+Persistent=true
+Unit=jarvis-serve-nats-watchdog.service
+
+[Install]
+WantedBy=timers.target
