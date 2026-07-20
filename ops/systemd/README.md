@@ -52,6 +52,11 @@ is down, **or** its Socket-Mode subscription dropped without re-establishing, **
 the journal has been silent past a 6h backstop. The staleness rule (and why a
 plain no-lines-in-N-minutes rule would false-alarm on a healthy idle/rotating
 door) is documented in the script header, `serve_nats_watchdog.py`.
+Known cap (honest): a subscription that dies **without logging any trouble line**
+while the door's independent KV-poll keeps the journal non-silent evades both
+journal signals — the observed Socket-Mode drop class does log its marker; the
+truly-silent death is a register residue (cure = an end-to-end probe, not more
+journal grammar).
 
 - The watchdog **never** starts/stops/restarts serve-nats and touches no
   seat/GPU/keepalive — it is CPU- and journal-only.

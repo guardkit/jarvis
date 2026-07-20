@@ -41,6 +41,14 @@ STALENESS RULE (the door is STALE → alert iff ANY of):
      events). A door that has logged NOTHING for longer than a full rotation cycle
      is wedged even while the process lingers.
 
+KNOWN CAP (honest, coach-flagged 2026-07-20): signal 2 needs the drop to EMIT a
+connection-trouble line, and the silence backstop is fed by the independent
+``list_all`` KV-poll lines — so a subscription that dies with ZERO trouble log
+while the KV-poll keeps the journal non-silent evades both signals. The realistic
+observed Socket-Mode failure class DOES log its trouble marker (evidence above);
+the truly-silent death stays a register residue (cure = an end-to-end probe à la
+HB-1's gate, not more journal grammar).
+
 The door is FRESH/QUIET (→ no alert) otherwise: process ``active``, the last
 connection event is a healthy ``established`` (or there is no trouble at all in
 the window), and a journal line within the silence window.
