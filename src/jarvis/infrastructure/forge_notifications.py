@@ -963,9 +963,9 @@ class ForgeNotificationsSubscriber:
 
         Returns ``False`` (process normally) when the subscriber has not
         been started (no start time to compare against) or when the
-        delivery carries no readable JetStream metadata — in the latter
-        case the message's age cannot be judged, so it is processed rather
-        than risk dropping a live event.
+        delivery carries no readable/comparable JetStream store timestamp —
+        in the latter case the message's age cannot be judged, so it is
+        processed rather than risk dropping a live event.
         """
         start_time = self._start_time
         if start_time is None:
@@ -973,15 +973,18 @@ class ForgeNotificationsSubscriber:
 
         try:
             message_ts = msg.metadata.timestamp
-        except Exception:
-            # Not a JetStream message / unparsable ack-reply subject.
-            # Cannot judge age — process normally (never drop blindly).
+            if message_ts.tzinfo is None:
+                message_ts = message_ts.replace(tzinfo=UTC)
+            is_replay = message_ts < start_time - timedelta(
+                seconds=_REPLAY_GRACE_SECONDS
+            )
+        except (AttributeError, TypeError, ValueError):
+            # No readable JetStream metadata, or a store timestamp that is
+            # not a comparable aware datetime. The age cannot be judged, so
+            # process normally rather than drop a possibly-live event.
             return False
 
-        if message_ts.tzinfo is None:
-            message_ts = message_ts.replace(tzinfo=UTC)
-
-        if message_ts >= start_time - timedelta(seconds=_REPLAY_GRACE_SECONDS):
+        if not is_replay:
             return False
 
         self._suppressed_replays += 1
