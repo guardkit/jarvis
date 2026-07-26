@@ -37,7 +37,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from unittest import mock
 
@@ -169,6 +169,28 @@ def _make_msg(data: bytes) -> mock.MagicMock:
     m.subject = "pipeline.stage-complete.FEAT-J005DEMO"
     m.ack = mock.AsyncMock()
     return m
+
+
+def _make_js_msg(data: bytes, *, timestamp: datetime) -> mock.MagicMock:
+    """Build a JetStream ``Msg`` mock carrying a store ``metadata.timestamp``.
+
+    F9 replay suppression keys off ``msg.metadata.timestamp`` (the broker's
+    store time). This helper attaches a metadata object with the given
+    timestamp so the pre/post-start comparison can be exercised.
+    """
+    m = _make_msg(data)
+    m.metadata = mock.MagicMock(timestamp=timestamp)
+    return m
+
+
+def _bind_notification_sink(
+    sub: ForgeNotificationsSubscriber,
+) -> mock.MagicMock:
+    """Bind a NotificationSink-shaped mock (async ``notify``) onto the sub."""
+    sink = mock.MagicMock()
+    sink.notify = mock.AsyncMock()
+    sub.bind_notification_sink(sink)
+    return sink
 
 
 def _make_subscriber(
@@ -993,3 +1015,251 @@ class TestLifecycleEventDropsOwnPublishes:
 
         # Source-ID gate drops it before any further processing.
         sm.enqueue_notification.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# F9 (2026-07-26) — client-side New semantics: pre-start lifecycle deliveries
+# are ack-drained without re-posting to the notification sink or the session
+# FIFO. Cures the double-timestamp Slack storm on restart while draining the
+# stale workqueue backlog. deliver_policy stays ALL (workqueue-mandated).
+# ---------------------------------------------------------------------------
+
+
+class TestReplaySuppression:
+    """A delivery whose JetStream store timestamp predates ``start()``
+    (beyond the clock-skew grace) is dropped: sink NOT called, nothing
+    enqueued, suppression tally incremented. A post-start delivery is
+    processed exactly as before.
+    """
+
+    @pytest.mark.asyncio
+    async def test_prestart_lifecycle_message_suppressed(self) -> None:
+        sub, _, writer = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sink = _bind_notification_sink(sub)
+        sub.register_correlation(
+            "corr-r1", "cli-r", "cli", datetime.now(UTC), "FEAT-J005DEMO"
+        )
+        await sub.start()
+        assert sub._start_time is not None
+
+        payload = _build_started_payload(feature_id="FEAT-J005DEMO")
+        msg = _make_js_msg(
+            _envelope_bytes(
+                payload,
+                correlation_id="corr-r1",
+                event_type="build_started",
+            ),
+            # Stored 10s before the subscriber came up — replay.
+            timestamp=sub._start_time - timedelta(seconds=10),
+        )
+        msg.subject = "pipeline.build-started.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        # Sink (real Slack cloud in prod) NOT invoked; nothing enqueued.
+        sink.notify.assert_not_awaited()
+        sm.enqueue_notification.assert_not_called()
+        writer.append_build_queue_event.assert_not_awaited()
+        # Itemized count — not a silent swallow.
+        assert sub._suppressed_replays == 1
+
+    @pytest.mark.asyncio
+    async def test_prestart_stage_complete_message_suppressed(self) -> None:
+        sub, _, writer = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sub.register_correlation(
+            "corr-001", "cli-abc", "cli", datetime.now(UTC), "FEAT-J005DEMO"
+        )
+        await sub.start()
+
+        payload = _stage_complete_payload(correlation_id="corr-001")
+        msg = _make_js_msg(
+            _envelope_bytes(payload),
+            timestamp=sub._start_time - timedelta(seconds=10),
+        )
+
+        await sub._on_message(msg)
+
+        # Stage-complete path: neither the routing-history edge nor the
+        # enqueue runs for a suppressed replay.
+        writer.append_build_queue_event.assert_not_awaited()
+        sm.enqueue_notification.assert_not_called()
+        assert sub._suppressed_replays == 1
+
+    @pytest.mark.asyncio
+    async def test_poststart_message_processed_as_today(self) -> None:
+        sub, _, _ = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sink = _bind_notification_sink(sub)
+        sub.register_correlation(
+            "corr-r2", "cli-r", "cli", datetime.now(UTC), "FEAT-J005DEMO"
+        )
+        await sub.start()
+
+        payload = _build_started_payload(feature_id="FEAT-J005DEMO")
+        msg = _make_js_msg(
+            _envelope_bytes(
+                payload,
+                correlation_id="corr-r2",
+                event_type="build_started",
+            ),
+            # Stored 1s after start — a live event.
+            timestamp=sub._start_time + timedelta(seconds=1),
+        )
+        msg.subject = "pipeline.build-started.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        sink.notify.assert_awaited_once()
+        sm.enqueue_notification.assert_called_once()
+        assert sub._suppressed_replays == 0
+
+    @pytest.mark.asyncio
+    async def test_within_grace_window_is_processed(self) -> None:
+        """A delivery stamped just before start (inside the 2s grace) is
+        treated as live — the grace errs toward posting, protecting a
+        borderline-live event from being wrongly dropped."""
+        sub, _, _ = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sink = _bind_notification_sink(sub)
+        sub.register_correlation(
+            "corr-r3", "cli-r", "cli", datetime.now(UTC), "FEAT-J005DEMO"
+        )
+        await sub.start()
+
+        payload = _build_started_payload(feature_id="FEAT-J005DEMO")
+        msg = _make_js_msg(
+            _envelope_bytes(
+                payload,
+                correlation_id="corr-r3",
+                event_type="build_started",
+            ),
+            # 1s before start — within the 2s clock-skew grace.
+            timestamp=sub._start_time - timedelta(seconds=1),
+        )
+        msg.subject = "pipeline.build-started.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        sink.notify.assert_awaited_once()
+        sm.enqueue_notification.assert_called_once()
+        assert sub._suppressed_replays == 0
+
+    @pytest.mark.asyncio
+    async def test_just_beyond_grace_window_is_suppressed(self) -> None:
+        """A delivery stamped 3s before start (beyond the 2s grace) is
+        suppressed — the boundary sits at start - grace."""
+        sub, _, _ = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sink = _bind_notification_sink(sub)
+        sub.register_correlation(
+            "corr-r4", "cli-r", "cli", datetime.now(UTC), "FEAT-J005DEMO"
+        )
+        await sub.start()
+
+        payload = _build_started_payload(feature_id="FEAT-J005DEMO")
+        msg = _make_js_msg(
+            _envelope_bytes(
+                payload,
+                correlation_id="corr-r4",
+                event_type="build_started",
+            ),
+            timestamp=sub._start_time - timedelta(seconds=3),
+        )
+        msg.subject = "pipeline.build-started.FEAT-J005DEMO"
+
+        await sub._on_message(msg)
+
+        sink.notify.assert_not_awaited()
+        sm.enqueue_notification.assert_not_called()
+        assert sub._suppressed_replays == 1
+
+    @pytest.mark.asyncio
+    async def test_backlog_of_stale_messages_all_suppressed_and_counted(
+        self,
+    ) -> None:
+        """First-restart drain: a backlog of stale lifecycle messages is
+        each suppressed and the running total is itemized."""
+        sub, _, _ = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sink = _bind_notification_sink(sub)
+        sub.register_correlation(
+            "corr-r5", "cli-r", "cli", datetime.now(UTC), "FEAT-J005DEMO"
+        )
+        await sub.start()
+
+        for _ in range(4):
+            payload = _build_started_payload(feature_id="FEAT-J005DEMO")
+            msg = _make_js_msg(
+                _envelope_bytes(
+                    payload,
+                    correlation_id="corr-r5",
+                    event_type="build_started",
+                ),
+                timestamp=sub._start_time - timedelta(seconds=30),
+            )
+            msg.subject = "pipeline.build-started.FEAT-J005DEMO"
+            await sub._on_message(msg)
+
+        sink.notify.assert_not_awaited()
+        sm.enqueue_notification.assert_not_called()
+        assert sub._suppressed_replays == 4
+
+    @pytest.mark.asyncio
+    async def test_no_suppression_before_start(self) -> None:
+        """Before ``start()`` there is no start time to compare against, so
+        the gate never suppresses (guards all the pre-start-msg unit tests
+        in this module, which never call ``start()``)."""
+        sub, _, writer = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sub.register_correlation(
+            "corr-001", "cli-abc", "cli", datetime.now(UTC), "FEAT-J005DEMO"
+        )
+        assert sub._start_time is None
+
+        payload = _stage_complete_payload(correlation_id="corr-001")
+        # Even with an ancient store timestamp, no start time => processed.
+        msg = _make_js_msg(
+            _envelope_bytes(payload),
+            timestamp=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+
+        await sub._on_message(msg)
+
+        writer.append_build_queue_event.assert_awaited_once()
+        sm.enqueue_notification.assert_called_once()
+        assert sub._suppressed_replays == 0
+
+    @pytest.mark.asyncio
+    async def test_unreadable_metadata_is_processed_not_dropped(self) -> None:
+        """A delivery whose metadata cannot be read (non-JS message) is
+        processed rather than dropped blindly — age is unjudgeable."""
+        sub, _, writer = _make_subscriber()
+        sm = _bind_session_manager(sub)
+        sub.register_correlation(
+            "corr-001", "cli-abc", "cli", datetime.now(UTC), "FEAT-J005DEMO"
+        )
+        await sub.start()
+
+        payload = _stage_complete_payload(correlation_id="corr-001")
+
+        class _NoMetadataMsg:
+            """Msg whose ``.metadata`` raises (mimics nats-py
+            ``NotJSMessageError`` on a message without a JS ack-reply)."""
+
+            def __init__(self, data: bytes) -> None:
+                self.data = data
+                self.subject = "pipeline.stage-complete.FEAT-J005DEMO"
+
+            @property
+            def metadata(self) -> Any:
+                raise ValueError("not a JetStream message")
+
+        msg = _NoMetadataMsg(_envelope_bytes(payload))
+
+        await sub._on_message(msg)
+
+        writer.append_build_queue_event.assert_awaited_once()
+        sm.enqueue_notification.assert_called_once()
+        assert sub._suppressed_replays == 0

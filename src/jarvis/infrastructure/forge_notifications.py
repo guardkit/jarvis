@@ -62,7 +62,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections import OrderedDict
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
@@ -418,18 +418,33 @@ class BuildCorrelation(BaseModel):
 # assumed PIPELINE was a LimitsPolicy stream, which the canonical infra
 # has not been since FEAT-JARVIS-INTERNAL-001 surfaced the contract drift.
 #
-# The "no replay-on-restart UX surprise" property the original DDR-027
-# rationale was after is preserved structurally rather than via the
-# delivery policy:
-#   * Workqueue retention deletes a message once any consumer acks it.
-#     Jarvis's only filter on this stream is ``pipeline.stage-complete.>``,
-#     and auto-ack drains every delivery the moment the callback returns —
-#     so the consumer's slice is empty in steady state.
-#   * The DDR-028 in-memory correlation map is lost on Jarvis restart.
-#     Any backlog drained at restart with deliver_policy=all hits a
-#     "correlation_id not found" silent drop in ``_handle_message`` and
-#     the message is gone (workqueue + auto-ack).
-# Net effect: the operator never sees replay UX, just like before.
+# The original DDR-027 rationale assumed the "no replay-on-restart UX
+# surprise" property was preserved structurally rather than via the
+# delivery policy. The 2026-07-26 forge e2e rehearsal DISPROVED that
+# assumption for the lifecycle subjects:
+#   * The structural argument only holds while jarvis is UP and auto-ack
+#     drains each delivery immediately. While jarvis is DOWN, lifecycle
+#     messages published by forge accumulate UNACKED on the workqueue
+#     stream (16 such messages were retained live on 2026-07-26). On
+#     restart, deliver_policy=all replays that whole backlog.
+#   * The "correlation map is lost on restart, so the backlog silent-drops"
+#     argument fails for the notification SINK path: the sink
+#     (create_slack_sink -> SlackNotifier, real third-party cloud) is
+#     invoked BEFORE and INDEPENDENT of the correlation lookup
+#     (_handle_build_lifecycle / _handle_pause_or_cancelled). So the
+#     stale backlog re-posted old lifecycle lines to Slack on every
+#     restart — the double-timestamp storm (defect F9).
+# A deliver_policy=NEW flip is impossible (workqueue rejects it, 10101),
+# so the fix is client-side New semantics: the subscriber records its
+# start time on start() and _replay_suppressed drops (ack-drains, without
+# sink or enqueue) any delivery whose JetStream store timestamp predates
+# that start time (beyond a small clock-skew grace). This also silently
+# drains the stale backlog off the workqueue on first restart.
+#
+# Trade-off (chosen deliberately): a lifecycle event that arrives DURING
+# a jarvis downtime window is suppressed on restart and never reaches
+# Slack — it remains visible via ``forge status``. Never re-posting
+# history to Slack is the chosen side of that trade.
 #
 # We avoid a top-level import of nats.js.api so the schema-only import of
 # this module (e.g. from a unit test that only exercises
@@ -443,6 +458,15 @@ class BuildCorrelation(BaseModel):
 # DDR-028 default cap. ``register_correlation`` evicts the oldest entry once
 # the map is at capacity and emits one WARN per eviction.
 _DEFAULT_CORRELATION_CAP = 1000
+
+# F9 (2026-07-26) client-side New semantics. Clock-skew grace between the
+# NATS broker clock (which stamps ``msg.metadata.timestamp``) and this
+# process's wall clock (which stamps ``_start_time``). A delivery is only
+# treated as replay when its store timestamp predates the subscriber start
+# time by MORE than this many seconds, so a message published right at
+# startup is never wrongly suppressed — the grace errs toward posting a
+# borderline-live event rather than dropping it.
+_REPLAY_GRACE_SECONDS = 2.0
 
 # TASK-JNB-108 — workqueue-overlap rejection code. JetStream answers
 # ``err_code=10100 'filtered consumer not unique on workqueue stream'`` when a
@@ -565,8 +589,12 @@ class ForgeNotificationsSubscriber:
 
     Behaviour invariants per design.md §8 / DDR-026 — DDR-028 / DDR-030:
 
-    * Ephemeral push consumer on ``pipeline.stage-complete.>`` with
-      ``deliver_policy=NEW``; auto-ack (DDR-027). No replay on restart.
+    * Ephemeral push consumer on the six lifecycle subjects with
+      ``deliver_policy=ALL`` (workqueue-mandated); auto-ack (DDR-027).
+      No replay on restart is enforced client-side (F9): deliveries whose
+      JetStream store timestamp predates ``start()`` are ack-drained
+      without invoking the sink or the session FIFO — see
+      :meth:`_replay_suppressed`.
     * ``start()`` is idempotent — a second call is a no-op.
     * ``stop()`` cancels the subscription and returns within ``stop_timeout``
       seconds even if the broker is unresponsive (Group D #14).
@@ -587,9 +615,11 @@ class ForgeNotificationsSubscriber:
         "_queue_cap",
         "_routing_history_writer",
         "_session_manager",
+        "_start_time",
         "_started",
         "_stop_timeout",
         "_subscription",
+        "_suppressed_replays",
     )
 
     def __init__(
@@ -634,6 +664,12 @@ class ForgeNotificationsSubscriber:
         self._notification_sink: Any = None  # NotificationSink protocol (TASK-JNB-002)
         self._subscription: Any = None  # nats.js.JetStreamContext.PushSubscription
         self._started: bool = False
+        # F9 client-side New semantics: the wall-clock instant start()
+        # created the consumer, and a running tally of deliveries dropped
+        # as pre-start replay. ``None`` until start() runs — before which
+        # no delivery can be judged as replay (nothing to compare against).
+        self._start_time: datetime | None = None
+        self._suppressed_replays: int = 0
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -665,10 +701,31 @@ class ForgeNotificationsSubscriber:
         DDR-027 (revised 2026-05-01 / TASK-FRR-001): ephemeral push
         consumer with ``deliver_policy=ALL``. Workqueue retention on the
         canonical PIPELINE stream rejects ``DeliverPolicy.NEW`` with
-        ``code=10101 consumer must be deliver all on workqueue stream``;
-        the no-replay-on-restart UX the original DDR-027 wanted is
-        preserved structurally instead — see the module-level rationale
-        block by ``_get_deliver_policy_all``.
+        ``code=10101 consumer must be deliver all on workqueue stream``
+        (re-confirmed live against the running broker 2026-07-26:
+        retention=workqueue, DeliverPolicy.NEW rejected), so a delivery-
+        policy flip is impossible.
+
+        F9 (2026-07-26 forge e2e rehearsal): the original DDR-027 claim
+        that the no-replay-on-restart UX was "preserved structurally"
+        FAILED. While jarvis is down, forge's lifecycle messages
+        accumulate UNACKED on the workqueue stream (16 were retained live
+        on 2026-07-26); on restart ``deliver_policy=ALL`` replays that
+        backlog, and because the notification sink (create_slack_sink ->
+        SlackNotifier, real third-party cloud) fires BEFORE and
+        independent of the correlation lookup, the stale backlog re-posted
+        old lifecycle lines to Slack — the double-timestamp storm. Since
+        the policy flip is impossible, the cure is client-side New
+        semantics: ``start()`` records ``_start_time`` and
+        ``_replay_suppressed`` ack-drains (no sink, no enqueue) any
+        delivery whose JetStream store timestamp predates it beyond
+        ``_REPLAY_GRACE_SECONDS``. Acking removes the workqueue message,
+        so the stale backlog is silently consumed on first restart.
+        Trade-off (chosen): a lifecycle event arriving DURING a jarvis
+        downtime window is suppressed on restart — it stays visible via
+        ``forge status``; never re-posting history to Slack is the chosen
+        side of the trade. See the module-level rationale block by
+        ``_get_deliver_policy_all``.
 
         Auto-ack — the subscriber does not call ``msg.ack()`` because
         ``manual_ack=False`` is the default and the JetStream context
@@ -697,6 +754,11 @@ class ForgeNotificationsSubscriber:
         js: JetStreamContext = self._nats_client.js
         deliver_policy_all = _get_deliver_policy_all()
         lifecycle_subjects = _get_lifecycle_subjects()
+
+        # F9: stamp the consumer's birth instant BEFORE the subscribe so
+        # every delivery this consumer receives is judged against a start
+        # time that is no later than the first delivery could arrive.
+        self._start_time = datetime.now(UTC)
 
         self._subscription = await js.subscribe(
             lifecycle_subjects[0],
@@ -863,6 +925,13 @@ class ForgeNotificationsSubscriber:
           drop the message (design.md §8 chooses drop over buffer).
         """
         try:
+            if self._replay_suppressed(msg):
+                # F9: pre-start replay. Returning here auto-acks the
+                # delivery (manual_ack=False) which removes it from the
+                # workqueue stream — this is how the stale backlog is
+                # drained on first restart — and skips both the sink and
+                # the session FIFO entirely.
+                return
             await self._handle_message(msg)
         except Exception as exc:
             # Defensive backstop. Every legitimate drop path inside
@@ -874,6 +943,55 @@ class ForgeNotificationsSubscriber:
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
+
+    def _replay_suppressed(self, msg: Msg) -> bool:
+        """Return ``True`` iff ``msg`` is pre-start replay to be dropped (F9).
+
+        Client-side New semantics for the workqueue-mandated
+        ``deliver_policy=ALL`` consumer. A delivery is replay when its
+        JetStream store timestamp (``msg.metadata.timestamp``, set by the
+        broker) predates :attr:`_start_time` — the instant :meth:`start`
+        created the consumer — by MORE than :data:`_REPLAY_GRACE_SECONDS`.
+        The grace absorbs broker/process clock skew and errs toward
+        posting a borderline-live event rather than dropping it.
+
+        On a hit the running suppression tally is incremented and one
+        ``forge_notification_replay_suppressed`` INFO line is logged
+        carrying that total (itemized — no silent swallowing). The caller
+        then returns, auto-acking the delivery off the workqueue stream
+        without invoking the notification sink or enqueueing anything.
+
+        Returns ``False`` (process normally) when the subscriber has not
+        been started (no start time to compare against) or when the
+        delivery carries no readable JetStream metadata — in the latter
+        case the message's age cannot be judged, so it is processed rather
+        than risk dropping a live event.
+        """
+        start_time = self._start_time
+        if start_time is None:
+            return False
+
+        try:
+            message_ts = msg.metadata.timestamp
+        except Exception:
+            # Not a JetStream message / unparsable ack-reply subject.
+            # Cannot judge age — process normally (never drop blindly).
+            return False
+
+        if message_ts.tzinfo is None:
+            message_ts = message_ts.replace(tzinfo=UTC)
+
+        if message_ts >= start_time - timedelta(seconds=_REPLAY_GRACE_SECONDS):
+            return False
+
+        self._suppressed_replays += 1
+        logger.info(
+            "forge_notification_replay_suppressed",
+            message_timestamp=message_ts.isoformat(),
+            subscriber_start_time=start_time.isoformat(),
+            suppressed_total=self._suppressed_replays,
+        )
+        return True
 
     async def _handle_message(self, msg: Msg) -> None:
         """Inner message-routing path. Never raises.
