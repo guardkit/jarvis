@@ -45,6 +45,7 @@ from jarvis.infrastructure.fleet_registration import (
     deregister_from_fleet,
 )
 from jarvis.infrastructure.logging import configure
+from jarvis.infrastructure.nats_client import redact_nats_url
 from jarvis.shared.constants import VERSION, Adapter
 from jarvis.shared.exceptions import ConfigurationError
 
@@ -343,7 +344,9 @@ async def _run_serve_nats(*, agent_id: str) -> None:
         # tolerates ``nats_client=None`` (REPL works without the broker),
         # but the gateway has nothing to subscribe to so we refuse to
         # start and exit non-zero with a diagnostic.
-        nats_url = getattr(state.config, "nats_url", "<unset>")
+        # Redact once at the source so neither the structured log field nor
+        # the terminal echo below can surface an inline-credential URL (F10).
+        nats_url = redact_nats_url(getattr(state.config, "nats_url", "<unset>"))
         log.error(
             "jarvis_serve_nats_broker_unreachable",
             nats_url=nats_url,

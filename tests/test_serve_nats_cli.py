@@ -201,6 +201,22 @@ class TestBrokerUnreachableFailsFast:
         assert "nats://localhost:4222" in result.output
         assert "unreachable" in result.output.lower()
 
+    def test_broker_unreachable_error_redacts_url_credentials(self) -> None:
+        """F10: an inline-credential ``nats_url`` is redacted in the
+        terminal error — host:port shows, the password never does. The
+        ``secret`` token here is a dummy, not a real credential."""
+        state = _make_state(nats_client=None)
+        state.config.nats_url = "nats://user:secret@localhost:4222"
+        runner = CliRunner()
+        with patch(
+            "jarvis.cli.main._create_app_state",
+            new=AsyncMock(return_value=state),
+        ):
+            result = runner.invoke(main, ["serve-nats"])
+        assert "localhost:4222" in result.output
+        assert "secret" not in result.output
+        assert "user:secret" not in result.output
+
     def test_no_subscribe_attempted_when_nats_client_none(self) -> None:
         state = _make_state(nats_client=None)
         runner = CliRunner()

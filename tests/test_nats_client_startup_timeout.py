@@ -104,6 +104,24 @@ class TestAC010_05ConnectionRefusedRaisesBrokerUnreachable:
         # operator-facing stack trace points back to nats-py's error.
         assert isinstance(exc_info.value.__cause__, ConnectionRefusedError)
 
+    async def test_broker_unreachable_message_redacts_url_credentials(self) -> None:
+        """F10: an inline-credential ``nats_url`` is redacted in the
+        BrokerUnreachableError message — host:port survives, the password
+        never does. The ``secret`` token here is a dummy, not a real cred."""
+        with mock.patch.object(
+            nats_client_module,
+            "_nats_connect",
+            new=mock.AsyncMock(side_effect=ConnectionRefusedError("refused")),
+        ), pytest.raises(BrokerUnreachableError) as exc_info:
+            await NATSClient.connect(
+                _make_config(nats_url="nats://user:secret@localhost:4222")
+            )
+
+        msg = str(exc_info.value)
+        assert "localhost:4222" in msg
+        assert "secret" not in msg
+        assert "user:secret" not in msg
+
 
 # ===========================================================================
 # AC-010-01 — Bounded wait fires within startup_connect_timeout_seconds

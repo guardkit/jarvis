@@ -49,6 +49,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
 
 import nats
 import structlog
@@ -91,7 +92,24 @@ __all__ = [
     "NATSConnectionError",
     "ReconnectContext",
     "build_lifecycle_callbacks",
+    "redact_nats_url",
 ]
+
+
+def redact_nats_url(url: str) -> str:
+    """Return ``url`` with any ``user:password@`` userinfo removed.
+
+    Operator-facing terminal / error strings render this credential-free
+    form so an inline-credential NATS URL (``nats://user:pass@host:port``)
+    never reaches a chat surface or a terminal. Host and port are preserved
+    verbatim; a URL with no userinfo (or a non-URL sentinel like
+    ``"<unset>"``) is returned unchanged.
+    """
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    netloc = parts.netloc.rsplit("@", 1)[1]
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
 class NATSClient:
@@ -253,7 +271,7 @@ class NATSClient:
                 error=str(exc),
             )
             raise BrokerUnreachableError(
-                f"NATS broker unreachable at {config.nats_url} "
+                f"NATS broker unreachable at {redact_nats_url(config.nats_url)} "
                 f"after {elapsed}s "
                 f"(startup_connect_timeout_seconds={budget_seconds}): "
                 f"{type(exc).__name__}"
