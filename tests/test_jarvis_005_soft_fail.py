@@ -323,9 +323,10 @@ class TestPublishStallsPastTimeout:
         reset_dispatch_state: None,
     ) -> None:
         """Stalled publish + timeout=0 → TimeoutError → DEGRADED ack."""
-        async def _stall(_subject: str, _payload: bytes) -> Any:
+        async def _stall(_subject: str, _payload: bytes, headers: Any = None) -> Any:
             # Would block well past the configured timeout — wait_for
-            # cancels and raises TimeoutError.
+            # cancels and raises TimeoutError. Accepts the F8 Nats-Msg-Id
+            # header kwarg that queue_build now passes to js.publish.
             await asyncio.sleep(60)
 
         nats_client = _make_nats_client(publish_side_effect=_stall)

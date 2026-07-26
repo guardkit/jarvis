@@ -202,6 +202,33 @@ _jarvis_config: JarvisConfig | None = None
 
 
 # ---------------------------------------------------------------------------
+# F8 — queue_build publish-once guard (idempotency).
+#
+# During a supervisor stall the LLM react loop re-invoked ``queue_build``
+# ~127 times, each publishing a duplicate build-queued envelope. The loop is
+# LLM-driven and cannot be numerically bounded, so the cure is publish-once at
+# this tool seam, in two layers keyed on the same stable build-request
+# identity (feature_id, repo, branch, feature_yaml_path — never
+# correlation_id, which is minted fresh per retry):
+#
+#   * Server-side: every publish carries a ``Nats-Msg-Id`` header so the
+#     PIPELINE stream's ``duplicate_window`` collapses within-window
+#     duplicates (estate prior art: nats-core client.py +
+#     ``fleet_memory/publisher.py``).
+#   * In-process belt for gaps beyond the server window: this TTL registry
+#     records each successful publish; a re-call within the TTL returns the
+#     original success ack marked ``already_queued`` WITHOUT re-publishing.
+#     The ack stays success-shaped so the react loop sees success and STOPS
+#     re-invoking — an error string would re-trigger the very loop that is
+#     the defect.
+# ---------------------------------------------------------------------------
+_BUILD_PUBLISH_DEDUP_TTL_SECONDS: float = 600.0
+
+# identity_key -> (expires_at_monotonic, success_ack_dict)
+_recent_build_publishes: dict[str, tuple[float, dict[str, str]]] = {}
+
+
+# ---------------------------------------------------------------------------
 # Retry-with-redirect policy (DDR-017): one redirect after a timeout or
 # specialist_error reply. ``MAX_REDIRECTS = 1`` ⇒ at most 2 attempts per
 # dispatch invocation. The lexicographic resolution order in
@@ -825,6 +852,52 @@ def _resolve_publish_timeout() -> int:
     return _DEFAULT_PIPELINE_PUBLISH_TIMEOUT_SECONDS
 
 
+def _build_request_identity_key(
+    *, feature_id: str, repo: str, branch: str, feature_yaml_path: str
+) -> str:
+    """SHA-256 over the canonical, stable build-request identity (F8).
+
+    The identity is the tuple that names *the same build*: ``feature_id``,
+    ``repo``, ``branch``, ``feature_yaml_path``. ``correlation_id`` is
+    deliberately excluded — it is minted fresh on each react-loop retry (see
+    :func:`queue_build`) and would silently defeat deduplication. The digest
+    is reused verbatim both as the in-process guard key and as the
+    server-side ``Nats-Msg-Id`` header so both layers dedup on identical
+    boundaries.
+    """
+    canonical = "\n".join((feature_id, repo, branch, feature_yaml_path))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _lookup_recent_build_publish(identity_key: str) -> dict[str, str] | None:
+    """Return the cached success ack for a within-TTL duplicate, else ``None``.
+
+    Expired entries are evicted lazily on access so the registry cannot grow
+    without bound across a long-lived process — it holds at most one row per
+    distinct in-flight build identity within the TTL window.
+    """
+    now = time.monotonic()
+    expired = [
+        key
+        for key, (expires_at, _ack) in _recent_build_publishes.items()
+        if expires_at <= now
+    ]
+    for key in expired:
+        del _recent_build_publishes[key]
+    entry = _recent_build_publishes.get(identity_key)
+    if entry is None:
+        return None
+    return entry[1]
+
+
+def _record_build_publish(identity_key: str, ack: dict[str, str]) -> None:
+    """Record a successful publish for the publish-once guard (TTL-bounded)."""
+    _recent_build_publishes[identity_key] = (
+        time.monotonic() + _BUILD_PUBLISH_DEDUP_TTL_SECONDS,
+        dict(ack),
+    )
+
+
 def _queue_build_validation_error(
     reason: str,
     detail: str,
@@ -1011,6 +1084,10 @@ async def queue_build(
              "queued_at": ISO8601,
              "publish_target": "pipeline.build-queued.{feature_id}",
              "status": "queued"}``
+        A repeat call for the SAME build (same feature_id, repo, branch and
+        feature_yaml_path) within the publish-once window returns the original
+        ack with ``"status": "already_queued"`` — the build is already queued;
+        treat it as success and do NOT re-issue.
         OR a structured error per ADR-ARCH-021 (always JSON, never raises):
           - ``{"status": "validation_error", "reason": "invalid_feature_id", ...}``
           - ``{"status": "validation_error", "reason": "invalid_repo", ...}``
@@ -1054,6 +1131,30 @@ async def queue_build(
             feature_id=feature_id,
         )
 
+    # ----- Publish-once guard (F8): stable build-request identity key ------
+    # sha256 over the canonical identity — NOT correlation_id, which is minted
+    # fresh per react-loop retry and would defeat dedup. The same digest is
+    # reused as the server-side Nats-Msg-Id header below. When branch /
+    # feature_yaml_path are not strings the guard is skipped; the payload
+    # validation below rejects such inputs.
+    idempotency_key: str | None = None
+    if isinstance(branch, str) and isinstance(feature_yaml_path, str):
+        idempotency_key = _build_request_identity_key(
+            feature_id=feature_id,
+            repo=repo,
+            branch=branch,
+            feature_yaml_path=feature_yaml_path,
+        )
+        cached_ack = _lookup_recent_build_publish(idempotency_key)
+        if cached_ack is not None:
+            # Within-TTL re-call: the build is already queued. Return the
+            # original success ack marked as an idempotent duplicate WITHOUT
+            # re-publishing or re-registering — the react loop sees success and
+            # stops. No semaphore slot is consumed for a no-op.
+            duplicate_ack = dict(cached_ack)
+            duplicate_ack["status"] = "already_queued"
+            return json.dumps(duplicate_ack)
+
     # ----- Acquire dispatch_semaphore (DDR-020 reuse) ----------------------
     semaphore = _dispatch_semaphore
     sem_acquired = False
@@ -1062,7 +1163,9 @@ async def queue_build(
         if not sem_acquired:
             return _queue_build_degraded_error(
                 "dispatch_capacity_saturated",
-                "queue_build dispatch slot saturated; wait and retry",
+                "queue_build dispatch capacity is saturated; this build was NOT "
+                "queued. Report the condition to the user; do not automatically "
+                "re-issue queue_build.",
                 correlation_id=resolved_correlation_id,
                 feature_id=feature_id,
             )
@@ -1148,10 +1251,16 @@ async def queue_build(
             )
 
         # ----- Real JetStream publish with bounded timeout (DDR-025) -----
+        # The Nats-Msg-Id header (F8) lets the PIPELINE stream's
+        # duplicate_window collapse within-window duplicate publishes
+        # server-side (estate prior art: nats-core client.py + publisher.py).
         timeout_seconds = _resolve_publish_timeout()
+        publish_headers = (
+            {"Nats-Msg-Id": idempotency_key} if idempotency_key is not None else None
+        )
         try:
             await asyncio.wait_for(
-                js.publish(subject, payload_bytes),
+                js.publish(subject, payload_bytes, headers=publish_headers),
                 timeout=timeout_seconds,
             )
         except TimeoutError:
@@ -1275,6 +1384,10 @@ async def queue_build(
             "publish_target": subject,
             "status": "queued",
         }
+        # Record the successful publish so a within-TTL re-call is served the
+        # same ack as an idempotent duplicate rather than re-published (F8).
+        if idempotency_key is not None:
+            _record_build_publish(idempotency_key, ack)
         return json.dumps(ack)
     finally:
         if sem_acquired and semaphore is not None:

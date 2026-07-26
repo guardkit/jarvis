@@ -77,9 +77,9 @@ def mock_nats_publish() -> Generator[dict[str, Any], None, None]:
     js = MagicMock()
     pubacks: list[Any] = []
 
-    async def _publish(subject: str, payload: bytes) -> Any:
+    async def _publish(subject: str, payload: bytes, headers: Any = None) -> Any:
         ack = MagicMock(seq=len(pubacks) + 1, stream="pipeline")
-        pubacks.append((subject, payload, ack))
+        pubacks.append((subject, payload, ack, headers))
         return ack
 
     js.publish = AsyncMock(side_effect=_publish)
@@ -269,7 +269,7 @@ class TestPubAckTimeoutDegrades:
     ) -> None:
         # Simulate a stalled publish by returning an awaitable that never
         # resolves; asyncio.wait_for will raise TimeoutError.
-        async def _stall(_subject: str, _payload: bytes) -> Any:
+        async def _stall(_subject: str, _payload: bytes, headers: Any = None) -> Any:
             await asyncio.sleep(10)
 
         mock_nats_publish["js"].publish = AsyncMock(side_effect=_stall)
@@ -628,3 +628,242 @@ class TestPayloadRoundTrip:
         assert restored == payload
         assert restored.triggered_by == "jarvis"
         assert restored.originating_adapter == "terminal"
+
+
+# ---------------------------------------------------------------------------
+# F8 — publish-once guard: idempotency key, Nats-Msg-Id header, in-process
+# TTL dedup, and the softened DEGRADED (saturated) wording.
+# ---------------------------------------------------------------------------
+class TestF8IdempotencyKey:
+    """The dedup key is a sha256 over the stable identity, not correlation_id."""
+
+    def test_key_is_sha256_over_canonical_identity(self) -> None:
+        import hashlib
+
+        key = dispatch._build_request_identity_key(
+            feature_id="FEAT-J002",
+            repo="guardkit/jarvis",
+            branch="main",
+            feature_yaml_path="features/feat.yaml",
+        )
+        expected = hashlib.sha256(
+            "\n".join(("FEAT-J002", "guardkit/jarvis", "main", "features/feat.yaml")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        assert key == expected
+
+    def test_key_ignores_correlation_id_and_adapter(self) -> None:
+        # Same build identity → same key regardless of per-call correlation_id.
+        base = dict(
+            feature_id="FEAT-J002",
+            repo="guardkit/jarvis",
+            branch="main",
+            feature_yaml_path="features/feat.yaml",
+        )
+        assert dispatch._build_request_identity_key(
+            **base
+        ) == dispatch._build_request_identity_key(**base)
+        # A different branch is a different build.
+        assert dispatch._build_request_identity_key(
+            **{**base, "branch": "release"}
+        ) != dispatch._build_request_identity_key(**base)
+
+
+class TestF8NatsMsgIdHeader:
+    """Server-side dedup is armed by a Nats-Msg-Id header on every publish."""
+
+    def test_publish_carries_nats_msg_id_equal_to_identity_key(
+        self, mock_nats_publish: dict[str, Any]
+    ) -> None:
+        result = _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+            correlation_id="corr-1",
+        )
+        assert json.loads(result)["status"] == "queued"
+        _subject, _payload, _ack, headers = mock_nats_publish["pubacks"][0]
+        assert headers is not None
+        expected_key = dispatch._build_request_identity_key(
+            feature_id="FEAT-J002",
+            repo="guardkit/jarvis",
+            branch="main",
+            feature_yaml_path="features/feat.yaml",
+        )
+        assert headers["Nats-Msg-Id"] == expected_key
+
+
+class TestF8InProcessDedup:
+    """A within-TTL re-call publishes once and returns an already_queued ack."""
+
+    def test_same_identity_double_call_publishes_once(
+        self, mock_nats_publish: dict[str, Any]
+    ) -> None:
+        first = _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+            correlation_id="corr-1",
+        )
+        second = _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+            correlation_id="corr-2",  # fresh retry id — must still dedup
+        )
+        first_ack = json.loads(first)
+        second_ack = json.loads(second)
+
+        assert first_ack["status"] == "queued"
+        # The second call is served the ORIGINAL ack, marked as a duplicate.
+        assert second_ack["status"] == "already_queued"
+        assert second_ack["correlation_id"] == first_ack["correlation_id"]
+        assert second_ack["queued_at"] == first_ack["queued_at"]
+        assert second_ack["publish_target"] == first_ack["publish_target"]
+
+        # Exactly one publish reached the stream despite two invocations.
+        mock_nats_publish["publish"].assert_awaited_once()
+        # The duplicate did not re-register or re-notify.
+        mock_nats_publish["subscriber"].register_correlation.assert_called_once()
+
+    def test_duplicate_does_not_consume_a_semaphore_slot(
+        self, mock_nats_publish: dict[str, Any]
+    ) -> None:
+        _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+        )
+        sem = mock_nats_publish["semaphore"]
+        acquire_count_after_first = sem.try_acquire.call_count
+        _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+        )
+        # The duplicate short-circuits before the semaphore acquire.
+        assert sem.try_acquire.call_count == acquire_count_after_first
+
+    def test_different_identity_publishes_twice(
+        self, mock_nats_publish: dict[str, Any]
+    ) -> None:
+        _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+        )
+        _ainvoke(
+            feature_id="FEAT-J003",  # different build identity
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+        )
+        assert mock_nats_publish["publish"].await_count == 2
+
+    def test_ttl_expiry_republishes(self, mock_nats_publish: dict[str, Any]) -> None:
+        import time as _time
+
+        _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+        )
+        key = dispatch._build_request_identity_key(
+            feature_id="FEAT-J002",
+            repo="guardkit/jarvis",
+            branch="main",
+            feature_yaml_path="features/feat.yaml",
+        )
+        # Force the registry entry to look expired.
+        _expires, ack = dispatch._recent_build_publishes[key]
+        dispatch._recent_build_publishes[key] = (_time.monotonic() - 1.0, ack)
+
+        result = _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+        )
+        # Beyond the TTL the in-process guard no longer fires — a fresh publish
+        # happens (the server-side Nats-Msg-Id window is the belt past this).
+        assert json.loads(result)["status"] == "queued"
+        assert mock_nats_publish["publish"].await_count == 2
+
+
+class TestF8SaturatedWording:
+    """The DEGRADED (saturated) template no longer invites automatic retry."""
+
+    def test_saturated_detail_states_not_queued_and_no_retry(
+        self, mock_nats_publish: dict[str, Any]
+    ) -> None:
+        mock_nats_publish["semaphore"].try_acquire = MagicMock(return_value=False)
+        result = _ainvoke(
+            feature_id="FEAT-J002",
+            feature_yaml_path="features/feat.yaml",
+            repo="guardkit/jarvis",
+        )
+        parsed = json.loads(result)
+        # Contract shape intact.
+        assert parsed["status"] == "degraded"
+        assert parsed["reason"] == "dispatch_capacity_saturated"
+        detail = parsed["detail"]
+        assert "NOT" in detail
+        # Must not invite an automatic re-issue.
+        assert "wait and retry" not in detail
+        assert "re-issue" in detail
+
+
+class TestF8ServerSideCollapse:
+    """Integration: the PIPELINE duplicate_window collapses a re-publish.
+
+    Bypasses the in-process guard (clears the registry, as a >TTL gap would)
+    so a SECOND real publish carrying the same Nats-Msg-Id reaches the broker;
+    the stream must still hold a single message.
+    """
+
+    async def test_duplicate_msg_id_collapses_server_side(
+        self, nats_test_server: Any
+    ) -> None:
+        saved = (
+            dispatch._nats_client,
+            dispatch._dispatch_semaphore,
+            dispatch._routing_history_writer,
+            dispatch._forge_subscriber,
+            dispatch._jarvis_config,
+        )
+        dispatch._nats_client = nats_test_server
+        dispatch._dispatch_semaphore = None
+        dispatch._routing_history_writer = None
+        dispatch._forge_subscriber = None
+        dispatch._jarvis_config = None
+        dispatch._recent_build_publishes.clear()
+        try:
+            kwargs = dict(
+                feature_id="FEAT-J002",
+                feature_yaml_path="features/feat.yaml",
+                repo="guardkit/jarvis",
+            )
+            first = json.loads(await queue_build.ainvoke(dict(kwargs)))
+            assert first["status"] == "queued"
+
+            js = nats_test_server.client.jetstream()
+            info = await js.stream_info("PIPELINE")
+            assert info.state.messages == 1
+
+            # Simulate a gap past the in-process window: clear the guard so the
+            # second same-identity call performs a real duplicate publish.
+            dispatch._recent_build_publishes.clear()
+            second = json.loads(await queue_build.ainvoke(dict(kwargs)))
+            assert second["status"] == "queued"
+
+            info_after = await js.stream_info("PIPELINE")
+            # Server-side dedup collapsed the duplicate — still one message.
+            assert info_after.state.messages == 1
+        finally:
+            (
+                dispatch._nats_client,
+                dispatch._dispatch_semaphore,
+                dispatch._routing_history_writer,
+                dispatch._forge_subscriber,
+                dispatch._jarvis_config,
+            ) = saved
+            dispatch._recent_build_publishes.clear()

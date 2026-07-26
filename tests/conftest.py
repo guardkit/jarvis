@@ -129,12 +129,17 @@ def _restore_dispatch_layer2_hooks() -> Generator[None, None, None]:
     original_nats = _dispatch._nats_client
     original_writer = _dispatch._routing_history_writer
     original_sem = _dispatch._dispatch_semaphore
+    # F8: the queue_build publish-once registry is module-level global state.
+    # Clear it around every test so a successful publish in one test cannot
+    # dedup a same-identity publish in the next (tests reuse feature ids).
+    _dispatch._recent_build_publishes.clear()
     yield
     _dispatch._current_session_hook = original_session_hook
     _dispatch._async_subagent_frame_hook = original_frame_hook
     _dispatch._nats_client = original_nats
     _dispatch._routing_history_writer = original_writer
     _dispatch._dispatch_semaphore = original_sem
+    _dispatch._recent_build_publishes.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +322,10 @@ async def _provision_canonical_streams_and_buckets(client: Any) -> None:
             retention=RetentionPolicy.WORK_QUEUE,
             storage=StorageType.FILE,
             num_replicas=1,
+            # Mirrors the live broker's server-side Nats-Msg-Id dedup window
+            # (F8) so integration tests can OBSERVE within-window duplicate
+            # collapse. Value in seconds.
+            duplicate_window=120,
         )
     )
 
