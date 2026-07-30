@@ -518,11 +518,15 @@ class TestTextOnlyFallback:
 
         await notifier._deliver_pause_message(notification)
 
-        # Explicit expected v1 shape (NOT notifier._render — a
+        # Explicit expected shape (NOT notifier._render — a
         # self-referential oracle would stay green if _render broke).
+        # Approval-card truth R1-A: the fallback now carries provenance
+        # (Build/Trace) directly under the header.
         hhmm = completed.astimezone().strftime("%H:%M")
         expected = (
             f"[{hhmm}] Forge FEAT-ABC1: build-paused\n"
+            "Build: build-abc123\n"
+            "Trace: corr-pause-1\n"
             "Stage: autobuild\n"
             "Coach score: 0.42\n"
             "Rationale: Coach flagged a wiring risk\n"

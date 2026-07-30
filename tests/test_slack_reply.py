@@ -1192,7 +1192,16 @@ class TestBuildAppStateReplyWiring:
                 stack.enter_context(p)
             state = await build_app_state(cfg)
 
-        factory.assert_called_once_with(cfg, fake_nats)
+        # Approval-card truth R3-B: lifecycle threads the shared
+        # terminal-state registry into the factory alongside cfg + nats.
+        from unittest.mock import ANY
+
+        from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
+
+        factory.assert_called_once_with(cfg, fake_nats, terminal_registry=ANY)
+        assert isinstance(
+            factory.call_args.kwargs["terminal_registry"], TerminalBuildRegistry
+        )
         fake_reply.start.assert_awaited_once()
         assert state.slack_reply_client is fake_reply
 

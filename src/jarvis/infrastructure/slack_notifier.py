@@ -64,6 +64,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.forge_notifications import ForgeNotification
     from jarvis.infrastructure.nats_client import NATSClient
+    from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
 
 logger = structlog.get_logger(__name__)
 
@@ -109,6 +110,32 @@ _PAUSE_REGISTRY_TTL_SECONDS = 3600.0
 # time.monotonic — patching the shared stdlib attribute freezes
 # asyncio's event-loop clock and hangs the whole test process.
 _monotonic = time.monotonic
+
+# Terminal build event types (approval-card truth R3-A/R3-B): each one
+# strips a retained pause card's action surface and records terminal
+# truth for the reply path's tap-races-terminal consult.
+_TERMINAL_EVENT_TYPES = frozenset({"build_cancelled", "build_complete", "build_failed"})
+
+
+def _terminal_status_line(notification: ForgeNotification) -> str:
+    """The R3-A terminal stamp for a pause card, e.g.
+
+    ``This build was cancelled at 14:07 by rich`` (the "by" clause only
+    when the cancel payload carried ``cancelled_by``). Time is the
+    retained ``completed_at`` (the terminal envelope's timestamp)
+    rendered as local HH:MM.
+    """
+    from jarvis.infrastructure.terminal_builds import render_local_hhmm
+
+    hhmm = render_local_hhmm(notification.completed_at)
+    if notification.event_type == "build_cancelled":
+        line = f"This build was cancelled at {hhmm}"
+        if notification.cancelled_by:
+            line += f" by {notification.cancelled_by}"
+        return line
+    if notification.event_type == "build_complete":
+        return f"This build completed at {hhmm}"
+    return f"This build failed at {hhmm}"
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +232,10 @@ class _PauseMessageRecord:
     value_json: str | None
     ts: str | None
     posted_at_mono: float
+    # Approval-card truth R3-A: set when the build reached a terminal
+    # state — the rendered card then carries this stamp instead of any
+    # action surface (buttons or CLI hint).
+    terminal_line: str | None = None
 
     def expires_at(self) -> float:
         """Monotonic deadline after which this record is dropped."""
@@ -257,15 +288,22 @@ def _plain_text_section(text: str) -> dict[str, Any]:
 def build_pause_blocks(
     notification: ForgeNotification,
     button_value: str | None = None,
+    *,
+    status_line: str | None = None,
 ) -> list[dict[str, Any]]:
     """Render a ``build_paused`` notification as Block Kit blocks.
 
     All operator-visible text renders as ``plain_text`` objects only —
     no mrkdwn interpretation, so rationale and failure strings arrive
     inert. Mirrors the v1 text rendering shape from
-    :meth:`SlackNotifier._render` (which remains byte-identical for the
-    text-only fallback path — deliberate divergence, do not merge the
-    two).
+    :meth:`SlackNotifier._render` (the two evolve in lockstep —
+    deliberate divergence in mechanism, do not merge the two).
+
+    Approval-card truth R1-A: the card carries its provenance —
+    ``Build: {build_id}`` and ``Trace: {correlation_id}`` — so junk
+    traffic (e.g. a ``smoke-…`` correlation id from a test suite) is
+    visibly junk BEFORE the operator taps Approve. Both values were
+    already at this render site; they were simply never rendered.
 
     Args:
         notification: The pause notification to render.
@@ -273,6 +311,10 @@ def build_pause_blocks(
             provided, an ``actions`` block with Approve/Reject buttons is
             appended; when ``None``, the v1 CLI hint line is rendered
             instead.
+        status_line: Terminal stamp (approval-card truth R3-A), e.g.
+            "This build was cancelled at 14:07 by rich". When set it
+            REPLACES the action surface entirely — no buttons and no CLI
+            hint render on a terminal card.
 
     Returns:
         Block Kit blocks list suitable for ``chat.postMessage`` /
@@ -288,6 +330,12 @@ def build_pause_blocks(
     blocks: list[dict[str, Any]] = [
         _plain_text_section(f"[{hhmm}] Forge {notification.feature_id}: build-paused")
     ]
+
+    # R1-A provenance lines — build_id when the payload carried one, the
+    # correlation id always (it is a required ForgeNotification field).
+    if notification.build_id:
+        blocks.append(_plain_text_section(f"Build: {notification.build_id}"))
+    blocks.append(_plain_text_section(f"Trace: {notification.correlation_id}"))
 
     if notification.stage_label:
         blocks.append(_plain_text_section(f"Stage: {notification.stage_label}"))
@@ -306,7 +354,12 @@ def build_pause_blocks(
             prefix = "Rationale: " if start == 0 else ""
             blocks.append(_plain_text_section(f"{prefix}{chunk}"))
 
-    if button_value is None:
+    if status_line is not None:
+        # Terminal card (R3-A): the stamp replaces the whole action
+        # surface — a cancelled/finished build must offer neither
+        # buttons nor a CLI approval hint.
+        blocks.append(_plain_text_section(status_line))
+    elif button_value is None:
         blocks.append(_plain_text_section("Use CLI to approve or reject this build."))
     else:
         blocks.append(
@@ -368,6 +421,7 @@ class SlackNotifier:
         "_seen_request_ids",
         "_started",
         "_stop_timeout",
+        "_terminal_registry",
         "_worker_task",
     )
 
@@ -378,6 +432,7 @@ class SlackNotifier:
         *,
         queue_maxsize: int = _DEFAULT_QUEUE_MAXSIZE,
         stop_timeout: float = _DEFAULT_STOP_TIMEOUT,
+        terminal_registry: TerminalBuildRegistry | None = None,
     ) -> None:
         """Construct the Slack notifier.
 
@@ -387,6 +442,12 @@ class SlackNotifier:
             queue_maxsize: Bound on the asyncio.Queue. Defaults to 100.
             stop_timeout: Maximum seconds :meth:`stop` will wait before
                 returning unconditionally.
+            terminal_registry: Shared terminal-state registry
+                (approval-card truth R3-B). This sink is the WRITER: every
+                terminal build notification records
+                ``build_id -> (terminal_state, at, by)`` so the Slack
+                reply handler can answer a tap on an already-terminal
+                build honestly. ``None`` (unwired) skips recording.
         """
         from slack_sdk.web.async_client import AsyncWebClient
 
@@ -394,6 +455,7 @@ class SlackNotifier:
         self._channel_id = channel_id
         self._queue_maxsize = queue_maxsize
         self._stop_timeout = stop_timeout
+        self._terminal_registry = terminal_registry
         self._client = AsyncWebClient(token=bot_token)
         self._queue: asyncio.Queue[ForgeNotification] = asyncio.Queue(maxsize=queue_maxsize)
         self._started = False
@@ -422,7 +484,16 @@ class SlackNotifier:
 
         If the queue is full, drops the oldest queued message with WARNING.
         If the sink is not started, logs WARNING and drops.
+
+        Approval-card truth R3-B: terminal build events record their
+        truth into the shared :class:`TerminalBuildRegistry` BEFORE any
+        delivery gating (started check, dedup, queue overflow) — the
+        registry must answer taps even when the Slack message itself is
+        dropped.
         """
+        if notification.event_type in _TERMINAL_EVENT_TYPES:
+            self._record_terminal_state(notification)
+
         if not self._started:
             logger.warning(
                 "slack_notify_dropped_not_started",
@@ -547,6 +618,11 @@ class SlackNotifier:
                 if notification.event_type == "build_paused":
                     await self._deliver_pause_message(notification)
                 else:
+                    if notification.event_type in _TERMINAL_EVENT_TYPES:
+                        # Approval-card truth R3-A — strip + stamp any
+                        # retained pause card BEFORE posting the terminal
+                        # line, closing the standing-tappable-card window.
+                        await self._stamp_terminal_pause_message(notification)
                     text = self._render(notification)
                     await self._post_with_retry(notification, text=text)
 
@@ -651,6 +727,81 @@ class SlackNotifier:
                 return None
 
         return None
+
+    # ------------------------------------------------------------------
+    # Approval-card truth R3-A/R3-B — terminal build handling
+    # ------------------------------------------------------------------
+
+    def _record_terminal_state(self, notification: ForgeNotification) -> None:
+        """Record terminal truth into the shared registry (R3-B writer).
+
+        Never raises (DDR-007 — ``notify()`` is called from the
+        JetStream callback path). A ``None`` registry (unwired) or a
+        payload without ``build_id`` is a silent no-op.
+        """
+        if self._terminal_registry is None or not notification.build_id:
+            return
+        try:
+            self._terminal_registry.record(
+                notification.build_id,
+                terminal_state=notification.event_type,
+                at=notification.completed_at,
+                by=notification.cancelled_by,
+            )
+        except Exception as exc:  # pragma: no cover - defensive backstop
+            logger.warning(
+                "slack_terminal_state_record_failed",
+                build_id=notification.build_id,
+                event_type=notification.event_type,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    async def _stamp_terminal_pause_message(self, notification: ForgeNotification) -> None:
+        """Strip + stamp the retained pause card on a terminal event (R3-A).
+
+        Looks up ``_pause_messages[build_id]``; when present, one
+        ``chat.update`` (the existing supersede/strip mechanism) removes
+        the action surface and stamps the terminal truth — e.g. "This
+        build was cancelled at 14:07 by rich" — so the operator can never
+        tap a card for a build that already ended. All three logged
+        occurrences (07-27 x2, 07-28) had minutes-to-hours windows this
+        closes.
+
+        The record is popped and mutated synchronously before the await
+        (C1): a concurrent capture then misses the registry and parks in
+        the pending map instead of re-buttoning a terminal card. Never
+        raises — a stamping failure must not swallow the terminal
+        message post that follows in the worker.
+        """
+        try:
+            build_id = notification.build_id
+            if build_id is None:
+                return
+            record = self._pause_messages.pop(build_id, None)
+            if record is None:
+                return
+            record.buttoned = False
+            record.value_json = None
+            record.terminal_line = _terminal_status_line(notification)
+            if record.ts is not None:
+                await self._update_pause_message(record)
+            # ts is None → post still in flight; _settle_pause_post's
+            # reconcile issues the chat.update once ts lands.
+            logger.info(
+                "slack_pause_message_terminal_stamped",
+                build_id=build_id,
+                event_type=notification.event_type,
+                in_flight=record.ts is None,
+            )
+        except Exception as exc:  # pragma: no cover - defensive backstop
+            logger.warning(
+                "slack_pause_terminal_stamp_failed",
+                build_id=notification.build_id,
+                event_type=notification.event_type,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
 
     # ------------------------------------------------------------------
     # TASK-JNB-103 — approval capture + pause message delivery
@@ -944,7 +1095,15 @@ class SlackNotifier:
         if ts is None:
             return
 
-        if record.request_id != posted_request_id or record.buttoned != posted_buttoned:
+        if (
+            record.request_id != posted_request_id
+            or record.buttoned != posted_buttoned
+            or record.terminal_line is not None
+        ):
+            # The terminal_line clause is defensive (R3-A): the single
+            # worker orders the terminal stamp after this settle, but a
+            # stamp that ever lands mid-flight must still converge the
+            # posted message onto the stamped state.
             await self._update_pause_message(record)
 
     async def _update_pause_message(self, record: _PauseMessageRecord) -> None:
@@ -960,12 +1119,18 @@ class SlackNotifier:
         blocks = build_pause_blocks(
             record.notification,
             button_value=record.value_json if record.buttoned else None,
+            status_line=record.terminal_line,
         )
+        text = self._render(record.notification)
+        if record.terminal_line is not None:
+            # R3-A: the notification-fallback text carries the terminal
+            # stamp too, not just the visible blocks.
+            text = f"{text}\n{record.terminal_line}"
         try:
             await self._client.chat_update(
                 channel=self._channel_id,
                 ts=record.ts,
-                text=self._render(record.notification),
+                text=text,
                 blocks=blocks,
             )
         except Exception as exc:
@@ -1135,8 +1300,16 @@ class SlackNotifier:
 
         if event_type == "build_paused":
             # TASK-JNB-005: Pause rendering
-            # Format: stage, rationale, coach_score, CLI hint
+            # Format: provenance, stage, rationale, coach_score, CLI hint
             parts = [f"[{hhmm}] Forge {feature_id}: build-paused"]
+
+            # Provenance (approval-card truth R1-A) — mirrors
+            # build_pause_blocks: build_id when present, the correlation
+            # id always, so junk traffic is visibly junk on the text
+            # fallback too.
+            if notification.build_id:
+                parts.append(f"Build: {notification.build_id}")
+            parts.append(f"Trace: {notification.correlation_id}")
 
             # Stage
             if notification.stage_label:
@@ -1494,6 +1667,7 @@ def create_slack_sink(
     *,
     queue_maxsize: int = _DEFAULT_QUEUE_MAXSIZE,
     stop_timeout: float = _DEFAULT_STOP_TIMEOUT,
+    terminal_registry: TerminalBuildRegistry | None = None,
 ) -> NotificationSink:
     """Create a Slack notification sink from JarvisConfig.
 
@@ -1505,6 +1679,10 @@ def create_slack_sink(
         queue_maxsize: Bound on the asyncio.Queue. Defaults to 100.
         stop_timeout: Maximum seconds ``stop()`` will wait before
             returning unconditionally.
+        terminal_registry: Shared terminal-state registry (approval-card
+            truth R3-B) the live :class:`SlackNotifier` writes terminal
+            build events into; ignored on the no-op path (no cards exist
+            without Slack).
 
     Returns:
         A :class:`NotificationSink` implementation. Either a live
@@ -1533,6 +1711,7 @@ def create_slack_sink(
         channel_id=channel_id,
         queue_maxsize=queue_maxsize,
         stop_timeout=stop_timeout,
+        terminal_registry=terminal_registry,
     )
 
 

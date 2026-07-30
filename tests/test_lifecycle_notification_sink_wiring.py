@@ -188,8 +188,19 @@ class TestBuildAppStateNotificationSinkHappyPath:
         ):
             state = await build_app_state(stub_registry_config_with_slack)
 
-        # AC-001: constructed when Slack config is set
-        mock_create_sink.assert_called_once_with(stub_registry_config_with_slack)
+        # AC-001: constructed when Slack config is set. Approval-card
+        # truth R3-B: lifecycle also threads the shared terminal-state
+        # registry into the sink factory.
+        from unittest.mock import ANY
+
+        from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
+
+        mock_create_sink.assert_called_once_with(
+            stub_registry_config_with_slack, terminal_registry=ANY
+        )
+        assert isinstance(
+            mock_create_sink.call_args.kwargs["terminal_registry"], TerminalBuildRegistry
+        )
 
         # AC-002: sink is bound to the subscriber
         fake_subscriber.bind_notification_sink.assert_called_once_with(fake_sink)
@@ -274,7 +285,10 @@ class TestBuildAppStateNotificationSinkHappyPath:
             state = await build_app_state(stub_registry_config)
 
         # AC-005: NoOpSink constructed when Slack config is missing
-        mock_create_sink.assert_called_once_with(stub_registry_config)
+        # (the R3-B terminal registry rides along on every permutation).
+        from unittest.mock import ANY
+
+        mock_create_sink.assert_called_once_with(stub_registry_config, terminal_registry=ANY)
         assert state.notification_sink is fake_noop_sink
 
         # Cleanup the heartbeat task

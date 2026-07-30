@@ -115,6 +115,7 @@ from jarvis.infrastructure.slack_reply import (
     SlackSocketModeReplyClient,
     create_slack_reply_client,
 )
+from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
 from jarvis.sessions.manager import SessionManager
 from jarvis.shared.exceptions import ConfigurationError
 from jarvis.tools import (
@@ -876,7 +877,15 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # or NoOpSink) for Forge build event notifications. The sink is always
     # constructed (never raises for any config permutation per AC-001) and
     # started BEFORE the subscriber binds/starts (AC-003 start ordering).
-    notification_sink = create_slack_sink(config)
+    #
+    # Approval-card truth R3-B: ONE shared terminal-state registry wires
+    # both halves of the approval surface — the sink WRITES terminal
+    # build events into it, the Slack reply handler (7c3) READS it before
+    # publishing a decision so a tap on an already-terminal build is
+    # answered honestly. In-process only (DDR-027): after a restart the
+    # map is empty and the reply path degrades to today's behaviour.
+    terminal_registry = TerminalBuildRegistry()
+    notification_sink = create_slack_sink(config, terminal_registry=terminal_registry)
     try:
         await notification_sink.start()
     except Exception as exc:
@@ -936,7 +945,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # unmet or NEITHER feature is configured; start failures soft-fail
     # per DDR-021.
     slack_reply_client: SlackSocketModeReplyClient | None = create_slack_reply_client(
-        config, nats_client
+        config, nats_client, terminal_registry=terminal_registry
     )
     if slack_reply_client is not None:
         try:

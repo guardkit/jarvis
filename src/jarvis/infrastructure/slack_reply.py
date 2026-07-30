@@ -67,6 +67,14 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
+# Stdlib-only module — safe on the cold import path (unlike the
+# nats_core / slack-sdk chains, which stay lazily imported below).
+from jarvis.infrastructure.terminal_builds import (
+    TerminalBuildRecord,
+    TerminalBuildRegistry,
+    render_local_hhmm,
+)
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.nats_client import NATSClient
@@ -234,6 +242,7 @@ class ApprovalReplyHandler:
         "_decision_lock",
         "_operator_ids",
         "_publisher",
+        "_terminal_registry",
         "_web_client",
     )
 
@@ -243,11 +252,16 @@ class ApprovalReplyHandler:
         operator_ids: frozenset[str],
         publisher: ApprovalResponsePublisher,
         web_client: Any | None = None,
+        terminal_registry: TerminalBuildRegistry | None = None,
     ) -> None:
         """See :func:`build_reply_handler` (the public factory)."""
         self._operator_ids = operator_ids
         self._publisher = publisher
         self._web_client = web_client
+        # Approval-card truth R3-B: shared terminal-state registry, READ
+        # side (the notification sink writes it). None = unwired →
+        # every consult misses (today's behaviour).
+        self._terminal_registry = terminal_registry
         # First-click-wins state — in-process only (DDR-027); forge's
         # request_id dedup is the authoritative backstop after restart.
         self._decided_request_ids: set[str] = set()
@@ -363,6 +377,42 @@ class ApprovalReplyHandler:
                     decision=decision,
                 )
                 return
+
+            # --- 3a. Terminal-truth consult (approval-card truth R3-B) ---
+            # Between first-click-wins and the publish: a tap on a build
+            # jarvis has already seen reach a terminal state (cancelled /
+            # complete / failed) is answered honestly on the card and
+            # NEVER published — forge would only drop the response
+            # silently (no active waiter) while the success update lied
+            # "Decision recorded". The request stays UN-marked:
+            # nothing was recorded, so a repeat tap re-answers, and after
+            # registry TTL expiry — or a jarvis restart, which empties
+            # the in-process map (DDR-027) — behaviour degrades exactly
+            # to today's publish path.
+            terminal = (
+                self._terminal_registry.get(button["build_id"])
+                if self._terminal_registry is not None
+                else None
+            )
+            if terminal is not None:
+                status = _already_terminal_text(terminal)
+                logger.info(
+                    "slack_reply_tap_after_terminal",
+                    request_id=request_id,
+                    build_id=button["build_id"],
+                    terminal_state=terminal.terminal_state,
+                    decision=decision,
+                )
+                await self._update_message(
+                    payload,
+                    blocks=_blocks_with_status(
+                        (payload.get("message") or {}).get("blocks"), status
+                    ),
+                    text=status,
+                    log_event="slack_reply_terminal_update_failed",
+                )
+                return
+
             self._decided_request_ids.add(request_id)
 
             # --- 3b. Identity — the ACTUAL clicker (TASK-JNB-110) ---------
@@ -927,6 +977,20 @@ def _extract_action_value(action: dict[str, Any]) -> str:
     return str(action.get("value") or "")
 
 
+def _already_terminal_text(record: TerminalBuildRecord) -> str:
+    """The honest answer to a tap on an already-terminal build (R3-B).
+
+    Time is the retained terminal event's ``completed_at`` rendered as
+    local HH:MM — the same stamp the R3-A card update shows.
+    """
+    hhmm = render_local_hhmm(record.at)
+    if record.terminal_state == "build_cancelled":
+        return f"This build was already cancelled at {hhmm} — your tap was not recorded."
+    if record.terminal_state == "build_complete":
+        return f"This build already completed at {hhmm} — your tap was not recorded."
+    return f"This build already failed at {hhmm} — your tap was not recorded."
+
+
 def _blocks_with_status(
     original_blocks: list[dict[str, Any]] | None, status_text: str
 ) -> list[dict[str, Any]]:
@@ -953,6 +1017,7 @@ def build_reply_handler(
     operator_ids: frozenset[str],
     publisher: ApprovalResponsePublisher,
     web_client: Any | None = None,
+    terminal_registry: TerminalBuildRegistry | None = None,
 ) -> ApprovalReplyHandler:
     """Public factory for :class:`ApprovalReplyHandler`.
 
@@ -967,12 +1032,20 @@ def build_reply_handler(
         web_client: Optional Slack ``AsyncWebClient`` for ``chat.update``
             / ``chat.postEphemeral``. ``None`` degrades those to logged
             no-ops (intentional — see module docstring C2 note).
+        terminal_registry: Shared terminal-state registry (approval-card
+            truth R3-B) written by the notification sink; the handler
+            consults it before publishing so a tap on an already-terminal
+            build is answered honestly instead of published into forge's
+            silent drop. ``None`` (unwired) keeps today's behaviour.
 
     Returns:
         A ready :class:`ApprovalReplyHandler`.
     """
     return ApprovalReplyHandler(
-        operator_ids=operator_ids, publisher=publisher, web_client=web_client
+        operator_ids=operator_ids,
+        publisher=publisher,
+        web_client=web_client,
+        terminal_registry=terminal_registry,
     )
 
 
@@ -1185,6 +1258,8 @@ def _warn_deprecated_identity_settings(config: JarvisConfig) -> None:
 def create_slack_reply_client(
     config: JarvisConfig,
     nats_client: NATSClient | None,
+    *,
+    terminal_registry: TerminalBuildRegistry | None = None,
 ) -> SlackSocketModeReplyClient | None:
     """Create the shared Socket Mode client, or a logged no-op (``None``).
 
@@ -1263,6 +1338,7 @@ def create_slack_reply_client(
             operator_ids=operator_ids,
             publisher=NatsApprovalResponsePublisher(nats_client),
             web_client=web_client,
+            terminal_registry=terminal_registry,
         )
     else:
         logger.info(
