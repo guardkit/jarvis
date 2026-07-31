@@ -31,6 +31,24 @@ Notes
 -----
 * Messages are plain text (mrkdwn disabled) so payload strings arrive
   inert.
+* Plain names on the wire to Slack (the factory phrase-book, ratified
+  2026-07-31): every operator-visible string this module renders uses the
+  phrase-book's plain name — ``Pipeline`` (not the ``forge`` codename),
+  ``Checker score`` (not ``Coach``). Codenames stay in code, field names
+  and log keys. Feature ids and build ids are real identifiers, never
+  renamed. A new user-visible string that reintroduces a codename is
+  caught mechanically by ``tests/test_plain_name_slack_surfaces.py``.
+* Not yet swept: ``ForgeNotification.render_line()`` still emits the
+  ``[HH:MM] Forge {feature_id}: …`` prefix. That line is **not** confined
+  to the terminal — ``chat_handler`` appends it to ``response_text``,
+  which is published as the chat gateway's reply on
+  ``agents.command.jarvis``, an outward human-read surface. So the
+  divergence is an **open carry**, not a safe boundary: it is unswept
+  only because that shape is a contract of record (DDR-030,
+  ``DM-forge-notification`` §1, ``API-internal.md``, and a
+  ``confidence=high`` assumption in the FEAT-JARVIS-005 spec), and
+  rewriting a spec-of-record is outside a Slack-surface sweep. See
+  ``ForgeNotification.render_line``.
 * Optional fields (pr_url, summary, failure_reason) render gracefully
   when ``None``.
 * The checkpoint slice implemented here: queued, build-started,
@@ -328,7 +346,7 @@ def build_pause_blocks(
     hhmm = local_completed_at.strftime("%H:%M")
 
     blocks: list[dict[str, Any]] = [
-        _plain_text_section(f"[{hhmm}] Forge {notification.feature_id}: build-paused")
+        _plain_text_section(f"[{hhmm}] Pipeline {notification.feature_id}: build-paused")
     ]
 
     # R1-A provenance lines — build_id when the payload carried one, the
@@ -345,7 +363,9 @@ def build_pause_blocks(
         score_text = "score unavailable"
     else:
         score_text = f"{notification.coach_score:.2f}"
-    blocks.append(_plain_text_section(f"Coach score: {score_text}"))
+    # Plain-name sweep (factory phrase-book, ratified 2026-07-31): the card
+    # says "Checker score"; ``coach_score`` stays the field/log name.
+    blocks.append(_plain_text_section(f"Checker score: {score_text}"))
 
     if notification.rationale:
         rationale = notification.rationale
@@ -1249,6 +1269,19 @@ class SlackNotifier:
         from ``ForgeNotification.render_line()`` but adapts for Slack
         (full timestamp, optional fields).
 
+        Plain-name sweep (factory phrase-book, ratified 2026-07-31): the
+        Slack line is prefixed ``Pipeline`` — the phrase-book's plain name
+        for forge. Feature ids and build ids are real identifiers and are
+        never renamed.
+
+        ``ForgeNotification.render_line()`` still says ``Forge``. That
+        divergence is an **unresolved carry, not a safe boundary**:
+        ``render_line()`` is not terminal-only — ``chat_handler`` appends
+        it to the chat gateway's reply on ``agents.command.jarvis``, which
+        a human reads. It is unswept here only because its shape is a
+        contract of record (DDR-030 / ``DM-forge-notification`` §1) that a
+        Slack-surface sweep has no authority to rewrite.
+
         Args:
             notification: The notification to render.
 
@@ -1268,23 +1301,23 @@ class SlackNotifier:
 
         if event_type == "build_queued":
             # Intake event (TASK-JNB-006)
-            return f"[{hhmm}] Forge {feature_id}: build-queued"
+            return f"[{hhmm}] Pipeline {feature_id}: build-queued"
 
         if event_type == "stage_complete":
             # Checkpoint slice: specifically the "queued" stage
             stage_label = notification.stage_label or "unknown"
             status = notification.status or "UNKNOWN"
-            return f"[{hhmm}] Forge {feature_id}: stage {stage_label} ({status})"
+            return f"[{hhmm}] Pipeline {feature_id}: stage {stage_label} ({status})"
 
         if event_type == "build_started":
-            base = f"[{hhmm}] Forge {feature_id}: build-started (RUNNING)"
+            base = f"[{hhmm}] Pipeline {feature_id}: build-started (RUNNING)"
             if notification.pr_url:
                 return f"{base}\nPR: {notification.pr_url}"
             return base
 
         if event_type == "build_complete":
             # Include pr_url and summary when present (AC-008)
-            base = f"[{hhmm}] Forge {feature_id}: build-complete (PASSED)"
+            base = f"[{hhmm}] Pipeline {feature_id}: build-complete (PASSED)"
             parts = [base]
 
             if notification.pr_url:
@@ -1296,12 +1329,12 @@ class SlackNotifier:
 
         if event_type == "build_failed":
             reason = notification.failure_reason or "unknown"
-            return f"[{hhmm}] Forge {feature_id}: build-failed ({reason})"
+            return f"[{hhmm}] Pipeline {feature_id}: build-failed ({reason})"
 
         if event_type == "build_paused":
             # TASK-JNB-005: Pause rendering
             # Format: provenance, stage, rationale, coach_score, CLI hint
-            parts = [f"[{hhmm}] Forge {feature_id}: build-paused"]
+            parts = [f"[{hhmm}] Pipeline {feature_id}: build-paused"]
 
             # Provenance (approval-card truth R1-A) — mirrors
             # build_pause_blocks: build_id when present, the correlation
@@ -1315,13 +1348,13 @@ class SlackNotifier:
             if notification.stage_label:
                 parts.append(f"Stage: {notification.stage_label}")
 
-            # Coach score
+            # Checker score (phrase-book plain name; field stays coach_score)
             if notification.coach_score is None:
                 score_text = "score unavailable"
             else:
                 # Defensive rendering: out-of-range scores render as text, never rejected
                 score_text = f"{notification.coach_score:.2f}"
-            parts.append(f"Coach score: {score_text}")
+            parts.append(f"Checker score: {score_text}")
 
             # Rationale (verbatim plain text)
             if notification.rationale:
@@ -1338,7 +1371,7 @@ class SlackNotifier:
         if event_type == "build_cancelled":
             # TASK-JNB-005: Cancelled rendering
             # Format: cancelled_by, reason
-            parts = [f"[{hhmm}] Forge {feature_id}: build-cancelled"]
+            parts = [f"[{hhmm}] Pipeline {feature_id}: build-cancelled"]
 
             if notification.cancelled_by:
                 parts.append(f"Cancelled by: {notification.cancelled_by}")
@@ -1349,7 +1382,7 @@ class SlackNotifier:
             return "\n".join(parts)
 
         # Fallback (should not reach here given the event_type Literal)
-        return f"[{hhmm}] Forge {feature_id}: {event_type}"
+        return f"[{hhmm}] Pipeline {feature_id}: {event_type}"
 
 
 # ---------------------------------------------------------------------------

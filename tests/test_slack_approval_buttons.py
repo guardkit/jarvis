@@ -524,11 +524,11 @@ class TestTextOnlyFallback:
         # (Build/Trace) directly under the header.
         hhmm = completed.astimezone().strftime("%H:%M")
         expected = (
-            f"[{hhmm}] Forge FEAT-ABC1: build-paused\n"
+            f"[{hhmm}] Pipeline FEAT-ABC1: build-paused\n"
             "Build: build-abc123\n"
             "Trace: corr-pause-1\n"
             "Stage: autobuild\n"
-            "Coach score: 0.42\n"
+            "Checker score: 0.42\n"
             "Rationale: Coach flagged a wiring risk\n"
             "Use CLI to approve or reject this build."
         )

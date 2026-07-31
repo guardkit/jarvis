@@ -38,7 +38,10 @@ References
 * ``docs/design/FEAT-JARVIS-005/decisions/DDR-029-stage-complete-as-append-only-edges.md``
   — fire-and-forget routing-history edge per matched event.
 * ``docs/design/FEAT-JARVIS-005/decisions/DDR-030-cli-notifications-between-prompts.md``
-  — canonical render shape consumed by the CLI.
+  — canonical render shape. Consumed by the CLI *and* by the chat
+  gateway reply on ``agents.command.jarvis``; see the warning on
+  :meth:`ForgeNotification.render_line` for why its ``Forge`` prefix is
+  an outward-vocabulary carry rather than a settled code identifier.
 * ``docs/design/FEAT-JARVIS-005/decisions/DDR-031-originating-adapter-from-session.md``
   — adapter resolution captured at queue time for diagnostics.
 
@@ -291,7 +294,25 @@ class ForgeNotification(BaseModel):
     )
 
     def render_line(self) -> str:
-        """Render the canonical CLI line per DDR-030 / DM-forge-notification §1.
+        """Render the canonical notification line per DDR-030 / DM-forge-notification §1.
+
+        .. warning::
+
+           This is **not** a terminal-only surface. Besides the CLI's
+           between-prompts drain, ``chat_handler`` appends this line to
+           ``response_text``, which is published as the chat gateway's
+           reply on ``agents.command.jarvis`` — read by a human, outside
+           any terminal. The ``Forge`` prefix below is therefore an
+           internal codename on an outward surface, which the factory
+           phrase-book (ratified 2026-07-31) rules against; the Slack
+           renderer has already moved to the plain name ``Pipeline``.
+
+           It is left unswept here **only** because this exact shape is a
+           contract of record — DDR-030, ``DM-forge-notification`` §1,
+           ``docs/design/FEAT-JARVIS-005/contracts/API-internal.md``, and
+           a ``confidence=high`` assumption in the FEAT-JARVIS-005 spec —
+           and rewriting a spec-of-record needs its own ruling, not a
+           Slack-surface sweep. Do not read this note as a safety claim.
 
         Shapes (one per ``event_type`` discriminator member; FEAT-J006 /
         FEAT-J009 reuse all four verbatim — the cross-adapter rendering

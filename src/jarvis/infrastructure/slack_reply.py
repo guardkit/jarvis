@@ -917,7 +917,10 @@ class ApprovalReplyHandler:
             await self._web_client.chat_postEphemeral(
                 channel=channel_id,
                 user=user_id,
-                text=("You are not authorized to decide forge approvals from Slack."),
+                # Plain-name sweep (factory phrase-book, ratified 2026-07-31):
+                # the refusal a Slack reader sees says "build approvals", not
+                # the "forge" codename.
+                text=("You are not authorized to decide build approvals from Slack."),
             )
         except Exception as exc:
             logger.warning(
