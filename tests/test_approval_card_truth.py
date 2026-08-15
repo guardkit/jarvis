@@ -700,11 +700,23 @@ class TestSharedSeamWiring:
         # inspection keeps this cheap — no full lifecycle boot needed).
         source = inspect.getsource(lc.build_app_state)
         assert "terminal_registry = TerminalBuildRegistry()" in source
-        assert "create_slack_sink(config, terminal_registry=terminal_registry)" in source
+        # Pinned call shapes moved 2026-08-15 (build-side mention lane): both
+        # factories gained a SECOND shared seam, ``audience`` — the
+        # who-to-tell registry. The terminal_registry assertions are unchanged
+        # in substance; only the surrounding argument list grew.
+        sink_call = (
+            "create_slack_sink(\n"
+            "        config, terminal_registry=terminal_registry, audience=audience_registry\n"
+            "    )"
+        )
+        assert sink_call in source
         reply_call = (
             "create_slack_reply_client(\n"
-            "        config, nats_client, terminal_registry=terminal_registry, "
-            "spec_texts=spec_texts\n"
+            "        config,\n"
+            "        nats_client,\n"
+            "        terminal_registry=terminal_registry,\n"
+            "        spec_texts=spec_texts,\n"
+            "        audience=audience_registry,\n"
             "    )"
         )
         assert reply_call in source

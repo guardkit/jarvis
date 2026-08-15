@@ -1198,16 +1198,21 @@ class TestBuildAppStateReplyWiring:
         # store of worked examples behind a spec digest card.
         from unittest.mock import ANY
 
+        from jarvis.infrastructure.build_audience import BuildAudienceRegistry
         from jarvis.infrastructure.spec_texts import SpecTextRegistry
         from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
 
+        # Pinned call shape moved 2026-08-15 (build-side mention lane): a third
+        # shared seam, ``audience`` — the handler WRITES the gate clicker so
+        # the build-side line can @-mention whoever asked for the build.
         factory.assert_called_once_with(
-            cfg, fake_nats, terminal_registry=ANY, spec_texts=ANY
+            cfg, fake_nats, terminal_registry=ANY, spec_texts=ANY, audience=ANY
         )
         assert isinstance(
             factory.call_args.kwargs["terminal_registry"], TerminalBuildRegistry
         )
         assert isinstance(factory.call_args.kwargs["spec_texts"], SpecTextRegistry)
+        assert isinstance(factory.call_args.kwargs["audience"], BuildAudienceRegistry)
         fake_reply.start.assert_awaited_once()
         assert state.slack_reply_client is fake_reply
 
