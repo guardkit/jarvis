@@ -78,6 +78,7 @@ from jarvis.infrastructure.terminal_builds import (
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.build_audience import BuildAudienceRegistry
     from jarvis.infrastructure.nats_client import NATSClient
     from jarvis.infrastructure.slack_planning_intake import PlanningIntakeHandler
 
@@ -239,6 +240,7 @@ class ApprovalReplyHandler:
     """
 
     __slots__ = (
+        "_audience",
         "_decided_request_ids",
         "_decision_lock",
         "_operator_ids",
@@ -256,6 +258,7 @@ class ApprovalReplyHandler:
         web_client: Any | None = None,
         terminal_registry: TerminalBuildRegistry | None = None,
         spec_texts: SpecTextRegistry | None = None,
+        audience: BuildAudienceRegistry | None = None,
     ) -> None:
         """See :func:`build_reply_handler` (the public factory)."""
         self._operator_ids = operator_ids
@@ -269,6 +272,10 @@ class ApprovalReplyHandler:
         # side (the notification sink writes it). None = unwired →
         # every consult misses (today's behaviour).
         self._terminal_registry = terminal_registry
+        # Build-side mention lane (2026-08-15): WRITE side. Whoever taps
+        # this build's gate asked for the build, so the terminal build
+        # line @-mentions them. None = unwired → nothing recorded.
+        self._audience = audience
         # First-click-wins state — in-process only (DDR-027); forge's
         # request_id dedup is the authoritative backstop after restart.
         self._decided_request_ids: set[str] = set()
@@ -452,6 +459,11 @@ class ApprovalReplyHandler:
             # this same member id, so the audit trail and the gate agree.
             decided_by = user_id
 
+            # Build-side mention lane: remember who asked for this build,
+            # so the notification sink can name them when it ends. Never
+            # raises — a registry failure must not cost the tap.
+            self._record_gate_clicker(button.get("build_id"), user_id)
+
             # --- 4. Optimistic disable (independent wrap — C2) ------------
             # Skipped when the interaction payload carries no
             # message.blocks (review fix): we could not restore what we
@@ -528,6 +540,20 @@ class ApprovalReplyHandler:
                 ),
                 text=f"Decision recorded: {decision}",
                 log_event="slack_reply_success_update_failed",
+            )
+
+    def _record_gate_clicker(self, build_id: str | None, user_id: str) -> None:
+        """Record ``build_id -> clicker`` for the build-side mention. Never raises."""
+        if self._audience is None:
+            return
+        try:
+            self._audience.record_gate_clicker(build_id, user_id)
+        except Exception as exc:  # pragma: no cover - defensive backstop
+            logger.warning(
+                "slack_reply_audience_record_failed",
+                build_id=build_id,
+                error_class=type(exc).__name__,
+                error=str(exc),
             )
 
     # ------------------------------------------------------------------
@@ -1319,6 +1345,7 @@ def build_reply_handler(
     web_client: Any | None = None,
     terminal_registry: TerminalBuildRegistry | None = None,
     spec_texts: SpecTextRegistry | None = None,
+    audience: BuildAudienceRegistry | None = None,
 ) -> ApprovalReplyHandler:
     """Public factory for :class:`ApprovalReplyHandler`.
 
@@ -1342,6 +1369,10 @@ def build_reply_handler(
             card, written by the planning checkpoint renderer; read when the
             owner asks to see them. ``None`` (unwired) makes that one button
             answer honestly that they are not to hand.
+        audience: Shared who-to-tell registry (build-side mention lane);
+            the handler WRITES ``build_id -> clicker`` so the notification
+            sink can @-mention the person who asked for the build when it
+            ends. ``None`` (unwired) records nothing.
 
     Returns:
         A ready :class:`ApprovalReplyHandler`.
@@ -1352,6 +1383,7 @@ def build_reply_handler(
         web_client=web_client,
         terminal_registry=terminal_registry,
         spec_texts=spec_texts,
+        audience=audience,
     )
 
 
@@ -1567,6 +1599,7 @@ def create_slack_reply_client(
     *,
     terminal_registry: TerminalBuildRegistry | None = None,
     spec_texts: SpecTextRegistry | None = None,
+    audience: BuildAudienceRegistry | None = None,
 ) -> SlackSocketModeReplyClient | None:
     """Create the shared Socket Mode client, or a logged no-op (``None``).
 
@@ -1647,6 +1680,7 @@ def create_slack_reply_client(
             web_client=web_client,
             terminal_registry=terminal_registry,
             spec_texts=spec_texts,
+            audience=audience,
         )
     else:
         logger.info(

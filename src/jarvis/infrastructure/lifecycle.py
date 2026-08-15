@@ -73,6 +73,7 @@ from jarvis.config.settings import JarvisConfig
 from jarvis.infrastructure.assumption_dialogue import (
     create_planning_checkpoint_renderer,
 )
+from jarvis.infrastructure.build_audience import BuildAudienceRegistry
 from jarvis.infrastructure.capabilities_registry import (
     CapabilitiesRegistry,
     LiveCapabilitiesRegistry,
@@ -885,8 +886,19 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # publishing a decision so a tap on an already-terminal build is
     # answered honestly. In-process only (DDR-027): after a restart the
     # map is empty and the reply path degrades to today's behaviour.
+    #
+    # Build-side mention lane (2026-08-15): a SECOND shared registry wired
+    # into all three Slack surfaces in this one process — the planning
+    # notifier and the reply handler WRITE who is waiting on a run (by
+    # correlation) and who tapped its gate (by build id); the sink READS
+    # both when a build ends so the terminal line @-mentions a person
+    # instead of nobody. Same in-process degrade as above: empty after a
+    # restart, and an empty consult just posts the line unmentioned.
     terminal_registry = TerminalBuildRegistry()
-    notification_sink = create_slack_sink(config, terminal_registry=terminal_registry)
+    audience_registry = BuildAudienceRegistry()
+    notification_sink = create_slack_sink(
+        config, terminal_registry=terminal_registry, audience=audience_registry
+    )
     try:
         await notification_sink.start()
     except Exception as exc:
@@ -954,7 +966,11 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # unmet or NEITHER feature is configured; start failures soft-fail
     # per DDR-021.
     slack_reply_client: SlackSocketModeReplyClient | None = create_slack_reply_client(
-        config, nats_client, terminal_registry=terminal_registry, spec_texts=spec_texts
+        config,
+        nats_client,
+        terminal_registry=terminal_registry,
+        spec_texts=spec_texts,
+        audience=audience_registry,
     )
     if slack_reply_client is not None:
         try:
@@ -980,7 +996,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # soft-fail; a JNB-108-style transient bind race just leaves the consumer
     # off for this boot (notifications degrade, never crash the supervisor).
     planning_notification_consumer: PlanningNotificationConsumer | None = (
-        create_planning_notification_consumer(config, nats_client)
+        create_planning_notification_consumer(config, nats_client, audience=audience_registry)
     )
     if planning_notification_consumer is not None:
         try:

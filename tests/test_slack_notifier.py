@@ -309,7 +309,12 @@ class TestCheckpointRenderShapes:
             call_kwargs = mock_client.chat_postMessage.call_args[1]
             text = call_kwargs["text"]
             assert "FEAT-ABC2" in text
-            assert "build-complete" in text or "PASSED" in text
+            # Pinned string moved 2026-08-15 (build-side mention lane): the
+            # line was "build-complete (PASSED)"; it is now the plain
+            # "build complete …" sentence that names the next act. See
+            # tests/test_build_side_mention.py for the full shape.
+            assert "build complete" in text
+            assert "the merge word is yours" in text
 
             await sink.stop()
 

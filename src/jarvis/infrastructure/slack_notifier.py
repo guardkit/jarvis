@@ -63,6 +63,15 @@ Notes
   Approve/Reject buttons on the pause message whose ``value`` JSON
   carries ``{request_id, build_id, correlation_id, approval_subject}``
   (the BUTTON_METADATA contract consumed by TASK-JNB-104).
+* Build-side mention lane (2026-08-15): terminal build lines
+  (``build_complete`` / ``build_failed`` / ``build_cancelled``) now open
+  with ``<@MEMBERID> ``, and the finished-build line says in plain words
+  how much passed, where the code is, and that the merge word is the
+  owner's. The reader-side state is the shared
+  :class:`~jarvis.infrastructure.build_audience.BuildAudienceRegistry`,
+  written by the planning notifier and the approval reply handler in this
+  same process. It adds NO approval surface — the merge card belongs to
+  the conductor, which is parked; this is one sentence, not a button.
 """
 
 from __future__ import annotations
@@ -80,6 +89,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.msg import Msg
 
     from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.build_audience import BuildAudienceRegistry
     from jarvis.infrastructure.forge_notifications import ForgeNotification
     from jarvis.infrastructure.nats_client import NATSClient
     from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
@@ -154,6 +164,44 @@ def _terminal_status_line(notification: ForgeNotification) -> str:
     if notification.event_type == "build_complete":
         return f"This build completed at {hhmm}"
     return f"This build failed at {hhmm}"
+
+
+# The one thing a finished build line must never leave unsaid (2026-08-15):
+# the code is sitting on a branch and NOTHING happens to it until the owner
+# says so. Deliberately a plain sentence and NOT a button — the merge card
+# belongs to the conductor, which is parked; this line adds no approval
+# surface of any kind.
+_MERGE_WORD_SENTENCE = "Nothing merges on its own — the merge word is yours."
+
+
+def _tasks_clause(notification: ForgeNotification) -> str:
+    """`` — 4 of 4 tasks passed the checker``, or ``""`` when unknown.
+
+    Honest by construction: it reports how many of the total PASSED, so a
+    build that completed with failures reads "3 of 4 tasks passed the
+    checker" and never anything shaped like "ready". When forge sent no
+    counts (or an older payload carried none) the clause is omitted
+    entirely rather than guessed at.
+    """
+    passed = notification.tasks_completed
+    total = notification.tasks_total
+    if passed is None or total is None:
+        return ""
+    noun = "task" if total == 1 else "tasks"
+    return f" — {passed} of {total} {noun} passed the checker"
+
+
+def _where_clause(notification: ForgeNotification) -> str:
+    """``The code is on branch autobuild/FEAT-D9A6 in api_test.``
+
+    jarvis NEVER derives or invents a branch name — an unknown branch
+    renders as the honest "the build's branch" and an unknown repo drops
+    its clause. Both are forge's to fill.
+    """
+    where = f"branch {notification.branch}" if notification.branch else "the build's branch"
+    if notification.repo:
+        where = f"{where} in {notification.repo}"
+    return f"The code is on {where}."
 
 
 # ---------------------------------------------------------------------------
@@ -430,10 +478,12 @@ class SlackNotifier:
     """
 
     __slots__ = (
+        "_audience",
         "_bot_token",
         "_channel_id",
         "_client",
         "_dedup_map",
+        "_operator_ids",
         "_pause_messages",
         "_pending_approvals",
         "_queue",
@@ -453,6 +503,8 @@ class SlackNotifier:
         queue_maxsize: int = _DEFAULT_QUEUE_MAXSIZE,
         stop_timeout: float = _DEFAULT_STOP_TIMEOUT,
         terminal_registry: TerminalBuildRegistry | None = None,
+        audience: BuildAudienceRegistry | None = None,
+        operator_ids: frozenset[str] = frozenset(),
     ) -> None:
         """Construct the Slack notifier.
 
@@ -468,6 +520,20 @@ class SlackNotifier:
                 ``build_id -> (terminal_state, at, by)`` so the Slack
                 reply handler can answer a tap on an already-terminal
                 build honestly. ``None`` (unwired) skips recording.
+            audience: Shared who-to-tell registry (build-side mention
+                lane, 2026-08-15). This sink is the READER: on a
+                terminal build event it asks for the planning
+                notification's target user (same correlation_id) and
+                then the gate clicker (same build_id). ``None``
+                (unwired) means every consult misses and the line posts
+                unmentioned — exactly today's behaviour.
+            operator_ids: The resolved operator allowlist
+                (:meth:`JarvisConfig.resolve_operator_allowlist`). Used
+                ONLY as the last link of the mention chain, and only
+                when it has exactly one member — a sole operator is
+                unambiguously the person who wants the build line. Two
+                or more members is not a fact about THIS build, so
+                nobody is mentioned.
         """
         from slack_sdk.web.async_client import AsyncWebClient
 
@@ -476,6 +542,8 @@ class SlackNotifier:
         self._queue_maxsize = queue_maxsize
         self._stop_timeout = stop_timeout
         self._terminal_registry = terminal_registry
+        self._audience = audience
+        self._operator_ids = operator_ids
         self._client = AsyncWebClient(token=bot_token)
         self._queue: asyncio.Queue[ForgeNotification] = asyncio.Queue(maxsize=queue_maxsize)
         self._started = False
@@ -1226,6 +1294,65 @@ class SlackNotifier:
         for key in [k for k, rec in self._pause_messages.items() if now_mono >= rec.expires_at()]:
             del self._pause_messages[key]
 
+    # ------------------------------------------------------------------
+    # Build-side mention (2026-08-15) — who to tell when a build ends
+    # ------------------------------------------------------------------
+
+    def _mention_prefix(self, notification: ForgeNotification) -> str:
+        """The ``"<@MEMBERID> "`` prefix for a terminal build line, or ``""``.
+
+        Never raises (DDR-007): this runs on the worker's delivery path,
+        and a registry that somehow throws must cost the message its
+        mention, never the message itself. Every miss is a silent
+        fallthrough.
+        """
+        try:
+            member_id = self._resolve_mention_target(notification)
+        except Exception as exc:  # pragma: no cover - defensive backstop
+            logger.warning(
+                "slack_mention_lookup_failed",
+                correlation_id=notification.correlation_id,
+                build_id=notification.build_id,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            return ""
+        if not member_id:
+            return ""
+        return f"<@{member_id}> "
+
+    def _resolve_mention_target(self, notification: ForgeNotification) -> str | None:
+        """The member id to @-mention on a terminal build line, first hit wins.
+
+        The chain, strongest join first:
+
+        a. **The planning target for this correlation_id** — the member id
+           the planning notifications for this very run already
+           @-mentioned. forge threads the queue-time correlation onto its
+           outbound build envelopes, so this is the same person, same run.
+        b. **The gate clicker for this build_id** — whoever actually
+           tapped Approve on this build asked for it, so they are told it
+           finished.
+        c. **A SOLE configured operator** — with exactly one member in the
+           allowlist there is no ambiguity about who the estate's operator
+           is.
+        d. **Nobody.** No id is ever invented, and a multi-member
+           allowlist is a config constant rather than a fact about THIS
+           build — the line posts unmentioned, as it always did.
+        """
+        audience = self._audience
+        if audience is not None:
+            target = audience.planning_target(notification.correlation_id)
+            if target:
+                return target
+            clicker = audience.gate_clicker(notification.build_id)
+            if clicker:
+                return clicker
+        operator_ids = self._operator_ids
+        if operator_ids and len(operator_ids) == 1:
+            return next(iter(operator_ids))
+        return None
+
     def _make_dedup_key(self, notification: ForgeNotification) -> tuple[str, ...]:
         """Construct dedup key per TASK-JNB-006 ASSUM-006.
 
@@ -1291,6 +1418,13 @@ class SlackNotifier:
         feature_id = notification.feature_id
         event_type = notification.event_type
 
+        # Build-side mention (2026-08-15). Terminal events only: those are
+        # the lines that mean an act is now owed by a person. build_queued
+        # / build_started / stage_complete stay unmentioned — they are
+        # progress, not a request, and mentioning every one of them would
+        # train the owner to ignore the mention.
+        mention = self._mention_prefix(notification) if event_type in _TERMINAL_EVENT_TYPES else ""
+
         # Format timestamp as HH:MM (local time)
         local_completed_at = (
             notification.completed_at.astimezone()
@@ -1316,8 +1450,17 @@ class SlackNotifier:
             return base
 
         if event_type == "build_complete":
-            # Include pr_url and summary when present (AC-008)
-            base = f"[{hhmm}] Pipeline {feature_id}: build-complete (PASSED)"
+            # The finished-build line, rewritten 2026-08-15. It used to
+            # read "build-complete (PASSED)" and stop there: no mention,
+            # no word on where the code was, no word on what happened
+            # next. A build finished at 12:02 and went unnoticed for an
+            # hour. It now names the person, the outcome, the place, and
+            # the one act that is owed.
+            base = (
+                f"{mention}[{hhmm}] Pipeline {feature_id}: build complete"
+                f"{_tasks_clause(notification)}. "
+                f"{_where_clause(notification)} {_MERGE_WORD_SENTENCE}"
+            )
             parts = [base]
 
             if notification.pr_url:
@@ -1329,7 +1472,7 @@ class SlackNotifier:
 
         if event_type == "build_failed":
             reason = notification.failure_reason or "unknown"
-            return f"[{hhmm}] Pipeline {feature_id}: build-failed ({reason})"
+            return f"{mention}[{hhmm}] Pipeline {feature_id}: build-failed ({reason})"
 
         if event_type == "build_paused":
             # TASK-JNB-005: Pause rendering
@@ -1371,7 +1514,7 @@ class SlackNotifier:
         if event_type == "build_cancelled":
             # TASK-JNB-005: Cancelled rendering
             # Format: cancelled_by, reason
-            parts = [f"[{hhmm}] Pipeline {feature_id}: build-cancelled"]
+            parts = [f"{mention}[{hhmm}] Pipeline {feature_id}: build-cancelled"]
 
             if notification.cancelled_by:
                 parts.append(f"Cancelled by: {notification.cancelled_by}")
@@ -1701,6 +1844,7 @@ def create_slack_sink(
     queue_maxsize: int = _DEFAULT_QUEUE_MAXSIZE,
     stop_timeout: float = _DEFAULT_STOP_TIMEOUT,
     terminal_registry: TerminalBuildRegistry | None = None,
+    audience: BuildAudienceRegistry | None = None,
 ) -> NotificationSink:
     """Create a Slack notification sink from JarvisConfig.
 
@@ -1716,6 +1860,12 @@ def create_slack_sink(
             truth R3-B) the live :class:`SlackNotifier` writes terminal
             build events into; ignored on the no-op path (no cards exist
             without Slack).
+        audience: Shared who-to-tell registry (build-side mention lane)
+            the live :class:`SlackNotifier` READS on terminal events;
+            ignored on the no-op path. The operator allowlist is taken
+            from ``config`` here — one resolution site, the same
+            :meth:`JarvisConfig.resolve_operator_allowlist` the reply
+            path's authorization gate uses.
 
     Returns:
         A :class:`NotificationSink` implementation. Either a live
@@ -1745,6 +1895,8 @@ def create_slack_sink(
         queue_maxsize=queue_maxsize,
         stop_timeout=stop_timeout,
         terminal_registry=terminal_registry,
+        audience=audience,
+        operator_ids=config.resolve_operator_allowlist(),
     )
 
 

@@ -193,13 +193,19 @@ class TestBuildAppStateNotificationSinkHappyPath:
         # registry into the sink factory.
         from unittest.mock import ANY
 
+        from jarvis.infrastructure.build_audience import BuildAudienceRegistry
         from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
 
+        # Pinned call shape moved 2026-08-15 (build-side mention lane): the
+        # sink factory gained the shared ``audience`` who-to-tell registry.
         mock_create_sink.assert_called_once_with(
-            stub_registry_config_with_slack, terminal_registry=ANY
+            stub_registry_config_with_slack, terminal_registry=ANY, audience=ANY
         )
         assert isinstance(
             mock_create_sink.call_args.kwargs["terminal_registry"], TerminalBuildRegistry
+        )
+        assert isinstance(
+            mock_create_sink.call_args.kwargs["audience"], BuildAudienceRegistry
         )
 
         # AC-002: sink is bound to the subscriber
@@ -288,7 +294,9 @@ class TestBuildAppStateNotificationSinkHappyPath:
         # (the R3-B terminal registry rides along on every permutation).
         from unittest.mock import ANY
 
-        mock_create_sink.assert_called_once_with(stub_registry_config, terminal_registry=ANY)
+        mock_create_sink.assert_called_once_with(
+            stub_registry_config, terminal_registry=ANY, audience=ANY
+        )
         assert state.notification_sink is fake_noop_sink
 
         # Cleanup the heartbeat task

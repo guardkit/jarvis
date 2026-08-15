@@ -53,6 +53,7 @@ import structlog
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.build_audience import BuildAudienceRegistry
     from jarvis.infrastructure.nats_client import NATSClient
 
 logger = structlog.get_logger(__name__)
@@ -196,6 +197,7 @@ class PlanningNotificationConsumer:
     """
 
     __slots__ = (
+        "_audience",
         "_channel_id",
         "_nats_client",
         "_seen",
@@ -212,11 +214,20 @@ class PlanningNotificationConsumer:
         channel_id: str,
         web_client: Any,
         stop_timeout: float = 5.0,
+        audience: BuildAudienceRegistry | None = None,
     ) -> None:
         """See :func:`create_planning_notification_consumer` (the factory)."""
         self._nats_client = nats_client
         self._channel_id = channel_id
         self._web_client = web_client
+        # Build-side mention lane (2026-08-15): this consumer is the only
+        # place in jarvis that ever learns which member id the owner is
+        # for a given run — forge puts it on ``target_user``. Recording it
+        # here is what lets the BUILD-side line (a different subscriber,
+        # same process) @-mention the same person when the build ends.
+        # ``None`` (unwired) records nothing; build lines then fall
+        # through the rest of the mention chain.
+        self._audience = audience
         self._stop_timeout = stop_timeout
         self._subscription: Any = None
         self._started = False
@@ -321,6 +332,9 @@ class PlanningNotificationConsumer:
             await self._safe_ack(msg)
             return
 
+        # --- remember who this run's notifications speak to (mention lane) --
+        self._record_audience(payload, envelope)
+
         # --- render + post (thread when anchored, else degrade top-level) ----
         thread_ts = payload.parent_request_id or payload.thread_ts
         text, blocks = self._render(payload)
@@ -359,6 +373,27 @@ class PlanningNotificationConsumer:
             channel=self._channel_id,
         )
         await self._safe_ack(msg)
+
+    def _record_audience(self, payload: Any, envelope: Any) -> None:
+        """Record ``correlation_id -> target_user`` for the build-side mention.
+
+        Never raises (DDR-007): a registry failure must not cost the
+        operator the notification that is about to post. A payload with no
+        ``target_user``, or no correlation to key on, is a silent no-op —
+        the registry's own write guard covers both, this wrapper covers a
+        registry that throws.
+        """
+        if self._audience is None:
+            return
+        try:
+            correlation_id = payload.correlation_id or getattr(envelope, "correlation_id", None)
+            self._audience.record_planning_target(correlation_id, payload.target_user)
+        except Exception as exc:  # pragma: no cover - defensive backstop
+            logger.warning(
+                "planning_notification_audience_record_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
 
     def _render(self, payload: Any) -> tuple[str, list[dict[str, Any]] | None]:
         """Build (text, blocks) for a notification (ASSUM-013 copy).
@@ -429,6 +464,8 @@ class PlanningNotificationConsumer:
 def create_planning_notification_consumer(
     config: JarvisConfig,
     nats_client: NATSClient | None,
+    *,
+    audience: BuildAudienceRegistry | None = None,
 ) -> PlanningNotificationConsumer | None:
     """Create the notification consumer, or a logged no-op (``None``).
 
@@ -474,6 +511,7 @@ def create_planning_notification_consumer(
         nats_client,
         channel_id=channel_id,
         web_client=web_client,
+        audience=audience,
     )
     logger.info("planning_notification_consumer_configured", channel_id=channel_id)
     return consumer

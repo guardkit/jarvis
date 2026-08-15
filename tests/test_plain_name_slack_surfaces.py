@@ -502,7 +502,7 @@ class TestTheFenceBites:
     def test_plain_names_and_identifiers_pass_clean(self) -> None:
         """No false positives on the vocabulary the phrase-book prescribes."""
         for clean in (
-            "[14:07] Pipeline FEAT-2D61: build-complete (PASSED)",
+            "[14:07] Pipeline FEAT-2D61: build complete — 4 of 4 tasks passed the checker.",
             "Checker score: 0.42",
             "Build: build-plain-1",
             "Trace: corr-plain-1",

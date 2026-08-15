@@ -241,6 +241,56 @@ class ForgeNotification(BaseModel):
             "field added in TASK-JNB-002 per frozen-model rule."
         ),
     )
+    repo: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Repository the build ran in (BuildCompletePayload.repo). "
+            "Optional field added in the build-side mention lane "
+            "(2026-08-15) so the finished-build line can say WHERE the "
+            "code is; None omits the repo clause rather than guessing."
+        ),
+    )
+    branch: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Branch the build's code is on (BuildCompletePayload.branch). "
+            "Optional field added in the build-side mention lane "
+            "(2026-08-15). None renders as 'the build's branch' — jarvis "
+            "NEVER derives or invents a branch name; forge fills this."
+        ),
+    )
+    tasks_completed: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Tasks that passed the checker (BuildCompletePayload."
+            "tasks_completed). Optional field added in the build-side "
+            "mention lane (2026-08-15)."
+        ),
+    )
+    tasks_failed: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Tasks that did not pass (BuildCompletePayload.tasks_failed). "
+            "Optional field added in the build-side mention lane "
+            "(2026-08-15). Non-zero on a build_complete event is why the "
+            "rendered line says 'N of M passed' rather than anything "
+            "shaped like 'ready'."
+        ),
+    )
+    tasks_total: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Total tasks in the build (BuildCompletePayload.tasks_total). "
+            "Optional field added in the build-side mention lane "
+            "(2026-08-15). None (with tasks_completed None) omits the "
+            "task clause entirely."
+        ),
+    )
     coach_score: float | None = Field(
         default=None,
         description=(
@@ -1249,6 +1299,24 @@ class ForgeNotificationsSubscriber:
         # lookup. A correlation miss still notifies the sink (the phone is
         # per-operator, not per-session).
         # Per DDR-007, sink errors are WARNING-only; they never propagate.
+        # Build-side mention lane (2026-08-15): the finished-build line
+        # names WHERE the code is and HOW MUCH of it passed, so the owner
+        # is not left to go and look. These five come off the ALREADY
+        # VALIDATED BuildCompletePayload (not the raw dict) because that
+        # model declares every one of them; ``repo`` / ``branch`` are
+        # blank-normalised to None so an empty string from forge cannot
+        # trip ForgeNotification's ``min_length=1`` and drop the whole
+        # notification.
+        outcome: dict[str, Any] = {}
+        if isinstance(payload, BuildCompletePayload):
+            outcome = {
+                "repo": (payload.repo or "").strip() or None,
+                "branch": (payload.branch or "").strip() or None,
+                "tasks_completed": payload.tasks_completed,
+                "tasks_failed": payload.tasks_failed,
+                "tasks_total": payload.tasks_total,
+            }
+
         if self._notification_sink is not None:
             try:
                 sink_notification = ForgeNotification(
@@ -1260,6 +1328,7 @@ class ForgeNotificationsSubscriber:
                     build_id=build_id_for_sink,
                     pr_url=pr_url_for_sink,
                     summary=summary_for_sink,
+                    **outcome,
                 )
                 await self._notification_sink.notify(sink_notification)
             except Exception as exc:

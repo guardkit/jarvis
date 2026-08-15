@@ -845,7 +845,9 @@ class TestWorkerDeliversPauseMessages:
                 await asyncio.sleep(0.01)
             kwargs = client.chat_postMessage.await_args.kwargs
             assert "blocks" not in kwargs
-            assert "build-complete (PASSED)" in kwargs["text"]
+            # Pinned string moved 2026-08-15 (build-side mention lane):
+            # was "build-complete (PASSED)".
+            assert "build complete" in kwargs["text"]
         finally:
             await notifier.stop()
 
