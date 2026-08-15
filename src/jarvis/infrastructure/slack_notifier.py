@@ -174,6 +174,67 @@ def _terminal_status_line(notification: ForgeNotification) -> str:
 _MERGE_WORD_SENTENCE = "Nothing merges on its own — the merge word is yours."
 
 
+# Slack renders a user mention only from the encoded ``<@MEMBERID>`` form,
+# which lives in the same angle-bracket entity layer as ``<http://…|label>``
+# and the ``<!here>`` broadcast — the layer the ``mrkdwn: false`` posture
+# switches off. Slack does not document that a mention survives with markup
+# parsing off, and the ONE jarvis surface whose mentions provably reach the
+# owner posts with it ON (``planning_notifier.post_threaded`` declares
+# ``mrkdwn: bool = True`` and hands it straight to ``chat_postMessage``).
+# So: mirror the proven path, but ONLY for a line that actually carries a
+# mention — never as a blanket change of posture.
+_MENTION_MARKER = "<@"
+
+
+def _needs_markup_parsing(text: str) -> bool:
+    """True when ``text`` carries a mention that needs Slack to parse it."""
+    return text.startswith(_MENTION_MARKER)
+
+
+def _escape_slack_entities(text: str) -> str:
+    """Neutralise Slack's entity syntax in one forge-authored string.
+
+    Escaping ``&``, ``<`` and ``>`` is Slack's own documented control, and
+    it is what keeps the inert-text guarantee (v1 scenario 14) true on the
+    ONE path where markup parsing is now on: ``<http://evil.com|clickme>``
+    renders as visible text instead of a disguised link, and a channel
+    broadcast only ever fires from the encoded ``<!here>`` form — a bare
+    ``@here`` in escaped text does nothing. Slack displays the escaped
+    entities back as the original characters, so the operator still reads
+    the string forge wrote.
+    """
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+# Every ForgeNotification field whose value is authored by forge (or by
+# whoever fed forge) and interpolated into a rendered line. Identifiers
+# jarvis controls are absent by design: ``feature_id`` is regex-pinned,
+# the task counts are ints, the timestamp is derived.
+_PAYLOAD_AUTHORED_FIELDS = (
+    "branch",
+    "repo",
+    "summary",
+    "pr_url",
+    "failure_reason",
+    "reason",
+    "cancelled_by",
+)
+
+
+def _inert_payload_strings(notification: ForgeNotification) -> ForgeNotification:
+    """A copy of ``notification`` with every forge-authored string escaped.
+
+    Applied ONLY when the line is about to be posted with markup parsing
+    on. The unmentioned path never calls this, so its bytes are unchanged.
+    """
+    updates = {
+        name: _escape_slack_entities(value)
+        for name in _PAYLOAD_AUTHORED_FIELDS
+        if isinstance(value := getattr(notification, name, None), str) and value
+    }
+    return notification.model_copy(update=updates) if updates else notification
+
+
 def _tasks_clause(notification: ForgeNotification) -> str:
     """`` — 4 of 4 tasks passed the checker``, or ``""`` when unknown.
 
@@ -712,7 +773,15 @@ class SlackNotifier:
                         # line, closing the standing-tappable-card window.
                         await self._stamp_terminal_pause_message(notification)
                     text = self._render(notification)
-                    await self._post_with_retry(notification, text=text)
+                    # Build-side mention lane (2026-08-15): markup parsing
+                    # is ON only for a line that ACTUALLY carries a
+                    # ``<@MEMBERID>`` — see _needs_markup_parsing. Every
+                    # other post stays byte-identical to today.
+                    await self._post_with_retry(
+                        notification,
+                        text=text,
+                        mrkdwn=_needs_markup_parsing(text),
+                    )
 
                 # Worker pacing: ~1 msg/s (TASK-JNB-006 AC-005)
                 await asyncio.sleep(_WORKER_PACING_DELAY)
@@ -734,6 +803,7 @@ class SlackNotifier:
         *,
         text: str,
         blocks: list[dict[str, Any]] | None = None,
+        mrkdwn: bool = False,
     ) -> Any | None:
         """Deliver one ``chat.postMessage`` with the 429 retry budget.
 
@@ -742,6 +812,22 @@ class SlackNotifier:
         implementation. Never raises; returns the Slack response on
         success and ``None`` when delivery failed or the retry budget
         was exhausted.
+
+        Args:
+            notification: The notification being delivered (log context).
+            text: The rendered message body.
+            blocks: Optional Block Kit blocks (``text`` stays the fallback).
+            mrkdwn: Slack markup parsing for the text body. Defaults to
+                ``False`` — the JNB-001 posture, so payload strings arrive
+                inert — and is flipped to ``True`` ONLY for the terminal
+                build lines that carry an ``<@MEMBERID>`` mention. Slack
+                does not document that a mention linkifies with markup
+                parsing off, and the ONE jarvis surface whose mentions
+                provably reach the owner posts with it on:
+                ``planning_notifier.post_threaded`` defaults
+                ``mrkdwn: bool = True`` and passes it straight into
+                ``chat_postMessage``. This mirrors that proven path
+                rather than betting on undocumented behaviour.
         """
         from slack_sdk.errors import SlackApiError
 
@@ -753,7 +839,7 @@ class SlackNotifier:
                 kwargs: dict[str, Any] = {
                     "channel": self._channel_id,
                     "text": text,
-                    "mrkdwn": False,
+                    "mrkdwn": mrkdwn,
                 }
                 if blocks is not None:
                     kwargs["blocks"] = blocks
@@ -1308,6 +1394,15 @@ class SlackNotifier:
         """
         try:
             member_id = self._resolve_mention_target(notification)
+            # The whole formatting step lives INSIDE the guard, and the
+            # type is checked rather than trusted: a registry value that
+            # is not a plain non-empty string (an object whose __str__
+            # raises, most of all) would otherwise escape _render and cost
+            # the worker the entire terminal message. A mention is a
+            # nicety; the message is not.
+            if not isinstance(member_id, str) or not member_id:
+                return ""
+            return f"<@{member_id}> "
         except Exception as exc:  # pragma: no cover - defensive backstop
             logger.warning(
                 "slack_mention_lookup_failed",
@@ -1317,9 +1412,6 @@ class SlackNotifier:
                 error=str(exc),
             )
             return ""
-        if not member_id:
-            return ""
-        return f"<@{member_id}> "
 
     def _resolve_mention_target(self, notification: ForgeNotification) -> str | None:
         """The member id to @-mention on a terminal build line, first hit wins.
@@ -1424,6 +1516,13 @@ class SlackNotifier:
         # progress, not a request, and mentioning every one of them would
         # train the owner to ignore the mention.
         mention = self._mention_prefix(notification) if event_type in _TERMINAL_EVENT_TYPES else ""
+        if mention:
+            # This line will be posted with markup parsing ON so the
+            # mention linkifies, which would also hand Slack's entity
+            # syntax to the forge-authored strings below. Escape them
+            # first: the inert-text guarantee (v1 scenario 14) holds on
+            # this path too, and the unmentioned path is untouched.
+            notification = _inert_payload_strings(notification)
 
         # Format timestamp as HH:MM (local time)
         local_completed_at = (

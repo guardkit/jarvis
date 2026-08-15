@@ -326,8 +326,104 @@ class TestBuildCompleteSpeaksPlainly:
 
         kwargs = client.chat_postMessage.await_args.kwargs
         assert "blocks" not in kwargs
-        assert kwargs["mrkdwn"] is False
         assert kwargs["text"].startswith("<@U0RICH> ")
+        # Pinned flag moved 2026-08-15: markup parsing ON for terminal
+        # lines. Slack does not document that ``<@U…>`` linkifies with it
+        # off, and the one jarvis surface whose mentions provably reach
+        # the owner posts with it on — planning_notifier.post_threaded
+        # defaults ``mrkdwn: bool = True``. A mention that renders as
+        # literal text is a mention nobody is notified by.
+        assert kwargs["mrkdwn"] is True
+
+    @staticmethod
+    async def _post_kwargs(notifier: SlackNotifier, notification: Any) -> dict[str, Any]:
+        client = AsyncMock()
+        notifier._client = client
+        await notifier.start()
+        try:
+            await notifier.notify(notification)
+            for _ in range(200):
+                if client.chat_postMessage.await_count:
+                    break
+                await asyncio.sleep(0.01)
+        finally:
+            await notifier.stop()
+        return dict(client.chat_postMessage.await_args.kwargs)
+
+    @pytest.mark.asyncio
+    async def test_non_terminal_posts_keep_markup_parsing_off(self) -> None:
+        """Only the mentioned lines change shape — everything else is as it was."""
+        kwargs = await self._post_kwargs(_notifier(), _complete(event_type="build_started"))
+        assert kwargs["mrkdwn"] is False
+
+    @pytest.mark.asyncio
+    async def test_an_unmentioned_terminal_post_also_keeps_parsing_off(self) -> None:
+        """The gate is the MENTION, not the event type — the narrowest blast radius.
+
+        This is what keeps the v1 inert-text scenario and the synthetic
+        three-event sequence byte-identical: neither has a mention source
+        wired, so neither line changes shape at all.
+        """
+        kwargs = await self._post_kwargs(_notifier(), _complete())
+        assert "<@" not in kwargs["text"]
+        assert kwargs["mrkdwn"] is False
+
+
+# ---------------------------------------------------------------------------
+# Inert text on the ONE path where markup parsing is now on (v1 scenario 14).
+# ---------------------------------------------------------------------------
+
+
+class TestHostilePayloadStaysInertOnAMentionedLine:
+    """Turning parsing on for the mention must not turn it on for forge's strings."""
+
+    @staticmethod
+    def _mentioned() -> SlackNotifier:
+        registry = BuildAudienceRegistry()
+        registry.record_planning_target(_CORR, "U0RICH")
+        return _notifier(audience=registry)
+
+    def test_a_disguised_link_in_a_failure_reason_is_escaped(self) -> None:
+        hostile = "*bold* <http://evil.com|clickme> @here"
+        text = self._mentioned()._render(
+            _complete(event_type="build_failed", failure_reason=hostile)
+        )
+        # The mention itself survives verbatim — it is the whole point.
+        assert text.startswith("<@U0RICH> ")
+        # forge's string does not: its entity syntax is neutralised, so
+        # Slack cannot render it as a link, and a bare @here never
+        # broadcasts (only the encoded <!here> form does).
+        assert "<http://evil.com|clickme>" not in text
+        assert "&lt;http://evil.com|clickme&gt;" in text
+
+    @pytest.mark.parametrize(
+        ("field", "extra"),
+        (
+            ("summary", {}),
+            ("branch", {}),
+            ("repo", {}),
+            ("pr_url", {}),
+            ("reason", {"event_type": "build_cancelled"}),
+            ("cancelled_by", {"event_type": "build_cancelled"}),
+        ),
+    )
+    def test_every_forge_authored_string_is_escaped(
+        self, field: str, extra: dict[str, Any]
+    ) -> None:
+        text = self._mentioned()._render(_complete(**{field: "<!here>"}, **extra))
+        assert "<!here>" not in text
+        assert "&lt;!here&gt;" in text
+
+    def test_the_unmentioned_path_is_byte_identical(self) -> None:
+        """No mention, no parsing, no escaping — exactly today's bytes."""
+        hostile = "*bold* <http://evil.com|clickme> @here"
+        text = _notifier()._render(_complete(event_type="build_failed", failure_reason=hostile))
+        assert hostile in text
+        assert "&lt;" not in text
+
+    def test_the_ampersand_escape_comes_first_so_it_is_not_double_escaped(self) -> None:
+        text = self._mentioned()._render(_complete(summary="a & b <c>"))
+        assert "Summary: a &amp; b &lt;c&gt;" in text
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +443,72 @@ class TestMentionLookupNeverRaises:
         text = _notifier(audience=self._ExplodingRegistry())._render(_complete())  # type: ignore[arg-type]
         assert "<@" not in text
         assert "build complete" in text
+
+    class _PoisonValueRegistry:
+        """Answers a hit — with a value that detonates on formatting."""
+
+        class _Poison:
+            def __str__(self) -> str:
+                raise RuntimeError("this member id explodes when rendered")
+
+            def __bool__(self) -> bool:
+                return True
+
+        def planning_target(self, correlation_id: str | None) -> Any:
+            return self._Poison()
+
+        def gate_clicker(self, build_id: str | None) -> Any:  # pragma: no cover
+            return None
+
+    def test_render_survives_a_member_value_whose_str_raises(self) -> None:
+        """A mention is a nicety; the message is not."""
+        text = _notifier(audience=self._PoisonValueRegistry())._render(_complete())  # type: ignore[arg-type]
+        assert "<@" not in text
+        assert "the merge word is yours" in text
+
+    class _WrongTypeRegistry:
+        """Answers a hit with a value that is not a string at all.
+
+        Its ``__str__`` is perfectly well behaved — which is the point.
+        Without the type check this renders a BOGUS mention that pings
+        nobody and reads as noise; the raise-guard alone would never
+        catch it, so the isinstance test is pinned separately here.
+        """
+
+        class _NotAnId:
+            def __str__(self) -> str:
+                return "definitely-not-a-member-id"
+
+        def planning_target(self, correlation_id: str | None) -> Any:
+            return self._NotAnId()
+
+        def gate_clicker(self, build_id: str | None) -> Any:  # pragma: no cover
+            return None
+
+    def test_a_non_string_member_value_is_never_rendered_as_a_mention(self) -> None:
+        text = _notifier(audience=self._WrongTypeRegistry())._render(_complete())  # type: ignore[arg-type]
+        assert "<@" not in text
+        assert "definitely-not-a-member-id" not in text
+        assert "the merge word is yours" in text
+
+    @pytest.mark.asyncio
+    async def test_a_poison_member_value_never_costs_the_message(self) -> None:
+        notifier = _notifier(audience=self._PoisonValueRegistry())  # type: ignore[arg-type]
+        client = AsyncMock()
+        notifier._client = client
+
+        await notifier.start()
+        try:
+            await notifier.notify(_complete())
+            for _ in range(200):
+                if client.chat_postMessage.await_count:
+                    break
+                await asyncio.sleep(0.01)
+        finally:
+            await notifier.stop()
+
+        assert client.chat_postMessage.await_count == 1
+        assert "<@" not in client.chat_postMessage.await_args.kwargs["text"]
 
     @pytest.mark.asyncio
     async def test_the_message_still_posts_unmentioned(self) -> None:
