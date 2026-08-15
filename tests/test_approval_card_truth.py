@@ -703,7 +703,8 @@ class TestSharedSeamWiring:
         assert "create_slack_sink(config, terminal_registry=terminal_registry)" in source
         reply_call = (
             "create_slack_reply_client(\n"
-            "        config, nats_client, terminal_registry=terminal_registry\n"
+            "        config, nats_client, terminal_registry=terminal_registry, "
+            "spec_texts=spec_texts\n"
             "    )"
         )
         assert reply_call in source
