@@ -115,6 +115,7 @@ from jarvis.infrastructure.slack_reply import (
     SlackSocketModeReplyClient,
     create_slack_reply_client,
 )
+from jarvis.infrastructure.spec_texts import SpecTextRegistry
 from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
 from jarvis.sessions.manager import SessionManager
 from jarvis.shared.exceptions import ConfigurationError
@@ -912,7 +913,15 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # DDR-021-style soft-fail: a flaky JetStream consumer must not block the
     # supervisor — build pauses then render the text-only fallback; planning
     # checkpoints degrade to unrendered (never a crash).
-    planning_checkpoint_renderer = create_planning_checkpoint_renderer(config)
+    # Machine chain stage 2: ONE shared store of the worked examples behind a
+    # spec digest card — the renderer WRITES them when it posts the card, the
+    # Slack reply handler READS them when the owner asks to see them. In-process
+    # only (the same posture as every other jarvis map): after a restart it is
+    # empty and that one button says so honestly. No decision depends on it.
+    spec_texts = SpecTextRegistry()
+    planning_checkpoint_renderer = create_planning_checkpoint_renderer(
+        config, spec_texts=spec_texts
+    )
     sink_is_slack = isinstance(notification_sink, SlackNotifier)
     approval_subscriber: ApprovalRequestsSubscriber | None = None
     if nats_client is not None and (sink_is_slack or planning_checkpoint_renderer is not None):
@@ -945,7 +954,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # unmet or NEITHER feature is configured; start failures soft-fail
     # per DDR-021.
     slack_reply_client: SlackSocketModeReplyClient | None = create_slack_reply_client(
-        config, nats_client, terminal_registry=terminal_registry
+        config, nats_client, terminal_registry=terminal_registry, spec_texts=spec_texts
     )
     if slack_reply_client is not None:
         try:

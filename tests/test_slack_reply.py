@@ -1194,14 +1194,20 @@ class TestBuildAppStateReplyWiring:
 
         # Approval-card truth R3-B: lifecycle threads the shared
         # terminal-state registry into the factory alongside cfg + nats.
+        # Machine chain stage 2 adds a second shared seam on the same call: the
+        # store of worked examples behind a spec digest card.
         from unittest.mock import ANY
 
+        from jarvis.infrastructure.spec_texts import SpecTextRegistry
         from jarvis.infrastructure.terminal_builds import TerminalBuildRegistry
 
-        factory.assert_called_once_with(cfg, fake_nats, terminal_registry=ANY)
+        factory.assert_called_once_with(
+            cfg, fake_nats, terminal_registry=ANY, spec_texts=ANY
+        )
         assert isinstance(
             factory.call_args.kwargs["terminal_registry"], TerminalBuildRegistry
         )
+        assert isinstance(factory.call_args.kwargs["spec_texts"], SpecTextRegistry)
         fake_reply.start.assert_awaited_once()
         assert state.slack_reply_client is fake_reply
 

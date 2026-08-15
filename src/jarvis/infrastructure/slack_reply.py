@@ -69,6 +69,7 @@ import structlog
 
 # Stdlib-only module — safe on the cold import path (unlike the
 # nats_core / slack-sdk chains, which stay lazily imported below).
+from jarvis.infrastructure.spec_texts import SpecTextRegistry
 from jarvis.infrastructure.terminal_builds import (
     TerminalBuildRecord,
     TerminalBuildRegistry,
@@ -242,6 +243,7 @@ class ApprovalReplyHandler:
         "_decision_lock",
         "_operator_ids",
         "_publisher",
+        "_spec_texts",
         "_terminal_registry",
         "_web_client",
     )
@@ -253,11 +255,16 @@ class ApprovalReplyHandler:
         publisher: ApprovalResponsePublisher,
         web_client: Any | None = None,
         terminal_registry: TerminalBuildRegistry | None = None,
+        spec_texts: SpecTextRegistry | None = None,
     ) -> None:
         """See :func:`build_reply_handler` (the public factory)."""
         self._operator_ids = operator_ids
         self._publisher = publisher
         self._web_client = web_client
+        # Machine chain stage 2: the worked examples behind a spec digest card,
+        # written by the checkpoint renderer. None = unwired → "Show the worked
+        # examples" answers honestly that they are not to hand.
+        self._spec_texts = spec_texts
         # Approval-card truth R3-B: shared terminal-state registry, READ
         # side (the notification sink writes it). None = unwired →
         # every consult misses (today's behaviour).
@@ -317,6 +324,11 @@ class ApprovalReplyHandler:
             ACTION_APPROVE,
             ACTION_CANCEL,
             ACTION_DEFER,
+            ACTION_DIGEST_APPROVE,
+            ACTION_DIGEST_NOTE,
+            ACTION_DIGEST_SHOW_SPEC,
+            ACTION_DIGEST_SIGN_IN_AGREE,
+            ACTION_DIGEST_SIGN_IN_DISAGREE,
             ACTION_EDIT,
             ACTION_WHOLE_APPROVE,
         )
@@ -324,6 +336,21 @@ class ApprovalReplyHandler:
         if action_id == ACTION_EDIT:
             # Open the modal BEFORE any lock (arch F4 — trigger_id ~3s TTL).
             await self._handle_edit_open(payload, action, user_id)
+            return
+        # --- 2b. Spec digest card (machine chain, stage 2) ---------------
+        # Both modal openers run BEFORE any lock, for the same trigger_id TTL
+        # reason as the edit modal above.
+        if action_id == ACTION_DIGEST_NOTE:
+            await self._handle_digest_note_open(payload, action)
+            return
+        if action_id == ACTION_DIGEST_SHOW_SPEC:
+            await self._handle_digest_show_spec(payload, action)
+            return
+        if action_id in (ACTION_DIGEST_SIGN_IN_AGREE, ACTION_DIGEST_SIGN_IN_DISAGREE):
+            await self._handle_digest_sign_in(payload, action, action_id)
+            return
+        if action_id == ACTION_DIGEST_APPROVE:
+            await self._handle_digest_approve(payload, action, user_id)
             return
         if action_id in (ACTION_APPROVE, ACTION_DEFER, ACTION_CANCEL, ACTION_WHOLE_APPROVE):
             await self._handle_dialogue_click(payload, action, action_id, user_id)
@@ -646,8 +673,15 @@ class ApprovalReplyHandler:
         decided_by: str,
         decision: str,
         dispositions: list[Any],
+        notes: str | None = None,
     ) -> bool:
-        """Publish exactly one aggregate decision (first-publish-wins)."""
+        """Publish exactly one aggregate decision (first-publish-wins).
+
+        ``notes`` carries the owner's own words VERBATIM — never summarised,
+        never reworded. It is the spec digest card's note channel (the field has
+        always existed on the wire and the pipeline has always read it); every
+        other caller omits it and publishes exactly what it published before.
+        """
         if request_id in self._decided_request_ids:
             logger.info("dialogue_duplicate_publish_dropped", request_id=request_id)
             return False
@@ -659,6 +693,7 @@ class ApprovalReplyHandler:
             request_id=request_id,
             decision=decision,  # type: ignore[arg-type]
             decided_by=decided_by,
+            notes=notes,
             dispositions=dispositions or None,
         )
         subject = approval_subject + ".response"
@@ -830,7 +865,13 @@ class ApprovalReplyHandler:
         from jarvis.infrastructure import assumption_dialogue as ad
 
         view = payload.get("view") or {}
-        if view.get("callback_id") != ad.EDIT_MODAL_CALLBACK_ID:
+        callback_id = view.get("callback_id")
+        # Two modals submit here, and a submission that matches neither is
+        # dropped — but SAID, not silently: an unrecognised callback id used to
+        # return with no log at all, which is how a note could vanish between a
+        # person typing it and the machine hearing it.
+        if callback_id not in (ad.EDIT_MODAL_CALLBACK_ID, ad.NOTE_MODAL_CALLBACK_ID):
+            logger.info("view_submission_unknown_callback_dropped", callback_id=callback_id)
             return
 
         user_id = (payload.get("user") or {}).get("id")
@@ -838,6 +879,10 @@ class ApprovalReplyHandler:
         # only allowlist members can record a decision.
         if not user_id or user_id not in self._operator_ids:
             logger.warning("dialogue_edit_unauthorized_submission", user_id=user_id)
+            return
+
+        if callback_id == ad.NOTE_MODAL_CALLBACK_ID:
+            await self._handle_digest_note_submission(payload, view, user_id)
             return
 
         try:
@@ -894,6 +939,258 @@ class ApprovalReplyHandler:
                 decided_by=user_id,
                 decision=ad.aggregate_decision(final_state),
                 dispositions=self._dispositions_from_state(final_state),
+            )
+
+    # ------------------------------------------------------------------
+    # The spec digest card (machine chain, stage 2)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _digest_click(
+        payload: dict[str, Any], action: dict[str, Any]
+    ) -> tuple[dict[str, Any], str | None, str | None] | None:
+        """Decode one digest-card click → (routing ids, channel, message ts).
+
+        ``None`` when the control's value is unreadable — the click is dropped
+        with a log entry and never propagates (DDR-007).
+        """
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        try:
+            button = ad.parse_item_value(_extract_action_value(action))
+        except ValueError as exc:
+            logger.warning("digest_click_malformed_value_dropped", error=str(exc))
+            return None
+        container = payload.get("container") or {}
+        channel_id = (payload.get("channel") or {}).get("id") or container.get("channel_id")
+        message_ts = container.get("message_ts")
+        return button, channel_id, message_ts
+
+    async def _handle_digest_note_open(
+        self, payload: dict[str, Any], action: dict[str, Any]
+    ) -> None:
+        """Open the note box (pre-lock — trigger TTL). Never raises.
+
+        The owner's red pen is a plain-English sentence, so the click collects
+        one instead of publishing anything: nothing reaches the wire until the
+        modal is submitted.
+        """
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        decoded = self._digest_click(payload, action)
+        if decoded is None:
+            return
+        button, channel_id, message_ts = decoded
+
+        trigger_id = payload.get("trigger_id")
+        if self._web_client is None or not trigger_id:
+            logger.warning("digest_note_no_trigger_or_client")
+            return
+
+        private_metadata = json.dumps(
+            {
+                "correlation_id": button["correlation_id"],
+                "request_id": button["request_id"],
+                "cycle": button["cycle"],
+                "approval_subject": button["approval_subject"],
+                "channel": channel_id,
+                "message_ts": message_ts,
+            },
+            separators=(",", ":"),
+        )
+        try:
+            await self._web_client.views_open(
+                trigger_id=trigger_id,
+                view=ad.build_note_modal(private_metadata=private_metadata),
+            )
+        except Exception as exc:
+            logger.warning(
+                "digest_note_modal_open_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    async def _handle_digest_show_spec(
+        self, payload: dict[str, Any], action: dict[str, Any]
+    ) -> None:
+        """Open the read-only worked-examples view (pre-lock). Never raises.
+
+        One click deeper, and never the ask: this view decides nothing, has no
+        submit control, and publishes nothing. When the examples are no longer
+        to hand (a restart emptied the in-process store) the view says so
+        plainly rather than opening empty.
+        """
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        decoded = self._digest_click(payload, action)
+        if decoded is None:
+            return
+        button, _channel_id, _message_ts = decoded
+
+        trigger_id = payload.get("trigger_id")
+        if self._web_client is None or not trigger_id:
+            logger.warning("digest_show_spec_no_trigger_or_client")
+            return
+
+        record = (
+            self._spec_texts.get(str(button["request_id"]))
+            if self._spec_texts is not None
+            else None
+        )
+        if record is None:
+            logger.info(
+                "digest_show_spec_not_held",
+                request_id=button["request_id"],
+            )
+            view = ad.build_spec_unavailable_modal()
+        else:
+            view = ad.build_spec_modal(feature=record.feature, spec_text=record.spec_text)
+        try:
+            await self._web_client.views_open(trigger_id=trigger_id, view=view)
+        except Exception as exc:
+            logger.warning(
+                "digest_show_spec_modal_open_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    async def _handle_digest_sign_in(
+        self, payload: dict[str, Any], action: dict[str, Any], action_id: str
+    ) -> None:
+        """Record the sign-in answer ON the card. Publishes nothing. Never raises.
+
+        The answer is written into the message the same way every other decided
+        item is, so it survives a restart in the only place that survives one —
+        the message itself. Saying yes to the spec is what carries it to the
+        wire, as a per-item value.
+        """
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        decoded = self._digest_click(payload, action)
+        if decoded is None:
+            return
+        button, channel_id, message_ts = decoded
+        request_id = str(button["request_id"])
+        item_id = str(button["assumption_id"])
+        disposition = "accepted" if action_id == ad.ACTION_DIGEST_SIGN_IN_AGREE else "rejected"
+
+        async with self._decision_lock:
+            if request_id in self._decided_request_ids:
+                # The card is already answered — the question went with it.
+                logger.info("digest_sign_in_after_decision_dropped", request_id=request_id)
+                return
+            blocks = await self._fetch_dialogue_blocks(channel_id, message_ts, payload)
+            updated = ad.apply_sign_in_answer(blocks, item_id=item_id, disposition=disposition)
+            await self._chat_update_blocks(
+                channel_id,
+                message_ts,
+                updated,
+                text="Your answer about signing in is recorded on the card.",
+            )
+            logger.info(
+                "digest_sign_in_answer_recorded",
+                request_id=request_id,
+                item_id=item_id,
+                disposition=disposition,
+            )
+
+    async def _handle_digest_approve(
+        self, payload: dict[str, Any], action: dict[str, Any], user_id: str
+    ) -> None:
+        """Publish the owner's yes to the spec. Never raises.
+
+        Carries whatever the card was told about signing in as a per-item value
+        — read out of the message, which is the authoritative copy. An
+        unanswered sign-in question sends no item at all, which the pipeline
+        reads as agreement, exactly as the card's own fine print says.
+        """
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        decoded = self._digest_click(payload, action)
+        if decoded is None:
+            return
+        button, channel_id, message_ts = decoded
+
+        async with self._decision_lock:
+            blocks = await self._fetch_dialogue_blocks(channel_id, message_ts, payload)
+            state = ad.parse_dialogue_blocks(blocks)
+            published = await self._publish_dialogue_decision(
+                request_id=str(button["request_id"]),
+                approval_subject=str(button["approval_subject"]),
+                correlation_id=button["correlation_id"] or None,
+                decided_by=user_id,
+                decision="approve",
+                dispositions=self._dispositions_from_state(state),
+            )
+            if not published:
+                return
+            await self._dialogue_status_update(
+                channel_id,
+                message_ts,
+                payload,
+                (
+                    "You said yes to the spec. The task plan and the quality "
+                    "checklist are next — nothing is built until you give the "
+                    "go-ahead."
+                ),
+            )
+
+    async def _handle_digest_note_submission(
+        self, payload: dict[str, Any], view: dict[str, Any], user_id: str
+    ) -> None:
+        """Send the owner's note to the machine, verbatim. Never raises.
+
+        ``reject`` is the wire's own literal and the only one that carries a
+        note; the spec digest door branches on it itself, so here it means
+        REWRITE THE SPEC FROM THIS — never "cancel the run". A note with no
+        words is not sent: there would be nothing to rewrite from.
+        """
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        try:
+            meta = json.loads(view.get("private_metadata") or "")
+        except (TypeError, ValueError):
+            logger.warning("digest_note_bad_private_metadata")
+            return
+
+        request_id = str(meta.get("request_id") or "")
+        approval_subject = str(meta.get("approval_subject") or "")
+        correlation_id = meta.get("correlation_id") or None
+        channel_id = meta.get("channel")
+        message_ts = meta.get("message_ts")
+        if not request_id or not approval_subject:
+            logger.warning("digest_note_incomplete_metadata", request_id=request_id)
+            return
+
+        note = ad.read_note_submission(view).strip()
+        if not note:
+            # Only reachable from a stale or hand-made submission: the modal's
+            # input is required.
+            logger.warning("digest_note_empty_dropped", request_id=request_id)
+            return
+
+        async with self._decision_lock:
+            blocks = await self._fetch_dialogue_blocks(channel_id, message_ts, payload)
+            state = ad.parse_dialogue_blocks(blocks)
+            published = await self._publish_dialogue_decision(
+                request_id=request_id,
+                approval_subject=approval_subject,
+                correlation_id=correlation_id,
+                decided_by=user_id,
+                decision="reject",
+                dispositions=self._dispositions_from_state(state),
+                notes=note,
+            )
+            if not published:
+                return
+            await self._dialogue_status_update(
+                channel_id,
+                message_ts,
+                payload,
+                (
+                    "Your note is with the machine. It will rewrite the spec "
+                    "from it and come back with a fresh list."
+                ),
             )
 
     # ------------------------------------------------------------------
@@ -1021,6 +1318,7 @@ def build_reply_handler(
     publisher: ApprovalResponsePublisher,
     web_client: Any | None = None,
     terminal_registry: TerminalBuildRegistry | None = None,
+    spec_texts: SpecTextRegistry | None = None,
 ) -> ApprovalReplyHandler:
     """Public factory for :class:`ApprovalReplyHandler`.
 
@@ -1040,6 +1338,10 @@ def build_reply_handler(
             consults it before publishing so a tap on an already-terminal
             build is answered honestly instead of published into forge's
             silent drop. ``None`` (unwired) keeps today's behaviour.
+        spec_texts: Shared store of the worked examples behind a spec digest
+            card, written by the planning checkpoint renderer; read when the
+            owner asks to see them. ``None`` (unwired) makes that one button
+            answer honestly that they are not to hand.
 
     Returns:
         A ready :class:`ApprovalReplyHandler`.
@@ -1049,6 +1351,7 @@ def build_reply_handler(
         publisher=publisher,
         web_client=web_client,
         terminal_registry=terminal_registry,
+        spec_texts=spec_texts,
     )
 
 
@@ -1263,6 +1566,7 @@ def create_slack_reply_client(
     nats_client: NATSClient | None,
     *,
     terminal_registry: TerminalBuildRegistry | None = None,
+    spec_texts: SpecTextRegistry | None = None,
 ) -> SlackSocketModeReplyClient | None:
     """Create the shared Socket Mode client, or a logged no-op (``None``).
 
@@ -1342,6 +1646,7 @@ def create_slack_reply_client(
             publisher=NatsApprovalResponsePublisher(nats_client),
             web_client=web_client,
             terminal_registry=terminal_registry,
+            spec_texts=spec_texts,
         )
     else:
         logger.info(

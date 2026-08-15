@@ -31,6 +31,14 @@ cleared, because the shape is a contract of record (DDR-030,
 assumption in the FEAT-JARVIS-005 spec) that only a spec ruling may change.
 This fence is deliberately silent about it rather than blessing it.
 
+**One gap CLOSED, and one exemption taken deliberately (2026-08-14).** The
+planning surfaces — the per-assumption dialogue and the new spec digest card —
+are now rendered here. The dialogue was never covered before, which meant the
+one surface Rich actually taps was the one surface this fence never rendered.
+The single exemption is the read-only view behind "Show the worked examples":
+it carries the spec's own words verbatim, because its whole value is fidelity,
+and it is asserted as an exemption below rather than left to be discovered.
+
 **How the fence works.** It renders the real Slack surfaces with *neutral*
 fixture data and asserts the rendered operator-visible text carries no
 codename. Feeding neutral data is the point: it isolates the **template** (the
@@ -49,6 +57,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from jarvis.infrastructure import assumption_dialogue as ad
 from jarvis.infrastructure.forge_notifications import ForgeNotification
 from jarvis.infrastructure.slack_notifier import (
     SlackNotifier,
@@ -284,6 +293,181 @@ class TestReplySurfacesRenderPlainNames:
         text = web_client.chat_postEphemeral.await_args.kwargs["text"]
         _assert_plain([text], "ApprovalReplyHandler._send_ephemeral_refusal")
         assert text == "You are not authorized to decide build approvals from Slack."
+
+
+# ---------------------------------------------------------------------------
+# The planning surfaces Rich actually taps.
+#
+# Both were outside this fence until 2026-08-14 — the one surface a person
+# decides on was the one surface it never rendered. Neutral fixtures again:
+# these assertions test the TEMPLATE, and the card body a planning run supplies
+# is authored elsewhere.
+# ---------------------------------------------------------------------------
+_PLANNING_SUBJECT = "agents.approval.forge.plan-cid123"
+
+
+def _dialogue_details(n: int = 2, *, checkpoint_type: str = "product_docs") -> dict[str, Any]:
+    """An assumption checkpoint whose every data field is codename-free."""
+    return {
+        "checkpoint_type": checkpoint_type,
+        "cycle": 1,
+        "attempt_count": 1,
+        "expected_approver": "U_RICH",
+        "parent_request_id": "1700000000.000100",
+        "summary": {
+            "checkpoint": "product-docs",
+            "assumptions": [
+                {
+                    "id": f"A{i + 1}",
+                    "text": f"Assumption {i + 1} proposed text",
+                    "confidence": "medium",
+                    "basis": "the input did not say",
+                }
+                for i in range(n)
+            ],
+        },
+    }
+
+
+def _digest_details(*, sign_in: bool = False, tags: list[str] | None = None) -> dict[str, Any]:
+    """A spec digest card whose every data field is codename-free."""
+    card: dict[str, Any] = {
+        "checkpoint": ad.DIGEST_CHECKPOINT_TYPE,
+        "title": "The spec is ready — here's what will be built",
+        "feature": "version-endpoint",
+        "what_happened": "Below is one sentence per example, in the order they appear.",
+        "what_it_will_do": [
+            {
+                "sentence": "Asking the service which version it runs returns the build.",
+                "tags": tags if tags is not None else ["@key-example", "@smoke"],
+            }
+        ],
+        "what_the_machine_assumed": [
+            {"assumption": "The version comes from the image.", "why": "the input did not say"}
+        ],
+        "approve_means": "Nothing is built yet.",
+        "note_means": "The machine rewrites the spec from what you say.",
+        "show_means": "Read the examples themselves. You never have to.",
+        "no_answer_means": "No answer within one hour: the run stops and says so.",
+        "worked_examples": "Feature: version\n  Scenario: it answers\n",
+    }
+    if sign_in:
+        card["sign_in_check"] = {
+            "title": "One thing to confirm",
+            "answer_id": "sign-in",
+            "statement": "Nothing in this feature involves signing in.",
+            "body": "Say whether that is right, with the spec in front of you.",
+            "why_we_ask": "The check that spots this is a keyword scan.",
+            "agree_means": "The build carries on.",
+            "disagree_means": "A person registers the quality checklist by hand.",
+            "no_answer_means": "Saying nothing here is taken as agreement.",
+            "flagged_lines": ["an example mentions a password"],
+        }
+    return {
+        "checkpoint_type": ad.DIGEST_CHECKPOINT_TYPE,
+        "cycle": None,
+        "expected_approver": "U_RICH",
+        "parent_request_id": "1700000000.000100",
+        "summary": card,
+    }
+
+
+def _render(details: dict[str, Any]) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    count = ad.chunk_count_for(details)
+    for index in range(count):
+        blocks.extend(
+            ad.build_dialogue_blocks(
+                details,
+                correlation_id="cid123",
+                request_id="req-1",
+                approval_subject=_PLANNING_SUBJECT,
+                chunk_index=index,
+                chunk_count=count,
+            )
+        )
+    return blocks
+
+
+class TestPlanningDialogueRendersPlainNames:
+    """The per-assumption dialogue — the surface the fence used to skip."""
+
+    @pytest.mark.parametrize("checkpoint_type", ("product_docs", "product_docs_escalated"))
+    def test_dialogue_blocks_are_codename_free(self, checkpoint_type: str) -> None:
+        blocks = _render(_dialogue_details(checkpoint_type=checkpoint_type))
+        _assert_plain(_visible_texts(blocks), f"build_dialogue_blocks({checkpoint_type})")
+
+    def test_zero_assumption_dialogue_is_codename_free(self) -> None:
+        _assert_plain(_visible_texts(_render(_dialogue_details(0))), "dialogue (no items)")
+
+    def test_edit_modal_is_codename_free(self) -> None:
+        view = ad.build_edit_modal(
+            assumption_id="A1", prefill="a proposed value", private_metadata="{}"
+        )
+        _assert_plain(_visible_texts(view), "build_edit_modal")
+
+    @pytest.mark.parametrize("chunk_index", (0, 1))
+    def test_dialogue_fallback_text_is_codename_free(self, chunk_index: int) -> None:
+        text = ad._fallback_text(_dialogue_details(), chunk_index=chunk_index, chunk_count=2)
+        _assert_plain([text], "dialogue fallback text")
+
+
+class TestSpecDigestCardRendersPlainNames:
+    """The spec digest card — the one card that decides what gets built."""
+
+    def test_digest_blocks_are_codename_free(self) -> None:
+        _assert_plain(_visible_texts(_render(_digest_details())), "spec digest card")
+
+    def test_the_sign_in_variant_is_codename_free(self) -> None:
+        blocks = _render(_digest_details(sign_in=True))
+        _assert_plain(_visible_texts(blocks), "spec digest card (sign-in)")
+
+    def test_an_answered_sign_in_question_is_codename_free(self) -> None:
+        blocks = ad.apply_sign_in_answer(
+            _render(_digest_details(sign_in=True)), item_id="sign-in", disposition="rejected"
+        )
+        _assert_plain(_visible_texts(blocks), "spec digest card (answered)")
+
+    def test_the_note_modal_is_codename_free(self) -> None:
+        _assert_plain(_visible_texts(ad.build_note_modal(private_metadata="{}")), "note modal")
+
+    def test_the_unavailable_examples_view_is_codename_free(self) -> None:
+        _assert_plain(
+            _visible_texts(ad.build_spec_unavailable_modal()), "worked examples (unavailable)"
+        )
+
+    def test_digest_fallback_text_is_codename_free(self) -> None:
+        text = ad._fallback_text(_digest_details(), chunk_index=0, chunk_count=1)
+        _assert_plain([text], "spec digest fallback text")
+
+    def test_an_internal_label_never_reaches_the_card(self) -> None:
+        """The hostile fixture: a spec's own labels are not the card's vocabulary.
+
+        The allowlist is what makes this hold — an unmapped label contributes
+        nothing — so a spec carrying task ids or codenames on its examples can
+        never turn a leak into a fence failure at render time.
+        """
+        blocks = _render(
+            _digest_details(tags=["@spl-003", "@TASK-ABW-002", "@forge-only", "@coach"])
+        )
+        _assert_plain(_visible_texts(blocks), "spec digest card (hostile labels)")
+
+    def test_the_worked_examples_view_is_deliberately_exempt(self) -> None:
+        """Named here so the exemption is a decision, not an oversight.
+
+        The read-only view behind "Show the worked examples" carries the spec's
+        OWN words, verbatim. Real specs in this estate carry task ids and tool
+        names, and scrubbing them would make the one surface whose whole value
+        is fidelity the one surface that lies. It is one click deeper, it is
+        never the ask, and every other string on the card is fenced above.
+        """
+        spec = "Feature: sign in\n  Scenario: TASK-ABW-002 the pipeline logs in\n"
+        view = ad.build_spec_modal(feature="version-endpoint", spec_text=spec)
+        rendered = "\n".join(_visible_texts(view))
+        assert spec in rendered
+        # The frame around it is still the fence's business.
+        frame = [t for t in _visible_texts(view) if spec not in t]
+        _assert_plain(frame, "worked examples view (frame)")
 
 
 # ---------------------------------------------------------------------------
