@@ -7,7 +7,10 @@ Covers the acceptance criteria in
 - AC-002: Malformed envelopes never reach sink
 - AC-003: source_id != 'forge' never reaches sink
 - AC-004: Correlation-map miss still notifies sink
-- AC-005: stage_complete events never forwarded to sink
+- AC-005: stage_complete events never forwarded to sink (narrowed 2026-08-24:
+  the merge-deploy outcome line forwards ONLY stage_label == "merge-deploy";
+  every other stage label still never reaches the sink — see
+  tests/test_merge_deploy_outcome_line.py)
 - AC-006: Raising sink produces WARNING, never propagates
 - AC-007: No sink bound → byte-identical behaviour
 - AC-008: ForgeNotification widened with optional build_id, pr_url, summary
@@ -284,7 +287,12 @@ async def test_correlation_miss_still_notifies_sink():
 
 @pytest.mark.asyncio
 async def test_stage_complete_never_reaches_sink():
-    """stage_complete events are NOT forwarded to sink (ASSUM-002)."""
+    """Ordinary stage_complete events are NOT forwarded to sink (ASSUM-002).
+
+    Narrowed 2026-08-24: the merge-deploy outcome line forwards ONLY
+    ``stage_label == "merge-deploy"`` (tests/test_merge_deploy_outcome_line.py);
+    this fence pins that every OTHER stage label still never reaches it.
+    """
     sink = mock.AsyncMock()
     subscriber = _make_subscriber()
     subscriber.bind_notification_sink(sink)
