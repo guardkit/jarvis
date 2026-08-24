@@ -218,6 +218,10 @@ _PAYLOAD_AUTHORED_FIELDS = (
     "failure_reason",
     "reason",
     "cancelled_by",
+    # Merge-deploy outcome line (2026-08-24): both are forge-authored
+    # sentences relayed onto a line that can carry a mention.
+    "failed_step",
+    "detail",
 )
 
 
@@ -263,6 +267,60 @@ def _where_clause(notification: ForgeNotification) -> str:
     if notification.repo:
         where = f"{where} in {notification.repo}"
     return f"The code is on {where}."
+
+
+# The stage label forge gives the merge-and-deploy executor's
+# stage-complete event — the wire contract from the make-merge-work
+# spec (2026-08-24). Kept as a literal here: this module imports
+# forge_notifications for type-checking only.
+_MERGE_DEPLOY_STAGE_LABEL = "merge-deploy"
+
+
+def _is_merge_deploy_outcome(notification: ForgeNotification) -> bool:
+    """True when ``notification`` is the merge-and-deploy outcome line.
+
+    A stage-complete for the ``merge-deploy`` stage, EXCEPT the owner's
+    own "rejected" decision — the card already shows that, so no line is
+    owed (the subscriber never forwards it; this guard keeps the
+    renderer honest if one arrives anyway, falling back to the plain
+    stage line).
+    """
+    return (
+        notification.event_type == "stage_complete"
+        and notification.stage_label == _MERGE_DEPLOY_STAGE_LABEL
+        and notification.result != "rejected"
+    )
+
+
+def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str) -> str:
+    """The one-line merge-and-deploy report (make-merge-work spec, step 5).
+
+    Plain sentences, the owner's language law. Dispatch order: the
+    explicit revert first, then the two explicit stop classes, then
+    success — claimed either by the explicit ``result`` or by a PASSED
+    stage whose result field is absent or unrecognised — and the stopped
+    line as the honest default for everything else. Absent fields
+    degrade: no counts drops the checks clause, no failed_step says
+    'the merge', no detail drops the why clause.
+    """
+    prefix = f"{mention}[{hhmm}] Pipeline {notification.feature_id}: "
+    result = notification.result
+    if result == "merged-deploy-reverted":
+        return (
+            f"{prefix}merged, then the deploy failed its checks and rolled back "
+            "automatically — the live copy was never broken. The branch is kept."
+        )
+    if result == "merged-and-running" or (
+        result not in ("merged-deploy-failed", "merge-refused")
+        and notification.status == "PASSED"
+    ):
+        checks = ""
+        if notification.checks_passed is not None and notification.checks_total is not None:
+            checks = f" — checks {notification.checks_passed}/{notification.checks_total}"
+        return f"{prefix}merged and running{checks}. Rollback is one command; the branch is kept."
+    step = notification.failed_step or "the merge"
+    why = f" — {notification.detail}" if notification.detail else ""
+    return f"{prefix}merge-and-deploy stopped at {step}{why}. Nothing half-done; the branch is kept."
 
 
 # ---------------------------------------------------------------------------
@@ -628,8 +686,10 @@ class SlackNotifier:
         """Enqueue a notification; never raises (DDR-007).
 
         Implements dedup (TASK-JNB-006 ASSUM-006): first-wins 300s TTL keyed
-        on (event_type, build_id, stage_label) for stream events and
-        ('build_queued', correlation_id) for intake events.
+        on (event_type, build_id, stage_label) for stream events,
+        ('build_queued', correlation_id) for intake events, and
+        ('stage_complete', correlation_id, stage_label) for the
+        merge-deploy outcome line (2026-08-24).
 
         If the queue is full, drops the oldest queued message with WARNING.
         If the sink is not started, logs WARNING and drops.
@@ -1449,6 +1509,7 @@ class SlackNotifier:
         """Construct dedup key per TASK-JNB-006 ASSUM-006.
 
         For build_queued (intake): ('build_queued', correlation_id)
+        For stage_complete: ('stage_complete', correlation_id, stage_label)
         For stream events: (event_type, build_id, stage_label or '')
 
         Args:
@@ -1460,7 +1521,19 @@ class SlackNotifier:
         if notification.event_type == "build_queued":
             return ("build_queued", notification.correlation_id)
 
-        # Stream events (build_started, build_complete, build_failed, stage_complete)
+        if notification.event_type == "stage_complete":
+            # Stage-complete reaches this sink only as the merge-deploy
+            # outcome line (2026-08-24). The correlation id is the join
+            # that is ALWAYS present on a stage-complete payload, so a
+            # redelivered outcome dedups while two different runs'
+            # outcomes can never collide on a blank build_id.
+            return (
+                "stage_complete",
+                notification.correlation_id,
+                notification.stage_label or "",
+            )
+
+        # Stream events (build_started, build_complete, build_failed)
         build_id = notification.build_id or ""
         stage_label = notification.stage_label or ""
         return (notification.event_type, build_id, stage_label)
@@ -1512,10 +1585,18 @@ class SlackNotifier:
 
         # Build-side mention (2026-08-15). Terminal events only: those are
         # the lines that mean an act is now owed by a person. build_queued
-        # / build_started / stage_complete stay unmentioned — they are
-        # progress, not a request, and mentioning every one of them would
-        # train the owner to ignore the mention.
-        mention = self._mention_prefix(notification) if event_type in _TERMINAL_EVENT_TYPES else ""
+        # / build_started / ordinary stage_complete stay unmentioned — they
+        # are progress, not a request, and mentioning every one of them
+        # would train the owner to ignore the mention. The one stage that
+        # IS a person's outcome is merge-deploy (2026-08-24): its line
+        # answers the owner's own button press, so it rides the same
+        # mention chain as the terminal build lines.
+        is_merge_deploy_outcome = _is_merge_deploy_outcome(notification)
+        mention = (
+            self._mention_prefix(notification)
+            if event_type in _TERMINAL_EVENT_TYPES or is_merge_deploy_outcome
+            else ""
+        )
         if mention:
             # This line will be posted with markup parsing ON so the
             # mention linkifies, which would also hand Slack's entity
@@ -1537,6 +1618,11 @@ class SlackNotifier:
             return f"[{hhmm}] Pipeline {feature_id}: build-queued"
 
         if event_type == "stage_complete":
+            if is_merge_deploy_outcome:
+                # Merge-deploy outcome line (make-merge-work spec,
+                # 2026-08-24). Every other stage label keeps the
+                # checkpoint-slice line below byte-identically.
+                return _merge_deploy_line(notification, mention, hhmm)
             # Checkpoint slice: specifically the "queued" stage
             stage_label = notification.stage_label or "unknown"
             status = notification.status or "UNKNOWN"

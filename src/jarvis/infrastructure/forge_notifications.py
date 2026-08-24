@@ -82,6 +82,40 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 logger = structlog.get_logger(__name__)
 
+# The stage label forge gives the merge-and-deploy executor's
+# stage-complete event (make-merge-work spec, 2026-08-24). Only this
+# label earns a Slack outcome line; every other stage label keeps the
+# no-sink behaviour byte-identically.
+_MERGE_DEPLOY_STAGE_LABEL = "merge-deploy"
+
+
+def _outcome_str(value: object) -> str | None:
+    """A non-blank string off the raw merge-deploy payload, or None.
+
+    The outcome fields (``result``, ``failed_step``, ``detail``, …) are
+    additive raw-payload fields — forge may not send them at all, and
+    nothing upstream has validated them. A missing, blank or non-string
+    value degrades to None (the Slack renderer's own fallbacks take
+    over) rather than costing the owner the whole line.
+    """
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return None
+
+
+def _outcome_count(value: object) -> int | None:
+    """A non-negative int off the raw merge-deploy payload, or None.
+
+    ``bool`` is refused explicitly (it is an ``int`` subclass), and
+    nothing is coerced — a junk count costs the checks clause on the
+    rendered line, never the line itself.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
 # ---------------------------------------------------------------------------
 # §1 — ForgeNotification (DM-forge-notification §1)
 # ---------------------------------------------------------------------------
@@ -340,6 +374,56 @@ class ForgeNotification(BaseModel):
         description=(
             "Cancellation reason from BuildCancelledPayload. "
             "Optional field added in TASK-JNB-005 per frozen-model rule."
+        ),
+    )
+    result: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Merge-and-deploy outcome class, read defensively off the "
+            "raw merge-deploy stage-complete payload (additive field; "
+            "make-merge-work spec 2026-08-24). Known values: "
+            "merged-and-running, merged-deploy-reverted, "
+            "merged-deploy-failed, merge-refused, rejected. Optional "
+            "field added per frozen-model rule; None on every other "
+            "event."
+        ),
+    )
+    failed_step: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Which of the executor's steps stopped the merge-and-deploy, "
+            "off the raw merge-deploy payload (additive, defensive). "
+            "None renders as 'the merge'."
+        ),
+    )
+    detail: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Plain-sentence reason the merge-and-deploy stopped, off "
+            "the raw merge-deploy payload (additive, defensive). "
+            "Forge-authored text — relayed verbatim, escaped on "
+            "mentioned Slack lines."
+        ),
+    )
+    checks_passed: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Live checks that passed against the running copy, off the "
+            "raw merge-deploy payload (additive, defensive). Rendered "
+            "with checks_total as 'checks {p}/{t}'; either side missing "
+            "drops the clause."
+        ),
+    )
+    checks_total: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Total live checks registered for the deploy, off the raw "
+            "merge-deploy payload (additive, defensive)."
         ),
     )
 
@@ -1145,6 +1229,13 @@ class ForgeNotificationsSubscriber:
         key is ``payload.correlation_id`` because StageCompletePayload
         carries one of its own (the three build-lifecycle payloads do
         not).
+
+        One addition (make-merge-work spec, 2026-08-24): a stage-complete
+        whose ``stage_label`` is ``merge-deploy`` ALSO projects onto the
+        notification sink so the owner's Slack channel carries the
+        merge-and-deploy outcome line. Every other stage label keeps the
+        original no-sink behaviour byte-identically, and the CLI /
+        routing-history path below is untouched for all labels.
         """
         from nats_core.events import StageCompletePayload
 
@@ -1160,6 +1251,69 @@ class ForgeNotificationsSubscriber:
             return
 
         correlation_id = payload.correlation_id
+
+        # --- Merge-deploy outcome line (make-merge-work spec, 2026-08-24) ---
+        # When the stage that finished is the merge-and-deploy executor,
+        # the owner gets a Slack line saying what actually happened, the
+        # same way the build lifecycle lines do. Every other stage label
+        # keeps today's behaviour byte-identically: no sink call. The
+        # seam sits BEFORE the correlation lookup (mirroring the
+        # TASK-JNB-002 lifecycle seam): a jarvis restart between the
+        # build and the merge press must not cost the owner the outcome
+        # line. The outcome fields are additive raw-payload fields and
+        # are read defensively — absent or junk values degrade to None.
+        # Per DDR-007, sink errors are WARNING-only; they never propagate.
+        if (
+            self._notification_sink is not None
+            and payload.stage_label == _MERGE_DEPLOY_STAGE_LABEL
+        ):
+            raw = envelope.payload if isinstance(envelope.payload, dict) else {}
+            result = _outcome_str(raw.get("result"))
+            if result == "rejected":
+                # The owner pressed reject: the card already shows the
+                # decision, so no line is owed.
+                logger.debug(
+                    "merge_deploy_outcome_rejected_no_line",
+                    correlation_id=correlation_id,
+                )
+            else:
+                try:
+                    try:
+                        sink_completed_at = _parse_completed_at(payload.completed_at)
+                    except ValueError:
+                        # A malformed completed_at must not cost the owner
+                        # the outcome line — the envelope's own timestamp
+                        # is the honest fallback (the same source the
+                        # lifecycle seam uses).
+                        sink_completed_at = envelope.timestamp
+                    sink_notification = ForgeNotification(
+                        event_type="stage_complete",
+                        correlation_id=correlation_id,
+                        feature_id=payload.feature_id,
+                        stage_label=payload.stage_label,
+                        status=payload.status,
+                        target_kind=payload.target_kind,
+                        target_identifier=_outcome_str(payload.target_identifier),
+                        completed_at=sink_completed_at,
+                        duration_secs=payload.duration_secs,
+                        build_id=_outcome_str(payload.build_id),
+                        result=result,
+                        failed_step=_outcome_str(raw.get("failed_step")),
+                        detail=_outcome_str(raw.get("detail")),
+                        checks_passed=_outcome_count(raw.get("checks_passed")),
+                        checks_total=_outcome_count(raw.get("checks_total")),
+                    )
+                    await self._notification_sink.notify(sink_notification)
+                except Exception as exc:
+                    # DDR-007: sink failures are WARNING-only, never propagate
+                    logger.warning(
+                        "notification_sink_error",
+                        error_class=type(exc).__name__,
+                        error=str(exc),
+                        event_type="stage_complete",
+                        correlation_id=correlation_id,
+                    )
+        # --- End merge-deploy outcome seam ---
 
         correlation = self._correlations.get(correlation_id)
         if correlation is None:
