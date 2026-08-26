@@ -1167,9 +1167,14 @@ class ApprovalReplyHandler:
         """Send the owner's note to the machine, verbatim. Never raises.
 
         ``reject`` is the wire's own literal and the only one that carries a
-        note; the spec digest door branches on it itself, so here it means
-        REWRITE THE SPEC FROM THIS — never "cancel the run". A note with no
-        words is not sent: there would be nothing to rewrite from.
+        note; the spec digest door branches on it itself. A note normally
+        means REWRITE THE SPEC FROM THIS — but a note whose FIRST WORD is
+        "reject" (any capitalisation) is the owner calling the run off, and
+        the machine cancels the run instead of redrafting. The note goes out
+        verbatim either way — the machine is the one deciding — and only the
+        in-card status line differs, so what the card says matches what the
+        machine will do. A note with no words is not sent: there would be
+        nothing to rewrite from.
         """
         from jarvis.infrastructure import assumption_dialogue as ad
 
@@ -1209,14 +1214,26 @@ class ApprovalReplyHandler:
             )
             if not published:
                 return
+            # The machine reads a note whose first word is "reject" as the
+            # owner cancelling the run, so the card must not promise a
+            # rewrite that will never come.
+            first_word = note.split(None, 1)[0].rstrip(".,:;!?-\u2013\u2014").lower()
+            if first_word == "reject":
+                status_line = (
+                    "You said reject, so this run will be cancelled and "
+                    "nothing will be built. Send a fresh sentence whenever "
+                    "you are ready to start again."
+                )
+            else:
+                status_line = (
+                    "Your note is with the machine. It will rewrite the spec "
+                    "from it and come back with a fresh list."
+                )
             await self._dialogue_status_update(
                 channel_id,
                 message_ts,
                 payload,
-                (
-                    "Your note is with the machine. It will rewrite the spec "
-                    "from it and come back with a fresh list."
-                ),
+                status_line,
             )
 
     # ------------------------------------------------------------------
