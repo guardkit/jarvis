@@ -307,6 +307,48 @@ class TestTheNoteChannel:
         assert "rewrite the spec" in text
 
     @pytest.mark.asyncio
+    async def test_a_note_starting_with_reject_still_reaches_the_wire_verbatim(self) -> None:
+        """The machine decides what a reject means; jarvis only carries the words."""
+        note = "reject - I messed up the original sentence"
+        handler, publisher, _web = _make_handler()
+        await handler.handle_view_submission(_note_submission(note))
+        assert publisher.publish.await_count == 1
+        response = _published(publisher)
+        assert response.decision == "reject"
+        assert response.notes == note
+
+    @pytest.mark.asyncio
+    async def test_the_card_says_the_run_will_be_cancelled_on_a_reject_note(self) -> None:
+        """A note starting with the word reject cancels the run, so the card
+        must not promise a rewrite that will never come."""
+        handler, _publisher, web = _make_handler()
+        await handler.handle_view_submission(
+            _note_submission("Reject: I typed the wrong sentence")
+        )
+        text = web.chat_update.await_args.kwargs["text"]
+        assert "cancelled" in text
+        assert "fresh sentence" in text
+        assert "rewrite the spec" not in text
+
+    @pytest.mark.asyncio
+    async def test_a_bare_reject_note_says_cancelled_too(self) -> None:
+        handler, publisher, web = _make_handler()
+        await handler.handle_view_submission(_note_submission("reject"))
+        assert _published(publisher).notes == "reject"
+        text = web.chat_update.await_args.kwargs["text"]
+        assert "cancelled" in text
+
+    @pytest.mark.asyncio
+    async def test_a_note_merely_containing_reject_still_says_rewrite(self) -> None:
+        """Only the FIRST word means cancel."""
+        handler, _publisher, web = _make_handler()
+        await handler.handle_view_submission(
+            _note_submission("please reject unknown formats with a 400")
+        )
+        text = web.chat_update.await_args.kwargs["text"]
+        assert "rewrite the spec" in text
+
+    @pytest.mark.asyncio
     async def test_a_stranger_cannot_send_a_note(self) -> None:
         handler, publisher, _web = _make_handler()
         await handler.handle_view_submission(_note_submission("hi", user_id="U_STRANGER"))
