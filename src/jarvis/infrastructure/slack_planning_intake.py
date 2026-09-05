@@ -43,6 +43,17 @@ Behaviour invariants (TASK-REV-3240 findings F3-F6, F10-F12):
   through in the payload field that already exists; it never checks whether
   the name is a repository — the forge resolves it and refuses an unknown
   one. Without a token every byte of this path behaves exactly as before.
+  A name using a character the wire cannot carry gets one plain sentence
+  back in the thread and nothing is published (binding spec 2026-09-05,
+  contract 3) — it used to be dropped with only a log line.
+* A message whose shape matches the queue grammar
+  (:mod:`jarvis.infrastructure.planning_intake_grammar`) is forwarded as
+  today's ``PlanningQueuedPayload`` with one extra field, ``queue_command``,
+  and jarvis posts NOTHING of its own: the forge owns the queue and its
+  reply in the thread is the acknowledgement (binding spec 2026-09-05,
+  contracts 1 and 2). Anything the grammar does not match is a sentence and
+  behaves exactly as before; a ``fix:``/``question:`` prefix is a sentence
+  too, with its kind carried in an extra ``kind`` field.
 * ``originating_adapter="slack"`` is hard-coded (F4): the wire layer
   verifiably skips its required-when-jarvis validator when the field is
   omitted, so jarvis must never rely on it.
@@ -73,6 +84,11 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
+from jarvis.infrastructure.planning_intake_grammar import (
+    INVALID_TARGET_NAME_REPLY,
+    is_allowed_target_name,
+    parse_queue_message,
+)
 from jarvis.tools._correlation import new_correlation_id
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -389,7 +405,62 @@ class PlanningIntakeHandler:
             )
             return
 
-        # --- 7. Payload construction (ASSUM-008 field mapping) ------------
+        # --- 7. A repository name the wire cannot carry -------------------
+        # One plain sentence back in the thread, and nothing published: this
+        # used to be a silent drop with a log line (spec 2026-09-05,
+        # contract 3). The dedup mark STAYS — a redelivery would be refused
+        # identically, and a second reply would only repeat itself.
+        if target_repo is not None and not is_allowed_target_name(target_repo):
+            logger.info(
+                "planning_intake_target_name_refused",
+                event_id=dedup_key,
+                channel=channel,
+                ts=ts,
+                user_id=user_id,
+                text_length=len(text),
+            )
+            await self._post_thread(
+                channel=channel,
+                thread_ts=ts,
+                text=INVALID_TARGET_NAME_REPLY,
+                log_event="planning_intake_target_name_reply_failed",
+            )
+            return
+
+        # --- 8. Command, refusal, or sentence (spec contracts 1 and 3) ----
+        parsed = parse_queue_message(text)
+        if parsed.shape == "refusal":
+            # The messages jarvis answers itself: bare "next" is ambiguous,
+            # and "next:" or "before #12:" with nothing after them are
+            # commands begun and not finished. It asks instead of guessing,
+            # and publishes nothing.
+            logger.info(
+                "planning_intake_ambiguous_refused",
+                event_id=dedup_key,
+                channel=channel,
+                ts=ts,
+                user_id=user_id,
+            )
+            await self._post_thread(
+                channel=channel,
+                thread_ts=ts,
+                text=parsed.refusal_text or "",
+                log_event="planning_intake_refusal_reply_failed",
+            )
+            return
+
+        # A command forwards the raw message and the flat command object; a
+        # sentence forwards the sentence, with its kind when one was typed.
+        extra_fields: dict[str, Any] = {}
+        if parsed.command is not None:
+            request_text = text
+            extra_fields["queue_command"] = parsed.command
+        else:
+            request_text = parsed.sentence
+            if parsed.kind is not None:
+                extra_fields["kind"] = parsed.kind
+
+        # --- 9. Payload construction (ASSUM-008 field mapping) ------------
         from nats_core import Topics
         from nats_core.events import PlanningQueuedPayload
         from pydantic import ValidationError
@@ -397,7 +468,7 @@ class PlanningIntakeHandler:
         correlation_id = new_correlation_id()
         try:
             planning = PlanningQueuedPayload(
-                request_text=text,
+                request_text=request_text,
                 target_repo=target_repo,
                 triggered_by="jarvis",
                 # Explicit constant (F4): the wire layer skips its
@@ -411,6 +482,11 @@ class PlanningIntakeHandler:
                 # call — the closest the immutable wire bytes can get to the
                 # contract's "when published".
                 queued_at=datetime.now(UTC),
+                # ``queue_command`` (a flat object) or ``kind`` — extra
+                # fields the model already allows (nats-core ``extra=allow``);
+                # declaring them in nats-core is a named follow-up, not this
+                # stage (spec 2026-09-05, contract 2).
+                **extra_fields,
             )
         except ValidationError as exc:
             # Backstop — a redelivery would fail identically, so the dedup
@@ -426,7 +502,7 @@ class PlanningIntakeHandler:
             )
             return
 
-        # --- 8. Publish (authoritative), then best-effort ack -------------
+        # --- 10. Publish (authoritative), then best-effort ack ------------
         subject = Topics.Pipeline.PLANNING_QUEUED.format(correlation_id=correlation_id)
         try:
             await self._publisher.publish(
@@ -468,7 +544,14 @@ class PlanningIntakeHandler:
             user_id=user_id,
             event_id=dedup_key,
             text_length=len(text),
+            queue_verb=(parsed.command or {}).get("verb"),
         )
+
+        if parsed.command is not None:
+            # A command is the forge's to answer: it executes it against the
+            # queue and replies in this same thread, so jarvis posts nothing
+            # of its own (spec 2026-09-05, contract 1).
+            return
 
         # Ack AFTER the publish returned — never before (an acked-but-
         # unqueued idea would be a silent loss). Best-effort: a failed ack
