@@ -72,6 +72,12 @@ _NAK_DELAY_SECONDS = 5.0
 _DEDUP_TTL_SECONDS = 300.0
 _DEDUP_MAX_ENTRIES = 1000
 
+# Slack's limits for the rendered reply: 3000 characters of text inside one
+# section block, 50 blocks in one message. Past either, the render degrades
+# rather than risking a rejected post.
+_SECTION_TEXT_LIMIT = 3000
+_MAX_BLOCKS = 50
+
 # Severity prefix from NotificationPayload.level (ASSUM-013).
 _LEVEL_PREFIX: dict[str, str] = {"info": "", "warning": "⚠️ ", "error": "❌ "}
 
@@ -399,13 +405,51 @@ class PlanningNotificationConsumer:
         """Build (text, blocks) for a notification (ASSUM-013 copy).
 
         Severity prefix from level, the message verbatim (no jarvis reasoning),
-        the correlation id in monospace, an optional @-mention of ``target_user``.
-        ``payload.blocks`` pass through when present (text remains the fallback).
+        an optional @-mention of ``target_user`` — and nothing else in the body.
+
+        The tracking id is NOT body text (spec 2026-09-05 evening, rule 2: an
+        internal identifier was reading as a line of prose under every factory
+        reply). Nothing in this estate reads the id back out of Slack — it is
+        for tracing a run by hand and in the logs — so it goes in a context
+        block, Slack's small muted line, under the words.
+
+        ``payload.blocks`` still pass through unchanged when present; the
+        context line is appended after them so the id is on the visible
+        message either way. When the body is too long for one section block
+        (Slack's 3000-character limit) the post degrades to plain text, which
+        Slack always accepts — a rejected block kit would cost the whole
+        notification.
         """
         prefix = _LEVEL_PREFIX.get(str(payload.level), "")
         mention = f"<@{payload.target_user}> " if payload.target_user else ""
-        text = f"{mention}{prefix}{payload.message}\n`{payload.correlation_id}`"
-        blocks = payload.blocks if payload.blocks else None
+        text = f"{mention}{prefix}{payload.message}"
+
+        correlation_id = payload.correlation_id
+        context = (
+            {
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": f"`{correlation_id}`"}],
+            }
+            if correlation_id
+            else None
+        )
+
+        blocks: list[dict[str, Any]] | None
+        if payload.blocks:
+            blocks = list(payload.blocks)
+        elif context and text and len(text) <= _SECTION_TEXT_LIMIT:
+            blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}}]
+        else:
+            blocks = None
+
+        if blocks is not None and context and len(blocks) < _MAX_BLOCKS:
+            blocks.append(context)
+
+        if not text:
+            # Slack rejects a post with neither text nor blocks, and needs a
+            # non-empty fallback for notifications. Only then does the id
+            # stand in as the text.
+            text = f"`{correlation_id}`" if correlation_id else "(no message)"
         return text, blocks
 
     # ------------------------------------------------------------------

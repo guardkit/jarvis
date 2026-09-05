@@ -556,14 +556,20 @@ class PlanningIntakeHandler:
         # Ack AFTER the publish returned — never before (an acked-but-
         # unqueued idea would be a silent loss). Best-effort: a failed ack
         # never undoes the queued request (spec Group D scenario 3).
+        #
+        # The wording says only what this side actually knows: the message
+        # left for the factory. It never claims the work was queued and
+        # never names a repository, because jarvis cannot check that the
+        # name exists — the factory can, and answers in this same thread
+        # ("Queued as #n (repo · kind). N ahead of it.", or a refusal).
+        # That factory reply is the acknowledgement of record, and it may
+        # well arrive first (spec 2026-09-05 evening, rule 1: Rich typed
+        # "target: nowhere", the factory refused, and the old line still
+        # said "Queued for nowhere").
         await self._post_thread(
             channel=channel,
             thread_ts=ts,
-            text=(
-                f"Queued for {target_repo} · `{correlation_id}`"
-                if target_repo
-                else f"Queued for planning · `{correlation_id}`"
-            ),
+            text=f"Sent to the factory · `{correlation_id}`",
             log_event="planning_intake_ack_failed",
         )
 

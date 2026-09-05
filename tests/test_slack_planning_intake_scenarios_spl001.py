@@ -388,7 +388,7 @@ class TestBotAuthoredIgnored:
         client, publisher, wc = _make_client()
         self_ack = _message_envelope_payload(
             user="U0JARVISBOT",
-            text="Queued for planning · `corr-1`",
+            text="Sent to the factory · `corr-1`",
             bot_id="B0JARVIS",
             app_id="A0JARVIS",
             thread_ts=_TS,
