@@ -72,6 +72,16 @@ Notes
   written by the planning notifier and the approval reply handler in this
   same process. It adds NO approval surface — the merge card belongs to
   the conductor, which is parked; this is one sentence, not a button.
+* The card's words (2026-09-05): the build gate and the merge-ready
+  checkpoint ride the SAME ``build-paused`` envelope and the same
+  renderer (:func:`build_pause_blocks`), so they are rewritten together.
+  Each opens with a headline saying what has happened and what is being
+  asked, carries the pipeline's own sentence as its body, and puts the
+  build id and the correlation id on ONE muted line labelled in words.
+  The status word, the stage label and the "score unavailable"
+  non-answer are gone from what a person sees. Nothing on the wire
+  changed, and the buttons — action ids, labels, value JSON — are
+  untouched.
 """
 
 from __future__ import annotations
@@ -470,6 +480,107 @@ def _plain_text_section(text: str) -> dict[str, Any]:
     }
 
 
+def _plain_text_header(text: str) -> dict[str, Any]:
+    """The card's one headline, as an inert ``plain_text`` header block."""
+    return {
+        "type": "header",
+        "text": {"type": "plain_text", "text": text, "emoji": False},
+    }
+
+
+def _muted_context(text: str) -> dict[str, Any]:
+    """One small, grey line under the card — provenance, never prose."""
+    return {
+        "type": "context",
+        "elements": [{"type": "plain_text", "text": text, "emoji": False}],
+    }
+
+
+# The two headlines a paused build can wear (words rewritten 2026-09-05, the
+# owner's language law: the card must say what has happened and what is being
+# asked of the reader, in a sentence, before it says anything else).
+_PAUSE_HEADLINE = "Build paused — waiting for your go-ahead"
+_MERGE_READY_HEADLINE = "Ready to merge and deploy — your press"
+
+# The same two cards once the build has settled underneath them (R3-A, the
+# strip-on-terminal path): the card keeps its name but stops asking for a
+# go-ahead it can no longer use — the stamp below says what happened.
+_PAUSE_SETTLED_HEADLINE = "Build paused"
+_MERGE_READY_SETTLED_HEADLINE = "Ready to merge and deploy"
+
+# The stage label forge puts on the merge-ready card. It is already the
+# phrase-book plain name on forge's side (``MERGE_READY_CHECKPOINT_LABEL``);
+# the card rides the SAME build-paused envelope and the SAME renderer, so the
+# label is the only thing that tells the two cards apart. Matched, never
+# rendered.
+_MERGE_READY_STAGE_LABEL = "the merge-ready checkpoint"
+
+
+def _pause_headline(notification: ForgeNotification, *, settled: bool = False) -> str:
+    """Which headline this paused build wears.
+
+    ``settled`` is the terminal card (R3-A): the build finished, was
+    cancelled or failed while its card was still on screen, so the card
+    keeps its name but stops asking for something that can no longer be
+    given. The stamp under it says what actually happened.
+    """
+    label = (notification.stage_label or "").strip().casefold()
+    if label == _MERGE_READY_STAGE_LABEL:
+        return _MERGE_READY_SETTLED_HEADLINE if settled else _MERGE_READY_HEADLINE
+    return _PAUSE_SETTLED_HEADLINE if settled else _PAUSE_HEADLINE
+
+
+def _feature_line(notification: ForgeNotification) -> tuple[str, bool]:
+    """``(what to show for the feature, is it the human title)``.
+
+    The human title when the payload carried one; otherwise the feature
+    id, which is an identifier and belongs in muted secondary text — a
+    reader should never have to read an id as a headline.
+    """
+    title = (notification.feature_title or "").strip()
+    if title:
+        return title, True
+    return notification.feature_id, False
+
+
+def _provenance_line(notification: ForgeNotification) -> str:
+    """The one muted line carrying both identifiers, labelled in words.
+
+    Approval-card truth R1-A keeps its point — junk traffic (a ``smoke-…``
+    reference from a test suite) is still visible BEFORE the operator taps
+    Approve — but as one small grey line rather than two lines of prose.
+    """
+    if notification.build_id:
+        return f"Build {notification.build_id} · reference {notification.correlation_id}"
+    return f"Reference {notification.correlation_id}"
+
+
+def _score_line(notification: ForgeNotification) -> str | None:
+    """``Checker score: 0.93``, or ``None`` when there is no score.
+
+    No score is the live default at the build gate (ADR-ARCH-033), and the
+    rationale already says so in a sentence — so a missing score renders
+    nothing at all rather than the old "score unavailable" non-answer.
+    Out-of-range values still render as inert text, never rejected.
+    """
+    if notification.coach_score is None:
+        return None
+    # Plain-name sweep (factory phrase-book, ratified 2026-07-31): the card
+    # says "Checker score"; ``coach_score`` stays the field/log name.
+    return f"Checker score: {notification.coach_score:.2f}"
+
+
+def _rationale_chunks(notification: ForgeNotification) -> list[str]:
+    """The rationale as the card's body, chunked under Block Kit's limit."""
+    rationale = notification.rationale
+    if not rationale:
+        return []
+    return [
+        rationale[start : start + _RATIONALE_CHUNK_CHARS]
+        for start in range(0, len(rationale), _RATIONALE_CHUNK_CHARS)
+    ]
+
+
 def build_pause_blocks(
     notification: ForgeNotification,
     button_value: str | None = None,
@@ -478,17 +589,31 @@ def build_pause_blocks(
 ) -> list[dict[str, Any]]:
     """Render a ``build_paused`` notification as Block Kit blocks.
 
+    The card, top to bottom: a headline saying what has happened and what
+    is being asked ("Build paused — waiting for your go-ahead", or "Ready
+    to merge and deploy — your press" on the merge-ready card, which rides
+    this same envelope and this same renderer); the feature as a person
+    would name it; the pipeline's own sentence explaining why it is
+    asking; the checker score when there is one; one muted line carrying
+    the build and its reference; then the buttons.
+
+    Words rewritten 2026-09-05. The card used to open ``[19:18] Pipeline
+    FEAT-729B: build-paused`` and follow it with ``Trace:``, ``Stage:``
+    and ``Checker score: score unavailable`` — a status line, two
+    identifiers as prose, an internal stage name, and a non-answer, none
+    of which told the reader what was being asked of them. Nothing on the
+    wire changed; only what a person sees.
+
     All operator-visible text renders as ``plain_text`` objects only —
     no mrkdwn interpretation, so rationale and failure strings arrive
-    inert. Mirrors the v1 text rendering shape from
-    :meth:`SlackNotifier._render` (the two evolve in lockstep —
-    deliberate divergence in mechanism, do not merge the two).
+    inert. Mirrors the text rendering in :meth:`SlackNotifier._render`
+    (the two evolve in lockstep — deliberate divergence in mechanism, do
+    not merge the two).
 
-    Approval-card truth R1-A: the card carries its provenance —
-    ``Build: {build_id}`` and ``Trace: {correlation_id}`` — so junk
-    traffic (e.g. a ``smoke-…`` correlation id from a test suite) is
-    visibly junk BEFORE the operator taps Approve. Both values were
-    already at this render site; they were simply never rendered.
+    Approval-card truth R1-A still holds: both identifiers are on the
+    card, so junk traffic (e.g. a ``smoke-…`` reference from a test
+    suite) is visibly junk BEFORE the operator taps Approve. They are
+    now one muted line labelled in words rather than two lines of prose.
 
     Args:
         notification: The pause notification to render.
@@ -505,41 +630,27 @@ def build_pause_blocks(
         Block Kit blocks list suitable for ``chat.postMessage`` /
         ``chat.update``.
     """
-    local_completed_at = (
-        notification.completed_at.astimezone()
-        if notification.completed_at.tzinfo is not None
-        else notification.completed_at
-    )
-    hhmm = local_completed_at.strftime("%H:%M")
+    headline = _pause_headline(notification, settled=status_line is not None)
+    feature_text, is_title = _feature_line(notification)
 
-    blocks: list[dict[str, Any]] = [
-        _plain_text_section(f"[{hhmm}] Pipeline {notification.feature_id}: build-paused")
-    ]
+    blocks: list[dict[str, Any]] = [_plain_text_header(headline)]
 
-    # R1-A provenance lines — build_id when the payload carried one, the
-    # correlation id always (it is a required ForgeNotification field).
-    if notification.build_id:
-        blocks.append(_plain_text_section(f"Build: {notification.build_id}"))
-    blocks.append(_plain_text_section(f"Trace: {notification.correlation_id}"))
+    # The feature, said the way a person would say it. A human title reads
+    # as the card's subject line; a bare id is an identifier and drops to
+    # muted secondary text — never the headline.
+    blocks.append(_plain_text_section(feature_text) if is_title else _muted_context(feature_text))
 
-    if notification.stage_label:
-        blocks.append(_plain_text_section(f"Stage: {notification.stage_label}"))
+    # The body: forge's own sentence explaining why it is asking.
+    for chunk in _rationale_chunks(notification):
+        blocks.append(_plain_text_section(chunk))
 
-    if notification.coach_score is None:
-        # ADR-ARCH-033 — None is the live default and must render, not raise.
-        score_text = "score unavailable"
-    else:
-        score_text = f"{notification.coach_score:.2f}"
-    # Plain-name sweep (factory phrase-book, ratified 2026-07-31): the card
-    # says "Checker score"; ``coach_score`` stays the field/log name.
-    blocks.append(_plain_text_section(f"Checker score: {score_text}"))
+    score_line = _score_line(notification)
+    if score_line is not None:
+        blocks.append(_plain_text_section(score_line))
 
-    if notification.rationale:
-        rationale = notification.rationale
-        for start in range(0, len(rationale), _RATIONALE_CHUNK_CHARS):
-            chunk = rationale[start : start + _RATIONALE_CHUNK_CHARS]
-            prefix = "Rationale: " if start == 0 else ""
-            blocks.append(_plain_text_section(f"{prefix}{chunk}"))
+    # R1-A provenance, now ONE muted line labelled in words and still
+    # rendered before the action surface.
+    blocks.append(_muted_context(_provenance_line(notification)))
 
     if status_line is not None:
         # Terminal card (R3-A): the stamp replaces the whole action
@@ -1660,38 +1771,30 @@ class SlackNotifier:
             return f"{mention}[{hhmm}] Pipeline {feature_id}: build-failed ({reason})"
 
         if event_type == "build_paused":
-            # TASK-JNB-005: Pause rendering
-            # Format: provenance, stage, rationale, coach_score, CLI hint
-            parts = [f"[{hhmm}] Pipeline {feature_id}: build-paused"]
+            # The paused-build text, in the same words as the Block Kit
+            # card (rewritten 2026-09-05). This string is what a reader
+            # sees when no approval request joined the pause, and it is
+            # the notification preview under the buttoned card — so it
+            # must never carry the status line, the two identifiers as
+            # prose, the internal stage name, or "score unavailable".
+            feature_text, _is_title = _feature_line(notification)
+            parts = [_pause_headline(notification), feature_text]
 
-            # Provenance (approval-card truth R1-A) — mirrors
-            # build_pause_blocks: build_id when present, the correlation
-            # id always, so junk traffic is visibly junk on the text
-            # fallback too.
-            if notification.build_id:
-                parts.append(f"Build: {notification.build_id}")
-            parts.append(f"Trace: {notification.correlation_id}")
-
-            # Stage
-            if notification.stage_label:
-                parts.append(f"Stage: {notification.stage_label}")
-
-            # Checker score (phrase-book plain name; field stays coach_score)
-            if notification.coach_score is None:
-                score_text = "score unavailable"
-            else:
-                # Defensive rendering: out-of-range scores render as text, never rejected
-                score_text = f"{notification.coach_score:.2f}"
-            parts.append(f"Checker score: {score_text}")
-
-            # Rationale (verbatim plain text)
+            # The body: the pipeline's own sentence, verbatim. Chunking
+            # is a Block Kit concern only; plain text carries it whole.
             if notification.rationale:
-                # Chunk rationales > 3000 chars for Block Kit compatibility
-                # In plain text mode, we just include the full rationale
-                # but note that actual Block Kit would need chunking
-                parts.append(f"Rationale: {notification.rationale}")
+                parts.append(notification.rationale)
 
-            # CLI hint for v1 (v1.1 will use buttons per TASK-JNB-103)
+            score_line = _score_line(notification)
+            if score_line is not None:
+                parts.append(score_line)
+
+            # Approval-card truth R1-A on the text path too: one line,
+            # labelled in words, so junk traffic is visibly junk here as
+            # well.
+            parts.append(_provenance_line(notification))
+
+            # No buttons on this path — say how the decision is made.
             parts.append("Use CLI to approve or reject this build.")
 
             return "\n".join(parts)

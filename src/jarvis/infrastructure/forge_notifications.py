@@ -343,6 +343,19 @@ class ForgeNotification(BaseModel):
             "Optional field added in TASK-JNB-005 per frozen-model rule."
         ),
     )
+    feature_title: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The feature's human title — the sentence a person would "
+            "recognise, e.g. 'Show the app version on the home screen'. "
+            "Read defensively off the raw pause payload: the wire does "
+            "not carry it today, so it is normally None and the card "
+            "falls back to showing the feature id as muted secondary "
+            "text. Optional field with a None default per the "
+            "frozen-model rule; nothing on the wire changed to add it."
+        ),
+    )
     gate_mode: str | None = Field(
         default=None,
         min_length=1,
@@ -1591,6 +1604,15 @@ class ForgeNotificationsSubscriber:
                 # fallback for older synthetic payloads (TASK-JNB-103
                 # review fix — real forge traffic never matched "stage").
                 stage_label = raw_payload_dict.get("stage_label") or raw_payload_dict.get("stage")
+                # The feature's human title, when the payload carries one.
+                # Read defensively (the wire does not carry it today), so a
+                # missing key simply leaves the card showing the feature id.
+                # Anything that is not a non-empty string becomes None — a
+                # junk title must never cost the whole notification.
+                raw_title = raw_payload_dict.get("feature_title")
+                feature_title = (
+                    raw_title.strip() or None if isinstance(raw_title, str) else None
+                )
                 cancelled_by = None
                 reason = None
             else:  # build_cancelled
@@ -1601,6 +1623,7 @@ class ForgeNotificationsSubscriber:
                 gate_mode = None
                 approval_subject = None
                 stage_label = None
+                feature_title = None
 
         except (KeyError, ValueError) as exc:
             logger.warning(
@@ -1629,6 +1652,7 @@ class ForgeNotificationsSubscriber:
                     cancelled_by=cancelled_by,
                     reason=reason,
                     stage_label=stage_label,
+                    feature_title=feature_title,
                 )
                 await self._notification_sink.notify(sink_notification)
             except Exception as exc:

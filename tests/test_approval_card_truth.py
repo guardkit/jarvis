@@ -3,10 +3,12 @@
 Three behaviours, one jarvis lane:
 
 * **R1-A — provenance on the pause card.** ``build_pause_blocks`` and the
-  ``_render`` text fallback additionally render ``Build: {build_id}`` and
-  ``Trace: {correlation_id}`` — the 07-27 junk approvals carried
-  ``smoke-…`` correlation ids that were on the wire but never rendered;
-  a junk card must now be visibly junk.
+  ``_render`` text rendering both carry the build id and the reference —
+  the 07-27 junk approvals carried ``smoke-…`` references that were on
+  the wire but never rendered; a junk card must be visibly junk. Since
+  the 2026-09-05 words rewrite they render as ONE muted context line,
+  ``Build {build_id} · reference {correlation_id}``, not as two lines of
+  prose.
 * **R3-A — strip-on-terminal.** A terminal build notification
   (``build_cancelled`` / ``build_complete`` / ``build_failed``) looks up
   the retained pause message and ``chat.update``s the card: action
@@ -145,6 +147,17 @@ def _section_texts(blocks: list[dict[str, Any]]) -> list[str]:
         b["text"]["text"]
         for b in blocks
         if b.get("type") == "section" and isinstance(b.get("text"), dict)
+    ]
+
+
+def _context_texts(blocks: list[dict[str, Any]]) -> list[str]:
+    """Every muted context line on the card (provenance lives here now)."""
+    return [
+        element["text"]
+        for b in blocks
+        if b.get("type") == "context"
+        for element in b.get("elements", [])
+        if isinstance(element, dict) and isinstance(element.get("text"), str)
     ]
 
 
@@ -292,13 +305,11 @@ class TestTerminalBuildRegistry:
 
 
 class TestPauseCardProvenance:
-    """Build/Trace render on the card so junk traffic is visibly junk."""
+    """Both identifiers stay on the card so junk traffic is visibly junk."""
 
-    def test_blocks_render_build_and_trace_lines(self) -> None:
+    def test_blocks_render_build_and_reference_in_one_muted_line(self) -> None:
         blocks = build_pause_blocks(_pause_notification("build-abc123"))
-        texts = _section_texts(blocks)
-        assert "Build: build-abc123" in texts
-        assert "Trace: corr-pause-1" in texts
+        assert "Build build-abc123 · reference corr-pause-1" in _context_texts(blocks)
 
     def test_junk_smoke_correlation_is_visible_on_the_card(self) -> None:
         # The 07-27 junk approvals: the smoke- discriminator was on the
@@ -306,43 +317,42 @@ class TestPauseCardProvenance:
         blocks = build_pause_blocks(
             _pause_notification("build-abc123", correlation_id="smoke-1f2e3d")
         )
-        assert "Trace: smoke-1f2e3d" in _section_texts(blocks)
+        assert "Build build-abc123 · reference smoke-1f2e3d" in _context_texts(blocks)
 
-    def test_no_build_id_omits_build_line_but_keeps_trace(self) -> None:
+    def test_no_build_id_keeps_the_reference_alone(self) -> None:
         blocks = build_pause_blocks(_pause_notification(None))
-        texts = _section_texts(blocks)
-        assert not any(t.startswith("Build:") for t in texts)
-        assert "Trace: corr-pause-1" in texts
+        assert "Reference corr-pause-1" in _context_texts(blocks)
+        assert not any(t.startswith("Build ") for t in _context_texts(blocks))
 
     def test_provenance_sections_are_plain_text(self) -> None:
         blocks = build_pause_blocks(_pause_notification("build-abc123"))
         for block in blocks:
-            if block.get("type") == "section":
+            if block.get("type") in ("section", "header"):
                 assert block["text"]["type"] == "plain_text"
+            if block.get("type") == "context":
+                for element in block["elements"]:
+                    assert element["type"] == "plain_text"
 
     def test_provenance_renders_before_buttons_and_keeps_actions(self) -> None:
         value = _button_value_json()
         blocks = build_pause_blocks(_pause_notification("build-abc123"), button_value=value)
         assert len(_actions_in(blocks)) == 1
-        texts = _section_texts(blocks)
-        assert "Build: build-abc123" in texts
+        provenance_at = next(i for i, b in enumerate(blocks) if b.get("type") == "context")
+        actions_at = next(i for i, b in enumerate(blocks) if b.get("type") == "actions")
+        assert provenance_at < actions_at
 
-    def test_text_fallback_renders_build_and_trace_lines(self) -> None:
+    def test_text_rendering_carries_build_and_reference(self) -> None:
         notifier, _ = _make_notifier()
         text = notifier._render(_pause_notification("build-abc123", correlation_id="smoke-9z"))
         lines = text.split("\n")
-        assert "Build: build-abc123" in lines
-        assert "Trace: smoke-9z" in lines
-        # Provenance sits directly under the header, mirroring the blocks.
-        assert lines[1] == "Build: build-abc123"
-        assert lines[2] == "Trace: smoke-9z"
+        assert "Build build-abc123 · reference smoke-9z" in lines
 
-    def test_text_fallback_without_build_id_keeps_trace_only(self) -> None:
+    def test_text_rendering_without_build_id_keeps_the_reference(self) -> None:
         notifier, _ = _make_notifier()
         text = notifier._render(_pause_notification(None))
         lines = text.split("\n")
-        assert "Trace: corr-pause-1" in lines
-        assert not any(line.startswith("Build:") for line in lines)
+        assert "Reference corr-pause-1" in lines
+        assert not any(line.startswith("Build build-") for line in lines)
 
 
 # ---------------------------------------------------------------------------

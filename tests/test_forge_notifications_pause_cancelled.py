@@ -247,10 +247,15 @@ class TestCancelledProjection:
 
 
 class TestPauseRendering:
-    """Pause rendering tests: stage, rationale, coach_score, CLI hint."""
+    """Pause rendering tests: headline, feature, rationale, score, CLI hint.
+
+    Words rewritten 2026-09-05: the paused-build text opens with a
+    headline saying what is being asked, and the internal stage name is
+    no longer shown at all.
+    """
 
     def test_pause_renders_with_score_available(self):
-        """AC: Pause shows stage, rationale, coach score, CLI hint."""
+        """AC: Pause shows the headline, feature, rationale, score, CLI hint."""
         notifier = SlackNotifier(
             bot_token="xoxb-test-token",
             channel_id="C123456",
@@ -268,15 +273,16 @@ class TestPauseRendering:
 
         text = notifier._render(notification)
 
-        assert "[10:30]" in text or "[" in text  # Time format
+        assert text.startswith("Build paused — waiting for your go-ahead")
         assert "FEAT-PAUSE" in text
-        assert "autobuild" in text
+        assert "autobuild" not in text  # the internal stage name is not shown
         assert "Tests are failing" in text
-        assert "0.65" in text
+        assert "Checker score: 0.65" in text
         assert "approve" in text.lower() or "reject" in text.lower()  # CLI hint
 
-    def test_pause_renders_score_unavailable_when_none(self):
-        """AC: coach_score=None renders 'score unavailable'."""
+    def test_pause_says_nothing_about_the_score_when_there_is_none(self):
+        """No score is the live default; the rationale already says so, so
+        the card says nothing rather than 'score unavailable'."""
         notifier = SlackNotifier(
             bot_token="xoxb-test-token",
             channel_id="C123456",
@@ -294,7 +300,8 @@ class TestPauseRendering:
 
         text = notifier._render(notification)
 
-        assert "score unavailable" in text.lower()
+        assert "score" not in text.lower()
+        assert "Quality check paused" in text
 
     def test_pause_renders_boundary_scores(self):
         """AC: Scores 0.0 and 1.0 render correctly."""

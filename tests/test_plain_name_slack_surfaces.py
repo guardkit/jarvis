@@ -221,7 +221,7 @@ class TestSlackNotifierRendersPlainNames:
     def test_render_uses_the_phrase_book_plain_names(self) -> None:
         """The positive assertion behind the fence, so it cannot pass vacuously."""
         text = _make_notifier()._render(_notification("build_paused"))
-        assert text.startswith(f"[{_HHMM}] Pipeline FEAT-2D61: build-paused")
+        assert text.startswith("Build paused — waiting for your go-ahead")
         assert "Checker score: 0.42" in text
 
 
@@ -252,7 +252,7 @@ class TestPauseCardRendersPlainNames:
 
     def test_card_uses_the_phrase_book_plain_names(self) -> None:
         texts = _visible_texts(build_pause_blocks(_notification("build_paused")))
-        assert f"[{_HHMM}] Pipeline FEAT-2D61: build-paused" in texts
+        assert "Build paused — waiting for your go-ahead" in texts
         assert "Checker score: 0.42" in texts
 
     @pytest.mark.parametrize("event_type", ("build_cancelled", "build_complete", "build_failed"))
