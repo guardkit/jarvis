@@ -45,8 +45,13 @@ async def test_planned_handoff_renders_into_originating_thread() -> None:
     kwargs = web.chat_postMessage.call_args.kwargs
     assert kwargs["thread_ts"] == "1751795701.000200"  # posted as a thread reply
     assert kwargs["channel"] == "C-PLAN"
-    assert "Planning run reached its planned handoff" in kwargs["text"]  # verbatim
-    assert "`cid-handoff`" in kwargs["text"]  # correlation id present
+    assert kwargs["text"] == "Planning run reached its planned handoff"  # verbatim
+    # The tracking id rides in the small muted line, never as body text.
+    assert "cid-handoff" not in kwargs["text"]
+    assert kwargs["blocks"][-1] == {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": "`cid-handoff`"}],
+    }
 
 
 @pytest.mark.asyncio
@@ -59,7 +64,9 @@ async def test_notification_without_anchor_degrades_to_channel_never_dropped() -
     kwargs = web.chat_postMessage.call_args.kwargs
     assert "thread_ts" not in kwargs  # top-level post
     assert kwargs["channel"] == "C-PLAN"
-    assert "`cid-deg`" in kwargs["text"]  # traceable by hand
+    assert kwargs["text"] == "status update"
+    # Traceable by hand, but as the muted context line — not a line of prose.
+    assert kwargs["blocks"][-1]["elements"][0]["text"] == "`cid-deg`"
     m.ack.assert_awaited_once()  # not dropped: rendered + acked
 
 

@@ -428,7 +428,7 @@ class TestTheSentencePathIsUnchanged:
         assert payload.request_text == "Add PDF export to the dashboard"
         assert not hasattr(payload, "queue_command")
         assert web_client.chat_postMessage.await_args.kwargs["text"] == (
-            f"Queued for planning · `{payload.correlation_id}`"
+            f"Sent to the factory · `{payload.correlation_id}`"
         )
 
     @pytest.mark.asyncio
@@ -441,7 +441,7 @@ class TestTheSentencePathIsUnchanged:
         assert not hasattr(payload, "queue_command")
         # A sentence, so the acknowledgement stays exactly as it was.
         assert web_client.chat_postMessage.await_args.kwargs["text"] == (
-            f"Queued for planning · `{payload.correlation_id}`"
+            f"Sent to the factory · `{payload.correlation_id}`"
         )
 
     @pytest.mark.asyncio

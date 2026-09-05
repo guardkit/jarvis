@@ -154,7 +154,7 @@ class TestGateArms:
         handler, publisher, wc = _make_handler()
         self_ack = _message_event(
             user="U0JARVISBOT",
-            text="Queued for planning · `corr-1`",
+            text="Sent to the factory · `corr-1`",
             bot_id="B0JARVIS",
             app_id="A0JARVIS",
             thread_ts=_TS,
@@ -355,7 +355,7 @@ class TestTheTargetToken:
         assert payload.target_repo == "study-tutor"
         assert payload.request_text == "Add PDF export"
         assert wc.chat_postMessage.await_args.kwargs["text"] == (
-            f"Queued for study-tutor · `{payload.correlation_id}`"
+            f"Sent to the factory · `{payload.correlation_id}`"
         )
 
     @pytest.mark.asyncio
@@ -386,24 +386,43 @@ class TestTheTargetToken:
         assert payload.request_text == text
 
     @pytest.mark.asyncio
-    async def test_ack_names_the_repo(self) -> None:
+    async def test_ack_never_names_the_repo(self) -> None:
+        """The messenger's line says the message left, and nothing more.
+
+        Jarvis cannot check that a typed name exists, so naming it here
+        would be a claim it cannot stand behind — that is exactly how
+        "Queued for nowhere" came to sit under the factory's refusal
+        (spec 2026-09-05 evening, rule 1).
+        """
         handler, publisher, wc = _make_handler()
         await handler.handle_message_event(
             _message_event(text="target: guardkit/study-tutor\nAdd PDF export")
         )
         correlation_id = _published_payload(publisher).correlation_id
-        assert wc.chat_postMessage.await_args.kwargs["text"] == (
-            f"Queued for guardkit/study-tutor · `{correlation_id}`"
-        )
+        posted = wc.chat_postMessage.await_args.kwargs["text"]
+        assert posted == f"Sent to the factory · `{correlation_id}`"
+        assert "guardkit" not in posted
+        assert "study-tutor" not in posted
 
     @pytest.mark.asyncio
-    async def test_ack_without_a_token_is_unchanged(self) -> None:
+    async def test_ack_is_the_same_line_with_or_without_a_target(self) -> None:
         handler, publisher, wc = _make_handler()
         await handler.handle_message_event(_message_event())
         correlation_id = _published_payload(publisher).correlation_id
         assert wc.chat_postMessage.await_args.kwargs["text"] == (
-            f"Queued for planning · `{correlation_id}`"
+            f"Sent to the factory · `{correlation_id}`"
         )
+
+    @pytest.mark.asyncio
+    async def test_ack_claims_no_queue_position_for_an_unknown_name(self) -> None:
+        """The case Rich hit: an unknown name still gets a truthful line."""
+        handler, publisher, wc = _make_handler()
+        await handler.handle_message_event(_message_event(text="target: nowhere\nAdd PDF export"))
+        correlation_id = _published_payload(publisher).correlation_id
+        posted = wc.chat_postMessage.await_args.kwargs["text"]
+        assert posted == f"Sent to the factory · `{correlation_id}`"
+        assert "nowhere" not in posted
+        assert "Queued" not in posted
 
     @pytest.mark.asyncio
     async def test_a_target_line_with_nothing_else_is_refused_as_blank(self) -> None:

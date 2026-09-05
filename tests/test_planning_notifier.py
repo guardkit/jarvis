@@ -147,13 +147,28 @@ async def test_post_threaded_returns_none_on_non_429_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_render_includes_message_verbatim_and_correlation_id() -> None:
+async def test_render_posts_the_factory_words_with_no_bare_id_line() -> None:
+    """The tracking id is never a line of body text (rule 2, 2026-09-05)."""
     web = mock.AsyncMock()
     c = _consumer(web)
     await c._handle(FakeMsg(_envelope_bytes(message="all done", correlation_id="cid-xyz")))
-    text = web.chat_postMessage.call_args.kwargs["text"]
-    assert "all done" in text
-    assert "`cid-xyz`" in text
+    kwargs = web.chat_postMessage.call_args.kwargs
+    assert kwargs["text"] == "all done"  # byte-identical to the factory's words
+    assert "cid-xyz" not in kwargs["text"]
+    assert kwargs["text"].splitlines() == ["all done"]
+
+
+@pytest.mark.asyncio
+async def test_render_carries_the_correlation_id_in_a_context_block() -> None:
+    web = mock.AsyncMock()
+    c = _consumer(web)
+    await c._handle(FakeMsg(_envelope_bytes(message="all done", correlation_id="cid-xyz")))
+    blocks = web.chat_postMessage.call_args.kwargs["blocks"]
+    assert blocks[0] == {"type": "section", "text": {"type": "mrkdwn", "text": "all done"}}
+    assert blocks[-1] == {
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": "`cid-xyz`"}],
+    }
 
 
 @pytest.mark.asyncio
@@ -174,7 +189,23 @@ async def test_render_passes_blocks_through() -> None:
     c = _consumer(web)
     blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "x"}}]
     await c._handle(FakeMsg(_envelope_bytes(blocks=blocks)))
-    assert web.chat_postMessage.call_args.kwargs["blocks"] == blocks
+    posted = web.chat_postMessage.call_args.kwargs["blocks"]
+    # The factory's own blocks arrive untouched; the id follows as the
+    # small muted line, exactly as it does for a plain message.
+    assert posted[:-1] == blocks
+    assert posted[-1]["type"] == "context"
+
+
+@pytest.mark.asyncio
+async def test_render_degrades_to_plain_text_for_a_very_long_message() -> None:
+    """Too long for one section block: post the words, drop the block kit."""
+    web = mock.AsyncMock()
+    c = _consumer(web)
+    long_message = "x" * (pn._SECTION_TEXT_LIMIT + 1)
+    await c._handle(FakeMsg(_envelope_bytes(message=long_message)))
+    kwargs = web.chat_postMessage.call_args.kwargs
+    assert kwargs["text"] == long_message
+    assert "blocks" not in kwargs
 
 
 # ---------------------------------------------------------------------------
