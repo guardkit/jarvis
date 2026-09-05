@@ -14,8 +14,12 @@ The rules, verbatim from the spec's table:
 * anything that does not match is a sentence, so ordinary prose — including
   a sentence that happens to start with the word "queue" followed by more
   words — travels exactly as it does today;
-* the bare word ``next`` is the one message jarvis answers itself, with a
-  single line asking which of the two ``next`` shapes was meant.
+* three shapes are answered by jarvis itself with one usage line and are not
+  forwarded at all: the bare word ``next``, and the two half-typed commands
+  ``next:`` and ``before #12:`` with nothing after them. Without that last
+  rule a half-typed command would become a planning sentence whose entire
+  text is ``next:`` — a real build started from a typo (the coach's ruling
+  of 2026-09-05 evening).
 
 The ``target: <name>`` first line is parsed BEFORE this module runs
 (:func:`jarvis.infrastructure.slack_planning_intake.parse_target_token`), so
@@ -45,11 +49,18 @@ _PROMOTE_RE = re.compile(r"^#(\d+)\s+next$", re.IGNORECASE)
 _LINK_RE = re.compile(r"^#(\d+)\s+after\s+#(\d+)$", re.IGNORECASE)
 _KEEP_DROP_RE = re.compile(r"^(keep|drop)\s+#?(\d+)$", re.IGNORECASE)
 _KIND_RE = re.compile(r"^(fix|question):\s+(.+)$", re.IGNORECASE)
-_BARE_NEXT_RE = re.compile(r"^next$", re.IGNORECASE)
 
-#: The one line jarvis posts itself: the bare word ``next`` is ambiguous
-#: between the two ``next`` shapes, so it asks rather than guessing.
-BARE_NEXT_REFUSAL = 'Did you mean "next: <sentence>" or "#12 next"?'
+# The three shapes jarvis answers itself. Each is a command begun and not
+# finished, so there is no sentence to file and nothing to forward.
+_BARE_NEXT_RE = re.compile(r"^next$", re.IGNORECASE)
+_EMPTY_ADD_FRONT_RE = re.compile(r"^next:\s*$", re.IGNORECASE)
+_EMPTY_ADD_BEFORE_RE = re.compile(r"^before\s+#(\d+):\s*$", re.IGNORECASE)
+
+#: The one line jarvis posts itself when a ``next``-shaped message carries no
+#: sentence: bare ``next`` is ambiguous between the two ``next`` shapes, and
+#: ``next:`` / ``before #12:`` were begun and not finished. The same line
+#: serves all three, so Rich sees one usage reminder rather than three.
+USAGE_REFUSAL = 'Did you mean "next: <sentence>" or "#12 next"?'
 
 #: Which characters a typed repository name may use. The same set the wire
 #: allows (nats-core ``PLANNING_TARGET_REPO_PATTERN``, ``_pipeline.py``):
@@ -162,8 +173,15 @@ def parse_queue_message(text: str) -> ParsedMessage:
         kind: Literal["fix", "question"] = "fix" if match.group(1).lower() == "fix" else "question"
         return ParsedMessage(shape="sentence", sentence=match.group(2).strip(), kind=kind)
 
-    if _BARE_NEXT_RE.match(candidate):
-        return ParsedMessage(shape="refusal", refusal_text=BARE_NEXT_REFUSAL)
+    if (
+        _BARE_NEXT_RE.match(candidate)
+        or _EMPTY_ADD_FRONT_RE.match(candidate)
+        or _EMPTY_ADD_BEFORE_RE.match(candidate)
+    ):
+        # A command with its sentence missing. Filing it as prose would start
+        # a planning run whose whole request is "next:", so jarvis answers
+        # with the usage line and publishes nothing.
+        return ParsedMessage(shape="refusal", refusal_text=USAGE_REFUSAL)
 
     # Not a command: an ordinary planning sentence, byte-for-byte as it
     # arrived (the wire strips its outer whitespace, as it always has).
@@ -171,8 +189,8 @@ def parse_queue_message(text: str) -> ParsedMessage:
 
 
 __all__ = [
-    "BARE_NEXT_REFUSAL",
     "INVALID_TARGET_NAME_REPLY",
+    "USAGE_REFUSAL",
     "ParsedMessage",
     "is_allowed_target_name",
     "parse_queue_message",

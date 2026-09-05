@@ -23,8 +23,8 @@ from structlog.testing import capture_logs
 
 from jarvis.infrastructure import planning_intake_grammar as grammar
 from jarvis.infrastructure.planning_intake_grammar import (
-    BARE_NEXT_REFUSAL,
     INVALID_TARGET_NAME_REPLY,
+    USAGE_REFUSAL,
     is_allowed_target_name,
     parse_queue_message,
 )
@@ -141,6 +141,114 @@ class TestTheGrammarTable:
 
 
 # ---------------------------------------------------------------------------
+# A command begun and not finished (coach ruling, 2026-09-05 evening)
+# ---------------------------------------------------------------------------
+
+
+class TestAHalfTypedCommandIsRefusedNotFiled:
+    """``next:`` and ``before #12:`` with nothing after them.
+
+    Before this fix each became an ordinary planning sentence, so a typo
+    started a real build whose entire request text was ``next:``. Both now
+    get the same one-line usage reply as bare ``next`` and publish nothing.
+    """
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "next:",
+            "next: ",
+            "next:   ",
+            "next:\t",
+            "NEXT:",
+            "Next: ",
+            "before #12:",
+            "before #12: ",
+            "before #12:   ",
+            "BEFORE #12:",
+            "before   #7:",
+            "before #123456:",
+        ],
+    )
+    def test_it_is_refused_with_the_usage_line_and_nothing_is_forwarded(self, message: str) -> None:
+        parsed = parse_queue_message(message)
+        assert parsed.shape == "refusal"
+        assert parsed.command is None
+        assert parsed.sentence == ""
+        assert parsed.kind is None
+        assert parsed.refusal_text == USAGE_REFUSAL
+
+    def test_the_reply_is_the_same_line_bare_next_gets(self) -> None:
+        bare = parse_queue_message("next").refusal_text
+        assert parse_queue_message("next:").refusal_text == bare
+        assert parse_queue_message("before #12:").refusal_text == bare
+        assert bare == 'Did you mean "next: <sentence>" or "#12 next"?'
+
+
+# ---------------------------------------------------------------------------
+# The whole table at once: only the two half-typed rows changed
+# ---------------------------------------------------------------------------
+
+#: Every shape the grammar has an opinion about, with the outcome it must
+#: produce. The two ``refusal`` rows carrying no sentence are the only rows
+#: this fix changed; every other row is pinned here exactly as it behaved
+#: before, so the fix cannot have moved anything else.
+_WHOLE_TABLE: list[tuple[str, str, dict[str, Any] | None, str | None]] = [
+    # verb rows — unchanged
+    ("queue", "command", {"verb": "list"}, None),
+    ("next: add PDF export", "command", {"verb": "add_front", "sentence": "add PDF export"}, None),
+    (
+        "before #12: add PDF export",
+        "command",
+        {"verb": "add_before", "id": 12, "sentence": "add PDF export"},
+        None,
+    ),
+    ("#12 next", "command", {"verb": "promote", "id": 12}, None),
+    ("#12 after #14", "command", {"verb": "link", "id": 12, "after": 14}, None),
+    ("keep 9", "command", {"verb": "keep", "id": 9}, None),
+    ("drop #9", "command", {"verb": "drop", "id": 9}, None),
+    # kind prefixes — unchanged
+    ("fix: the login button is dead", "sentence", None, "fix"),
+    ("question: which repo holds the cards", "sentence", None, "question"),
+    # the refusals: bare next as before, the two half-typed rows are the fix
+    ("next", "refusal", None, None),
+    ("next:", "refusal", None, None),
+    ("before #12:", "refusal", None, None),
+    # near misses that must stay ordinary prose — unchanged
+    ("next up: the reporting dashboard", "sentence", None, None),
+    ("next : add PDF export", "sentence", None, None),
+    ("next:add PDF export", "sentence", None, None),
+    ("nextly", "sentence", None, None),
+    ("before 12:", "sentence", None, None),
+    ("before #12", "sentence", None, None),
+    ("before #12:x", "sentence", None, None),
+    ("beforehand #12:", "sentence", None, None),
+    ("question:", "sentence", None, None),
+    ("queue the next feature please", "sentence", None, None),
+    ("Add PDF export to the reporting dashboard", "sentence", None, None),
+]
+
+
+class TestTheWholeTableIsUnchangedApartFromTheFix:
+    @pytest.mark.parametrize(("message", "shape", "command", "kind"), _WHOLE_TABLE)
+    def test_each_row_lands_where_it_always_did(
+        self, message: str, shape: str, command: dict[str, Any] | None, kind: str | None
+    ) -> None:
+        parsed = parse_queue_message(message)
+        assert parsed.shape == shape
+        assert parsed.command == command
+        assert parsed.kind == kind
+        if shape == "refusal":
+            assert parsed.refusal_text == USAGE_REFUSAL
+        else:
+            assert parsed.refusal_text is None
+
+    def test_only_two_rows_are_refusals_beyond_bare_next(self) -> None:
+        refused = [row[0] for row in _WHOLE_TABLE if row[1] == "refusal"]
+        assert refused == ["next", "next:", "before #12:"]
+
+
+# ---------------------------------------------------------------------------
 # Everything else is a sentence (spec contract 3, "prose is untouched")
 # ---------------------------------------------------------------------------
 
@@ -173,7 +281,6 @@ class TestAnythingElseIsASentence:
             "fix the login button",  # no colon
             "fix:the login button",  # no space
             "question:",
-            "next:",
             "nextly",
             "queue\nand a second line",
             "next: line one\nline two",  # a command is one line
@@ -273,13 +380,36 @@ class TestTheHandlerForwardsACommand:
         web_client.chat_postMessage.assert_not_awaited()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("message", ["next:", "before #12:"])
+    async def test_a_half_typed_command_is_answered_and_nothing_is_published(
+        self, message: str
+    ) -> None:
+        handler, publisher, web_client = _make_handler()
+        await handler.handle_message_event(_message_event(message))
+        publisher.publish.assert_not_awaited()
+        assert web_client.chat_postMessage.await_count == 1
+        posted = web_client.chat_postMessage.await_args.kwargs
+        assert posted["text"] == USAGE_REFUSAL
+        assert posted["thread_ts"] == _TS
+        assert posted["channel"] == _CHANNEL
+
+    @pytest.mark.asyncio
+    async def test_a_half_typed_command_under_a_target_line_publishes_nothing(self) -> None:
+        # The target line is parsed first, so the message left for the
+        # grammar is the half-typed command on its own.
+        handler, publisher, web_client = _make_handler()
+        await handler.handle_message_event(_message_event("target: api_test\nnext:"))
+        publisher.publish.assert_not_awaited()
+        assert web_client.chat_postMessage.await_args.kwargs["text"] == USAGE_REFUSAL
+
+    @pytest.mark.asyncio
     async def test_bare_next_is_answered_and_nothing_is_published(self) -> None:
         handler, publisher, web_client = _make_handler()
         await handler.handle_message_event(_message_event("next"))
         publisher.publish.assert_not_awaited()
         assert web_client.chat_postMessage.await_count == 1
         posted = web_client.chat_postMessage.await_args.kwargs
-        assert posted["text"] == BARE_NEXT_REFUSAL
+        assert posted["text"] == USAGE_REFUSAL
         assert posted["thread_ts"] == _TS
         assert posted["channel"] == _CHANNEL
 

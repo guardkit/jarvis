@@ -430,9 +430,10 @@ class PlanningIntakeHandler:
         # --- 8. Command, refusal, or sentence (spec contracts 1 and 3) ----
         parsed = parse_queue_message(text)
         if parsed.shape == "refusal":
-            # The one message jarvis answers itself: bare "next" is
-            # ambiguous, so it asks instead of guessing, and publishes
-            # nothing.
+            # The messages jarvis answers itself: bare "next" is ambiguous,
+            # and "next:" or "before #12:" with nothing after them are
+            # commands begun and not finished. It asks instead of guessing,
+            # and publishes nothing.
             logger.info(
                 "planning_intake_ambiguous_refused",
                 event_id=dedup_key,
