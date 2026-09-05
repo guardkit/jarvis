@@ -37,6 +37,12 @@ Behaviour invariants (TASK-REV-3240 findings F3-F6, F10-F12):
   repost after the failure notice can yield two planning runs with
   different correlation ids — ``parent_request_id`` (the Slack ts) is the
   stable key Mode P can dedup on if this ever bites (FEAT-SPL-002 note).
+* An optional first line ``target: <name>`` names the repository the
+  sentence will be built in (binding spec 2026-09-05). Jarvis parses the
+  syntax, strips the token from ``request_text``, and passes the name
+  through in the payload field that already exists; it never checks whether
+  the name is a repository — the forge resolves it and refuses an unknown
+  one. Without a token every byte of this path behaves exactly as before.
 * ``originating_adapter="slack"`` is hard-coded (F4): the wire layer
   verifiably skips its required-when-jarvis validator when the field is
   omitted, so jarvis must never rely on it.
@@ -88,6 +94,11 @@ _DEDUP_MAX_ENTRIES = 1000
 # ``config.pipeline_publish_timeout_seconds`` (DDR-025); this default only
 # covers direct construction in tests.
 _DEFAULT_PUBLISH_TIMEOUT_SECONDS = 5.0
+
+# The one word that may open a planning sentence's first line to name the
+# repository it will be built in (binding spec 2026-09-05, rule 1). Lower
+# case; the match is case-insensitive.
+_TARGET_PREFIX = "target:"
 
 # Injectable monotonic-clock seam. Tests MUST patch this alias
 # (jarvis.infrastructure.slack_planning_intake._monotonic) instead of
@@ -142,6 +153,40 @@ def _requested_at_from_ts(ts: str | None) -> datetime:
         return datetime.fromtimestamp(float(ts), tz=UTC)  # type: ignore[arg-type]
     except (TypeError, ValueError, OverflowError, OSError):
         return datetime.now(UTC)
+
+
+def parse_target_token(text: str) -> tuple[str | None, str]:
+    """Split a leading ``target: <name>`` token off the first line.
+
+    The whole grammar (binding spec 2026-09-05, rule 1): the FIRST line only;
+    a case-insensitive ``target:`` prefix; optional spaces; then exactly one
+    token with no spaces in it. The token is removed and everything after the
+    first line becomes the sentence. Anything else — more than one word after
+    the colon, nothing after the colon, the word further down the message —
+    is not a target: the message is returned unchanged with ``None``.
+
+    Jarvis parses the SYNTAX only. Whether a name is a repository jarvis has
+    never been told; the forge resolves it and refuses an unknown one.
+
+    Args:
+        text: The raw Slack message text.
+
+    Returns:
+        ``(target_repo, request_text)`` — ``target_repo`` is ``None`` when the
+        first line is not a target line, and ``request_text`` is then ``text``
+        unchanged (byte-identical, so every no-token path behaves as before).
+    """
+    first_line, newline, remainder = text.partition("\n")
+    candidate = first_line.strip()
+    if candidate[: len(_TARGET_PREFIX)].lower() != _TARGET_PREFIX:
+        return None, text
+    name = candidate[len(_TARGET_PREFIX) :].strip()
+    if not name or any(character.isspace() for character in name):
+        # "target:" alone, or "target: improve the login flow" — not a target.
+        return None, text
+    # The rest of the message is the sentence; a blank remainder is left for
+    # the caller's blank-text rule to refuse exactly as it refuses a blank post.
+    return name, remainder if newline else ""
 
 
 # ---------------------------------------------------------------------------
@@ -311,10 +356,15 @@ class PlanningIntakeHandler:
             )
             return
 
-        # --- 5. Blank-text pre-check (F10) --------------------------------
+        # --- 5. Target token, then the blank-text pre-check (F10) ---------
+        # An optional first line "target: <name>" names the repository this
+        # sentence will be built in; it is stripped before anything else sees
+        # the text, so a message that was ONLY a target line is refused by the
+        # blank rule exactly as a blank post is (spec 2026-09-05, rule 1).
         # The contract rejects blank request_text; filter it here so the
         # outcome is a clean logged discard, not a ValidationError.
-        text = event.get("text") or ""
+        raw_text = event.get("text") or ""
+        target_repo, text = parse_target_token(raw_text)
         if not text.strip():
             logger.info(
                 "planning_intake_blank_dropped",
@@ -345,7 +395,7 @@ class PlanningIntakeHandler:
         try:
             planning = PlanningQueuedPayload(
                 request_text=text,
-                target_repo=None,
+                target_repo=target_repo,
                 triggered_by="jarvis",
                 # Explicit constant (F4): the wire layer skips its
                 # required-when-jarvis validator when this field is omitted.
@@ -423,7 +473,11 @@ class PlanningIntakeHandler:
         await self._post_thread(
             channel=channel,
             thread_ts=ts,
-            text=f"Queued for planning · `{correlation_id}`",
+            text=(
+                f"Queued for {target_repo} · `{correlation_id}`"
+                if target_repo
+                else f"Queued for planning · `{correlation_id}`"
+            ),
             log_event="planning_intake_ack_failed",
         )
 

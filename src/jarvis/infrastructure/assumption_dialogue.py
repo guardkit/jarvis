@@ -698,9 +698,15 @@ def _digest_header_blocks(
 ) -> list[dict[str, Any]]:
     title = str(card.get("title") or "The spec is ready — here's what will be built")
     feature = str(card.get("feature") or "").strip()
+    repo = str(card.get("target_repo") or "").strip()
     headline = f"*{title}*"
     if feature:
         headline += f"\n_Feature: {feature}_"
+    # The repository this will be built in, when the forge told us which
+    # (binding spec 2026-09-05, rule 5). An older forge sends no such field,
+    # and the card then renders byte-for-byte as it did before.
+    if repo:
+        headline += f"\n_Repo: {repo}_"
     blocks: list[dict[str, Any]] = [
         {
             "type": "section",

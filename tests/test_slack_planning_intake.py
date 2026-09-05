@@ -252,6 +252,8 @@ class TestQueueAndAck:
         assert payload.originating_adapter == "slack"  # F4 — explicit, never omitted
         assert payload.originating_user == _JAMES
         assert payload.parent_request_id == _TS
+        # No "target:" first line in this sentence, so no repository is named
+        # and the forge uses its default (binding spec 2026-09-05, rule 1).
         assert payload.target_repo is None
         assert payload.retry_count == 0
         assert payload.requested_at.timestamp() == pytest.approx(1751795701.0002)
@@ -301,6 +303,141 @@ class TestQueueAndAck:
         handler, publisher, _ = _make_handler(web_client=None)
         await handler.handle_message_event(_message_event())
         publisher.publish.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# The "target:" first line — which repository the sentence is built in
+# (binding spec 2026-09-05, rules 1 and 2)
+# ---------------------------------------------------------------------------
+
+
+class TestTheTargetToken:
+    """The token names a repository; jarvis parses the syntax and nothing else.
+
+    NB the installed event contract only accepts an ``org/name`` value for
+    ``target_repo`` (nats_core ``REPO_PATTERN``), so the publishing tests here
+    use one — see ``test_a_bare_name_does_not_pass_todays_wire_contract``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_target_token_sets_target_repo(self) -> None:
+        handler, publisher, _ = _make_handler()
+        await handler.handle_message_event(
+            _message_event(text="target: guardkit/study-tutor\nAdd PDF export to the dashboard")
+        )
+        assert _published_payload(publisher).target_repo == "guardkit/study-tutor"
+
+    @pytest.mark.asyncio
+    async def test_target_token_is_stripped_from_request_text(self) -> None:
+        handler, publisher, _ = _make_handler()
+        await handler.handle_message_event(
+            _message_event(text="target: guardkit/study-tutor\nAdd PDF export to the dashboard")
+        )
+        payload = _published_payload(publisher)
+        assert payload.request_text == "Add PDF export to the dashboard"
+        assert "target:" not in payload.request_text
+
+    @pytest.mark.asyncio
+    async def test_a_bare_name_does_not_pass_todays_wire_contract(self) -> None:
+        """A gap the binding spec did not cover — reported, not worked around.
+
+        The spec's forge rule 3 resolves a name with no slash against the
+        configured checkouts, so ``target: study-tutor`` is meant to work. The
+        INSTALLED contract refuses it (``target_repo must be 'org/name'``), so
+        the payload never validates and the post is dropped with a metadata
+        log and no reply. Jarvis does not second-guess the contract here; when
+        nats_core widens the pattern this test is the one to delete.
+        """
+        handler, publisher, wc = _make_handler()
+        with capture_logs() as logs:
+            await handler.handle_message_event(
+                _message_event(text="target: study-tutor\nAdd PDF export")
+            )
+        publisher.publish.assert_not_awaited()
+        wc.chat_postMessage.assert_not_awaited()
+        dropped = [e for e in logs if e["event"] == "planning_intake_invalid_dropped"]
+        assert dropped and dropped[0]["reason"] == "ValidationError"
+
+    @pytest.mark.asyncio
+    async def test_multiword_first_line_is_not_a_target(self) -> None:
+        # "target: improve the login flow" is a sentence, not a repository.
+        handler, publisher, _ = _make_handler()
+        text = "target: improve the login flow"
+        await handler.handle_message_event(_message_event(text=text))
+        payload = _published_payload(publisher)
+        assert payload.target_repo is None
+        assert payload.request_text == text
+
+    @pytest.mark.asyncio
+    async def test_ack_names_the_repo(self) -> None:
+        handler, publisher, wc = _make_handler()
+        await handler.handle_message_event(
+            _message_event(text="target: guardkit/study-tutor\nAdd PDF export")
+        )
+        correlation_id = _published_payload(publisher).correlation_id
+        assert wc.chat_postMessage.await_args.kwargs["text"] == (
+            f"Queued for guardkit/study-tutor · `{correlation_id}`"
+        )
+
+    @pytest.mark.asyncio
+    async def test_ack_without_a_token_is_unchanged(self) -> None:
+        handler, publisher, wc = _make_handler()
+        await handler.handle_message_event(_message_event())
+        correlation_id = _published_payload(publisher).correlation_id
+        assert wc.chat_postMessage.await_args.kwargs["text"] == (
+            f"Queued for planning · `{correlation_id}`"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_target_line_with_nothing_else_is_refused_as_blank(self) -> None:
+        handler, publisher, wc = _make_handler()
+        with capture_logs() as logs:
+            await handler.handle_message_event(_message_event(text="target: guardkit/study-tutor"))
+        publisher.publish.assert_not_awaited()
+        wc.chat_postMessage.assert_not_awaited()
+        assert [e for e in logs if e["event"] == "planning_intake_blank_dropped"]
+
+    @pytest.mark.asyncio
+    async def test_the_word_further_down_the_message_is_not_a_target(self) -> None:
+        handler, publisher, _ = _make_handler()
+        text = "Add PDF export\ntarget: guardkit/study-tutor"
+        await handler.handle_message_event(_message_event(text=text))
+        payload = _published_payload(publisher)
+        assert payload.target_repo is None
+        assert payload.request_text == text
+
+
+class TestParseTargetToken:
+    """The grammar itself — first line, case-insensitive, exactly one word."""
+
+    def test_no_token_returns_the_text_unchanged(self) -> None:
+        assert spi.parse_target_token("just an idea") == (None, "just an idea")
+
+    def test_prefix_is_case_insensitive(self) -> None:
+        assert spi.parse_target_token("TARGET:  study-tutor\nbody") == (
+            "study-tutor",
+            "body",
+        )
+
+    def test_an_org_slash_name_is_one_token(self) -> None:
+        assert spi.parse_target_token("target: guardkit/api_test\nbody") == (
+            "guardkit/api_test",
+            "body",
+        )
+
+    def test_the_colon_alone_is_not_a_target(self) -> None:
+        assert spi.parse_target_token("target:\nbody") == (None, "target:\nbody")
+
+    def test_a_lone_target_line_leaves_a_blank_sentence(self) -> None:
+        assert spi.parse_target_token("target: study-tutor") == ("study-tutor", "")
+
+    def test_the_rest_of_the_message_keeps_its_own_line_breaks(self) -> None:
+        parsed = spi.parse_target_token("target: t\nline one\n\nline two")
+        assert parsed == ("t", "line one\n\nline two")
+
+    def test_a_word_that_merely_starts_with_target_is_not_the_prefix(self) -> None:
+        text = "targeting: the wrong thing\nbody"
+        assert spi.parse_target_token(text) == (None, text)
 
 
 # ---------------------------------------------------------------------------

@@ -231,7 +231,11 @@ class TestVerbatimNoReasoning:
         await _deliver(client, _message_envelope_payload(text=text))
         payload = _published(publisher)["payload"]
         assert payload.request_text == text.strip()
-        assert payload.target_repo is None  # ASSUM-004 — never parsed from text
+        # This sentence has no "target:" first line, so no repository is
+        # named and the forge builds in its default. Jarvis still does no
+        # reasoning on the text: the only thing it ever reads out of it is
+        # that one optional token (binding spec 2026-09-05, rule 1).
+        assert payload.target_repo is None
         # Only two side-effect surfaces exist on the handler; both accounted,
         # and the web client saw NOTHING but the threaded ack:
         assert publisher.publish.await_count == 1
@@ -247,15 +251,28 @@ class TestVerbatimNoReasoning:
 class TestPlanningQueuedEnvelopeContract:
     """Round-trips the REAL publisher's wire bytes through installed nats_core."""
 
-    async def _capture_wire_bytes(self) -> tuple[str, bytes]:
+    async def _capture_wire_bytes(self, text: str | None = None) -> tuple[str, bytes]:
         js = SimpleNamespace(publish=AsyncMock())
         nats_client = SimpleNamespace(js=js)
         client, _, _ = _make_client(
             intake_publisher=NatsPlanningQueuedPublisher(nats_client)  # type: ignore[arg-type]
         )
-        await _deliver(client, _message_envelope_payload())
+        kwargs = {"text": text} if text is not None else {}
+        await _deliver(client, _message_envelope_payload(**kwargs))
         subject, raw = js.publish.await_args.args
         return subject, raw
+
+    @pytest.mark.asyncio
+    async def test_a_named_repository_rides_the_wire_in_the_existing_field(self) -> None:
+        # The counterpart to the null pins: with a "target:" first line the
+        # name travels in the field the contract already has — no schema
+        # change (binding spec 2026-09-05).
+        from nats_core.events import PlanningQueuedPayload
+
+        _, raw = await self._capture_wire_bytes("target: guardkit/study-tutor\nAdd PDF export")
+        payload = PlanningQueuedPayload.model_validate(json.loads(raw)["payload"])
+        assert payload.target_repo == "guardkit/study-tutor"
+        assert payload.request_text == "Add PDF export"
 
     @pytest.mark.asyncio
     async def test_wire_bytes_round_trip_through_installed_nats_core(self) -> None:
@@ -270,6 +287,7 @@ class TestPlanningQueuedEnvelopeContract:
         assert reconstructed.stage == "planning"
         assert reconstructed.originating_user == _JAMES
         assert reconstructed.retry_count == 0
+        # No "target:" token in this message — the field rides the wire as null.
         assert reconstructed.target_repo is None
         assert subject == f"pipeline.planning-queued.{reconstructed.correlation_id}"
         assert envelope.correlation_id == reconstructed.correlation_id

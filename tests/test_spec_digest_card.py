@@ -252,6 +252,31 @@ class TestTheCardFace:
         """``parse_dialogue_blocks`` must not read the card's own buttons as state."""
         assert ad.parse_dialogue_blocks(_blocks(make_digest_details())) == {}
 
+    def test_the_card_names_the_repository_it_will_be_built_in(self) -> None:
+        """Binding spec 2026-09-05, rule 5 — the owner reads WHERE, not just what."""
+        details = make_digest_details()
+        details["summary"]["target_repo"] = "guardkit/study-tutor"
+        header = next(b for b in _blocks(details) if b.get("block_id") == "digesthdr")
+        text = header["text"]["text"]
+        assert "_Repo: guardkit/study-tutor_" in text
+        # Under the feature line, not above it.
+        assert text.index("_Feature: version-endpoint_") < text.index("_Repo:")
+
+    def test_a_card_without_a_repository_renders_exactly_as_before(self) -> None:
+        """An older forge sends no such field; the card must be byte-identical."""
+        blocks = _blocks(make_digest_details())
+        header = next(b for b in blocks if b.get("block_id") == "digesthdr")
+        assert header["text"]["text"] == (
+            "*The spec is ready — here's what will be built*\n_Feature: version-endpoint_"
+        )
+        assert "Repo:" not in "\n".join(_texts(blocks))
+
+    def test_a_blank_repository_field_renders_no_repo_line(self) -> None:
+        details = make_digest_details()
+        details["summary"]["target_repo"] = "   "
+        header = next(b for b in _blocks(details) if b.get("block_id") == "digesthdr")
+        assert "Repo:" not in header["text"]["text"]
+
 
 # ---------------------------------------------------------------------------
 # The label allowlist
