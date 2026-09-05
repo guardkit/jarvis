@@ -359,6 +359,15 @@ class TestTheTargetToken:
         )
 
     @pytest.mark.asyncio
+    async def test_the_published_sentence_is_trimmed(self) -> None:
+        """Blank lines and spaces around the sentence do not reach the forge."""
+        handler, publisher, _ = _make_handler()
+        await handler.handle_message_event(
+            _message_event(text="target: study-tutor\n\n  Add PDF export  \n")
+        )
+        assert _published_payload(publisher).request_text == "Add PDF export"
+
+    @pytest.mark.asyncio
     async def test_an_unknown_short_name_is_still_published_not_dropped(self) -> None:
         """Jarvis does not judge the name; the forge refuses it out loud."""
         handler, publisher, wc = _make_handler()
@@ -442,6 +451,11 @@ class TestParseTargetToken:
     def test_the_rest_of_the_message_keeps_its_own_line_breaks(self) -> None:
         parsed = spi.parse_target_token("target: t\nline one\n\nline two")
         assert parsed == ("t", "line one\n\nline two")
+
+    def test_the_remainder_is_trimmed(self) -> None:
+        """Spec rule 1: the rest of the message, TRIMMED, is the sentence."""
+        parsed = spi.parse_target_token("target: t\n\n  Add PDF export  \n\n")
+        assert parsed == ("t", "Add PDF export")
 
     def test_a_word_that_merely_starts_with_target_is_not_the_prefix(self) -> None:
         text = "targeting: the wrong thing\nbody"

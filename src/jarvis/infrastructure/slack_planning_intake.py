@@ -161,7 +161,7 @@ def parse_target_token(text: str) -> tuple[str | None, str]:
     The whole grammar (binding spec 2026-09-05, rule 1): the FIRST line only;
     a case-insensitive ``target:`` prefix; optional spaces; then exactly one
     token with no spaces in it. The token is removed and everything after the
-    first line becomes the sentence. Anything else — more than one word after
+    first line, trimmed, becomes the sentence. Anything else — more than one word after
     the colon, nothing after the colon, the word further down the message —
     is not a target: the message is returned unchanged with ``None``.
 
@@ -175,6 +175,8 @@ def parse_target_token(text: str) -> tuple[str | None, str]:
         ``(target_repo, request_text)`` — ``target_repo`` is ``None`` when the
         first line is not a target line, and ``request_text`` is then ``text``
         unchanged (byte-identical, so every no-token path behaves as before).
+        With a token, ``request_text`` is the remainder with leading and
+        trailing whitespace removed.
     """
     first_line, newline, remainder = text.partition("\n")
     candidate = first_line.strip()
@@ -184,9 +186,10 @@ def parse_target_token(text: str) -> tuple[str | None, str]:
     if not name or any(character.isspace() for character in name):
         # "target:" alone, or "target: improve the login flow" — not a target.
         return None, text
-    # The rest of the message is the sentence; a blank remainder is left for
-    # the caller's blank-text rule to refuse exactly as it refuses a blank post.
-    return name, remainder if newline else ""
+    # The rest of the message, TRIMMED, is the sentence (spec rule 1); a blank
+    # remainder is left for the caller's blank-text rule to refuse exactly as
+    # it refuses a blank post.
+    return name, remainder.strip() if newline else ""
 
 
 # ---------------------------------------------------------------------------
