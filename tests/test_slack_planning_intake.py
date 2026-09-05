@@ -314,9 +314,10 @@ class TestQueueAndAck:
 class TestTheTargetToken:
     """The token names a repository; jarvis parses the syntax and nothing else.
 
-    NB the installed event contract only accepts an ``org/name`` value for
-    ``target_repo`` (nats_core ``REPO_PATTERN``), so the publishing tests here
-    use one — see ``test_a_bare_name_does_not_pass_todays_wire_contract``.
+    Both shapes travel: ``org/name`` and the short name on its own. The forge
+    resolves the short name against its configured checkouts and refuses a
+    name it does not know out loud (spec 2026-09-05, rules 3 and 4), so jarvis
+    must not filter either shape out at the wire.
     """
 
     @pytest.mark.asyncio
@@ -338,25 +339,32 @@ class TestTheTargetToken:
         assert "target:" not in payload.request_text
 
     @pytest.mark.asyncio
-    async def test_a_bare_name_does_not_pass_todays_wire_contract(self) -> None:
-        """A gap the binding spec did not cover — reported, not worked around.
+    async def test_a_short_name_travels_to_the_forge(self) -> None:
+        """The short name is the one a person actually types.
 
-        The spec's forge rule 3 resolves a name with no slash against the
-        configured checkouts, so ``target: study-tutor`` is meant to work. The
-        INSTALLED contract refuses it (``target_repo must be 'org/name'``), so
-        the payload never validates and the post is dropped with a metadata
-        log and no reply. Jarvis does not second-guess the contract here; when
-        nats_core widens the pattern this test is the one to delete.
+        It must reach the forge, which is the only side that knows the
+        configured checkouts and can either resolve it or say, in the thread,
+        that it does not know the name (spec 2026-09-05, rules 3 and 4). A
+        wire refusal here would drop the sentence with no reply at all.
         """
         handler, publisher, wc = _make_handler()
-        with capture_logs() as logs:
-            await handler.handle_message_event(
-                _message_event(text="target: study-tutor\nAdd PDF export")
-            )
-        publisher.publish.assert_not_awaited()
-        wc.chat_postMessage.assert_not_awaited()
-        dropped = [e for e in logs if e["event"] == "planning_intake_invalid_dropped"]
-        assert dropped and dropped[0]["reason"] == "ValidationError"
+        await handler.handle_message_event(
+            _message_event(text="target: study-tutor\nAdd PDF export")
+        )
+        payload = _published_payload(publisher)
+        assert payload.target_repo == "study-tutor"
+        assert payload.request_text == "Add PDF export"
+        assert wc.chat_postMessage.await_args.kwargs["text"] == (
+            f"Queued for study-tutor · `{payload.correlation_id}`"
+        )
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_short_name_is_still_published_not_dropped(self) -> None:
+        """Jarvis does not judge the name; the forge refuses it out loud."""
+        handler, publisher, wc = _make_handler()
+        await handler.handle_message_event(_message_event(text="target: nowhere\nAdd PDF export"))
+        assert _published_payload(publisher).target_repo == "nowhere"
+        wc.chat_postMessage.assert_awaited()
 
     @pytest.mark.asyncio
     async def test_multiword_first_line_is_not_a_target(self) -> None:
