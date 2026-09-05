@@ -53,7 +53,7 @@ _PAUSE_HEADLINE = "Build paused — waiting for your go-ahead"
 _MERGE_HEADLINE = "Ready to merge and deploy — your press"
 
 # The words the old card put on screen that must never come back.
-_BANNED = ("Stage:", "Trace:", "score unavailable", "build-paused")
+_BANNED = ("Stage:", "Trace:", "score unavailable", "build-paused", "Pipeline")
 
 
 def _live_payload(**overrides: Any) -> ForgeNotification:
