@@ -520,16 +520,16 @@ class TestTextOnlyFallback:
 
         # Explicit expected shape (NOT notifier._render — a
         # self-referential oracle would stay green if _render broke).
-        # Approval-card truth R1-A: the fallback now carries provenance
-        # (Build/Trace) directly under the header.
-        hhmm = completed.astimezone().strftime("%H:%M")
+        # Words rewritten 2026-09-05: a headline that says what is being
+        # asked, the feature, the pipeline's own sentence, the score, and
+        # one muted provenance line. No status line, no stage name, no
+        # identifiers as prose.
         expected = (
-            f"[{hhmm}] Pipeline FEAT-ABC1: build-paused\n"
-            "Build: build-abc123\n"
-            "Trace: corr-pause-1\n"
-            "Stage: autobuild\n"
+            "Build paused — waiting for your go-ahead\n"
+            "FEAT-ABC1\n"
+            "Coach flagged a wiring risk\n"
             "Checker score: 0.42\n"
-            "Rationale: Coach flagged a wiring risk\n"
+            "Build build-abc123 · reference corr-pause-1\n"
             "Use CLI to approve or reject this build."
         )
         kwargs = client.chat_postMessage.await_args.kwargs
@@ -716,7 +716,7 @@ class TestPlainTextOnlyRendering:
             if block.get("text"):
                 assert len(block["text"]["text"]) <= 3000
         joined = "".join(b["text"]["text"] for b in blocks if b.get("text"))
-        assert "r" * 7000 in joined.replace("Rationale: ", "")
+        assert "r" * 7000 in joined
 
 
 # ---------------------------------------------------------------------------
@@ -1051,13 +1051,13 @@ class TestMultiGateSupersede:
         # Gate 1: request + pause → buttoned message M1
         await _capture(subscriber, "build-abc123", "apr-001")
         await notifier._deliver_pause_message(
-            _pause_notification("build-abc123", stage_label="gate-1")
+            _pause_notification("build-abc123", stage_label="gate-1", rationale="gate-1 rationale")
         )
 
         # Gate 2: refreshed request arrives first, then the gate-2 pause
         await _capture(subscriber, "build-abc123", "apr-002")
         await notifier._deliver_pause_message(
-            _pause_notification("build-abc123", stage_label="gate-2")
+            _pause_notification("build-abc123", stage_label="gate-2", rationale="gate-2 rationale")
         )
 
         # Fresh gate-2 message carries the apr-002 buttons + gate-2 content
@@ -1066,7 +1066,7 @@ class TestMultiGateSupersede:
         value = _button_value_from_blocks(m2_kwargs["blocks"])
         assert value["request_id"] == "apr-002"
         m2_text = " ".join(b["text"]["text"] for b in m2_kwargs["blocks"] if b.get("text"))
-        assert "Stage: gate-2" in m2_text
+        assert "gate-2 rationale" in m2_text
 
         # The LAST update of M1 stripped its buttons (no actions block)
         m1_updates = [
@@ -1087,12 +1087,12 @@ class TestMultiGateSupersede:
         # Gate 1: request + pause → buttoned message M1
         await _capture(subscriber, "build-abc123", "apr-001")
         await notifier._deliver_pause_message(
-            _pause_notification("build-abc123", stage_label="gate-1")
+            _pause_notification("build-abc123", stage_label="gate-1", rationale="gate-1 rationale")
         )
 
         # Gate 2: pause first (no request yet), then the gate-2 request
         await notifier._deliver_pause_message(
-            _pause_notification("build-abc123", stage_label="gate-2")
+            _pause_notification("build-abc123", stage_label="gate-2", rationale="gate-2 rationale")
         )
         await _capture(subscriber, "build-abc123", "apr-002")
 
@@ -1113,7 +1113,7 @@ class TestMultiGateSupersede:
         value = _button_value_from_blocks(m2_updates[-1]["blocks"])
         assert value["request_id"] == "apr-002"
         m2_text = " ".join(b["text"]["text"] for b in m2_updates[-1]["blocks"] if b.get("text"))
-        assert "Stage: gate-2" in m2_text
+        assert "gate-2 rationale" in m2_text
 
 
 # ---------------------------------------------------------------------------
@@ -1430,7 +1430,9 @@ class TestPauseProjectionContract:
         # ADR-ARCH-033
         blocks = build_pause_blocks(restored)
         rendered_text = " ".join(b["text"]["text"] for b in blocks if b.get("text"))
-        assert "score unavailable" in rendered_text
+        # No score is the live default; the card says nothing about it
+        # rather than printing the old "score unavailable" non-answer.
+        assert "score" not in rendered_text.lower()
         # all text objects are plain_text (mrkdwn disabled)
         assert all(b["text"]["type"] == "plain_text" for b in blocks if b.get("text"))
 
