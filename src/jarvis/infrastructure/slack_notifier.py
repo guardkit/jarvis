@@ -285,6 +285,13 @@ def _where_clause(notification: ForgeNotification) -> str:
 # forge_notifications for type-checking only.
 _MERGE_DEPLOY_STAGE_LABEL = "merge-deploy"
 
+# The one value of the outcome's ``deployed_in`` field that changes the
+# success sentence: forge sends it when the repository's deploy profile
+# carries a sandbox block, so the deploy ran inside a Docker Sandbox
+# (deploy-into-Docker-Sandboxes spec, 2026-09-06). Every other value,
+# and no value at all, keeps today's wording byte-identically.
+_DOCKER_SANDBOX = "docker-sandbox"
+
 
 def _is_merge_deploy_outcome(notification: ForgeNotification) -> bool:
     """True when ``notification`` is the merge-and-deploy outcome line.
@@ -312,6 +319,11 @@ def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str)
     line as the honest default for everything else. Absent fields
     degrade: no counts drops the checks clause, no failed_step says
     'the merge', no detail drops the why clause.
+
+    One addition (deploy-into-Docker-Sandboxes spec, 2026-09-06): when
+    the outcome says the deploy ran in a Docker Sandbox, the success
+    sentence names it. Nothing else on any line changes, and an absent
+    or unrecognised value keeps today's wording byte-identically.
     """
     prefix = f"{mention}[{hhmm}] Pipeline {notification.feature_id}: "
     result = notification.result
@@ -327,7 +339,11 @@ def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str)
         checks = ""
         if notification.checks_passed is not None and notification.checks_total is not None:
             checks = f" — checks {notification.checks_passed}/{notification.checks_total}"
-        return f"{prefix}merged and running{checks}. Rollback is one command; the branch is kept."
+        where = " in its Docker Sandbox" if notification.deployed_in == _DOCKER_SANDBOX else ""
+        return (
+            f"{prefix}merged and running{where}{checks}. "
+            "Rollback is one command; the branch is kept."
+        )
     step = notification.failed_step or "the merge"
     why = f" — {notification.detail}" if notification.detail else ""
     return f"{prefix}merge-and-deploy stopped at {step}{why}. Nothing half-done; the branch is kept."

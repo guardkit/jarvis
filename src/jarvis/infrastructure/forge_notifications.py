@@ -439,6 +439,19 @@ class ForgeNotification(BaseModel):
             "merge-deploy payload (additive, defensive)."
         ),
     )
+    deployed_in: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Where the deploy actually ran, off the raw merge-deploy "
+            "payload (additive, defensive; deploy-into-Docker-Sandboxes "
+            "spec 2026-09-06). Forge sends 'docker-sandbox' when the "
+            "repository's deploy profile carries a sandbox block, and "
+            "that value alone changes the success line. Anything else, "
+            "including None, keeps today's wording byte-identically. "
+            "Optional field added per frozen-model rule."
+        ),
+    )
 
     def render_line(self) -> str:
         """Render the canonical notification line per DDR-030 / DM-forge-notification §1.
@@ -1315,6 +1328,7 @@ class ForgeNotificationsSubscriber:
                         detail=_outcome_str(raw.get("detail")),
                         checks_passed=_outcome_count(raw.get("checks_passed")),
                         checks_total=_outcome_count(raw.get("checks_total")),
+                        deployed_in=_outcome_str(raw.get("deployed_in")),
                     )
                     await self._notification_sink.notify(sink_notification)
                 except Exception as exc:
