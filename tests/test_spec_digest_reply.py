@@ -7,7 +7,8 @@ wire when the owner answers a spec digest card:
   signing in as a per-item value;
 * "Send a note" collects plain English in a modal and publishes it VERBATIM as
   a ``reject`` with a note — the literal the digest door reads as "rewrite the
-  spec", never as "cancel the run";
+  spec", never as "cancel the run" — and the card then keeps the note in its
+  status line, whole, and says what happens next (2026-09-06);
 * the note modal's submission is HANDLED. It used to be dropped with no log at
   all, which is how a typed note could vanish between a person and the machine;
 * "Show the worked examples" opens a read-only view and publishes nothing.
@@ -125,6 +126,22 @@ def _make_handler(*, spec_texts: SpecTextRegistry | None = None):
 
 def _published(publisher: MagicMock) -> Any:
     return publisher.publish.await_args.kwargs["payload"]
+
+
+def _sent_line(note: str) -> str:
+    """The status line after a plain note, verbatim from the lane spec (rule 22)."""
+    return (
+        f'Your note was sent: "{note}". The machine is rewriting the spec from it '
+        "and will post a fresh list in this thread. If it cannot honour the note "
+        "it will say so here, and a new sentence starts a fresh run."
+    )
+
+
+# The reject-note line keeps its wording; pinned so a change is a deliberate one.
+_REJECT_LINE = (
+    "You said reject, so this run will be cancelled and nothing will be built. "
+    "Send a fresh sentence whenever you are ready to start again."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -300,11 +317,92 @@ class TestTheNoteChannel:
         publisher.publish.assert_awaited()
 
     @pytest.mark.asyncio
-    async def test_the_card_says_the_note_is_with_the_machine(self) -> None:
+    async def test_the_card_keeps_the_note_and_says_what_happens_next(self) -> None:
+        """2026-09-06: the card showed the rewrite promise and then nothing, and
+        with the note gone from the card Rich read it as having had no way to
+        send one. The status line now carries the note, whole and in quotes,
+        and says where the fresh list will land and what to do if the machine
+        cannot honour the note. The words are the lane spec's (rule 22)."""
         handler, _publisher, web = _make_handler()
         await handler.handle_view_submission(_note_submission("rename it"))
         text = web.chat_update.await_args.kwargs["text"]
-        assert "rewrite the spec" in text
+        assert text == _sent_line("rename it")
+
+    @pytest.mark.asyncio
+    async def test_the_status_line_is_the_card_with_its_buttons_swapped_for_that_line(
+        self,
+    ) -> None:
+        """Nothing else on the card moves: every block but the buttons stays,
+        in order and byte for byte, and the one new block is a plain-text
+        section carrying the status line. No new buttons (rule 24)."""
+        handler, _publisher, web = _make_handler()
+        await handler.handle_view_submission(_note_submission("rename it"))
+        blocks = web.chat_update.await_args.kwargs["blocks"]
+        original = _card_blocks()
+        assert [b for b in original if b.get("type") == "actions"], "the card had buttons"
+        kept = [b for b in original if b.get("type") != "actions"]
+        assert blocks[:-1] == kept
+        assert blocks[-1] == {
+            "type": "section",
+            "text": {"type": "plain_text", "text": _sent_line("rename it"), "emoji": False},
+        }
+        assert not [b for b in blocks if b.get("type") == "actions"]
+        assert "button" not in json.dumps(blocks)
+
+    @pytest.mark.asyncio
+    async def test_a_note_with_quotes_in_it_is_shown_whole_inside_the_quotes(self) -> None:
+        note = 'call the field "domain", not "email_domain", and keep the "total" row'
+        handler, publisher, web = _make_handler()
+        await handler.handle_view_submission(_note_submission(note))
+        assert _published(publisher).notes == note
+        text = web.chat_update.await_args.kwargs["text"]
+        assert text == _sent_line(note)
+        assert f'Your note was sent: "{note}". ' in text
+
+    @pytest.mark.asyncio
+    async def test_a_multi_line_note_is_shown_whole_with_its_line_breaks(self) -> None:
+        note = "Two things:\n- the count must include inactive users\n- sort by domain"
+        handler, publisher, web = _make_handler()
+        await handler.handle_view_submission(_note_submission(note))
+        assert _published(publisher).notes == note
+        text = web.chat_update.await_args.kwargs["text"]
+        assert text == _sent_line(note)
+        assert note in text
+        block_text = web.chat_update.await_args.kwargs["blocks"][-1]["text"]["text"]
+        assert block_text == text
+
+    @pytest.mark.asyncio
+    async def test_a_long_note_is_never_cut_short(self) -> None:
+        note = " ".join(f"sentence {n} of the note" for n in range(1, 121))
+        assert len(note) > 2000
+        handler, publisher, web = _make_handler()
+        await handler.handle_view_submission(_note_submission(note))
+        assert _published(publisher).notes == note
+        text = web.chat_update.await_args.kwargs["text"]
+        assert text == _sent_line(note)
+        assert note in text
+        assert "..." not in text and "\u2026" not in text
+
+    @pytest.mark.asyncio
+    async def test_the_note_is_shown_as_sent_after_the_modal_trimmed_it(self) -> None:
+        """What the card quotes is what went out on the wire: the same trimmed words."""
+        handler, publisher, web = _make_handler()
+        await handler.handle_view_submission(_note_submission("  rename it \n"))
+        assert _published(publisher).notes == "rename it"
+        assert web.chat_update.await_args.kwargs["text"] == _sent_line("rename it")
+
+    def test_the_reject_form_is_unchanged(self) -> None:
+        """Rule 22's second half: the form a note is typed into keeps its words."""
+        view = ad.build_note_modal(private_metadata="{}")
+        assert view["title"]["text"] == "Send a note"
+        assert view["submit"]["text"] == "Send"
+        assert view["close"]["text"] == "Cancel"
+        (field,) = view["blocks"]
+        assert field["label"]["text"] == "What should be different?"
+        assert field["hint"]["text"] == (
+            "Say it however you would say it out loud. The machine "
+            "rewrites the spec from this and comes back with a fresh list."
+        )
 
     @pytest.mark.asyncio
     async def test_a_note_starting_with_reject_still_reaches_the_wire_verbatim(self) -> None:
@@ -326,9 +424,10 @@ class TestTheNoteChannel:
             _note_submission("Reject: I typed the wrong sentence")
         )
         text = web.chat_update.await_args.kwargs["text"]
-        assert "cancelled" in text
-        assert "fresh sentence" in text
+        assert text == _REJECT_LINE
         assert "rewrite the spec" not in text
+        assert "rewriting the spec" not in text
+        assert "Your note was sent" not in text
 
     @pytest.mark.asyncio
     async def test_a_bare_reject_note_says_cancelled_too(self) -> None:
@@ -336,7 +435,7 @@ class TestTheNoteChannel:
         await handler.handle_view_submission(_note_submission("reject"))
         assert _published(publisher).notes == "reject"
         text = web.chat_update.await_args.kwargs["text"]
-        assert "cancelled" in text
+        assert text == _REJECT_LINE
 
     @pytest.mark.asyncio
     async def test_a_note_merely_containing_reject_still_says_rewrite(self) -> None:
@@ -346,7 +445,8 @@ class TestTheNoteChannel:
             _note_submission("please reject unknown formats with a 400")
         )
         text = web.chat_update.await_args.kwargs["text"]
-        assert "rewrite the spec" in text
+        assert text == _sent_line("please reject unknown formats with a 400")
+        assert "cancelled" not in text
 
     @pytest.mark.asyncio
     async def test_a_stranger_cannot_send_a_note(self) -> None:

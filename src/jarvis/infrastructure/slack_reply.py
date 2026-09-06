@@ -1175,6 +1175,14 @@ class ApprovalReplyHandler:
         in-card status line differs, so what the card says matches what the
         machine will do. A note with no words is not sent: there would be
         nothing to rewrite from.
+
+        The status line after a plain note keeps the note itself, whole and
+        in quotes, and says what happens next and where. On 2026-09-06 the
+        card showed only the rewrite promise and then nothing followed in
+        the thread; with the note gone from the card, Rich read it as having
+        had no way to send one. The words are the lane spec's own (in the
+        ai-transition repository, docs/rewrite-on-refusal-spec-2026-09-06.md,
+        rule 22). A long note is still shown whole, never cut short.
         """
         from jarvis.infrastructure import assumption_dialogue as ad
 
@@ -1226,8 +1234,10 @@ class ApprovalReplyHandler:
                 )
             else:
                 status_line = (
-                    "Your note is with the machine. It will rewrite the spec "
-                    "from it and come back with a fresh list."
+                    f'Your note was sent: "{note}". The machine is rewriting '
+                    "the spec from it and will post a fresh list in this "
+                    "thread. If it cannot honour the note it will say so "
+                    "here, and a new sentence starts a fresh run."
                 )
             await self._dialogue_status_update(
                 channel_id,
