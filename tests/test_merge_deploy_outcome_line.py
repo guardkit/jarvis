@@ -22,7 +22,11 @@ What is fenced here:
 * **The copy.** Four result classes, plain sentences per the owner's
   language law: merged-and-running (with the checks tally), the
   automatic-rollback story, the stopped-at-a-step story, and NO line for
-  "rejected" — the card already shows that decision.
+  "rejected" — the card already shows that decision. Since the
+  deploy-into-Docker-Sandboxes spec (2026-09-06) the success sentence
+  also says where the deploy ran, but only when forge says
+  ``deployed_in: "docker-sandbox"``; every other value, and no value at
+  all, leaves every line byte-identical to before.
 * **The mention.** The outcome line answers the owner's own press, so it
   rides the existing terminal-line mention chain (planning target →
   gate clicker → sole operator → nobody), with forge-authored strings
@@ -192,6 +196,13 @@ _RUNNING_LINE = (
     "Rollback is one command; the branch is kept."
 )
 
+# The one new sentence (deploy-into-Docker-Sandboxes spec, 2026-09-06),
+# pinned byte-for-byte exactly as the spec writes it.
+_SANDBOX_RUNNING_LINE = (
+    f"[{_HHMM}] Pipeline FEAT-E613: merged and running in its Docker Sandbox "
+    "— checks 7/7. Rollback is one command; the branch is kept."
+)
+
 
 # ---------------------------------------------------------------------------
 # The projection: what reaches the sink, and what never does
@@ -311,6 +322,47 @@ class TestSinkProjection:
         assert n.detail is None
 
     @pytest.mark.asyncio
+    async def test_deployed_in_reaches_the_sink(self) -> None:
+        """Where the deploy ran travels with the outcome (2026-09-06)."""
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merged-and-running",
+            checks_passed=7,
+            checks_total=7,
+            deployed_in="docker-sandbox",
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
+        n = sink.notify.await_args.args[0]
+        assert n.deployed_in == "docker-sandbox"
+
+    @pytest.mark.asyncio
+    async def test_absent_deployed_in_degrades_to_none(self) -> None:
+        """An older forge that never sends the field still reports."""
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(result="merged-and-running")
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        n = sink.notify.await_args.args[0]
+        assert n.deployed_in is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("junk", [42, True, "", "   ", None, ["docker-sandbox"], {}])
+    async def test_junk_deployed_in_degrades_to_none(self, junk: Any) -> None:
+        """Junk costs the clause, never the line — same posture as the rest."""
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(result="merged-and-running", deployed_in=junk)
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
+        n = sink.notify.await_args.args[0]
+        assert n.deployed_in is None
+
+    @pytest.mark.asyncio
     async def test_negative_counts_are_refused(self) -> None:
         sub, sink, _ = _subscriber()
         payload = _merge_payload(result="merged-and-running", checks_passed=-1, checks_total=7)
@@ -378,6 +430,106 @@ class TestTheOutcomeLines:
     def test_one_sided_counts_also_drop_the_clause(self) -> None:
         text = _notifier()._render(_outcome(checks_total=None))
         assert "checks" not in text
+
+    def test_sandbox_running_line_exact(self) -> None:
+        """The spec's sentence, byte-for-byte (2026-09-06)."""
+        text = _notifier()._render(_outcome(deployed_in="docker-sandbox"))
+        assert text == _SANDBOX_RUNNING_LINE
+
+    def test_sandbox_line_without_counts_still_drops_the_checks_clause(self) -> None:
+        text = _notifier()._render(
+            _outcome(deployed_in="docker-sandbox", checks_passed=None, checks_total=None)
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merged and running in its Docker "
+            "Sandbox. Rollback is one command; the branch is kept."
+        )
+
+    def test_sandbox_wording_survives_an_unrecognised_result_on_a_passed_stage(
+        self,
+    ) -> None:
+        """The success branch is claimed by status as well as by result."""
+        text = _notifier()._render(_outcome(result=None, deployed_in="docker-sandbox"))
+        assert text == _SANDBOX_RUNNING_LINE
+
+    @pytest.mark.parametrize(
+        ("deployed_in", "expected"),
+        [
+            ("docker-sandbox", _SANDBOX_RUNNING_LINE),
+            (None, _RUNNING_LINE),
+            ("Docker-Sandbox", _RUNNING_LINE),
+            ("DOCKER-SANDBOX", _RUNNING_LINE),
+            ("docker-sandbox ", _RUNNING_LINE),
+            ("docker", _RUNNING_LINE),
+            ("docker-sandboxes", _RUNNING_LINE),
+            ("host-docker", _RUNNING_LINE),
+            ("gvisor", _RUNNING_LINE),
+        ],
+    )
+    def test_only_the_exact_docker_sandbox_value_changes_the_line(
+        self, deployed_in: str | None, expected: str
+    ) -> None:
+        """One value names the sandbox; every other value, and none at all,
+        leaves the sentence exactly as it read before this lane."""
+        assert _notifier()._render(_outcome(deployed_in=deployed_in)) == expected
+
+    def test_the_reverted_line_is_unchanged_inside_a_sandbox(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merged-deploy-reverted",
+                status="FAILED",
+                deployed_in="docker-sandbox",
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merged, then the deploy failed its "
+            "checks and rolled back automatically — the live copy was never "
+            "broken. The branch is kept."
+        )
+
+    def test_the_stopped_line_is_unchanged_inside_a_sandbox(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merged-deploy-failed",
+                status="FAILED",
+                failed_step="re-check",
+                detail="two tests failed by name",
+                deployed_in="docker-sandbox",
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at "
+            "re-check — two tests failed by name. Nothing half-done; the "
+            "branch is kept."
+        )
+
+    def test_an_ordinary_stage_line_ignores_deployed_in(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                stage_label="plan-complete",
+                result=None,
+                checks_passed=None,
+                checks_total=None,
+                deployed_in="docker-sandbox",
+            )
+        )
+        assert text == f"[{_HHMM}] Pipeline FEAT-E613: stage plan-complete (PASSED)"
+
+    def test_a_rejected_outcome_ignores_deployed_in_too(self) -> None:
+        text = _notifier()._render(_outcome(result="rejected", deployed_in="docker-sandbox"))
+        assert text == f"[{_HHMM}] Pipeline FEAT-E613: stage merge-deploy (PASSED)"
+
+    def test_a_hostile_deployed_in_never_reaches_the_line(self) -> None:
+        """The field is compared to one literal, never interpolated — so
+        forge's bytes cannot land on the owner's line through it."""
+        registry = BuildAudienceRegistry()
+        registry.record_planning_target(_CORR, "U0RICH")
+        text = _notifier(audience=registry)._render(
+            _outcome(deployed_in="<!here> <http://evil.com|clickme>")
+        )
+        assert text == f"<@U0RICH> {_RUNNING_LINE}"
+        assert "evil.com" not in text
+        assert "<!here>" not in text
 
     def test_reverted_line_exact(self) -> None:
         text = _notifier()._render(_outcome(result="merged-deploy-reverted", status="FAILED"))
@@ -554,6 +706,29 @@ class TestDeliveryAndDedup:
         finally:
             await notifier.stop()
         return dict(client.chat_postMessage.await_args.kwargs)
+
+    @pytest.mark.asyncio
+    async def test_the_posted_sandbox_line_is_plain_text_too(self) -> None:
+        kwargs = await self._post_kwargs(_notifier(), _outcome(deployed_in="docker-sandbox"))
+        assert kwargs["text"] == _SANDBOX_RUNNING_LINE
+        assert "blocks" not in kwargs
+        assert kwargs["mrkdwn"] is False
+
+    @pytest.mark.asyncio
+    async def test_the_wire_payload_renders_the_sandbox_line_end_to_end(self) -> None:
+        """forge's raw payload → the subscriber → the exact owner-facing line."""
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merged-and-running",
+            checks_passed=7,
+            checks_total=7,
+            deployed_in="docker-sandbox",
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        notification = sink.notify.await_args.args[0]
+        assert _notifier()._render(notification) == _SANDBOX_RUNNING_LINE
 
     @pytest.mark.asyncio
     async def test_the_posted_line_is_plain_text_with_no_action_surface(self) -> None:
