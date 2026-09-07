@@ -31,6 +31,15 @@ What is fenced here:
   rides the existing terminal-line mention chain (planning target →
   gate clicker → sole operator → nobody), with forge-authored strings
   escaped on the one path where markup parsing is on.
+* **The candidate checked before the merge (protect-main, 2026-09-07).**
+  Forge now builds a candidate from the feature branch, runs the live
+  checks against it, and only then merges and promotes that exact build.
+  It says so with a ``gate_before_merge`` block and, on a refusal, the
+  result ``candidate-refused`` and the repair row's number. Three new
+  sentences, pinned byte for byte from the spec: the green run, the
+  refusal, and the main that moved under a passing check. Every one of
+  them needs the block; an older forge that sends none keeps every line
+  exactly as it read before.
 """
 
 from __future__ import annotations
@@ -202,6 +211,48 @@ _SANDBOX_RUNNING_LINE = (
     f"[{_HHMM}] Pipeline FEAT-E613: merged and running in its Docker Sandbox "
     "— checks 7/7. Rollback is one command; the branch is kept."
 )
+
+# The three sentences of the candidate-before-merge order (protect-main
+# spec, 2026-09-07), pinned byte-for-byte exactly as the spec writes them.
+_CHECKED_LINE = (
+    f"[{_HHMM}] Pipeline FEAT-E613: checked in the sandbox (7 of 7), merged, and running."
+)
+_REFUSED_LINE = (
+    f"[{_HHMM}] Pipeline FEAT-E613: checked in the sandbox before merging — "
+    "failed 2 of 7 checks (users_roundtrip, count_by_domain), so nothing was "
+    "merged. The branch is kept; repair row #12 is filed."
+)
+_MOVED_LINE = (
+    f"[{_HHMM}] Pipeline FEAT-E613: the checks passed but main had moved since "
+    "this was built, so nothing was merged; send the sentence again."
+)
+
+
+def _gate(**overrides: Any) -> dict[str, Any]:
+    """A ``gate_before_merge`` block as forge sends it; overrides edit it."""
+    block: dict[str, Any] = {
+        "verdict": "pass",
+        "checks_passed": 7,
+        "checks_total": 7,
+        "candidate_sha": "c0ffee1234567890",
+        "candidate_tree": "tree-aaaa1111",
+        "merged_tree": "tree-aaaa1111",
+    }
+    block.update(overrides)
+    return block
+
+
+def _refused_gate(**overrides: Any) -> dict[str, Any]:
+    """The block for a candidate that failed two of seven checks."""
+    block: dict[str, Any] = {
+        "verdict": "fail",
+        "checks_passed": 5,
+        "checks_total": 7,
+        "merged_tree": None,
+        "failed_checks": ["users_roundtrip", "count_by_domain"],
+    }
+    block.update(overrides)
+    return _gate(**block)
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +457,146 @@ class TestSinkProjection:
         await sub._handle_message(_msg(_envelope_bytes(payload)))
 
         sink.notify.assert_not_awaited()
+        assert session_manager.enqueue_notification.call_count == 1
+
+
+class TestGateBeforeMergeProjection:
+    """The candidate check's record rides the raw payload into the sink."""
+
+    @pytest.mark.asyncio
+    async def test_the_block_projects_every_field(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="candidate-refused",
+            status="FAILED",
+            gate_before_merge=_refused_gate(),
+            repair_row=12,
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
+        n = sink.notify.await_args.args[0]
+        assert n.result == "candidate-refused"
+        gate = n.gate_before_merge
+        assert gate is not None
+        assert gate.verdict == "fail"
+        assert gate.checks_passed == 5
+        assert gate.checks_total == 7
+        assert gate.candidate_sha == "c0ffee1234567890"
+        assert gate.candidate_tree == "tree-aaaa1111"
+        assert gate.merged_tree is None
+        assert gate.failed_checks == ("users_roundtrip", "count_by_domain")
+        assert n.repair_row == "12"
+
+    @pytest.mark.asyncio
+    async def test_an_older_forge_that_sends_no_block_projects_none(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(result="merged-and-running", checks_passed=7, checks_total=7)
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        n = sink.notify.await_args.args[0]
+        assert n.gate_before_merge is None
+        assert n.repair_row is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("junk", [42, "pass", [], ["pass"], True, None, ""])
+    async def test_a_block_that_is_not_a_mapping_projects_none(self, junk: Any) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(result="merged-and-running", gate_before_merge=junk)
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
+        assert sink.notify.await_args.args[0].gate_before_merge is None
+
+    @pytest.mark.asyncio
+    async def test_junk_inside_the_block_degrades_field_by_field(self) -> None:
+        """Each field costs itself, never its neighbours or the line."""
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="candidate-refused",
+            status="FAILED",
+            gate_before_merge={
+                "verdict": 7,
+                "checks_passed": "five",
+                "checks_total": 7,
+                "candidate_sha": "   ",
+                "candidate_tree": None,
+                "merged_tree": ["tree"],
+                "failed_checks": "users_roundtrip",
+                "something_new": {"ignored": True},
+            },
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        gate = sink.notify.await_args.args[0].gate_before_merge
+        assert gate is not None
+        assert gate.verdict is None
+        assert gate.checks_passed is None
+        assert gate.checks_total == 7
+        assert gate.candidate_sha is None
+        assert gate.candidate_tree is None
+        assert gate.merged_tree is None
+        assert gate.failed_checks == ()
+
+    @pytest.mark.asyncio
+    async def test_junk_items_in_the_names_list_are_dropped(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="candidate-refused",
+            status="FAILED",
+            gate_before_merge=_refused_gate(
+                failed_checks=["users_roundtrip", "", "   ", 3, None, " health "]
+            ),
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        gate = sink.notify.await_args.args[0].gate_before_merge
+        assert gate is not None
+        assert gate.failed_checks == ("users_roundtrip", "health")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("sent", "expected"),
+        [
+            (12, "12"),
+            ("12", "12"),
+            ("#12", "12"),
+            (" # 12 ", "12"),
+            (0, None),
+            (-3, None),
+            (True, None),
+            ("twelve", None),
+            ("", None),
+            ("#", None),
+            (None, None),
+            ([12], None),
+        ],
+    )
+    async def test_the_repair_row_number_in_every_shape_forge_might_send(
+        self, sent: Any, expected: str | None
+    ) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(result="candidate-refused", status="FAILED", repair_row=sent)
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
+        assert sink.notify.await_args.args[0].repair_row == expected
+
+    @pytest.mark.asyncio
+    async def test_a_refused_candidate_still_reaches_the_sink(self) -> None:
+        """A new result word is not 'rejected': the line is owed."""
+        sub, sink, session_manager = _subscriber()
+        payload = _merge_payload(result="candidate-refused", status="FAILED")
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
         assert session_manager.enqueue_notification.call_count == 1
 
 
@@ -622,6 +813,393 @@ class TestTheOutcomeLines:
             _outcome(stage_label="plan-complete", result=None)
         )
         assert "<@" not in text
+
+
+# ---------------------------------------------------------------------------
+# The copy since the candidate is checked before the merge (2026-09-07)
+# ---------------------------------------------------------------------------
+
+
+class TestTheProtectMainLines:
+    """The spec's three sentences, byte for byte; today's words otherwise."""
+
+    # --- the green run -----------------------------------------------------
+
+    def test_checked_merged_and_running_line_exact(self) -> None:
+        text = _notifier()._render(_outcome(gate_before_merge=_gate()))
+        assert text == _CHECKED_LINE
+
+    def test_the_green_line_does_not_name_the_sandbox_twice(self) -> None:
+        """``deployed_in`` shaped the old sentence; the new one already
+        says where the check ran, so the field changes nothing."""
+        text = _notifier()._render(
+            _outcome(gate_before_merge=_gate(), deployed_in="docker-sandbox")
+        )
+        assert text == _CHECKED_LINE
+
+    def test_the_gates_counts_win_over_the_reports_counts(self) -> None:
+        text = _notifier()._render(
+            _outcome(gate_before_merge=_gate(), checks_passed=5, checks_total=5)
+        )
+        assert text == _CHECKED_LINE
+
+    def test_the_reports_counts_fill_in_when_the_block_carries_none(self) -> None:
+        text = _notifier()._render(
+            _outcome(gate_before_merge=_gate(checks_passed=None, checks_total=None))
+        )
+        assert text == _CHECKED_LINE
+
+    def test_a_block_with_no_counts_anywhere_keeps_todays_words(self) -> None:
+        """The spec's sentence carries a tally; without one, no claim of a
+        tally is invented — the report reads as it did before."""
+        text = _notifier()._render(
+            _outcome(
+                gate_before_merge=_gate(checks_passed=None, checks_total=None),
+                checks_passed=None,
+                checks_total=None,
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merged and running. "
+            "Rollback is one command; the branch is kept."
+        )
+
+    def test_a_passed_stage_with_an_unrecognised_result_still_reads_as_checked(self) -> None:
+        text = _notifier()._render(_outcome(result=None, gate_before_merge=_gate()))
+        assert text == _CHECKED_LINE
+
+    def test_no_block_keeps_the_old_green_lines_byte_for_byte(self) -> None:
+        assert _notifier()._render(_outcome()) == _RUNNING_LINE
+        assert _notifier()._render(_outcome(deployed_in="docker-sandbox")) == _SANDBOX_RUNNING_LINE
+
+    # --- the refusal ---------------------------------------------------------
+
+    def _refused(self, **overrides: Any) -> ForgeNotification:
+        fields: dict[str, Any] = {
+            "result": "candidate-refused",
+            "status": "FAILED",
+            "checks_passed": None,
+            "checks_total": None,
+            "gate_before_merge": _refused_gate(),
+            "repair_row": "12",
+            "failed_step": "the candidate check",
+            "detail": "2 of 7 live checks failed against the candidate",
+        }
+        fields.update(overrides)
+        return _outcome(**fields)
+
+    def test_refused_line_exact(self) -> None:
+        assert _notifier()._render(self._refused()) == _REFUSED_LINE
+
+    def test_without_a_repair_row_the_sentence_ends_at_the_branch_is_kept(self) -> None:
+        """Forge carries the row's number when it filed one; when the report
+        has none, jarvis names no row — the sentence simply ends."""
+        text = _notifier()._render(self._refused(repair_row=None))
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: checked in the sandbox before merging — "
+            "failed 2 of 7 checks (users_roundtrip, count_by_domain), so nothing "
+            "was merged. The branch is kept."
+        )
+
+    def test_without_names_the_names_clause_is_dropped(self) -> None:
+        text = _notifier()._render(self._refused(gate_before_merge=_refused_gate(failed_checks=[])))
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: checked in the sandbox before merging — "
+            "failed 2 of 7 checks, so nothing was merged. The branch is kept; "
+            "repair row #12 is filed."
+        )
+
+    def test_one_failed_check_counts_as_one(self) -> None:
+        text = _notifier()._render(
+            self._refused(
+                gate_before_merge=_refused_gate(checks_passed=6, failed_checks=["health"]),
+                repair_row=None,
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: checked in the sandbox before merging — "
+            "failed 1 of 7 checks (health), so nothing was merged. The branch is kept."
+        )
+
+    def test_the_gates_tally_wins_over_the_reports_tally_on_a_refusal(self) -> None:
+        text = _notifier()._render(self._refused(checks_passed=7, checks_total=7))
+        assert text == _REFUSED_LINE
+
+    def test_a_refusal_without_a_tally_keeps_todays_stopped_line(self) -> None:
+        """No counts anywhere: no tally is invented. Forge's own step and
+        reason carry the line, in the shape every stop has always had."""
+        text = _notifier()._render(
+            self._refused(
+                gate_before_merge=_gate(verdict="fail", checks_passed=None, checks_total=None)
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at the "
+            "candidate check — 2 of 7 live checks failed against the candidate. "
+            "Nothing half-done; the branch is kept."
+        )
+
+    def test_a_refusal_without_the_block_keeps_todays_stopped_line(self) -> None:
+        text = _notifier()._render(self._refused(gate_before_merge=None))
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at the "
+            "candidate check — 2 of 7 live checks failed against the candidate. "
+            "Nothing half-done; the branch is kept."
+        )
+
+    def test_a_refusal_whose_tally_shows_nothing_failed_keeps_todays_stopped_line(self) -> None:
+        """A candidate that could not even come up has a 7/7-shaped tally
+        and a refusal; 'failed 0 of 7' would be a lie, so the stop line
+        with forge's reason stands instead."""
+        text = _notifier()._render(
+            self._refused(
+                gate_before_merge=_gate(
+                    verdict="environment_fail", checks_passed=7, checks_total=7
+                ),
+                detail="the candidate never became healthy",
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at the "
+            "candidate check — the candidate never became healthy. "
+            "Nothing half-done; the branch is kept."
+        )
+
+    def test_a_refusal_is_never_read_as_success_whatever_the_status_says(self) -> None:
+        text = _notifier()._render(self._refused(status="PASSED"))
+        assert text == _REFUSED_LINE
+
+    # --- a main that moved ---------------------------------------------------
+
+    def test_moved_main_line_exact(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merge-refused",
+                status="FAILED",
+                failed_step="merge",
+                detail="main moved since the checks ran",
+                gate_before_merge=_gate(merged_tree=None),
+            )
+        )
+        assert text == _MOVED_LINE
+
+    def test_tree_mismatch_line_exact(self) -> None:
+        """The exact-tree guard refused the promote: the same sentence."""
+        text = _notifier()._render(
+            _outcome(
+                result="merged-deploy-failed",
+                status="FAILED",
+                failed_step="promote",
+                detail="the merged tree differs from the candidate's tree",
+                gate_before_merge=_gate(merged_tree="tree-bbbb2222"),
+            )
+        )
+        assert text == _MOVED_LINE
+
+    def test_a_refused_merge_without_the_block_keeps_todays_words(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merge-refused",
+                status="FAILED",
+                detail="main moved since the checks ran",
+                checks_passed=None,
+                checks_total=None,
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at "
+            "the merge — main moved since the checks ran. Nothing half-done; "
+            "the branch is kept."
+        )
+
+    def test_a_refused_merge_whose_block_does_not_say_pass_keeps_todays_words(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merge-refused",
+                status="FAILED",
+                detail="a merge step is already on record for this build",
+                gate_before_merge=_gate(verdict=None, merged_tree=None),
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at "
+            "the merge — a merge step is already on record for this build. "
+            "Nothing half-done; the branch is kept."
+        )
+
+    def test_matching_trees_keep_todays_stopped_line(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merged-deploy-failed",
+                status="FAILED",
+                failed_step="promote",
+                detail="the promote runbook exited 1",
+                gate_before_merge=_gate(),
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at "
+            "promote — the promote runbook exited 1. Nothing half-done; "
+            "the branch is kept."
+        )
+
+    def test_one_tree_missing_is_not_a_mismatch(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merged-deploy-failed",
+                status="FAILED",
+                failed_step="promote",
+                gate_before_merge=_gate(verdict=None, merged_tree=None),
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at "
+            "promote. Nothing half-done; the branch is kept."
+        )
+
+    # --- every other result keeps its words ----------------------------------
+
+    def test_the_reverted_line_is_unchanged_with_the_block(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merged-deploy-reverted",
+                status="FAILED",
+                gate_before_merge=_gate(),
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merged, then the deploy failed its "
+            "checks and rolled back automatically — the live copy was never "
+            "broken. The branch is kept."
+        )
+
+    def test_a_rejected_outcome_ignores_the_block(self) -> None:
+        text = _notifier()._render(_outcome(result="rejected", gate_before_merge=_gate()))
+        assert text == f"[{_HHMM}] Pipeline FEAT-E613: stage merge-deploy (PASSED)"
+
+    def test_an_ordinary_stage_line_ignores_the_block(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                stage_label="plan-complete",
+                result=None,
+                checks_passed=None,
+                checks_total=None,
+                gate_before_merge=_gate(),
+            )
+        )
+        assert text == f"[{_HHMM}] Pipeline FEAT-E613: stage plan-complete (PASSED)"
+
+    # --- the mention and the inert-text posture ------------------------------
+
+    def test_the_refusal_rides_the_mention_chain(self) -> None:
+        registry = BuildAudienceRegistry()
+        registry.record_planning_target(_CORR, "U0RICH")
+        text = _notifier(audience=registry)._render(self._refused())
+        assert text == f"<@U0RICH> {_REFUSED_LINE}"
+
+    def test_a_hostile_check_name_is_inert_on_a_mentioned_line(self) -> None:
+        registry = BuildAudienceRegistry()
+        registry.record_planning_target(_CORR, "U0RICH")
+        text = _notifier(audience=registry)._render(
+            self._refused(
+                gate_before_merge=_refused_gate(
+                    failed_checks=["<http://evil.com|clickme>", "<!here>"]
+                )
+            )
+        )
+        assert text.startswith("<@U0RICH> ")
+        assert "<http://evil.com|clickme>" not in text
+        assert "<!here>" not in text
+        assert "(&lt;http://evil.com|clickme&gt;, &lt;!here&gt;)" in text
+
+    def test_a_hostile_repair_row_is_inert_on_a_mentioned_line(self) -> None:
+        """The projection only ever admits digits; the renderer escapes the
+        field anyway, so a directly built notification cannot slip markup
+        through it either."""
+        registry = BuildAudienceRegistry()
+        registry.record_planning_target(_CORR, "U0RICH")
+        text = _notifier(audience=registry)._render(self._refused(repair_row="<!here>"))
+        assert "<!here>" not in text
+        assert "repair row #&lt;!here&gt; is filed." in text
+
+    def test_the_unmentioned_refusal_keeps_forge_bytes_verbatim(self) -> None:
+        hostile = "<http://evil.com|clickme>"
+        text = _notifier()._render(
+            self._refused(gate_before_merge=_refused_gate(failed_checks=[hostile]))
+        )
+        assert hostile in text
+        assert "&lt;" not in text
+
+    # --- end to end: forge's raw payload → the exact line ---------------------
+
+    @pytest.mark.asyncio
+    async def test_the_wire_payload_renders_the_checked_line_end_to_end(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merged-and-running",
+            merged_sha="0abc123",
+            checks_passed=7,
+            checks_total=7,
+            deployed_in="docker-sandbox",
+            gate_before_merge=_gate(),
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        notification = sink.notify.await_args.args[0]
+        assert _notifier()._render(notification) == _CHECKED_LINE
+
+    @pytest.mark.asyncio
+    async def test_the_wire_payload_renders_the_refusal_end_to_end(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="candidate-refused",
+            status="FAILED",
+            failed_step="the candidate check",
+            detail="2 of 7 live checks failed against the candidate",
+            gate_before_merge=_refused_gate(),
+            repair_row=12,
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        notification = sink.notify.await_args.args[0]
+        assert _notifier()._render(notification) == _REFUSED_LINE
+
+    @pytest.mark.asyncio
+    async def test_the_wire_payload_renders_the_moved_main_end_to_end(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merge-refused",
+            status="FAILED",
+            failed_step="merge",
+            detail="main moved since the checks ran",
+            gate_before_merge=_gate(merged_tree=None),
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        notification = sink.notify.await_args.args[0]
+        assert _notifier()._render(notification) == _MOVED_LINE
+
+    @pytest.mark.asyncio
+    async def test_the_posted_refusal_is_plain_text(self) -> None:
+        notifier = _notifier()
+        client = AsyncMock()
+        notifier._client = client
+        await notifier.start()
+        try:
+            await notifier.notify(self._refused())
+            for _ in range(200):
+                if client.chat_postMessage.await_count:
+                    break
+                await asyncio.sleep(0.01)
+        finally:
+            await notifier.stop()
+        kwargs = dict(client.chat_postMessage.await_args.kwargs)
+        assert kwargs["text"] == _REFUSED_LINE
+        assert "blocks" not in kwargs
+        assert kwargs["mrkdwn"] is False
 
 
 # ---------------------------------------------------------------------------

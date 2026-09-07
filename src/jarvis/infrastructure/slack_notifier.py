@@ -232,6 +232,12 @@ _PAYLOAD_AUTHORED_FIELDS = (
     # sentences relayed onto a line that can carry a mention.
     "failed_step",
     "detail",
+    # The candidate check before the merge (2026-09-07): the repair row's
+    # number is digits by projection, but the field is a string, so it is
+    # escaped like every other forge-authored string on a mentioned line.
+    # The failed check NAMES live inside the gate block and are escaped
+    # separately below.
+    "repair_row",
 )
 
 
@@ -241,11 +247,19 @@ def _inert_payload_strings(notification: ForgeNotification) -> ForgeNotification
     Applied ONLY when the line is about to be posted with markup parsing
     on. The unmentioned path never calls this, so its bytes are unchanged.
     """
-    updates = {
+    updates: dict[str, Any] = {
         name: _escape_slack_entities(value)
         for name in _PAYLOAD_AUTHORED_FIELDS
         if isinstance(value := getattr(notification, name, None), str) and value
     }
+    gate = notification.gate_before_merge
+    if gate is not None and gate.failed_checks:
+        # The names of the checks a candidate failed are forge-authored
+        # (they come from the repository's own live-check registry) and
+        # land on the refusal line, so they are escaped like the rest.
+        updates["gate_before_merge"] = gate.model_copy(
+            update={"failed_checks": tuple(_escape_slack_entities(n) for n in gate.failed_checks)}
+        )
     return notification.model_copy(update=updates) if updates else notification
 
 
@@ -292,6 +306,13 @@ _MERGE_DEPLOY_STAGE_LABEL = "merge-deploy"
 # and no value at all, keeps today's wording byte-identically.
 _DOCKER_SANDBOX = "docker-sandbox"
 
+# The result words that mean the merge-and-deploy stopped short. The
+# success sentence is claimed by a PASSED stage whose result is absent or
+# unrecognised; these three are never read that way, whatever the status
+# field says. ``candidate-refused`` joined on 2026-09-07 (protect-main):
+# the candidate failed its checks before the merge, so nothing merged.
+_STOPPED_RESULTS = frozenset({"merged-deploy-failed", "merge-refused", "candidate-refused"})
+
 
 def _is_merge_deploy_outcome(notification: ForgeNotification) -> bool:
     """True when ``notification`` is the merge-and-deploy outcome line.
@@ -309,21 +330,96 @@ def _is_merge_deploy_outcome(notification: ForgeNotification) -> bool:
     )
 
 
+def _counts_before_merge(notification: ForgeNotification) -> tuple[int, int] | None:
+    """``(passed, total)`` from the candidate check, or None.
+
+    Only when forge sent the ``gate_before_merge`` block at all — that
+    block is the one signal the check ran in front of the merge. Its own
+    counts win; the report's top-level counts fill in when the block
+    carries none (forge has always put the live-check tally there).
+    """
+    gate = notification.gate_before_merge
+    if gate is None:
+        return None
+    passed = gate.checks_passed if gate.checks_passed is not None else notification.checks_passed
+    total = gate.checks_total if gate.checks_total is not None else notification.checks_total
+    if passed is None or total is None:
+        return None
+    return passed, total
+
+
+def _candidate_refused_sentence(notification: ForgeNotification) -> str | None:
+    """The refusal line's body (protect-main spec, 2026-09-07), or None.
+
+    None when the report does not carry what the sentence needs — the
+    counts, with at least one check failed — so the caller falls back to
+    today's stopped line rather than inventing a tally. The names clause
+    is dropped when forge sent no names; the repair-row clause is dropped
+    when forge sent no row number, and the sentence ends at "The branch
+    is kept."
+    """
+    counts = _counts_before_merge(notification)
+    if counts is None:
+        return None
+    passed, total = counts
+    failed = total - passed
+    if failed < 1:
+        return None
+    gate = notification.gate_before_merge
+    names = ", ".join(gate.failed_checks) if gate is not None else ""
+    named = f" ({names})" if names else ""
+    filed = f"; repair row #{notification.repair_row} is filed." if notification.repair_row else "."
+    return (
+        f"checked in the sandbox before merging — failed {failed} of {total} "
+        f"checks{named}, so nothing was merged. The branch is kept{filed}"
+    )
+
+
+def _main_moved_after_the_check(notification: ForgeNotification) -> bool:
+    """True when the candidate passed its checks but main had moved.
+
+    Two shapes of the same event: the merge itself was refused after a
+    passing check (the expected-main guard caught a moved main), or the
+    merged commit's tree differs from the candidate's (the exact-tree
+    guard refused the promote). Both need the ``gate_before_merge``
+    block; without it, today's words stand.
+    """
+    gate = notification.gate_before_merge
+    if gate is None:
+        return False
+    if notification.result == "merge-refused" and (gate.verdict or "").strip().casefold() == "pass":
+        return True
+    return bool(
+        gate.candidate_tree and gate.merged_tree and gate.candidate_tree != gate.merged_tree
+    )
+
+
 def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str) -> str:
     """The one-line merge-and-deploy report (make-merge-work spec, step 5).
 
     Plain sentences, the owner's language law. Dispatch order: the
-    explicit revert first, then the two explicit stop classes, then
-    success — claimed either by the explicit ``result`` or by a PASSED
-    stage whose result field is absent or unrecognised — and the stopped
-    line as the honest default for everything else. Absent fields
-    degrade: no counts drops the checks clause, no failed_step says
-    'the merge', no detail drops the why clause.
+    explicit revert first, then the refused candidate, then success —
+    claimed either by the explicit ``result`` or by a PASSED stage whose
+    result field is absent or unrecognised — then the moved-main story,
+    and the stopped line as the honest default for everything else.
+    Absent fields degrade: no counts drops the checks clause, no
+    failed_step says 'the merge', no detail drops the why clause.
 
-    One addition (deploy-into-Docker-Sandboxes spec, 2026-09-06): when
-    the outcome says the deploy ran in a Docker Sandbox, the success
-    sentence names it. Nothing else on any line changes, and an absent
-    or unrecognised value keeps today's wording byte-identically.
+    Since 2026-09-07 (protect-main) the candidate is checked in the
+    sandbox BEFORE the merge, and forge says so with a
+    ``gate_before_merge`` block on the report. When that block is there,
+    three lines change: a green run reads "checked in the sandbox (M of
+    M), merged, and running."; a refused candidate reads "checked in the
+    sandbox before merging — failed k of M checks (<names>), so nothing
+    was merged. The branch is kept; repair row #n is filed."; and a main
+    that moved under a passing check reads "the checks passed but main
+    had moved since this was built, so nothing was merged; send the
+    sentence again." Without the block, every line keeps the words it
+    had, byte for byte — an older forge still reports exactly as before.
+
+    The one earlier addition (deploy-into-Docker-Sandboxes spec,
+    2026-09-06) stands: when the outcome says the deploy ran in a Docker
+    Sandbox, the success sentence names it.
     """
     prefix = f"{mention}[{hhmm}] Pipeline {notification.feature_id}: "
     result = notification.result
@@ -332,10 +428,18 @@ def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str)
             f"{prefix}merged, then the deploy failed its checks and rolled back "
             "automatically — the live copy was never broken. The branch is kept."
         )
-    if result == "merged-and-running" or (
-        result not in ("merged-deploy-failed", "merge-refused")
-        and notification.status == "PASSED"
+    if result == "candidate-refused":
+        refused = _candidate_refused_sentence(notification)
+        if refused is not None:
+            return f"{prefix}{refused}"
+        # No usable tally on the report: today's stopped line, below.
+    elif result == "merged-and-running" or (
+        result not in _STOPPED_RESULTS and notification.status == "PASSED"
     ):
+        checked = _counts_before_merge(notification)
+        if checked is not None:
+            passed, total = checked
+            return f"{prefix}checked in the sandbox ({passed} of {total}), merged, and running."
         checks = ""
         if notification.checks_passed is not None and notification.checks_total is not None:
             checks = f" — checks {notification.checks_passed}/{notification.checks_total}"
@@ -344,9 +448,16 @@ def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str)
             f"{prefix}merged and running{where}{checks}. "
             "Rollback is one command; the branch is kept."
         )
+    elif _main_moved_after_the_check(notification):
+        return (
+            f"{prefix}the checks passed but main had moved since this was built, "
+            "so nothing was merged; send the sentence again."
+        )
     step = notification.failed_step or "the merge"
     why = f" — {notification.detail}" if notification.detail else ""
-    return f"{prefix}merge-and-deploy stopped at {step}{why}. Nothing half-done; the branch is kept."
+    return (
+        f"{prefix}merge-and-deploy stopped at {step}{why}. Nothing half-done; the branch is kept."
+    )
 
 
 # ---------------------------------------------------------------------------
