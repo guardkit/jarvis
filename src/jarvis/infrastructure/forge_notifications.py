@@ -116,6 +116,108 @@ def _outcome_count(value: object) -> int | None:
     return value if value >= 0 else None
 
 
+def _outcome_names(value: object) -> tuple[str, ...]:
+    """The non-blank strings in a list off the raw merge-deploy payload.
+
+    Used for the names of the live checks a candidate failed before the
+    merge (protect-main, 2026-09-07). Anything that is not a list, and
+    every item that is not a non-blank string, is dropped — a junk name
+    costs the names clause on the rendered line, never the line.
+    """
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
+
+
+def _outcome_row_number(value: object) -> str | None:
+    """The repair row's number off the raw merge-deploy payload, or None.
+
+    The queue row a person types is ``#12``; forge may send it as the
+    int ``12`` or the strings ``"12"`` / ``"#12"``. Anything else is not
+    a row number and degrades to None — the refusal line then ends at
+    "The branch is kept." rather than naming a row that may not exist.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return str(value) if value > 0 else None
+    if isinstance(value, str):
+        digits = value.strip().lstrip("#").strip()
+        return digits if digits.isdigit() and int(digits) > 0 else None
+    return None
+
+
+class GateBeforeMerge(BaseModel):
+    """What the candidate check found before the merge (protect-main,
+    2026-09-07), read defensively off the raw merge-deploy payload's
+    ``gate_before_merge`` block.
+
+    Forge runs the registered live checks against a candidate built from
+    the feature branch BEFORE the merge lands; this block is its record.
+    Every field is optional. An absent block projects to ``None`` on the
+    notification, and every rendered line then keeps the words it had
+    before the check moved in front of the merge.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    verdict: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The candidate check's verdict as forge words it ('pass' when every check passed)."
+        ),
+    )
+    checks_passed: int | None = Field(
+        default=None, ge=0, description="Live checks the candidate passed."
+    )
+    checks_total: int | None = Field(
+        default=None, ge=0, description="Live checks registered for the repository."
+    )
+    candidate_sha: str | None = Field(
+        default=None,
+        min_length=1,
+        description="The feature-branch commit the candidate was built from.",
+    )
+    candidate_tree: str | None = Field(
+        default=None, min_length=1, description="The git tree id of the candidate's checkout."
+    )
+    merged_tree: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The git tree id of the merged commit; must equal candidate_tree for the promote."
+        ),
+    )
+    failed_checks: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "Names of the live checks the candidate failed, in forge's order; empty when "
+            "none or unsent."
+        ),
+    )
+
+
+def _gate_before_merge(value: object) -> GateBeforeMerge | None:
+    """The ``gate_before_merge`` block projected field by field, or None.
+
+    Anything that is not a mapping is not a block. Inside a block each
+    field is read with the same posture as the rest of the outcome: junk
+    degrades to None (or to no names), never to a dropped line.
+    """
+    if not isinstance(value, dict):
+        return None
+    return GateBeforeMerge(
+        verdict=_outcome_str(value.get("verdict")),
+        checks_passed=_outcome_count(value.get("checks_passed")),
+        checks_total=_outcome_count(value.get("checks_total")),
+        candidate_sha=_outcome_str(value.get("candidate_sha")),
+        candidate_tree=_outcome_str(value.get("candidate_tree")),
+        merged_tree=_outcome_str(value.get("merged_tree")),
+        failed_checks=_outcome_names(value.get("failed_checks")),
+    )
+
+
 # ---------------------------------------------------------------------------
 # §1 — ForgeNotification (DM-forge-notification §1)
 # ---------------------------------------------------------------------------
@@ -397,9 +499,10 @@ class ForgeNotification(BaseModel):
             "raw merge-deploy stage-complete payload (additive field; "
             "make-merge-work spec 2026-08-24). Known values: "
             "merged-and-running, merged-deploy-reverted, "
-            "merged-deploy-failed, merge-refused, rejected. Optional "
-            "field added per frozen-model rule; None on every other "
-            "event."
+            "merged-deploy-failed, merge-refused, rejected, and — since "
+            "the candidate is checked before the merge (protect-main, "
+            "2026-09-07) — candidate-refused. Optional field added per "
+            "frozen-model rule; None on every other event."
         ),
     )
     failed_step: str | None = Field(
@@ -450,6 +553,27 @@ class ForgeNotification(BaseModel):
             "that value alone changes the success line. Anything else, "
             "including None, keeps today's wording byte-identically. "
             "Optional field added per frozen-model rule."
+        ),
+    )
+    gate_before_merge: GateBeforeMerge | None = Field(
+        default=None,
+        description=(
+            "What the candidate check found before the merge, off the raw "
+            "merge-deploy payload's gate_before_merge block (additive, "
+            "defensive; protect-main 2026-09-07). Present only when forge "
+            "ran the check in front of the merge; None keeps every line's "
+            "words as they were. Optional field added per frozen-model rule."
+        ),
+    )
+    repair_row: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The number of the repair row forge filed for a refused "
+            "candidate, off the raw merge-deploy payload's repair_row "
+            "field (additive, defensive; protect-main 2026-09-07). Digits "
+            "only, rendered as '#12'; None ends the refusal line at 'The "
+            "branch is kept.' Optional field added per frozen-model rule."
         ),
     )
 
@@ -1329,6 +1453,8 @@ class ForgeNotificationsSubscriber:
                         checks_passed=_outcome_count(raw.get("checks_passed")),
                         checks_total=_outcome_count(raw.get("checks_total")),
                         deployed_in=_outcome_str(raw.get("deployed_in")),
+                        gate_before_merge=_gate_before_merge(raw.get("gate_before_merge")),
+                        repair_row=_outcome_row_number(raw.get("repair_row")),
                     )
                     await self._notification_sink.notify(sink_notification)
                 except Exception as exc:

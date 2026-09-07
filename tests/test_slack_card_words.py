@@ -251,6 +251,71 @@ class TestTheMergeReadyCard:
         assert text.startswith(_MERGE_HEADLINE)
 
 
+# The merge card's sentence once the candidate is checked before the merge
+# (protect-main spec, 2026-09-07), byte for byte as the spec writes it.
+# Forge authors the card's body (``merge_offer.py`` composes the rationale
+# and jarvis relays it whole); what jarvis owns is that not one word of it
+# is altered, split, or interpreted on the way to the reader.
+_PROTECT_MAIN_SENTENCE = (
+    "Approve = check a candidate in the Docker Sandbox first; only if every "
+    "check passes, merge into main and promote that exact build. Reject = "
+    "nothing changes."
+)
+_PROTECT_MAIN_RATIONALE = f"FEAT-729B built clean — 4 of 4 tasks passed. {_PROTECT_MAIN_SENTENCE}"
+
+
+class TestTheMergeCardCarriesTheProtectMainSentence:
+    """forge's new Approve/Reject sentence lands on the card verbatim."""
+
+    def _card(self) -> list[dict[str, Any]]:
+        return build_pause_blocks(
+            _live_payload(
+                stage_label="the merge-ready checkpoint",
+                rationale=_PROTECT_MAIN_RATIONALE,
+            ),
+            button_value=_button_value(),
+        )
+
+    def test_the_sentence_is_the_body_word_for_word(self) -> None:
+        sections = [b["text"]["text"] for b in self._card() if b.get("type") == "section"]
+        assert _PROTECT_MAIN_RATIONALE in sections
+        assert _PROTECT_MAIN_SENTENCE in _PROTECT_MAIN_RATIONALE
+
+    def test_the_body_is_one_inert_plain_text_block(self) -> None:
+        body = next(
+            b
+            for b in self._card()
+            if b.get("type") == "section" and b["text"]["text"] == _PROTECT_MAIN_RATIONALE
+        )
+        assert body["text"]["type"] == "plain_text"
+        assert body["text"]["emoji"] is False
+
+    def test_the_headline_still_asks_for_the_press(self) -> None:
+        assert self._card()[0]["text"]["text"] == _MERGE_HEADLINE
+
+    def test_no_new_buttons_and_no_new_touch(self) -> None:
+        actions = [b for b in self._card() if b.get("type") == "actions"]
+        assert len(actions) == 1
+        assert [e["action_id"] for e in actions[0]["elements"]] == [
+            "forge_approve",
+            "forge_reject",
+        ]
+        assert [e["text"]["text"] for e in actions[0]["elements"]] == ["Approve", "Reject"]
+
+    def test_the_text_rendering_carries_the_sentence_whole(self) -> None:
+        text = _make_notifier()._render(
+            _live_payload(
+                stage_label="the merge-ready checkpoint",
+                rationale=_PROTECT_MAIN_RATIONALE,
+            )
+        )
+        assert _PROTECT_MAIN_RATIONALE in text.split("\n")
+
+    @pytest.mark.parametrize("banned", _BANNED)
+    def test_the_old_words_stay_gone(self, banned: str) -> None:
+        assert not [t for t in _visible(self._card()) if banned in t]
+
+
 # ---------------------------------------------------------------------------
 # The text rendering (the no-buttons message, and the notification preview)
 # ---------------------------------------------------------------------------
