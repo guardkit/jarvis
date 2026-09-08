@@ -417,6 +417,15 @@ def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str)
     sentence again." Without the block, every line keeps the words it
     had, byte for byte — an older forge still reports exactly as before.
 
+    Since 2026-09-07 (sandbox first) a repository whose factory runs in
+    its own sandbox has its merge land in the factory's copy of the
+    repository rather than in the operator's checkout. Forge says so with
+    a ``sandbox_merge`` block carrying one plain sentence, already
+    holding the exact command that brings the merge over; when the block
+    is there that sentence is added to the end of the green line, word
+    for word as forge wrote it. Both green lines take it. Without the
+    block nothing is added and every line reads as it did.
+
     The one earlier addition (deploy-into-Docker-Sandboxes spec,
     2026-09-06) stands: when the outcome says the deploy ran in a Docker
     Sandbox, the success sentence names it.
@@ -436,17 +445,25 @@ def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str)
     elif result == "merged-and-running" or (
         result not in _STOPPED_RESULTS and notification.status == "PASSED"
     ):
+        # Where the merge landed, when the factory ran in a sandbox: forge
+        # already wrote that sentence in plain English, with the exact
+        # command in it, so it is appended as it stands and never reworded.
+        landed = notification.sandbox_merge
+        where_it_landed = f" {landed.sentence}" if landed is not None else ""
         checked = _counts_before_merge(notification)
         if checked is not None:
             passed, total = checked
-            return f"{prefix}checked in the sandbox ({passed} of {total}), merged, and running."
+            return (
+                f"{prefix}checked in the sandbox ({passed} of {total}), merged, "
+                f"and running.{where_it_landed}"
+            )
         checks = ""
         if notification.checks_passed is not None and notification.checks_total is not None:
             checks = f" — checks {notification.checks_passed}/{notification.checks_total}"
         where = " in its Docker Sandbox" if notification.deployed_in == _DOCKER_SANDBOX else ""
         return (
             f"{prefix}merged and running{where}{checks}. "
-            "Rollback is one command; the branch is kept."
+            f"Rollback is one command; the branch is kept.{where_it_landed}"
         )
     elif _main_moved_after_the_check(notification):
         return (

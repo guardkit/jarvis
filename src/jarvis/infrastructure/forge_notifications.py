@@ -218,6 +218,71 @@ def _gate_before_merge(value: object) -> GateBeforeMerge | None:
     )
 
 
+class SandboxMerge(BaseModel):
+    """Where a merge landed when the factory works inside a sandbox
+    (sandbox first, 2026-09-07), read defensively off the raw merge-deploy
+    payload's ``sandbox_merge`` block.
+
+    When a repository's factory runs in its own sandbox, the merge lands in
+    the factory's copy of the repository, not in the operator's checkout —
+    so forge writes one plain sentence saying that and giving the exact
+    command that brings the merge over, and jarvis prints that sentence
+    rather than composing words of its own. Only repositories that have a
+    sandbox carry the block; without it a merge line reads exactly as it
+    always has.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    sandbox: str | None = Field(
+        default=None, min_length=1, description="The sandbox the merge landed in."
+    )
+    remote: str | None = Field(
+        default=None,
+        min_length=1,
+        description="The git remote on the host that points at the sandbox's copy.",
+    )
+    checkout: str | None = Field(
+        default=None,
+        min_length=1,
+        description="The path of the operator's own checkout, which the merge is not in yet.",
+    )
+    fetch_command: str | None = Field(
+        default=None,
+        min_length=1,
+        description="The exact command that brings the merge to the operator's checkout.",
+    )
+    sentence: str = Field(
+        min_length=1,
+        description=(
+            "Forge's own plain sentence, already carrying the command; jarvis prints it "
+            "as forge wrote it and never rewrites it."
+        ),
+    )
+
+
+def _sandbox_merge(value: object) -> SandboxMerge | None:
+    """The ``sandbox_merge`` block projected field by field, or None.
+
+    Anything that is not a mapping is not a block, and a block without a
+    usable sentence is nothing to say — both give None, and the merge line
+    then reads exactly as it did before. Each of the other fields degrades
+    on its own, never costing the sentence or the line.
+    """
+    if not isinstance(value, dict):
+        return None
+    sentence = _outcome_str(value.get("sentence"))
+    if sentence is None:
+        return None
+    return SandboxMerge(
+        sandbox=_outcome_str(value.get("sandbox")),
+        remote=_outcome_str(value.get("remote")),
+        checkout=_outcome_str(value.get("checkout")),
+        fetch_command=_outcome_str(value.get("fetch_command")),
+        sentence=sentence,
+    )
+
+
 # ---------------------------------------------------------------------------
 # §1 — ForgeNotification (DM-forge-notification §1)
 # ---------------------------------------------------------------------------
@@ -574,6 +639,17 @@ class ForgeNotification(BaseModel):
             "field (additive, defensive; protect-main 2026-09-07). Digits "
             "only, rendered as '#12'; None ends the refusal line at 'The "
             "branch is kept.' Optional field added per frozen-model rule."
+        ),
+    )
+    sandbox_merge: SandboxMerge | None = Field(
+        default=None,
+        description=(
+            "Where the merge landed and the one command that brings it to "
+            "the operator's checkout, off the raw merge-deploy payload's "
+            "sandbox_merge block (additive, defensive; sandbox first "
+            "2026-09-07). Present only for a repository whose factory runs "
+            "in its own sandbox; None keeps every line's words as they "
+            "were. Optional field added per frozen-model rule."
         ),
     )
 
@@ -1455,6 +1531,7 @@ class ForgeNotificationsSubscriber:
                         deployed_in=_outcome_str(raw.get("deployed_in")),
                         gate_before_merge=_gate_before_merge(raw.get("gate_before_merge")),
                         repair_row=_outcome_row_number(raw.get("repair_row")),
+                        sandbox_merge=_sandbox_merge(raw.get("sandbox_merge")),
                     )
                     await self._notification_sink.notify(sink_notification)
                 except Exception as exc:

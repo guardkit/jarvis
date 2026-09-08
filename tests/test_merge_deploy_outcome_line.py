@@ -40,6 +40,14 @@ What is fenced here:
   refusal, and the main that moved under a passing check. Every one of
   them needs the block; an older forge that sends none keeps every line
   exactly as it read before.
+* **Where the merge landed (sandbox first, 2026-09-07).** When a
+  repository's factory runs in its own sandbox, the merge lands in the
+  factory's copy of the repository and not in the operator's checkout.
+  Forge sends a ``sandbox_merge`` block holding one plain sentence that
+  says so and gives the exact command that brings the merge over; jarvis
+  adds that sentence to the end of the green line, word for word, and
+  changes nothing else. No block, or a block with nothing to say, and
+  every line reads exactly as it did.
 """
 
 from __future__ import annotations
@@ -253,6 +261,35 @@ def _refused_gate(**overrides: Any) -> dict[str, Any]:
     }
     block.update(overrides)
     return _gate(**block)
+
+
+# The sandbox-first block (2026-09-07): forge writes the whole sentence,
+# command and all, and jarvis prints it as it stands. These are forge's own
+# words, copied from its side so the two cannot drift apart.
+_SANDBOX_NAME = "api-test-factory"
+_CHECKOUT = "/home/richardwoollcott/Projects/appmilla_github/api_test"
+_FETCH_COMMAND = (
+    f"git -C {_CHECKOUT} fetch sandbox-{_SANDBOX_NAME} main && "
+    f"git -C {_CHECKOUT} merge --ff-only sandbox-{_SANDBOX_NAME}/main"
+)
+_LANDED_SENTENCE = (
+    "This merge landed in the factory's own copy of the repository, inside "
+    f"the sandbox {_SANDBOX_NAME} — not in your checkout at {_CHECKOUT}. To "
+    f"bring it to your checkout, run: {_FETCH_COMMAND}"
+)
+
+
+def _landed(**overrides: Any) -> dict[str, Any]:
+    """A ``sandbox_merge`` block as forge sends it; overrides edit it."""
+    block: dict[str, Any] = {
+        "sandbox": _SANDBOX_NAME,
+        "remote": f"sandbox-{_SANDBOX_NAME}",
+        "checkout": _CHECKOUT,
+        "fetch_command": _FETCH_COMMAND,
+        "sentence": _LANDED_SENTENCE,
+    }
+    block.update(overrides)
+    return block
 
 
 # ---------------------------------------------------------------------------
@@ -598,6 +635,102 @@ class TestGateBeforeMergeProjection:
 
         sink.notify.assert_awaited_once()
         assert session_manager.enqueue_notification.call_count == 1
+
+
+class TestSandboxMergeProjection:
+    """Where the merge landed rides the raw payload into the sink."""
+
+    @pytest.mark.asyncio
+    async def test_the_block_projects_every_field(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(result="merged-and-running", sandbox_merge=_landed())
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
+        landed = sink.notify.await_args.args[0].sandbox_merge
+        assert landed is not None
+        assert landed.sandbox == _SANDBOX_NAME
+        assert landed.remote == f"sandbox-{_SANDBOX_NAME}"
+        assert landed.checkout == _CHECKOUT
+        assert landed.fetch_command == _FETCH_COMMAND
+        assert landed.sentence == _LANDED_SENTENCE
+
+    @pytest.mark.asyncio
+    async def test_a_forge_that_sends_no_block_projects_none(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(result="merged-and-running", checks_passed=7, checks_total=7)
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        assert sink.notify.await_args.args[0].sandbox_merge is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("junk", [42, "a sentence", [], [{}], True, None, "", {}])
+    async def test_a_block_of_the_wrong_shape_projects_none(self, junk: Any) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(result="merged-and-running", sandbox_merge=junk)
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
+        assert sink.notify.await_args.args[0].sandbox_merge is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("sentence", [None, "", "   ", 7, ["a sentence"], {"a": 1}])
+    async def test_a_block_with_nothing_to_say_projects_none(self, sentence: Any) -> None:
+        """The sentence is the whole point; without one there is no block."""
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merged-and-running", sandbox_merge=_landed(sentence=sentence)
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        sink.notify.assert_awaited_once()
+        assert sink.notify.await_args.args[0].sandbox_merge is None
+
+    @pytest.mark.asyncio
+    async def test_junk_in_the_other_fields_never_costs_the_sentence(self) -> None:
+        """Each field costs itself, never the sentence a person reads."""
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merged-and-running",
+            sandbox_merge={
+                "sandbox": 7,
+                "remote": "   ",
+                "checkout": None,
+                "fetch_command": ["git"],
+                "sentence": _LANDED_SENTENCE,
+                "something_new": {"ignored": True},
+            },
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        landed = sink.notify.await_args.args[0].sandbox_merge
+        assert landed is not None
+        assert landed.sandbox is None
+        assert landed.remote is None
+        assert landed.checkout is None
+        assert landed.fetch_command is None
+        assert landed.sentence == _LANDED_SENTENCE
+
+    def test_the_block_survives_the_notification_round_trip(self) -> None:
+        """Dumped and read back, the notification still carries the words."""
+        notification = _outcome(sandbox_merge=_landed())
+
+        again = ForgeNotification.model_validate(notification.model_dump(mode="json"))
+
+        assert again.sandbox_merge == notification.sandbox_merge
+        assert again.sandbox_merge is not None
+        assert again.sandbox_merge.sentence == _LANDED_SENTENCE
+        assert again.sandbox_merge.fetch_command == _FETCH_COMMAND
+
+    def test_a_notification_without_the_block_round_trips_to_none(self) -> None:
+        again = ForgeNotification.model_validate(_outcome().model_dump(mode="json"))
+
+        assert again.sandbox_merge is None
 
 
 # ---------------------------------------------------------------------------
@@ -1200,6 +1333,175 @@ class TestTheProtectMainLines:
         assert kwargs["text"] == _REFUSED_LINE
         assert "blocks" not in kwargs
         assert kwargs["mrkdwn"] is False
+
+
+# ---------------------------------------------------------------------------
+# Where the merge landed (sandbox first, 2026-09-07)
+# ---------------------------------------------------------------------------
+
+
+class TestTheSandboxMergeSentence:
+    """A repository whose factory runs in its own sandbox has its merge
+    land in the factory's copy of the repository, not in the operator's
+    checkout. Forge writes that sentence, command and all; jarvis adds it
+    to the end of the green line exactly as forge wrote it, and adds
+    nothing anywhere else."""
+
+    def test_the_checked_line_ends_with_forges_sentence(self) -> None:
+        text = _notifier()._render(_outcome(gate_before_merge=_gate(), sandbox_merge=_landed()))
+        assert text == f"{_CHECKED_LINE} {_LANDED_SENTENCE}"
+        assert text.endswith(_LANDED_SENTENCE)
+
+    def test_the_older_success_line_ends_with_forges_sentence(self) -> None:
+        text = _notifier()._render(_outcome(sandbox_merge=_landed()))
+        assert text == f"{_RUNNING_LINE} {_LANDED_SENTENCE}"
+        assert text.endswith(_LANDED_SENTENCE)
+
+    def test_the_docker_sandbox_success_line_ends_with_it_too(self) -> None:
+        text = _notifier()._render(_outcome(deployed_in="docker-sandbox", sandbox_merge=_landed()))
+        assert text == f"{_SANDBOX_RUNNING_LINE} {_LANDED_SENTENCE}"
+
+    def test_the_success_line_without_counts_ends_with_it_too(self) -> None:
+        text = _notifier()._render(
+            _outcome(checks_passed=None, checks_total=None, sandbox_merge=_landed())
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merged and running. "
+            f"Rollback is one command; the branch is kept. {_LANDED_SENTENCE}"
+        )
+
+    def test_the_sentence_is_added_word_for_word_and_nothing_else(self) -> None:
+        """jarvis never rewrites forge's sentence, and never invents one."""
+        text = _notifier()._render(_outcome(gate_before_merge=_gate(), sandbox_merge=_landed()))
+        assert text.count(_LANDED_SENTENCE) == 1
+        assert text == f"{_CHECKED_LINE} {_LANDED_SENTENCE}"
+        assert _FETCH_COMMAND in text
+
+    def test_no_block_keeps_the_green_lines_byte_for_byte(self) -> None:
+        notifier = _notifier()
+        assert notifier._render(_outcome()) == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merged and running — checks 7/7. "
+            "Rollback is one command; the branch is kept."
+        )
+        assert notifier._render(_outcome(deployed_in="docker-sandbox")) == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merged and running in its Docker "
+            "Sandbox — checks 7/7. Rollback is one command; the branch is kept."
+        )
+        assert notifier._render(_outcome(gate_before_merge=_gate())) == (
+            f"[{_HHMM}] Pipeline FEAT-E613: checked in the sandbox (7 of 7), merged, and running."
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "malformed",
+        ["a sentence", 42, [], None, {}, {"sandbox": "api-test-factory"}],
+    )
+    async def test_a_malformed_block_leaves_the_line_exactly_as_it_was(
+        self, malformed: Any
+    ) -> None:
+        """Words on a line must never be the thing that costs the line."""
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merged-and-running",
+            checks_passed=7,
+            checks_total=7,
+            sandbox_merge=malformed,
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        notification = sink.notify.await_args.args[0]
+        assert _notifier()._render(notification) == _RUNNING_LINE
+
+    @pytest.mark.asyncio
+    async def test_a_block_with_an_empty_sentence_leaves_the_checked_line_alone(
+        self,
+    ) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merged-and-running",
+            gate_before_merge=_gate(),
+            sandbox_merge=_landed(sentence="   "),
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        notification = sink.notify.await_args.args[0]
+        assert _notifier()._render(notification) == _CHECKED_LINE
+
+    @pytest.mark.asyncio
+    async def test_the_wire_payload_renders_the_landed_line_end_to_end(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            result="merged-and-running",
+            merged_sha="0abc123",
+            checks_passed=7,
+            checks_total=7,
+            deployed_in="docker-sandbox",
+            gate_before_merge=_gate(),
+            sandbox_merge=_landed(),
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        notification = sink.notify.await_args.args[0]
+        assert _notifier()._render(notification) == f"{_CHECKED_LINE} {_LANDED_SENTENCE}"
+
+    # --- everything that is not a green merge is untouched --------------------
+
+    def test_the_refusal_line_ignores_the_block(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="candidate-refused",
+                status="FAILED",
+                gate_before_merge=_refused_gate(),
+                repair_row="12",
+                sandbox_merge=_landed(),
+            )
+        )
+        assert text == _REFUSED_LINE
+
+    def test_the_moved_main_line_ignores_the_block(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merge-refused",
+                status="FAILED",
+                gate_before_merge=_gate(merged_tree=None),
+                sandbox_merge=_landed(),
+            )
+        )
+        assert text == _MOVED_LINE
+
+    def test_the_reverted_line_ignores_the_block(self) -> None:
+        text = _notifier()._render(
+            _outcome(result="merged-deploy-reverted", sandbox_merge=_landed())
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merged, then the deploy failed its "
+            "checks and rolled back automatically — the live copy was never "
+            "broken. The branch is kept."
+        )
+
+    def test_the_stopped_line_ignores_the_block(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="merge-failed",
+                status="FAILED",
+                failed_step="merge",
+                detail="a conflict in src/app.py",
+                sandbox_merge=_landed(),
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-E613: merge-and-deploy stopped at merge — "
+            "a conflict in src/app.py. Nothing half-done; the branch is kept."
+        )
+
+    def test_an_ordinary_stage_line_ignores_the_block(self) -> None:
+        text = _notifier()._render(
+            _outcome(stage_label="build", result=None, sandbox_merge=_landed())
+        )
+        assert _LANDED_SENTENCE not in text
 
 
 # ---------------------------------------------------------------------------
