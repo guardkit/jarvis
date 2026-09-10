@@ -48,6 +48,13 @@ What is fenced here:
   adds that sentence to the end of the green line, word for word, and
   changes nothing else. No block, or a block with nothing to say, and
   every line reads exactly as it did.
+* **The reason a person reads is the reason it happened (2026-09-10).**
+  A merge turned away after a passing check is only called a moved main
+  when forge's own report says main moved. Every other refusal — a
+  branch that is not there, a dirty working tree, a conflict — names the
+  step forge stopped at and repeats forge's own reason, so the owner can
+  see what stopped it without opening a log and is never sent to fix
+  something that is not broken.
 """
 
 from __future__ import annotations
@@ -233,6 +240,30 @@ _REFUSED_LINE = (
 _MOVED_LINE = (
     f"[{_HHMM}] Pipeline FEAT-E613: the checks passed but main had moved since "
     "this was built, so nothing was merged; send the sentence again."
+)
+
+# Forge's own sentence when main moved during the build, copied from its
+# side (its merge executor writes it and puts it on the report as the
+# detail) so the two cannot drift apart. It is the ONLY thing that says
+# main moved: nothing in the check block names which guard turned the
+# merge away, so a report that does not say this gets the honest line
+# naming the step and forge's own reason instead.
+_MOVED_MAIN_DETAIL = (
+    "FEAT-E613 passed its sandbox check, but main had moved since this was "
+    "built (a1b2c3d4e5 is not in the branch); nothing was merged and the "
+    "branch is kept. Send the sentence again."
+)
+
+# The other sentence for the same event, copied from the merge command's
+# own check just before it merges (its merge executor writes it) and
+# passed onto the report by forge word for word. This is the ORDINARY
+# way a moved main is refused: main moved on after the offer was made,
+# so the branch still holds the commit forge looks for and forge's own
+# check lets it through. The owner must read the same line for it.
+_MOVED_MAIN_PREFLIGHT_DETAIL = (
+    "main has moved since the checks ran "
+    "(expected 9f1c0b2ad3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8, "
+    "found 0e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5)"
 )
 
 
@@ -1110,7 +1141,7 @@ class TestTheProtectMainLines:
                 result="merge-refused",
                 status="FAILED",
                 failed_step="merge",
-                detail="main moved since the checks ran",
+                detail=_MOVED_MAIN_DETAIL,
                 gate_before_merge=_gate(merged_tree=None),
             )
         )
@@ -1306,7 +1337,7 @@ class TestTheProtectMainLines:
             result="merge-refused",
             status="FAILED",
             failed_step="merge",
-            detail="main moved since the checks ran",
+            detail=_MOVED_MAIN_DETAIL,
             gate_before_merge=_gate(merged_tree=None),
         )
 
@@ -1333,6 +1364,171 @@ class TestTheProtectMainLines:
         assert kwargs["text"] == _REFUSED_LINE
         assert "blocks" not in kwargs
         assert kwargs["mrkdwn"] is False
+
+
+# ---------------------------------------------------------------------------
+# The reason a person reads is the reason it happened (2026-09-10)
+# ---------------------------------------------------------------------------
+
+
+class TestTheRefusalNamesItsOwnReason:
+    """A merge turned away after a passing check says WHY it was turned
+    away, in forge's own words.
+
+    On 2026-09-10 the owner said merge on FEAT-39F6, the candidate passed
+    all eight of its checks, and the merge was refused because the branch
+    the merge needed was not there — the fix journey's commits were on a
+    fix branch. Slack told him main had moved. Main had not moved: the
+    ancestry was intact and forge's own report said "branch
+    autobuild/FEAT-39F6 does not exist". He read the sentence, believed
+    it, and went looking for a problem that did not exist while the real
+    one stayed hidden.
+
+    The cause was reading the SHAPE of the report — a candidate that
+    passed plus a merge that was refused — as proof that main had moved,
+    when that shape is equally true of a missing branch, a dirty working
+    tree and a conflict. Nothing on the report names which guard turned
+    the merge away, so the moved-main sentence now waits for forge to say
+    main moved, and every other refusal repeats the step and the reason
+    forge already wrote.
+    """
+
+    # The real refusal, as forge reported it that day.
+    _REAL_DETAIL = "branch autobuild/FEAT-39F6 does not exist"
+
+    def _the_real_refusal(self, **overrides: Any) -> ForgeNotification:
+        fields: dict[str, Any] = {
+            "feature_id": "FEAT-39F6",
+            "build_id": "build-FEAT-39F6-20260910110821",
+            "result": "merge-refused",
+            "status": "FAILED",
+            "failed_step": "merge",
+            "detail": self._REAL_DETAIL,
+            "gate_before_merge": _gate(checks_passed=8, checks_total=8, merged_tree=None),
+        }
+        fields.update(overrides)
+        return _outcome(**fields)
+
+    def test_the_missing_branch_is_named_and_main_is_not(self) -> None:
+        text = _notifier()._render(self._the_real_refusal())
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-39F6: merge-and-deploy stopped at "
+            "merge — branch autobuild/FEAT-39F6 does not exist. Nothing "
+            "half-done; the branch is kept."
+        )
+        assert "main" not in text.removeprefix(f"[{_HHMM}] Pipeline FEAT-39F6: ")
+
+    @pytest.mark.asyncio
+    async def test_the_real_wire_payload_reads_the_same_end_to_end(self) -> None:
+        sub, sink, _ = _subscriber()
+        payload = _merge_payload(
+            feature_id="FEAT-39F6",
+            result="merge-refused",
+            status="FAILED",
+            failed_step="merge",
+            detail=self._REAL_DETAIL,
+            gate_before_merge=_gate(checks_passed=8, checks_total=8, merged_tree=None),
+        )
+
+        await sub._handle_message(_msg(_envelope_bytes(payload)))
+
+        notification = sink.notify.await_args.args[0]
+        assert _notifier()._render(notification) == (
+            f"[{_HHMM}] Pipeline FEAT-39F6: merge-and-deploy stopped at "
+            "merge — branch autobuild/FEAT-39F6 does not exist. Nothing "
+            "half-done; the branch is kept."
+        )
+
+    def test_a_dirty_working_tree_is_named_too(self) -> None:
+        text = _notifier()._render(
+            self._the_real_refusal(
+                detail="the working tree has uncommitted changes",
+            )
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-39F6: merge-and-deploy stopped at "
+            "merge — the working tree has uncommitted changes. Nothing "
+            "half-done; the branch is kept."
+        )
+
+    def test_a_conflict_is_named_too(self) -> None:
+        text = _notifier()._render(
+            self._the_real_refusal(detail="the merge conflicted in src/app.py")
+        )
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-39F6: merge-and-deploy stopped at "
+            "merge — the merge conflicted in src/app.py. Nothing half-done; "
+            "the branch is kept."
+        )
+
+    def test_a_refusal_with_no_detail_invents_no_cause(self) -> None:
+        """Forge said nothing about why, so neither does the line — and it
+        certainly does not say main moved."""
+        text = _notifier()._render(self._the_real_refusal(detail=None))
+        assert text == (
+            f"[{_HHMM}] Pipeline FEAT-39F6: merge-and-deploy stopped at "
+            "merge. Nothing half-done; the branch is kept."
+        )
+
+    def test_a_main_that_really_moved_keeps_todays_sentence(self) -> None:
+        """Forge's own detail says main moved, so the owner reads exactly
+        what he read before — byte for byte."""
+        text = _notifier()._render(
+            _outcome(
+                result="merge-refused",
+                status="FAILED",
+                failed_step="merge",
+                detail=_MOVED_MAIN_DETAIL,
+                gate_before_merge=_gate(merged_tree=None),
+            )
+        )
+        assert text == _MOVED_LINE
+
+    def test_a_main_that_moved_before_the_merge_keeps_todays_sentence_too(self) -> None:
+        """The ordinary moved main: main moved on between the offer and
+        the merge, so the merge command's own check turned it away and
+        said so in its own words. Same event, same line — and the owner
+        still reads the one thing he has to do."""
+        text = _notifier()._render(
+            _outcome(
+                result="merge-refused",
+                status="FAILED",
+                failed_step="merge",
+                detail=_MOVED_MAIN_PREFLIGHT_DETAIL,
+                gate_before_merge=_gate(merged_tree=None),
+            )
+        )
+        assert text == _MOVED_LINE
+
+    def test_the_tree_that_differs_keeps_its_own_words(self) -> None:
+        """The other guard states its case in the report itself — the two
+        tree ids differ — so it is unaffected by what the detail says."""
+        text = _notifier()._render(
+            _outcome(
+                result="merged-deploy-failed",
+                status="FAILED",
+                failed_step="promote",
+                detail="the merged commit's tree is not the tree that was checked",
+                gate_before_merge=_gate(merged_tree="tree-bbbb2222"),
+            )
+        )
+        assert text == _MOVED_LINE
+
+    def test_a_green_merge_is_byte_identical(self) -> None:
+        assert _notifier()._render(_outcome(gate_before_merge=_gate())) == _CHECKED_LINE
+
+    def test_a_failed_candidate_is_byte_identical(self) -> None:
+        text = _notifier()._render(
+            _outcome(
+                result="candidate-refused",
+                status="FAILED",
+                failed_step="the candidate check",
+                detail="2 of 7 live checks failed against the candidate",
+                gate_before_merge=_refused_gate(),
+                repair_row="12",
+            )
+        )
+        assert text == _REFUSED_LINE
 
 
 # ---------------------------------------------------------------------------
@@ -1466,6 +1662,7 @@ class TestTheSandboxMergeSentence:
             _outcome(
                 result="merge-refused",
                 status="FAILED",
+                detail=_MOVED_MAIN_DETAIL,
                 gate_before_merge=_gate(merged_tree=None),
                 sandbox_merge=_landed(),
             )

@@ -375,19 +375,65 @@ def _candidate_refused_sentence(notification: ForgeNotification) -> str | None:
     )
 
 
+# The words used when a merge is refused because main moved while the
+# build was running. TWO different parts of the factory can turn a merge
+# away for that reason, and each writes its own sentence:
+#
+#   * Forge's own check, when the commit main sat on is not in the branch
+#     at all — "… passed its sandbox check, but main had moved since this
+#     was built (<commit> is not in the branch); nothing was merged and
+#     the branch is kept. Send the sentence again."
+#   * The merge command's check just before it merges, which is the
+#     ordinary case — main moved on after the offer was made, so the
+#     branch still holds the commit forge looked for and forge's own
+#     check waves it through. That one says it in the present tense:
+#     "main has moved since the checks ran (expected <commit>, found
+#     <commit>)". Forge passes those words straight onto the report.
+#
+# Either sentence means the same thing to the owner, so both are read as
+# a moved main and he gets the same line — the one that ends "send the
+# sentence again", which is the thing he has to do.
+#
+# It has to be read from the words because the report carries no field
+# saying WHICH guard refused the merge: the check block says how the
+# candidate did, not why the merge was turned away. A passing candidate
+# plus a refused merge is equally true of a branch that is not there, a
+# dirty working tree and a conflict — and on 2026-09-10 the shape alone
+# told the owner main had moved when it had not, sending him to fix
+# something that was not broken.
+_MAIN_MOVED_WORDS = ("main had moved", "main has moved")
+
+
+def _report_says_main_moved(notification: ForgeNotification) -> bool:
+    """True when the report's own reason says main moved during the build.
+
+    Nothing is inferred: no reason, or a reason about something else,
+    means the merge was refused for a reason only the report can name,
+    and the line says that reason instead.
+    """
+    detail = (notification.detail or "").casefold()
+    return any(words in detail for words in _MAIN_MOVED_WORDS)
+
+
 def _main_moved_after_the_check(notification: ForgeNotification) -> bool:
     """True when the candidate passed its checks but main had moved.
 
     Two shapes of the same event: the merge itself was refused after a
-    passing check (the expected-main guard caught a moved main), or the
-    merged commit's tree differs from the candidate's (the exact-tree
-    guard refused the promote). Both need the ``gate_before_merge``
-    block; without it, today's words stand.
+    passing check AND the report's own reason says main moved (either of
+    the two sentences named above), or the merged commit's tree differs
+    from the candidate's (the exact-tree guard refused the promote — a
+    difference the report states outright, in the two tree ids it sends).
+    Both need the ``gate_before_merge`` block; without it, today's words
+    stand.
     """
     gate = notification.gate_before_merge
     if gate is None:
         return False
-    if notification.result == "merge-refused" and (gate.verdict or "").strip().casefold() == "pass":
+    if (
+        notification.result == "merge-refused"
+        and (gate.verdict or "").strip().casefold() == "pass"
+        and _report_says_main_moved(notification)
+    ):
         return True
     return bool(
         gate.candidate_tree and gate.merged_tree and gate.candidate_tree != gate.merged_tree
@@ -416,6 +462,14 @@ def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str)
     had moved since this was built, so nothing was merged; send the
     sentence again." Without the block, every line keeps the words it
     had, byte for byte — an older forge still reports exactly as before.
+
+    That moved-main sentence is only ever used when the report's own
+    reason SAYS main moved (2026-09-10), in either of the two wordings
+    the factory uses for it. Every other merge turned away after a
+    passing check — a branch that is not there, a dirty working tree, a
+    conflict — falls through to the honest line, which names the step
+    forge stopped at and repeats forge's own detail, so the owner can
+    read what actually stopped it without opening a log.
 
     Since 2026-09-07 (sandbox first) a repository whose factory runs in
     its own sandbox has its merge land in the factory's copy of the
