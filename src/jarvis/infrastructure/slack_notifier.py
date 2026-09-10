@@ -375,19 +375,52 @@ def _candidate_refused_sentence(notification: ForgeNotification) -> str | None:
     )
 
 
+# The words forge uses when it refuses a merge because main moved while
+# the build was running. Forge writes that whole sentence itself — "…
+# passed its sandbox check, but main had moved since this was built
+# (<commit> is not in the branch); nothing was merged and the branch is
+# kept. Send the sentence again." — and puts it on the report as the
+# detail, so this is forge's own account of what happened rather than a
+# guess from the shape of the report.
+#
+# It has to be read from the words because the report carries no field
+# saying WHICH guard refused the merge: the check block says how the
+# candidate did, not why the merge was turned away. A passing candidate
+# plus a refused merge is equally true of a branch that is not there, a
+# dirty working tree and a conflict — and on 2026-09-10 the shape alone
+# told the owner main had moved when it had not, sending him to fix
+# something that was not broken.
+_MAIN_MOVED_WORDS = "main had moved"
+
+
+def _report_says_main_moved(notification: ForgeNotification) -> bool:
+    """True when forge's own detail says main moved during the build.
+
+    Nothing is inferred: no detail, or a detail about something else,
+    means the merge was refused for a reason only forge can name, and the
+    line says that reason instead.
+    """
+    return _MAIN_MOVED_WORDS in (notification.detail or "").casefold()
+
+
 def _main_moved_after_the_check(notification: ForgeNotification) -> bool:
     """True when the candidate passed its checks but main had moved.
 
     Two shapes of the same event: the merge itself was refused after a
-    passing check (the expected-main guard caught a moved main), or the
-    merged commit's tree differs from the candidate's (the exact-tree
-    guard refused the promote). Both need the ``gate_before_merge``
-    block; without it, today's words stand.
+    passing check AND forge's own detail says main moved (the
+    expected-main guard), or the merged commit's tree differs from the
+    candidate's (the exact-tree guard refused the promote — a difference
+    the report states outright, in the two tree ids it sends). Both need
+    the ``gate_before_merge`` block; without it, today's words stand.
     """
     gate = notification.gate_before_merge
     if gate is None:
         return False
-    if notification.result == "merge-refused" and (gate.verdict or "").strip().casefold() == "pass":
+    if (
+        notification.result == "merge-refused"
+        and (gate.verdict or "").strip().casefold() == "pass"
+        and _report_says_main_moved(notification)
+    ):
         return True
     return bool(
         gate.candidate_tree and gate.merged_tree and gate.candidate_tree != gate.merged_tree
@@ -416,6 +449,13 @@ def _merge_deploy_line(notification: ForgeNotification, mention: str, hhmm: str)
     had moved since this was built, so nothing was merged; send the
     sentence again." Without the block, every line keeps the words it
     had, byte for byte — an older forge still reports exactly as before.
+
+    That moved-main sentence is only ever used when forge SAYS main
+    moved (2026-09-10). Every other merge turned away after a passing
+    check — a branch that is not there, a dirty working tree, a conflict
+    — falls through to the honest line, which names the step forge
+    stopped at and repeats forge's own detail, so the owner can read
+    what actually stopped it without opening a log.
 
     Since 2026-09-07 (sandbox first) a repository whose factory runs in
     its own sandbox has its merge land in the factory's copy of the
