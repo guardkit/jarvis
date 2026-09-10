@@ -254,6 +254,18 @@ _MOVED_MAIN_DETAIL = (
     "branch is kept. Send the sentence again."
 )
 
+# The other sentence for the same event, copied from the merge command's
+# own check just before it merges (its merge executor writes it) and
+# passed onto the report by forge word for word. This is the ORDINARY
+# way a moved main is refused: main moved on after the offer was made,
+# so the branch still holds the commit forge looks for and forge's own
+# check lets it through. The owner must read the same line for it.
+_MOVED_MAIN_PREFLIGHT_DETAIL = (
+    "main has moved since the checks ran "
+    "(expected 9f1c0b2ad3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8, "
+    "found 0e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5)"
+)
+
 
 def _gate(**overrides: Any) -> dict[str, Any]:
     """A ``gate_before_merge`` block as forge sends it; overrides edit it."""
@@ -1467,6 +1479,22 @@ class TestTheRefusalNamesItsOwnReason:
                 status="FAILED",
                 failed_step="merge",
                 detail=_MOVED_MAIN_DETAIL,
+                gate_before_merge=_gate(merged_tree=None),
+            )
+        )
+        assert text == _MOVED_LINE
+
+    def test_a_main_that_moved_before_the_merge_keeps_todays_sentence_too(self) -> None:
+        """The ordinary moved main: main moved on between the offer and
+        the merge, so the merge command's own check turned it away and
+        said so in its own words. Same event, same line — and the owner
+        still reads the one thing he has to do."""
+        text = _notifier()._render(
+            _outcome(
+                result="merge-refused",
+                status="FAILED",
+                failed_step="merge",
+                detail=_MOVED_MAIN_PREFLIGHT_DETAIL,
                 gate_before_merge=_gate(merged_tree=None),
             )
         )
