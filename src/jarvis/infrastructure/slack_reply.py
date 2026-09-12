@@ -90,6 +90,15 @@ _ACTION_DECISIONS: dict[str, str] = {
     "forge_reject": "reject",
 }
 
+# What the card says once the owner has said no to a spec. ONE sentence for
+# BOTH ways of saying it — the typed note whose first word is "reject", and the
+# card's own decline control — so nothing new has to be learned to use the
+# button (2026-09-12).
+_SPEC_DECLINED_LINE = (
+    "You said reject, so this run will be cancelled and nothing will be built. "
+    "Send a fresh sentence whenever you are ready to start again."
+)
+
 # The exact BUTTON_METADATA keys (producer contract, TASK-JNB-103).
 _BUTTON_VALUE_KEYS = ("request_id", "build_id", "correlation_id", "approval_subject")
 
@@ -332,6 +341,7 @@ class ApprovalReplyHandler:
             ACTION_CANCEL,
             ACTION_DEFER,
             ACTION_DIGEST_APPROVE,
+            ACTION_DIGEST_DECLINE,
             ACTION_DIGEST_NOTE,
             ACTION_DIGEST_SHOW_SPEC,
             ACTION_DIGEST_SIGN_IN_AGREE,
@@ -358,6 +368,9 @@ class ApprovalReplyHandler:
             return
         if action_id == ACTION_DIGEST_APPROVE:
             await self._handle_digest_approve(payload, action, user_id)
+            return
+        if action_id == ACTION_DIGEST_DECLINE:
+            await self._handle_digest_decline(payload, action, user_id)
             return
         if action_id in (ACTION_APPROVE, ACTION_DEFER, ACTION_CANCEL, ACTION_WHOLE_APPROVE):
             await self._handle_dialogue_click(payload, action, action_id, user_id)
@@ -1161,6 +1174,48 @@ class ApprovalReplyHandler:
                 ),
             )
 
+    async def _handle_digest_decline(
+        self, payload: dict[str, Any], action: dict[str, Any], user_id: str
+    ) -> None:
+        """Publish the owner's no to the spec. Never raises.
+
+        Saying no has always been possible by TYPING a note whose first word is
+        "reject": the machine reads that word, ends the run and builds nothing.
+        Nothing on the card said so, so on 2026-09-12 a spec that had already
+        been decided against sat in the planning queue until its hour ran out
+        while its owner looked for a way to say no. This control is that same
+        decision with a button on it — NOT a new step and NOT a new answer:
+        it sends the very word the typed note sends, on the same field, so the
+        machine needs no change and both routes end in the same sentence.
+        """
+        from jarvis.infrastructure import assumption_dialogue as ad
+
+        decoded = self._digest_click(payload, action)
+        if decoded is None:
+            return
+        button, channel_id, message_ts = decoded
+
+        async with self._decision_lock:
+            blocks = await self._fetch_dialogue_blocks(channel_id, message_ts, payload)
+            state = ad.parse_dialogue_blocks(blocks)
+            published = await self._publish_dialogue_decision(
+                request_id=str(button["request_id"]),
+                approval_subject=str(button["approval_subject"]),
+                correlation_id=button["correlation_id"] or None,
+                decided_by=user_id,
+                decision="reject",
+                dispositions=self._dispositions_from_state(state),
+                notes=ad.DIGEST_DECLINE_NOTE,
+            )
+            if not published:
+                return
+            await self._dialogue_status_update(
+                channel_id,
+                message_ts,
+                payload,
+                _SPEC_DECLINED_LINE,
+            )
+
     async def _handle_digest_note_submission(
         self, payload: dict[str, Any], view: dict[str, Any], user_id: str
     ) -> None:
@@ -1227,11 +1282,7 @@ class ApprovalReplyHandler:
             # rewrite that will never come.
             first_word = note.split(None, 1)[0].rstrip(".,:;!?-\u2013\u2014").lower()
             if first_word == "reject":
-                status_line = (
-                    "You said reject, so this run will be cancelled and "
-                    "nothing will be built. Send a fresh sentence whenever "
-                    "you are ready to start again."
-                )
+                status_line = _SPEC_DECLINED_LINE
             else:
                 status_line = (
                     f'Your note was sent: "{note}". The machine is rewriting '

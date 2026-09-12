@@ -5,6 +5,9 @@ wire when the owner answers a spec digest card:
 
 * "Yes" publishes ONE ``approve``, carrying whatever the card was told about
   signing in as a per-item value;
+* "No" publishes the SAME decision a typed "reject" publishes — the machine is
+  told the run is off in the words it has always read, so nothing changed on
+  the far side (2026-09-12);
 * "Send a note" collects plain English in a modal and publishes it VERBATIM as
   a ``reject`` with a note — the literal the digest door reads as "rewrite the
   spec", never as "cancel the run" — and the card then keeps the note in its
@@ -272,6 +275,144 @@ class TestTheSignInAnswer:
         web.conversations_history = AsyncMock(return_value={"messages": [{"blocks": answered}]})
         await handler.handle_block_actions(_click(ad.ACTION_DIGEST_APPROVE, blocks=blocks))
         assert _published(publisher).dispositions[0].disposition == "rejected"
+
+
+# ---------------------------------------------------------------------------
+# Saying no to the spec
+# ---------------------------------------------------------------------------
+class TestSayingNo:
+    """The button that declines a spec.
+
+    On 2026-09-12 a spec that had already been decided against held the
+    planning queue for its full hour because the card offered no way to say
+    no; the owner guessed at typing a note beginning "reject", which worked.
+    The button is that same decision, not a new one: the same words on the
+    wire, and the same sentence back.
+    """
+
+    @pytest.mark.asyncio
+    async def test_one_reject_reaches_the_wire(self) -> None:
+        handler, publisher, _web = _make_handler()
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        assert publisher.publish.await_count == 1
+        response = _published(publisher)
+        assert response.request_id == _REQUEST_ID
+        assert response.decision == "reject"
+        assert response.decided_by == _OPERATOR
+        assert publisher.publish.await_args.kwargs["subject"] == _SUBJECT + ".response"
+
+    @pytest.mark.asyncio
+    async def test_the_note_is_the_word_the_machine_reads_as_call_it_off(self) -> None:
+        """The machine splits on a FIRST WORD of "reject"; the button sends it."""
+        handler, publisher, _web = _make_handler()
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        notes = _published(publisher).notes
+        assert notes is not None
+        assert notes.split(None, 1)[0].lower() == "reject"
+
+    @pytest.mark.asyncio
+    async def test_the_button_and_the_typed_reject_send_the_same_decision(self) -> None:
+        """THE POINT OF THE LANE: forge needs no change, because the payload is
+        the one it already handles. Asserted on the payload itself — decision,
+        note, routing and per-item answers — never on any log wording."""
+        typed_handler, typed_publisher, _tw = _make_handler()
+        await typed_handler.handle_view_submission(_note_submission("reject"))
+        typed = _published(typed_publisher)
+
+        button_handler, button_publisher, _bw = _make_handler()
+        await button_handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        tapped = _published(button_publisher)
+
+        assert tapped.model_dump() == typed.model_dump()
+        assert (
+            button_publisher.publish.await_args.kwargs == typed_publisher.publish.await_args.kwargs
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_card_says_the_same_sentence_either_way(self) -> None:
+        """Nothing new to learn: the words after the button are the words after
+        the typed reject."""
+        typed_handler, _tp, typed_web = _make_handler()
+        await typed_handler.handle_view_submission(_note_submission("reject"))
+        typed_line = typed_web.chat_update.await_args.kwargs["text"]
+
+        handler, _publisher, web = _make_handler()
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        assert web.chat_update.await_args.kwargs["text"] == typed_line
+        assert typed_line == _REJECT_LINE
+
+    @pytest.mark.asyncio
+    async def test_the_buttons_are_replaced_by_that_one_line(self) -> None:
+        handler, _publisher, web = _make_handler()
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        blocks = web.chat_update.await_args.kwargs["blocks"]
+        assert not [b for b in blocks if b.get("type") == "actions"]
+        assert blocks[-1] == {
+            "type": "section",
+            "text": {"type": "plain_text", "text": _REJECT_LINE, "emoji": False},
+        }
+
+    @pytest.mark.asyncio
+    async def test_a_second_tap_publishes_nothing(self) -> None:
+        handler, publisher, _web = _make_handler()
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        assert publisher.publish.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_saying_no_after_saying_yes_publishes_nothing(self) -> None:
+        """First answer wins, whichever answer it was."""
+        handler, publisher, _web = _make_handler()
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_APPROVE))
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        assert publisher.publish.await_count == 1
+        assert _published(publisher).decision == "approve"
+
+    @pytest.mark.asyncio
+    async def test_a_stranger_cannot_say_no(self) -> None:
+        handler, publisher, web = _make_handler()
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE, user_id="U_STRANGER"))
+        publisher.publish.assert_not_awaited()
+        web.chat_postEphemeral.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_malformed_control_value_is_dropped(self) -> None:
+        handler, publisher, _web = _make_handler()
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE, value="not json"))
+        publisher.publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_publish_failure_leaves_the_card_answerable(self) -> None:
+        handler, publisher, _web = _make_handler()
+        publisher.publish.side_effect = RuntimeError("broker down")
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        publisher.publish.side_effect = None
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE))
+        assert publisher.publish.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_a_sign_in_answer_on_the_card_rides_along_as_it_does_when_typed(
+        self,
+    ) -> None:
+        """Whatever the card was told is carried exactly as the typed route
+        carries it — the two payloads stay identical with the question answered."""
+        blocks = _card_blocks(sign_in=True)
+        answered = ad.apply_sign_in_answer(blocks, item_id="sign-in", disposition="accepted")
+
+        typed_handler, typed_publisher, typed_web = _make_handler()
+        typed_web.conversations_history = AsyncMock(
+            return_value={"messages": [{"blocks": answered}]}
+        )
+        await typed_handler.handle_view_submission(_note_submission("reject"))
+
+        handler, publisher, web = _make_handler()
+        web.conversations_history = AsyncMock(return_value={"messages": [{"blocks": answered}]})
+        await handler.handle_block_actions(_click(ad.ACTION_DIGEST_DECLINE, blocks=answered))
+
+        assert _published(publisher).model_dump() == _published(typed_publisher).model_dump()
+        assert [(d.assumption_id, d.disposition) for d in _published(publisher).dispositions] == [
+            ("sign-in", "accepted")
+        ]
 
 
 # ---------------------------------------------------------------------------

@@ -142,6 +142,7 @@ DIGEST_CHECKPOINT_TYPE = "product_docs_spec_digest"
 
 # The digest card's controls.
 ACTION_DIGEST_APPROVE = "digest_approve"
+ACTION_DIGEST_DECLINE = "digest_decline"
 ACTION_DIGEST_NOTE = "digest_note"
 ACTION_DIGEST_SHOW_SPEC = "digest_show_spec"
 # The sign-in question's two answers (present only when the spec tripped the
@@ -150,10 +151,17 @@ ACTION_DIGEST_SHOW_SPEC = "digest_show_spec"
 ACTION_DIGEST_SIGN_IN_AGREE = "digest_sign_in_agree"
 ACTION_DIGEST_SIGN_IN_DISAGREE = "digest_sign_in_disagree"
 
+# What the decline control sends as the owner's note. Saying no to a spec has
+# always been possible by TYPING a note whose first word is "reject" — the
+# machine reads that word and ends the run. The button sends that same word, so
+# the two routes are one decision on the wire and the machine needs no change.
+DIGEST_DECLINE_NOTE = "reject"
+
 # The set of digest action_ids the reply handler owns (routing gate).
 DIGEST_ACTION_IDS = frozenset(
     {
         ACTION_DIGEST_APPROVE,
+        ACTION_DIGEST_DECLINE,
         ACTION_DIGEST_NOTE,
         ACTION_DIGEST_SHOW_SPEC,
         ACTION_DIGEST_SIGN_IN_AGREE,
@@ -910,12 +918,18 @@ def _sign_in_blocks(card: dict[str, Any], *, value: str) -> list[dict[str, Any]]
 
 
 def _digest_control_blocks(card: dict[str, Any], *, value: str) -> list[dict[str, Any]]:
-    """The three controls, and the fine print that tells the truth about them.
+    """The four controls, and the fine print that tells the truth about them.
 
     The primary control says what saying yes actually does. It does NOT start a
     build — the machine writes the task plan and the quality checklist and comes
     back for the go-ahead — and a button that misnamed its own consequence would
     be an approval-surface defect, not a wording nit.
+
+    Saying no sits beside saying yes, because that is where a person looks for
+    it (2026-09-12: a spec that had been decided against held the planning queue
+    until its hour ran out, and the card offered no way to say so). It is the
+    other half of a decision the owner already makes, not a new one: it sends
+    the same word the typed note has always sent, and the run ends.
     """
     blocks: list[dict[str, Any]] = [
         {"type": "divider", "block_id": "digestdiv"},
@@ -934,6 +948,17 @@ def _digest_control_blocks(card: dict[str, Any], *, value: str) -> list[dict[str
                         "emoji": False,
                     },
                     "style": "primary",
+                    "value": value,
+                },
+                {
+                    "type": "button",
+                    "action_id": ACTION_DIGEST_DECLINE,
+                    "text": {
+                        "type": "plain_text",
+                        "text": "No — stop here, nothing is built",
+                        "emoji": False,
+                    },
+                    "style": "danger",
                     "value": value,
                 },
                 {
@@ -984,7 +1009,7 @@ def build_digest_blocks(
 
     One sentence per worked example, numbered, in the spec's own order; then the
     spec's assumptions with their reasons; then the sign-in question if this
-    spec raised one; then the three controls. The worked examples themselves are
+    spec raised one; then the four controls. The worked examples themselves are
     never on this surface — they sit behind "Show the worked examples", which is
     the whole point of the digest.
 
@@ -1603,6 +1628,7 @@ __all__ = [
     "ACTION_CANCEL",
     "ACTION_DEFER",
     "ACTION_DIGEST_APPROVE",
+    "ACTION_DIGEST_DECLINE",
     "ACTION_DIGEST_NOTE",
     "ACTION_DIGEST_SHOW_SPEC",
     "ACTION_DIGEST_SIGN_IN_AGREE",
@@ -1614,6 +1640,7 @@ __all__ = [
     "DIGEST_ACTION_IDS",
     "DIGEST_CARD_ID",
     "DIGEST_CHECKPOINT_TYPE",
+    "DIGEST_DECLINE_NOTE",
     "EDIT_MODAL_CALLBACK_ID",
     "NOTE_MODAL_CALLBACK_ID",
     "SPEC_MODAL_CALLBACK_ID",

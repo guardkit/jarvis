@@ -2,7 +2,7 @@
 
 Machine chain, stage 2 (2026-08-14). These tests pin the RENDER half: the
 numbered sentences, the assumptions with their reasons, the label allowlist,
-the three controls, chunking on worked examples, threading, the sign-in
+the four controls, chunking on worked examples, threading, the sign-in
 question, and the two modals ("send a note" and the read-only worked-examples
 view). Fully hermetic — no Slack, no NATS.
 
@@ -11,6 +11,8 @@ The load-bearing ones, named so a reader knows which failures matter most:
 * an unmapped label reaches NO visible text on the card (a spec is free to
   carry internal labels; the owner's surface is not);
 * the primary control never says the tap starts a build, because it does not;
+* saying no is a button beside saying yes (2026-09-12), and adding it moves
+  nothing else on the card;
 * every other ``checkpoint_type`` renders exactly what it rendered before.
 """
 
@@ -146,6 +148,16 @@ def _action_ids(blocks: list[dict[str, Any]]) -> list[str]:
     return ids
 
 
+def _control(blocks: list[dict[str, Any]], action_id: str) -> dict[str, Any]:
+    """The one button carrying ``action_id`` — raises if the card has no such button."""
+    return next(
+        element
+        for block in blocks
+        for element in (block.get("elements") or [])
+        if isinstance(element, dict) and element.get("action_id") == action_id
+    )
+
+
 # ---------------------------------------------------------------------------
 # Detection
 # ---------------------------------------------------------------------------
@@ -201,17 +213,49 @@ class TestTheCardFace:
         assert any("no assumptions of its own" in t for t in _texts(blocks))
         assert ad.ACTION_DIGEST_APPROVE in _action_ids(blocks)
 
-    def test_the_three_controls_are_present_and_named_plainly(self) -> None:
+    def test_the_four_controls_are_present_and_named_plainly(self) -> None:
         blocks = _blocks(make_digest_details())
         assert _action_ids(blocks) == [
             ad.ACTION_DIGEST_APPROVE,
+            ad.ACTION_DIGEST_DECLINE,
             ad.ACTION_DIGEST_NOTE,
             ad.ACTION_DIGEST_SHOW_SPEC,
         ]
         texts = _texts(blocks)
         assert "Yes — this is what I want built" in texts
+        assert "No — stop here, nothing is built" in texts
         assert "Send a note" in texts
         assert "Show the worked examples" in texts
+
+    def test_saying_no_is_a_button_beside_saying_yes(self) -> None:
+        """2026-09-12: a spec already decided against held the planning queue
+        for an hour because the card offered no way to say no. The control sits
+        next to the yes, where a person looks for it — never hidden behind the
+        note box — and its words say what it does to the run."""
+        blocks = _blocks(make_digest_details())
+        ids = _action_ids(blocks)
+        assert ids.index(ad.ACTION_DIGEST_DECLINE) == ids.index(ad.ACTION_DIGEST_APPROVE) + 1
+        button = _control(blocks, ad.ACTION_DIGEST_DECLINE)
+        assert button["text"]["text"] == "No — stop here, nothing is built"
+        assert button["text"]["type"] == "plain_text"
+
+    def test_the_other_three_controls_keep_their_labels_and_their_order(self) -> None:
+        """Adding the no must move nothing else on the card."""
+        blocks = _blocks(make_digest_details())
+        ids = _action_ids(blocks)
+        kept = [i for i in ids if i != ad.ACTION_DIGEST_DECLINE]
+        assert kept == [
+            ad.ACTION_DIGEST_APPROVE,
+            ad.ACTION_DIGEST_NOTE,
+            ad.ACTION_DIGEST_SHOW_SPEC,
+        ]
+        assert _control(blocks, ad.ACTION_DIGEST_APPROVE)["text"]["text"] == (
+            "Yes — this is what I want built"
+        )
+        assert _control(blocks, ad.ACTION_DIGEST_NOTE)["text"]["text"] == "Send a note"
+        assert _control(blocks, ad.ACTION_DIGEST_SHOW_SPEC)["text"]["text"] == (
+            "Show the worked examples"
+        )
 
     def test_the_primary_control_never_says_the_tap_starts_a_build(self) -> None:
         """A control that misnames its consequence is an approval-surface defect."""
@@ -355,6 +399,8 @@ class TestChunking:
         last = _blocks(details, chunk_index=1, chunk_count=2)
         assert ad.ACTION_DIGEST_APPROVE not in _action_ids(first)
         assert ad.ACTION_DIGEST_APPROVE in _action_ids(last)
+        assert ad.ACTION_DIGEST_DECLINE not in _action_ids(first)
+        assert ad.ACTION_DIGEST_DECLINE in _action_ids(last)
         assert any("continued (1/2)" in t for t in _texts(first))
 
 
