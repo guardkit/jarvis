@@ -1832,3 +1832,87 @@ class TestDeliveryAndDedup:
     def test_a_redelivered_outcome_shares_its_dedup_key(self) -> None:
         notifier = _notifier()
         assert notifier._make_dedup_key(_outcome()) == notifier._make_dedup_key(_outcome())
+
+
+class TestTheRefusalSaysWhatTheCheckSaw:
+    """Forge has always sent what the failed check saw; nothing read it.
+
+    On 2026-09-12 a refusal named "created-per-day" and stopped there. The
+    endpoint had answered 503 from its own database-error handler, and only
+    forge's log said so — an hour of digging for a fact that was already in
+    the payload. These pin that the fact reaches the line, and that a report
+    without it reads exactly as it did before.
+    """
+
+    _SAW = [
+        {
+            "gate_id": "created-per-day",
+            "id": "created-per-day::status",
+            "expected": 200,
+            "observed": 503,
+        }
+    ]
+
+    def _refused(self, **overrides: Any) -> ForgeNotification:
+        return _outcome(
+            result="candidate-refused",
+            status="FAILED",
+            checks_passed=None,
+            checks_total=None,
+            gate_before_merge=_refused_gate(
+                checks_passed=6,
+                failed_checks=["created-per-day"],
+                **overrides,
+            ),
+            repair_row=None,
+            failed_step="the candidate check",
+            detail="1 of 7 live checks failed against the candidate",
+        )
+
+    def test_the_line_names_what_the_check_expected_and_what_it_saw(self) -> None:
+        text = _notifier()._render(self._refused(failed_assertions=self._SAW))
+        assert "expected 200, saw 503" in text
+        assert "created-per-day (created-per-day::status)" in text
+        # The sentence it already had is untouched, and the new clause follows it.
+        assert "failed 1 of 7 checks (created-per-day), so nothing was merged" in text
+        assert text.index("The branch is kept") < text.index("The first thing that failed")
+
+    def test_it_says_how_many_more_the_report_holds(self) -> None:
+        text = _notifier()._render(
+            self._refused(
+                failed_assertions=self._SAW + [dict(self._SAW[0], id="created-per-day::body")],
+                failed_assertions_left_out=3,
+            )
+        )
+        assert "The report lists 4 more." in text
+
+    def test_a_check_that_said_nothing_is_named_as_such(self) -> None:
+        text = _notifier()._render(
+            self._refused(failed_assertions=[{"gate_id": "health", "id": "health"}])
+        )
+        assert "did not say what it saw" in text
+
+    def test_without_the_detail_the_line_is_what_it_always_was(self) -> None:
+        """An older forge, or a check that sent nothing, reads byte for byte."""
+        text = _notifier()._render(self._refused())
+        assert "The first thing that failed" not in text
+        assert text.endswith("failed 1 of 7 checks (created-per-day), so nothing was merged. The branch is kept.")
+
+    def test_junk_costs_the_clause_never_the_line(self) -> None:
+        """Junk is dropped where every raw payload is read — the projector.
+
+        A real report reaches jarvis as a raw mapping and is projected field
+        by field; nothing that is not a mapping survives into the block, so
+        the clause is simply absent and the sentence stands.
+        """
+        from jarvis.infrastructure.forge_notifications import _gate_before_merge
+
+        block = _gate_before_merge(
+            _refused_gate(
+                checks_passed=6,
+                failed_checks=["created-per-day"],
+                failed_assertions=["nonsense", 5],
+            )
+        )
+        assert block is not None
+        assert block.failed_assertions == ()

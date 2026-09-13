@@ -260,7 +260,65 @@ def _inert_payload_strings(notification: ForgeNotification) -> ForgeNotification
         updates["gate_before_merge"] = gate.model_copy(
             update={"failed_checks": tuple(_escape_slack_entities(n) for n in gate.failed_checks)}
         )
+    if gate is not None and gate.failed_assertions:
+        # What the check SAW is forge-authored too — the names come from the
+        # repository's live-check registry and the values from whatever the
+        # service actually returned, so both are escaped before they land on
+        # a line that can carry a mention.
+        escaped = tuple(
+            {
+                key: _escape_slack_entities(value) if isinstance(value, str) else value
+                for key, value in entry.items()
+            }
+            for entry in gate.failed_assertions
+        )
+        already = updates.get("gate_before_merge", gate)
+        updates["gate_before_merge"] = already.model_copy(
+            update={"failed_assertions": escaped}
+        )
     return notification.model_copy(update=updates) if updates else notification
+
+
+def _what_the_check_saw(notification: ForgeNotification) -> str:
+    """What the failed check actually saw, or ``""`` when it did not say.
+
+    THE MISSING HALF OF THE REFUSAL (2026-09-13). Forge has always sent
+    this — the check it belongs to, the assertion inside it, and the values
+    the gate reported — and jarvis composed its own words and never read it.
+    So Rich was told a check had failed and not what it saw, and on
+    2026-09-12 that cost an evening: the refusal named "created-per-day" and
+    nothing else, and only forge's own log said the endpoint had answered
+    503, which is what localised the fault.
+
+    One line, never a dump: the first thing that failed, and how many more
+    the report holds. Absent or unreadable, the caller's sentence is
+    unchanged byte for byte.
+    """
+    gate = notification.gate_before_merge
+    if gate is None or not gate.failed_assertions:
+        return ""
+    first = gate.failed_assertions[0]
+    check = str(first.get("gate_id") or "").strip()
+    inside = str(first.get("id") or "").strip()
+    if check and inside and inside != check:
+        named = f"{check} ({inside})"
+    else:
+        named = check or inside or "an unnamed check"
+
+    expected = first.get("expected")
+    observed = first.get("observed")
+    if expected is not None and observed is not None:
+        saw = f"expected {expected}, saw {observed}"
+    elif expected is not None:
+        saw = f"expected {expected}; the check did not say what it saw"
+    elif observed is not None:
+        saw = f"saw {observed}; the check did not say what it expected"
+    else:
+        return f" The first thing that failed was {named}, and it did not say what it saw."
+
+    more = len(gate.failed_assertions) - 1 + (gate.failed_assertions_left_out or 0)
+    tail = f" The report lists {more} more." if more > 0 else ""
+    return f" The first thing that failed was {named}: {saw}.{tail}"
 
 
 def _tasks_clause(notification: ForgeNotification) -> str:
@@ -372,6 +430,7 @@ def _candidate_refused_sentence(notification: ForgeNotification) -> str | None:
     return (
         f"checked in the sandbox before merging — failed {failed} of {total} "
         f"checks{named}, so nothing was merged. The branch is kept{filed}"
+        f"{_what_the_check_saw(notification)}"
     )
 
 

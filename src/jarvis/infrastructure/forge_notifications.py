@@ -129,6 +129,20 @@ def _outcome_names(value: object) -> tuple[str, ...]:
     return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
 
 
+def _outcome_assertions(value: object) -> tuple[dict[str, Any], ...]:
+    """The failed-assertion entries off the raw merge-deploy payload.
+
+    Each entry is forge's own record of one thing a check found: the check
+    it belongs to, the assertion inside it, and the values the gate
+    reported. Anything that is not a list, and every item that is not a
+    mapping, is dropped — junk costs the "what it saw" clause on the
+    rendered line, never the line.
+    """
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, dict))
+
+
 def _outcome_row_number(value: object) -> str | None:
     """The repair row's number off the raw merge-deploy payload, or None.
 
@@ -196,6 +210,24 @@ class GateBeforeMerge(BaseModel):
             "none or unsent."
         ),
     )
+    failed_assertions: tuple[dict[str, Any], ...] = Field(
+        default=(),
+        description=(
+            "What each failed check actually saw, in forge's order — each entry naming "
+            "the check ('gate_id'), the assertion inside it ('id'), and the values the "
+            "gate reported ('expected', 'observed'). Forge has always sent these; "
+            "until 2026-09-13 nothing read them, so Rich was told a check failed "
+            "without being told what it saw. Empty when none or unsent."
+        ),
+    )
+    failed_assertions_left_out: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "How many further failed assertions the report holds but did not send, "
+            "so a line can say there are more rather than imply these are all."
+        ),
+    )
 
 
 def _gate_before_merge(value: object) -> GateBeforeMerge | None:
@@ -215,6 +247,10 @@ def _gate_before_merge(value: object) -> GateBeforeMerge | None:
         candidate_tree=_outcome_str(value.get("candidate_tree")),
         merged_tree=_outcome_str(value.get("merged_tree")),
         failed_checks=_outcome_names(value.get("failed_checks")),
+        failed_assertions=_outcome_assertions(value.get("failed_assertions")),
+        failed_assertions_left_out=_outcome_count(
+            value.get("failed_assertions_left_out")
+        ),
     )
 
 
