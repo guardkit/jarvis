@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# What never reaches a container build of this repository.
+#
+# Written 25 September 2026, beside deploy/Dockerfile.
+#
+# THE FIRST BLOCK IS THE POINT OF THIS FILE. This repository's settings file
+# holds live Slack tokens and a bus password. A Dockerfile that copies only the
+# files it names would not pick one up today, but a build context that CANNOT
+# carry it is a different and better guarantee: it survives the next person who
+# adds a COPY line. The pattern matches the whole family, the way .gitignore
+# does here, because a timestamped backup once rode along in a commit for want
+# of exactly that.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+*.env
+!.env.example
+
+# Credentials and keys of any kind.
+*.creds
+*.pem
+*.key
+
+# A machine's own working state: a virtual environment belongs to the machine
+# that made it, and copying one into an image mixes two interpreters.
+.venv/
+venv/
+.git/
+.langgraph_api/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
