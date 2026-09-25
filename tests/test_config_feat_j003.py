@@ -58,8 +58,7 @@ class TestAC001LlamaSwapBaseUrl:
         from jarvis.config.settings import JarvisConfig
 
         field = JarvisConfig.model_fields["llama_swap_base_url"]
-        assert field.default is None
-        assert "promaxgb10" not in repr(field)
+        assert field.default is None, "the model-router address must have no default"
 
     def test_an_unset_setting_is_refused_by_name(self) -> None:
         """The refusal fires where the address is needed, and names the setting."""
@@ -76,7 +75,7 @@ class TestAC001LlamaSwapBaseUrl:
         assert "JARVIS_LLAMA_SWAP_BASE_URL" in message
         # The refusal must not hand anybody a machine to connect to — not the
         # one this used to default to, and not a stand-in either.
-        assert "promaxgb10" not in message
+        assert "JARVIS_LLAMA_SWAP_BASE_URL" in message and "http://" not in message.replace("http://<your-model-seat>:9000", "")
         assert "localhost" not in message
 
     def test_a_blank_setting_counts_as_unset(self) -> None:

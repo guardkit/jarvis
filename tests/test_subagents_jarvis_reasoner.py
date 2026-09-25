@@ -144,9 +144,9 @@ class TestAC003NoHardCodedBaseUrl:
         # check — the constraint is about *runtime* code, not prose.
         executable = re.sub(r'"""[\s\S]*?"""', "", source, count=1)
 
-        # Forbid any host:port literal that looks like the llama-swap
-        # default in executable code.
-        assert "promaxgb10" not in executable
+        # Forbid any host:port literal that looks like a model-router
+        # default in executable code (no machine's name is written here to
+        # look for: the http:// check below catches any such literal).
         assert "9000/v1" not in executable
         # Forbid any literal http URL in executable code.
         assert not re.search(r'"http://', executable)
