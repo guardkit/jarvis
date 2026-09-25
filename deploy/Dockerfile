@@ -71,11 +71,44 @@ RUN test -d /tmp/nats-core/src/nats_core \
 # The test and lint tooling is NOT in this image.
 WORKDIR /app
 COPY pyproject.toml ./
+COPY uv.lock ./
 COPY langgraph.json ./
 COPY src ./src
+
+# THE VERSIONS ARE THIS REPOSITORY'S OWN LOCKED ONES, not whatever the index
+# serves on the day of the build.
+#
+# This repository's dependency declarations are RANGES, the way a library's
+# should be, and a developer's environment is built from uv.lock. An image built
+# by resolving those ranges is therefore a different program from the one the
+# live service runs, and a different one again next week — which is the exact
+# thing the release path exists to end, said in the release manifest's own
+# words. It is not theoretical: built unconstrained on 25 September 2026 this
+# image picked up langchain 1.4.2 and deepagents 0.5.9 where the lock says
+# 1.2.15 and 0.5.3, and the supervisor graph then refused to build at all
+# ("Please remove duplicate middleware instances"), so the bus gateway started,
+# joined the bus and exited.
+#
+# So the lock is turned into a pip constraints file and the install is held to
+# it. Packages the lock resolves from a local path (this package, and the bus
+# library, which arrives above as a build context) are left out: a constraint
+# is a version, and those two have no version on an index.
+#
+# This is NOT a second source of truth. uv.lock stays the one place the
+# versions are written; this step only reads it.
+RUN python - <<'PY'
+import tomllib
+locked = tomllib.load(open("uv.lock", "rb"))
+with open("/tmp/constraints.txt", "w") as out:
+    for package in locked["package"]:
+        source = package.get("source", {})
+        if "registry" not in source:
+            continue
+        out.write(f"{package['name']}=={package['version']}\n")
+PY
 RUN pip install --no-cache-dir /tmp/nats-core \
-    && pip install --no-cache-dir ".[nats,front-door]" \
-    && rm -rf /tmp/nats-core
+    && pip install --no-cache-dir -c /tmp/constraints.txt ".[nats,front-door]" \
+    && rm -rf /tmp/nats-core /tmp/constraints.txt
 
 # A NON-ROOT USER, and a home it can write.
 #

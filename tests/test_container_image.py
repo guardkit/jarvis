@@ -2,7 +2,7 @@
 
 Written 25 September 2026, when this repository first grew a Dockerfile.
 
-WHY THESE FOUR THINGS, AND NOT A BUILD. Building the image needs Docker, a
+WHY THESE FIVE THINGS, AND NOT A BUILD. Building the image needs Docker, a
 network and a clone of the bus library, so it is not something a unit test
 does; the factory's release build does that, and its own proof script opens the
 built image and asks it questions. What a test here can hold is the FILE — the
@@ -18,7 +18,10 @@ produce an image that still built and was wrong:
 3. THE BUS LIBRARY COMES FROM ITS OWN REPOSITORY, as a build context. The name
    ``nats-core`` on the public index is a DIFFERENT project, so an install that
    resolved it by name would quietly install something else.
-4. IT DOES NOT RUN AS ROOT, and the settings file cannot reach the image.
+4. THE VERSIONS ARE THIS REPOSITORY'S OWN LOCKED ONES. The declarations here
+   are ranges; an image that resolves them afresh is a different program every
+   week, and a different one from the live service.
+5. IT DOES NOT RUN AS ROOT, and the settings file cannot reach the image.
 
 None of this names any target project's toolchain: it is about one image of
 this repository's own two services.
@@ -105,6 +108,33 @@ def test_the_bus_library_comes_from_its_own_repository() -> None:
         "really the bus library, so a wrong or empty context would install "
         "quietly and fail much later"
     )
+
+
+def test_the_versions_are_this_repositorys_locked_ones() -> None:
+    """An image that resolves this repository's ranges is a different program
+    every week, and a different one from the live service.
+
+    The declarations here are RANGES, the way a library's should be, and a
+    developer's environment is built from uv.lock. Built unconstrained on 25
+    September 2026 the image picked up langchain 1.4.2 and deepagents 0.5.9
+    where the lock says 1.2.15 and 0.5.3, and the supervisor graph then refused
+    to build at all — so the bus gateway started, joined the bus and exited,
+    while the front door's server came up looking perfectly healthy because it
+    loads that graph lazily.
+    """
+    text = _dockerfile_text()
+    assert "uv.lock" in text, (
+        "deploy/Dockerfile does not read uv.lock, so the image's versions are "
+        "whatever the index served on the day it was built"
+    )
+    installs = [line for line in _instructions(text) if "pip install" in line]
+    package_install = [line for line in installs if '".[' in line]
+    assert package_install, "deploy/Dockerfile never installs this package with its extras"
+    for line in package_install:
+        assert "-c " in line, (
+            "deploy/Dockerfile installs this package without holding it to a "
+            f"constraints file built from uv.lock: {line}"
+        )
 
 
 def test_it_does_not_run_as_root() -> None:
