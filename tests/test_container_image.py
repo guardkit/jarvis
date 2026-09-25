@@ -24,6 +24,10 @@ produce an image that still built and was wrong:
 5. IT DOES NOT RUN AS ROOT, and the settings file cannot reach the image.
 6. WHAT IT COPIES CARRIES NOTHING OF THE MACHINE THAT BUILDS IT — swept with
    words that come from that machine, never from a list written down here.
+7. ANOTHER REPOSITORY'S CHECKOUT IS NOT A LAYER OF THE SHIPPED IMAGE. The bus
+   library arrives as a whole clone; it is copied in a BUILDER stage, and a
+   deletion in a later step of one stage would not do — a deleted file is gone
+   from what a container sees and still in what a push sends.
 
 None of this names any target project's toolchain: it is about one image of
 this repository's own two services.
@@ -112,6 +116,64 @@ def test_the_bus_library_comes_from_its_own_repository() -> None:
         "deploy/Dockerfile does not check that the nats-core build context is "
         "really the bus library, so a wrong or empty context would install "
         "quietly and fail much later"
+    )
+
+
+def _stages(text: str) -> list[list[str]]:
+    """The instructions grouped by the ``FROM`` that begins each stage."""
+    stages: list[list[str]] = []
+    for line in _instructions(text):
+        if line.startswith("FROM "):
+            stages.append([line])
+        elif stages:
+            stages[-1].append(line)
+    return stages
+
+
+def test_the_bus_librarys_checkout_is_not_a_layer_of_the_shipped_image() -> None:
+    """A deleted file is gone from what a container sees and still in what a
+    push sends.
+
+    The bus library arrives as a whole clone of another repository — all of it,
+    including whatever working state that repository has committed. A
+    single-stage build that copies it in and deletes it later looks clean from
+    the inside (``docker export`` is the flattened final filesystem) and is not:
+    the layer holding it is still one of the image's layers, and ``docker save``
+    and a registry push send every layer. Measured on 25 September 2026 that
+    layer was 68.3 MB, and at the commit the release pins it carried a person's
+    account name in 127 files.
+
+    So the copy belongs in a stage that is not shipped, and only the installed
+    virtual environment crosses into the image.
+    """
+    text = _dockerfile_text()
+    stages = _stages(text)
+    assert len(stages) > 1, (
+        "deploy/Dockerfile is a single stage, so everything it copies in is a "
+        "layer of the image that ships — including the whole clone of the bus "
+        "library, whether or not a later step deletes it"
+    )
+
+    final = stages[-1]
+    final_copies = [line for line in final if line.startswith("COPY ") and "--from=" in line]
+    for line in final_copies:
+        assert "--from=nats-core" not in line, (
+            "the shipped stage copies the bus library's whole checkout into "
+            f"the image: {line}"
+        )
+    assert any("--from=builder" in line for line in final_copies), (
+        "the shipped stage takes nothing from the builder stage, so whatever "
+        "the builder installed is not in the image"
+    )
+    assert not any("nats-core" in line for line in final if line.startswith("RUN ")), (
+        "the shipped stage handles the bus library's checkout itself; it "
+        "belongs to the builder stage alone"
+    )
+
+    earlier = [line for stage in stages[:-1] for line in stage]
+    assert any("--from=nats-core" in line for line in earlier), (
+        "no stage takes the bus library from its build context, so the image "
+        "would install whatever the public index serves under that name"
     )
 
 

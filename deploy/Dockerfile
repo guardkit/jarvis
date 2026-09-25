@@ -18,10 +18,28 @@
 # and answer service are one image with two start commands, so this is the
 # estate's existing pattern and not a new one.
 #
-# THE BASE IS PINNED BY DIGEST, and it is the factory's ONE base image. A
-# release build reads every Dockerfile of the release and refuses one that pins
-# no digest, or one whose digest is not the release's: a release has one base,
-# or it has two supply chains under one name.
+# WHY TWO STAGES. A stage is not tidiness here; it is what keeps another
+# repository's whole checkout out of the image that ships.
+#
+# The bus library arrives as a build context — a clone of another repository,
+# all of it, including whatever working state that repository happens to have
+# committed. A single-stage build that COPYs it in and deletes it later looks
+# clean from the inside (`docker export`, which is the flattened final
+# filesystem, does not have it) and is not clean at all: the layer that holds
+# it is still one of the image's layers, and a `docker save` or a push to a
+# registry sends every layer. Measured on 25 September 2026: the deleted copy
+# was a 68.3 MB layer of this image, and at the commit the release pins it
+# carried a person's account name in 127 files and a host name in 10.
+#
+# So the copy happens in a BUILDER stage that nothing ships, and the only
+# thing that crosses into the image is the virtual environment the install
+# produced — which holds the bus library as an INSTALLED package and none of
+# its checkout. That is the same shape Forge's own image has.
+#
+# THE BASE IS PINNED BY DIGEST — both stages, the same digest. A release build
+# reads every Dockerfile of the release and refuses one that pins no digest, or
+# one whose digest is not the release's: a release has one base, or it has two
+# supply chains under one name.
 #
 # WHAT IS NOT IN HERE, deliberately:
 #   * no .env — the repository's own .dockerignore keeps the whole .env family
@@ -33,7 +51,7 @@
 #     carrying the absolute path of the machine that compiled them, and the
 #     .dockerignore now keeps every one of them out;
 #   * no Slack token, no bus password, no licence key of any kind;
-#   * NO MACHINE NAME — and this line was not always true. Read on.
+#   * no machine name — and this line was not always true. Read on.
 #
 # THE MACHINE NAME THAT USED TO BE IN HERE, and how it went. Between 25
 # September 2026 and the commit that carries this paragraph, this image really
@@ -58,11 +76,16 @@
 # WHAT KEEPS IT TRUE. Two sweeps, and neither of them is a list of names in a
 # tracked file — such a list would be the defect it is looking for. The words
 # come from the MACHINE, in RELEASE_SWEEP_TERMS: the release build sweeps every
-# built image's whole filesystem, config, labels and history and refuses the
-# release on a hit (forge/scripts/build-release-image.sh), and a test in this
-# repository sweeps what this Dockerfile COPYs (tests/test_container_image.py).
+# built image's LAYERS — what a push sends, not only what a container would see
+# — along with its configuration, labels and history, and refuses the release on
+# a hit (forge/scripts/build-release-image.sh); and a test in this repository
+# sweeps what this Dockerfile COPYs (tests/test_container_image.py).
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim-bookworm@sha256:2e256d0381371566ed96980584957ed31297f437569b79b0e5f7e17f2720e53a
+
+# ---------------------------------------------------------------------------
+# STAGE 1 — the builder. Nothing of this stage is shipped except /opt/venv.
+# ---------------------------------------------------------------------------
+FROM python:3.14-slim-bookworm@sha256:2e256d0381371566ed96980584957ed31297f437569b79b0e5f7e17f2720e53a AS builder
 
 # THE BUS LIBRARY, FROM ITS OWN REPOSITORY.
 #
@@ -82,6 +105,9 @@ FROM python:3.14-slim-bookworm@sha256:2e256d0381371566ed96980584957ed31297f43756
 # Built by hand without that flag, this build stops here and says so, which is
 # the right answer: the image would otherwise be built against whatever a
 # public index happens to serve under that name.
+#
+# THIS COPY IS WHY THERE IS A BUILDER STAGE. It brings in another repository's
+# whole tree; nothing of this stage reaches the image.
 COPY --from=nats-core / /tmp/nats-core
 RUN test -d /tmp/nats-core/src/nats_core \
     || (echo "the nats-core build context has no src/nats_core in it, so it is not the bus library this image needs" >&2; exit 1)
@@ -138,9 +164,33 @@ with open("/tmp/constraints.txt", "w") as out:
             continue
         out.write(f"{package['name']}=={package['version']}\n")
 PY
-RUN pip install --no-cache-dir /tmp/nats-core \
-    && pip install --no-cache-dir -c /tmp/constraints.txt ".[nats,front-door]" \
-    && rm -rf /tmp/nats-core /tmp/constraints.txt
+
+# EVERYTHING IS INSTALLED INTO ONE VIRTUAL ENVIRONMENT, /opt/venv, because that
+# is the one directory the image takes from this stage. Installing into the
+# base interpreter instead would mean copying site-packages out of it, which is
+# a guess about what a base image put there.
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --disable-pip-version-check /tmp/nats-core \
+    && /opt/venv/bin/pip install --no-cache-dir --disable-pip-version-check -c /tmp/constraints.txt ".[nats,front-door]"
+
+# ---------------------------------------------------------------------------
+# STAGE 2 — the image that ships. It takes the virtual environment and this
+# repository's own files, and nothing else from anywhere.
+# ---------------------------------------------------------------------------
+FROM python:3.14-slim-bookworm@sha256:2e256d0381371566ed96980584957ed31297f437569b79b0e5f7e17f2720e53a
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}" \
+    VIRTUAL_ENV=/opt/venv
+
+# The repository's own files are here as well as installed, because
+# langgraph.json names its two graphs by PATH into ./src — the server imports
+# them from this directory, not from the installed copy.
+WORKDIR /app
+COPY pyproject.toml ./
+COPY uv.lock ./
+COPY langgraph.json ./
+COPY src ./src
 
 # A NON-ROOT USER, and a home it can write.
 #
