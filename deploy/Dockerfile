@@ -27,8 +27,26 @@
 #   * no .env — the repository's own .dockerignore keeps the whole .env family
 #     out of the build context, so it cannot be copied in by accident. Every
 #     setting arrives at run time, and the Slack tokens arrive as files;
-#   * no checkout path, no home directory of anybody, no machine name;
+#   * no checkout path and no home directory of anybody — nothing of the
+#     machine that builds the image rides into it. That was not free: until 25
+#     September 2026 a developer's compiled files went into the build context
+#     carrying the absolute path of the machine that compiled them, and the
+#     .dockerignore now keeps every one of them out;
 #   * no Slack token, no bus password, no licence key of any kind.
+#
+# ONE THING THAT IS IN HERE, and an earlier version of the list above wrongly
+# said otherwise: A MACHINE NAME. This package's own settings module hard-codes
+# a host name as the default model-seat address (src/jarvis/config/settings.py,
+# llama_swap_base_url), a docstring in src/jarvis/adapters/llamaswap.py repeats
+# it, .env.example carries it, and pyproject.toml names a folder in a comment
+# about sibling checkouts. All of that pre-dates this file, in a repository
+# that is already public, so packaging published nothing that was not published
+# already. It is also inert wherever the estate runs this image: the estate
+# supplies JARVIS_LLAMA_SWAP_BASE_URL and refuses to start the service without
+# it, so that default can never be the value in use. Taking the host name out
+# of the source is this repository's own fix, not a packaging one — it is
+# written here so that nobody reads the list above and believes the image is
+# cleaner than it is.
 # ---------------------------------------------------------------------------
 FROM python:3.14-slim-bookworm@sha256:2e256d0381371566ed96980584957ed31297f437569b79b0e5f7e17f2720e53a
 
