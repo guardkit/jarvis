@@ -38,7 +38,7 @@ resolves the gate registry (qa/gates/registry.yaml) and every gate's evidence di
 (qa/gates/evidence/) CWD-RELATIVE. So it MUST be launched FROM THE JARVIS REPO
 ROOT:
 
-    cd /home/richardwoollcott/Projects/appmilla_github/jarvis
+    cd <this checkout>            # the jarvis repository root
     uv run --no-sync --project ../guardkit \
       python qa/gates/local_live_gate.py --feature HB-1-SERVE-NATS-LIVENESS \
       --target local --repo .

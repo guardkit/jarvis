@@ -156,15 +156,19 @@ dev = [
 # package has since broadened to `requires-python = ">=3.10"`, and
 # Jarvis's pin has been rebaselined to `>=3.11`. The collision rationale
 # no longer applies. The sibling-repo install is retained for now to
-# preserve in-place developer iteration on `nats-core` from `appmilla_github/`
+# preserve in-place developer iteration on a sibling `nats-core` checkout
 # — when the team is ready to consume `nats-core` purely from PyPI, this
 # `[tool.uv.sources]` entry can be deleted and the runtime dep above
 # (`nats-core>=0.5`) will resolve from PyPI.
 #
 # The canonical layout assumes `nats-core` is a sibling of `jarvis`:
 #
-#   …/appmilla_github/jarvis/        ← this project
-#   …/appmilla_github/nats-core/     ← target of `../nats-core`
+#   <your projects folder>/jarvis/        ← this project
+#   <your projects folder>/nats-core/     ← target of `../nats-core`
+#
+# The NAME of that folder does not matter and is deliberately not written
+# here: `../nats-core` is a RELATIVE path, so all that matters is that the
+# two checkouts are siblings.
 #
 # Note for git worktrees: `uv` resolves the path relative to the directory
 # that contains *this* pyproject.toml. From a worktree at

@@ -45,7 +45,9 @@ NOW = 1_784_554_100.0
 
 
 def _line(epoch: float, msg: str) -> str:
-    return f'{epoch:.6f} promaxgb10-41b1 jarvis[2903526]: {{"event": "{msg}"}}'
+    # The host field of a syslog line. Any name will do — this fixture is
+    # about what the watchdog reads out of the line, not whose box wrote it.
+    return f'{epoch:.6f} a-host jarvis[2903526]: {{"event": "{msg}"}}'
 
 
 # A healthy Socket-Mode rotation: abandon immediately FOLLOWED by established.

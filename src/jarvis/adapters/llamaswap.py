@@ -6,7 +6,11 @@ the network in Phase 2. The read path is exposed via a keyword-only
 default of :data:`None`.
 
 Live endpoint paths (FEAT-JARVIS-004 will swap the stub for real probes
-against ``http://promaxgb10-41b1:9000``):
+against the model seat named by ``JARVIS_LLAMA_SWAP_BASE_URL``, for example
+``http://<your-model-seat>:9000``). This module names no machine: the
+address arrives as ``base_url`` below, and
+``JarvisConfig.resolve_llama_swap_base_url`` refuses by name rather than
+defaulting when nobody has set it:
 
 - ``GET /running`` — list of currently loaded model aliases plus the
   ``eta_seconds`` countdown for any alias still warming up.

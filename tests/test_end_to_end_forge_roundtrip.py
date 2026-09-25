@@ -281,9 +281,9 @@ class TestEndToEndForgeRoundTrip:
         missing = _missing_required_env_vars()
         if missing:
             pytest.skip(
-                "End-to-end Forge round-trip requires real GB10 "
+                "End-to-end Forge round-trip requires the real fleet's "
                 f"infrastructure. Missing env-vars: {sorted(missing)}. "
-                "Set JARVIS_NATS_URL=nats://promaxgb10-41b1:4222 and "
+                "Set JARVIS_NATS_URL=nats://<your-bus-host>:4222 and "
                 "JARVIS_FLEET_MEMORY_ENABLED=<falkordb-endpoint> on the operator "
                 "host before re-running with -m e2e."
             )

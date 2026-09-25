@@ -60,7 +60,7 @@ See [system-context.md](system-context.md) for C4 Level 1 and [container.md](con
 ### D. Adapters (I/O edges)
 - `jarvis.adapters.nats` — consumes `jarvis.command.*`, publishes dispatches + notifications, fleet.register lifecycle, KV read + watch
 - `jarvis.adapters.graphiti` — read/write against `jarvis_routing_history` + `jarvis_ambient_history`
-- `jarvis.adapters.llamaswap` — `init_chat_model` configured for `http://promaxgb10-41b1:9000/v1` (OpenAI format) and `/v1/messages` (Anthropic format) via llama-swap
+- `jarvis.adapters.llamaswap` — `init_chat_model` configured for `<JARVIS_LLAMA_SWAP_BASE_URL>/v1` (OpenAI format) and `/v1/messages` (Anthropic format) via llama-swap
 - **Adapter services (separate containers on GB10):** `telegram`, `cli`, `dashboard`, `reachy` — built from `nats-asyncio-service` template
 
 ### E. Cross-cutting
@@ -77,7 +77,7 @@ See [system-context.md](system-context.md) for C4 Level 1 and [container.md](con
 | Language | Python 3.12+ |
 | Agent framework | LangChain DeepAgents `>=0.5.3, <0.6` |
 | Graph runtime | LangGraph — `langgraph.json` / `langgraph dev` / `CompiledStateGraph` |
-| Model client | `init_chat_model("<llama-swap-alias>")` via OpenAI-compatible base URL `http://promaxgb10-41b1:9000/v1` |
+| Model client | `init_chat_model("<llama-swap-alias>")` via OpenAI-compatible base URL `<JARVIS_LLAMA_SWAP_BASE_URL>/v1` |
 | Primary reasoner | `gpt-oss-120b` MXFP4 (llama-swap `jarvis-reasoner` alias; builders group, swap) |
 | Voice/coder-adjacent | `qwen3-coder-next` FP8 (llama-swap `qwen-coder-next` alias; builders group, swap) |
 | Attended-only escape | Gemini 3.1 Pro / Opus 4.7 via `escalate_to_frontier` tool (constitutionally attended-gated) |
@@ -111,7 +111,7 @@ See [system-context.md](system-context.md) for C4 Level 1 and [container.md](con
 
 ## 6. Inference Strategy (Foundational)
 
-**All unattended inference routes through llama-swap on GB10** at `http://promaxgb10-41b1:9000`. No cloud LLMs on unattended paths. Cloud frontier models (Gemini 3.1 Pro, Opus 4.7) are permitted only via the `escalate_to_frontier` tool on attended adapter sessions, constitutionally blocked from ambient/learning/Pattern-C subagent tool sets.
+**All unattended inference routes through llama-swap on the local model seat**, at the address `JARVIS_LLAMA_SWAP_BASE_URL` names (there is no default; an unset setting is refused by name). No cloud LLMs on unattended paths. Cloud frontier models (Gemini 3.1 Pro, Opus 4.7) are permitted only via the `escalate_to_frontier` tool on attended adapter sessions, constitutionally blocked from ambient/learning/Pattern-C subagent tool sets.
 
 llama-swap model groups:
 - **forever** (always-on; lifecycle delegated to existing vLLM scripts): `qwen-graphiti` (Qwen2.5-14B FP8 for Graphiti entity extraction), `nomic-embed` (embeddings)
@@ -204,7 +204,7 @@ This architecture is a **crystallisation** of [fleet-architecture-v3-coherence-v
 
 - Preserves: three surfaces-one-substrate (D40), model routing as reasoning (D43), flywheel-per-surface (D41), trace-richness by default (D42, ADR-FLEET-001), selectively ambient A+B v1 (D44), `jarvis.learning` as module not separate agent (D45).
 - Extends: the "four-cloud-subagents" suggestion from vision §2 is superseded by ADR-ARCH-001's local-first principle → single `jarvis-reasoner` on `gpt-oss-120b` with role-driven prompts.
-- Clarifies: llama-swap on GB10 is the fleet's unified inference front door, not only Jarvis's — Forge and specialist-agent containers share the same `http://promaxgb10-41b1:9000` endpoint.
+- Clarifies: llama-swap on GB10 is the fleet's unified inference front door, not only Jarvis's — Forge and specialist-agent containers share the same llama-swap endpoint.
 
 ---
 

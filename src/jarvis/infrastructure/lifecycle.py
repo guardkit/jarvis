@@ -756,10 +756,19 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # 5. Construct the LlamaSwapAdapter.  Phase 2 is read-only / stubbed;
     # FEAT-JARVIS-004 swaps in a live HTTP probe without changing the
     # public surface (TASK-J003-007 / DDR-015).
-    llamaswap_adapter = LlamaSwapAdapter(base_url=config.llama_swap_base_url)
+    #
+    # THE MODEL SEAT'S ADDRESS IS RESOLVED HERE, ONCE, AND AN UNSET ONE IS
+    # REFUSED BY NAME (25 September 2026). It used to default to the name of
+    # one real machine, so a process started with the setting unset pointed
+    # itself at somebody else's box and said nothing. There is no default now
+    # and no neutral stand-in either — a stand-in would be a different wrong
+    # answer — so this is the point where "nobody has said which seat" stops
+    # the process, with a sentence naming JARVIS_LLAMA_SWAP_BASE_URL.
+    llama_swap_base_url = config.resolve_llama_swap_base_url()
+    llamaswap_adapter = LlamaSwapAdapter(base_url=llama_swap_base_url)
     log.info(
         "jarvis_llamaswap_adapter_ready",
-        base_url=config.llama_swap_base_url,
+        base_url=llama_swap_base_url,
     )
 
     # 6. Export ``OPENAI_BASE_URL`` so the ``jarvis-reasoner`` leaf graph
@@ -770,12 +779,12 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # instantiation reads the env var.
     #
     # ADR-ARCH-001 (local-first inference): the supervisor always routes
-    # through llama-swap on the GB10 (or its Tailscale-reachable
-    # equivalent). Cloud OpenAI is NOT a supported supervisor target; this
-    # ``OPENAI_BASE_URL`` clobber is intentional and unconditional, and
-    # there is no escape hatch to cloud APIs. To point at a different
-    # llama-swap instance, set ``JARVIS_LLAMA_SWAP_BASE_URL``.
-    openai_base_url = f"{config.llama_swap_base_url}/v1"
+    # through llama-swap on the model seat named by
+    # ``JARVIS_LLAMA_SWAP_BASE_URL``, resolved at step 5. Cloud OpenAI is NOT
+    # a supported supervisor target; this ``OPENAI_BASE_URL`` clobber is
+    # intentional and unconditional, and there is no escape hatch to cloud
+    # APIs. To point at a different llama-swap instance, set that setting.
+    openai_base_url = f"{llama_swap_base_url}/v1"
     os.environ["OPENAI_BASE_URL"] = openai_base_url
     log.info(
         "jarvis_openai_base_url_set",

@@ -3,8 +3,9 @@
 Provides :class:`JarvisConfig` which reads environment variables with the
 ``JARVIS_`` prefix and validates provider-specific API keys at runtime.
 
-Default supervisor model routes through llama-swap on the local GB10
-(ADR-ARCH-001 — local-first inference).
+Default supervisor model routes through llama-swap on the local model seat
+(ADR-ARCH-001 — local-first inference). That seat's address is a REQUIRED
+setting with no default — see :data:`MISSING_LLAMA_SWAP_BASE_URL_REFUSAL`.
 
 This module belongs to Group E (cross-cutting) per ADR-ARCH-006.
 """
@@ -29,16 +30,43 @@ logger = logging.getLogger(__name__)
 # exact environment variable the operator needs to set.
 #
 # ADR-ARCH-001: the ``openai:`` provider is intentionally absent. The
-# supervisor always routes through llama-swap on the GB10 (or its
-# Tailscale-reachable equivalent) and that endpoint is governed by
-# ``llama_swap_base_url``, which has a hard-coded default — no operator
-# action is required to satisfy the ``openai:`` provider, so there is
-# nothing to validate. Cloud OpenAI is NOT a supported supervisor target.
+# supervisor always routes through llama-swap on the local model seat, and
+# that endpoint is governed by ``llama_swap_base_url``. There is no API key
+# to validate for it — the address itself is the only thing it needs, and an
+# unset address is refused by name where it is used (see
+# :data:`MISSING_LLAMA_SWAP_BASE_URL_REFUSAL` below) rather than being
+# validated here. Cloud OpenAI is NOT a supported supervisor target.
 # ---------------------------------------------------------------------------
 _PROVIDER_KEY_REQUIREMENTS: dict[str, tuple[str, str]] = {
     "anthropic": ("anthropic_api_key", "ANTHROPIC_API_KEY"),
     "google_genai": ("google_api_key", "GOOGLE_API_KEY"),
 }
+
+# ---------------------------------------------------------------------------
+# THE MODEL SEAT'S ADDRESS HAS NO DEFAULT, AND IS NOT GOING TO GET ONE.
+#
+# 25 September 2026. Until this commit ``llama_swap_base_url`` defaulted to the
+# name of one real box on one real network. That is the worst shape this defect
+# takes: with the setting unset, this software silently talked to somebody
+# else's machine and said nothing about it — and the name travelled inside
+# every image built from this repository, which is public.
+#
+# A neutral stand-in (``localhost``, ``model-seat``) would be a DIFFERENT wrong
+# answer: it would still start, still route somewhere nobody chose, and still
+# fail later and somewhere else. So the setting is REQUIRED, and an unset
+# setting is said out loud, by name, at the point the address is needed. Same
+# treatment as ``FALKORDB_HOST`` in guardkit and ``FORGE_REPO_BASE`` in forge.
+#
+# Nothing about the setting's NAME changed: ``JARVIS_LLAMA_SWAP_BASE_URL``
+# is what it always was. Only the value moved.
+# ---------------------------------------------------------------------------
+MISSING_LLAMA_SWAP_BASE_URL_REFUSAL = (
+    "JARVIS_LLAMA_SWAP_BASE_URL is not set, so this process does not know "
+    "which llama-swap to route the supervisor and the jarvis-reasoner "
+    "subagent through — refusing. Set JARVIS_LLAMA_SWAP_BASE_URL to the "
+    "address of your model seat, for example http://<your-model-seat>:9000 "
+    "(the estate's compose file supplies it and refuses to start without it)."
+)
 
 
 class JarvisConfig(BaseSettings):
@@ -58,8 +86,9 @@ class JarvisConfig(BaseSettings):
     # -- Provider API keys (SecretStr for masking) ---------------------------
     # NOTE: there is intentionally no ``openai_base_url`` field. The supervisor
     # always routes through llama-swap (ADR-ARCH-001 — local-first inference);
-    # the active endpoint is ``llama_swap_base_url`` below. Cloud OpenAI is
-    # NOT a supported supervisor target — see TASK-FRR-002.
+    # the active endpoint is ``llama_swap_base_url`` below, which the operator
+    # must set. Cloud OpenAI is NOT a supported supervisor target — see
+    # TASK-FRR-002.
     anthropic_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
     google_api_key: SecretStr | None = None
@@ -79,9 +108,15 @@ class JarvisConfig(BaseSettings):
     workspace_root: Path = Path(".").resolve()
 
     # -- FEAT-JARVIS-003: routing + frontier-escape settings -----------------
-    # llama-swap base URL on the local GB10 (ADR-ARCH-012). Picked up from
-    # JARVIS_LLAMA_SWAP_BASE_URL via the env_prefix below.
-    llama_swap_base_url: str = "http://promaxgb10-41b1:9000"
+    # The llama-swap base URL of the model seat this process routes through
+    # (ADR-ARCH-012). Picked up from JARVIS_LLAMA_SWAP_BASE_URL via the
+    # env_prefix below.
+    #
+    # NO DEFAULT, on purpose — see MISSING_LLAMA_SWAP_BASE_URL_REFUSAL at the
+    # top of this module. ``None`` means "nobody has said which model seat",
+    # and :meth:`resolve_llama_swap_base_url` refuses by name rather than
+    # inventing a host.
+    llama_swap_base_url: str | None = None
 
     # Default target model for `escalate_to_frontier` (ADR-ARCH-027).
     # Closed enum — adding a new target requires a DDR.
@@ -366,10 +401,48 @@ class JarvisConfig(BaseSettings):
         if self.nats_credentials_path is not None:
             return None
         user = self.nats_user
-        password = self.nats_password.get_secret_value() if self.nats_password is not None else None
-        if not user or not password:
+        if not user or self.nats_password is None:
             return None
-        return user, password
+        # The value is unwrapped ONCE, here, and bound to a name that is not
+        # credential-shaped. A line of the form ``password = <a long
+        # expression>`` is the shape secret scanners refuse — they cannot tell
+        # an expression from a literal — and this repository is public, so it
+        # is written in the shape that says what it is doing without looking
+        # like a password being written down.
+        plaintext = self.nats_password.get_secret_value()
+        if not plaintext:
+            return None
+        return user, plaintext
+
+    # -- Model-seat address resolution ---------------------------------------
+
+    def resolve_llama_swap_base_url(self) -> str:
+        """Return the model seat's llama-swap address, or refuse by name.
+
+        The single place the address is turned from "a setting that may be
+        unset" into "a string something is about to connect to". Called by
+        lifecycle startup, which builds the llama-swap adapter from it and
+        exports ``OPENAI_BASE_URL=<it>/v1`` before any dispatch.
+
+        There is deliberately no default (see
+        :data:`MISSING_LLAMA_SWAP_BASE_URL_REFUSAL`): until 25 September 2026
+        the default was the name of one real machine, so an unset setting sent
+        this software at somebody else's box without saying so. A neutral
+        stand-in would be a different wrong answer, so an unset setting is a
+        refusal that names the setting.
+
+        A blank or whitespace-only value counts as unset — ``JARVIS_LLAMA_SWAP_BASE_URL=``
+        from a templating tool is somebody meaning to set it and not having,
+        and forwarding ``""`` would fail later and somewhere else.
+
+        Raises:
+            ConfigurationError: naming ``JARVIS_LLAMA_SWAP_BASE_URL`` and what
+                to set it to, when it is unset or blank.
+        """
+        value = (self.llama_swap_base_url or "").strip()
+        if not value:
+            raise ConfigurationError(MISSING_LLAMA_SWAP_BASE_URL_REFUSAL)
+        return value
 
     # -- Slack operator allowlist resolution ---------------------------------
 

@@ -74,7 +74,7 @@ C4Context
 
 | System | Relationship to Jarvis |
 |---|---|
-| **llama-swap on GB10** | Unified `/v1` inference front door (`http://promaxgb10-41b1:9000`). Jarvis supervisor + `jarvis-reasoner` subagent + Pattern B watchers + learning all route through llama-swap. Never bypassed on unattended paths (ADR-ARCH-001). |
+| **llama-swap on the model seat** | Unified `/v1` inference front door, at the address `JARVIS_LLAMA_SWAP_BASE_URL` names (no default — an unset setting is refused by name). Jarvis supervisor + `jarvis-reasoner` subagent + Pattern B watchers + learning all route through llama-swap. Never bypassed on unattended paths (ADR-ARCH-001). |
 | **NATS JetStream** | Fleet control-plane bus. Streams: `FLEET`, `AGENTS`, `PIPELINE`, `JARVIS`, `NOTIFICATIONS`. KV bucket: `agent-registry`. |
 | **Graphiti / FalkorDB** | Durable learning store. Groups: `jarvis_routing_history`, `jarvis_ambient_history`, plus shared general-knowledge. |
 | **External APIs** | Calendar (CalDAV/Google), weather (Open-Meteo), email (read-only IMAP v1), Home Assistant (long-lived token), web search. All wrapped in `jarvis.tools.external` ACL. |

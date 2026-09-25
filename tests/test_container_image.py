@@ -2,7 +2,7 @@
 
 Written 25 September 2026, when this repository first grew a Dockerfile.
 
-WHY THESE FIVE THINGS, AND NOT A BUILD. Building the image needs Docker, a
+WHY THESE THINGS, AND NOT A BUILD. Building the image needs Docker, a
 network and a clone of the bus library, so it is not something a unit test
 does; the factory's release build does that, and its own proof script opens the
 built image and asks it questions. What a test here can hold is the FILE — the
@@ -22,6 +22,8 @@ produce an image that still built and was wrong:
    are ranges; an image that resolves them afresh is a different program every
    week, and a different one from the live service.
 5. IT DOES NOT RUN AS ROOT, and the settings file cannot reach the image.
+6. WHAT IT COPIES CARRIES NOTHING OF THE MACHINE THAT BUILDS IT — swept with
+   words that come from that machine, never from a list written down here.
 
 None of this names any target project's toolchain: it is about one image of
 this repository's own two services.
@@ -29,8 +31,11 @@ this repository's own two services.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCKERFILE = REPO_ROOT / "deploy" / "Dockerfile"
@@ -171,3 +176,53 @@ def test_the_settings_file_cannot_reach_the_image() -> None:
     )
     text = _dockerfile_text()
     assert "COPY .env" not in text, "deploy/Dockerfile copies a settings file into the image"
+
+
+# ---------------------------------------------------------------------------
+# 6. NOTHING OF THE MACHINE THAT BUILDS IT, in what the Dockerfile COPYs
+# ---------------------------------------------------------------------------
+#
+# Added 25 September 2026. On 25 September a filesystem sweep of the built
+# image found this machine's host name in it — not from the build, but from
+# this package's own source, where `llama_swap_base_url` defaulted to it. The
+# default is gone (see tests/test_config_feat_j003.py), and this test is the
+# guard that keeps the tree the image is made of clean.
+#
+# THE TERMS COME FROM THE MACHINE, NEVER FROM A LIST HERE. A tracked list of
+# this machine's names would be the very defect it is looking for, so the words
+# arrive in RELEASE_SWEEP_TERMS — the same environment name the release build's
+# own image sweep reads (forge/scripts/build-release-image.sh). With nothing
+# set this test says so and skips, rather than passing and looking like an
+# answer.
+
+
+def test_what_the_image_copies_carries_none_of_this_machines_names() -> None:
+    terms = [word for word in os.environ.get("RELEASE_SWEEP_TERMS", "").split() if word]
+    if not terms:
+        pytest.skip(
+            "RELEASE_SWEEP_TERMS is not set, so no sweep ran. Set it to this "
+            "machine's names (its host name, its user name, its home path, its "
+            "projects folder), space separated, to sweep what the image copies."
+        )
+
+    # Exactly what deploy/Dockerfile COPYs into the image.
+    copied = ["pyproject.toml", "uv.lock", "langgraph.json", "src"]
+    hits: list[str] = []
+    for relative in copied:
+        target = REPO_ROOT / relative
+        files = sorted(target.rglob("*")) if target.is_dir() else [target]
+        for path in files:
+            if not path.is_file() or "__pycache__" in path.parts:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for term in terms:
+                if term in text:
+                    hits.append(f"{path.relative_to(REPO_ROOT)}: {term}")
+
+    assert not hits, (
+        "what deploy/Dockerfile copies into the image carries this machine's "
+        "own names, and the image is public:\n  " + "\n  ".join(hits)
+    )

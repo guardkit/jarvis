@@ -288,7 +288,7 @@ class TestAC005ValidateProviderKeys:
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig(
                 supervisor_model="openai:jarvis-reasoner",
-                llama_swap_base_url="http://promaxgb10-41b1:9000",
+                llama_swap_base_url="http://a-model-seat:9000",
             )
         # Should not raise
         cfg.validate_provider_keys()

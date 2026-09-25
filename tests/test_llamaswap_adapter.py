@@ -38,9 +38,9 @@ class TestAC001ConstructorSignature:
     """``__init__(self, base_url: str, *, _stub_response=None)``."""
 
     def test_construct_with_only_base_url_succeeds(self) -> None:
-        adapter = LlamaSwapAdapter("http://promaxgb10-41b1:9000")
+        adapter = LlamaSwapAdapter("http://a-model-seat:9000")
 
-        assert adapter.base_url == "http://promaxgb10-41b1:9000"
+        assert adapter.base_url == "http://a-model-seat:9000"
 
     def test_stub_response_is_keyword_only(self) -> None:
         sig = inspect.signature(LlamaSwapAdapter.__init__)
@@ -69,7 +69,7 @@ class TestAC002DefaultGetStatusReturnsLoadedSnapshot:
     """Without ``_stub_response`` the adapter assumes the alias is loaded."""
 
     def test_default_get_status_returns_eta_zero_stub_source(self) -> None:
-        adapter = LlamaSwapAdapter("http://promaxgb10-41b1:9000")
+        adapter = LlamaSwapAdapter("http://a-model-seat:9000")
 
         result = adapter.get_status("qwen3-coder")
 

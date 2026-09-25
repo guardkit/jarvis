@@ -73,9 +73,16 @@ def _stub_yaml_path() -> Path:
 
 
 def _build_config() -> JarvisConfig:
-    """Return a ``JarvisConfig`` valid for manifest construction."""
+    """Return a ``JarvisConfig`` valid for manifest construction.
+
+    ``llama_swap_base_url`` is named here because it has no default and
+    ``build_app_state`` refuses by name without one (25 September 2026 — the
+    old default was the host name of one real machine). The address is a
+    stand-in: nothing in these tests connects to it.
+    """
     return JarvisConfig(
         openai_base_url="http://fake-endpoint/v1",
+        llama_swap_base_url="http://a-model-seat:9000",
         stub_capabilities_path=_stub_yaml_path(),
     )
 

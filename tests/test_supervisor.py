@@ -366,7 +366,7 @@ class TestSeamSupervisorModelEndpoint:
         """
         from jarvis.config.settings import JarvisConfig
 
-        monkeypatch.setenv("JARVIS_LLAMA_SWAP_BASE_URL", "http://promaxgb10-41b1:9000")
+        monkeypatch.setenv("JARVIS_LLAMA_SWAP_BASE_URL", "http://a-model-seat:9000")
         config = JarvisConfig()
 
         assert ":" in config.supervisor_model, (

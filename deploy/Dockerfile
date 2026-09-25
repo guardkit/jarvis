@@ -32,21 +32,35 @@
 #     September 2026 a developer's compiled files went into the build context
 #     carrying the absolute path of the machine that compiled them, and the
 #     .dockerignore now keeps every one of them out;
-#   * no Slack token, no bus password, no licence key of any kind.
+#   * no Slack token, no bus password, no licence key of any kind;
+#   * NO MACHINE NAME — and this line was not always true. Read on.
 #
-# ONE THING THAT IS IN HERE, and an earlier version of the list above wrongly
-# said otherwise: A MACHINE NAME. This package's own settings module hard-codes
-# a host name as the default model-seat address (src/jarvis/config/settings.py,
-# llama_swap_base_url), a docstring in src/jarvis/adapters/llamaswap.py repeats
-# it, .env.example carries it, and pyproject.toml names a folder in a comment
-# about sibling checkouts. All of that pre-dates this file, in a repository
-# that is already public, so packaging published nothing that was not published
-# already. It is also inert wherever the estate runs this image: the estate
-# supplies JARVIS_LLAMA_SWAP_BASE_URL and refuses to start the service without
-# it, so that default can never be the value in use. Taking the host name out
-# of the source is this repository's own fix, not a packaging one — it is
-# written here so that nobody reads the list above and believes the image is
-# cleaner than it is.
+# THE MACHINE NAME THAT USED TO BE IN HERE, and how it went. Between 25
+# September 2026 and the commit that carries this paragraph, this image really
+# did carry one: this package's settings module hard-coded a host name as the
+# DEFAULT model-seat address (src/jarvis/config/settings.py, llama_swap_base_url),
+# a docstring in src/jarvis/adapters/llamaswap.py repeated it, .env.example
+# carried it, and pyproject.toml named one person's folder in a comment about
+# sibling checkouts. None of it was put there by packaging — it pre-dated this
+# file in a repository that is already public — and it was inert wherever the
+# estate ran this image, because the estate supplies JARVIS_LLAMA_SWAP_BASE_URL
+# and refuses to start without it. It was found by sweeping the built image's
+# whole FILESYSTEM, which is not what this image's proof script reads.
+#
+# The fix is this repository's own, and it is not a path edit: the setting has
+# NO DEFAULT now, and no neutral stand-in either — a stand-in would be a
+# different wrong answer, silently routing somewhere nobody chose. An unset
+# JARVIS_LLAMA_SWAP_BASE_URL is refused BY NAME at the point the address is
+# needed (JarvisConfig.resolve_llama_swap_base_url), which is the same shape
+# guardkit's FALKORDB_HOST and forge's FORGE_REPO_BASE already have. The
+# setting's name did not change; only the value moved.
+#
+# WHAT KEEPS IT TRUE. Two sweeps, and neither of them is a list of names in a
+# tracked file — such a list would be the defect it is looking for. The words
+# come from the MACHINE, in RELEASE_SWEEP_TERMS: the release build sweeps every
+# built image's whole filesystem, config, labels and history and refuses the
+# release on a hit (forge/scripts/build-release-image.sh), and a test in this
+# repository sweeps what this Dockerfile COPYs (tests/test_container_image.py).
 # ---------------------------------------------------------------------------
 FROM python:3.14-slim-bookworm@sha256:2e256d0381371566ed96980584957ed31297f437569b79b0e5f7e17f2720e53a
 

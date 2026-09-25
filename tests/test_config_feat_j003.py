@@ -1,8 +1,9 @@
 """Tests for FEAT-JARVIS-003 JarvisConfig extensions (TASK-J003-001).
 
 Covers acceptance criteria:
-  AC-001: ``llama_swap_base_url`` field with documented default and
-          ``JARVIS_LLAMA_SWAP_BASE_URL`` env binding.
+  AC-001: ``llama_swap_base_url`` field with NO default (25 September 2026 —
+          it used to name one real machine) and ``JARVIS_LLAMA_SWAP_BASE_URL``
+          env binding, with a refusal by name when it is unset.
   AC-002: ``frontier_default_target`` Literal with default ``GEMINI_3_1_PRO``
           and ``JARVIS_FRONTIER_DEFAULT_TARGET`` env binding.
   AC-003: ``gemini_api_key`` SecretStr | None bound to the un-prefixed
@@ -26,20 +27,85 @@ from pydantic import SecretStr, ValidationError
 # AC-001: llama_swap_base_url
 # ---------------------------------------------------------------------------
 class TestAC001LlamaSwapBaseUrl:
-    """JarvisConfig defines llama_swap_base_url with the documented default."""
+    """The model seat's address is required, and an unset one is refused by name.
 
-    def test_default_llama_swap_base_url_is_gb10(self) -> None:
+    WHY THIS CLASS CHANGED ON 25 SEPTEMBER 2026. Until that day this field
+    defaulted to the host name of one real box on one real network, and these
+    tests asserted that default. That is the worst shape of the machine-name
+    defect: anyone running this with the setting unset was pointed, without
+    being told, at somebody else's machine — and the name rode into every
+    image built from this repository, which is public.
+
+    A neutral stand-in (``localhost``, ``model-seat``) would be a DIFFERENT
+    wrong answer: still starts, still routes somewhere nobody chose, still
+    fails later and somewhere else. So the setting is required and an unset
+    setting is said out loud, by name — the same treatment ``FALKORDB_HOST``
+    got in guardkit and ``FORGE_REPO_BASE`` in forge.
+
+    The setting's NAME did not change. Only the value moved.
+    """
+
+    def test_there_is_no_default_and_it_names_no_machine(self) -> None:
+        """Nothing is filled in for an operator who has said nothing."""
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig()
-        assert cfg.llama_swap_base_url == "http://promaxgb10-41b1:9000"
+        assert cfg.llama_swap_base_url is None
 
-    def test_llama_swap_base_url_is_str(self) -> None:
+    def test_the_field_declares_no_host_anywhere(self) -> None:
+        """Not a default, not an example, not a description — no host at all."""
+        from jarvis.config.settings import JarvisConfig
+
+        field = JarvisConfig.model_fields["llama_swap_base_url"]
+        assert field.default is None
+        assert "promaxgb10" not in repr(field)
+
+    def test_an_unset_setting_is_refused_by_name(self) -> None:
+        """The refusal fires where the address is needed, and names the setting."""
+        from jarvis.config.settings import JarvisConfig
+        from jarvis.shared.exceptions import ConfigurationError
+
+        with patch.dict("os.environ", {}, clear=True):
+            cfg = JarvisConfig()
+
+        with pytest.raises(ConfigurationError) as excinfo:
+            cfg.resolve_llama_swap_base_url()
+
+        message = str(excinfo.value)
+        assert "JARVIS_LLAMA_SWAP_BASE_URL" in message
+        # The refusal must not hand anybody a machine to connect to — not the
+        # one this used to default to, and not a stand-in either.
+        assert "promaxgb10" not in message
+        assert "localhost" not in message
+
+    def test_a_blank_setting_counts_as_unset(self) -> None:
+        """``JARVIS_LLAMA_SWAP_BASE_URL=`` is somebody meaning to set it."""
+        from jarvis.config.settings import JarvisConfig
+        from jarvis.shared.exceptions import ConfigurationError
+
+        with patch.dict("os.environ", {"JARVIS_LLAMA_SWAP_BASE_URL": "   "}, clear=True):
+            cfg = JarvisConfig()
+
+        with pytest.raises(ConfigurationError):
+            cfg.resolve_llama_swap_base_url()
+
+    def test_a_set_setting_is_the_address_that_is_used(self) -> None:
+        from jarvis.config.settings import JarvisConfig
+
+        with patch.dict(
+            "os.environ",
+            {"JARVIS_LLAMA_SWAP_BASE_URL": "http://a-model-seat:9000"},
+            clear=True,
+        ):
+            cfg = JarvisConfig()
+        assert cfg.resolve_llama_swap_base_url() == "http://a-model-seat:9000"
+
+    def test_llama_swap_base_url_is_str_or_none(self) -> None:
         from jarvis.config.settings import JarvisConfig
 
         hints = get_type_hints(JarvisConfig)
-        assert hints["llama_swap_base_url"] is str
+        assert hints["llama_swap_base_url"] == (str | None)
 
     def test_jarvis_llama_swap_base_url_env_var(self) -> None:
         from jarvis.config.settings import JarvisConfig

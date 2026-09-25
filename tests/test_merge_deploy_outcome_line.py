@@ -298,7 +298,7 @@ def _refused_gate(**overrides: Any) -> dict[str, Any]:
 # command and all, and jarvis prints it as it stands. These are forge's own
 # words, copied from its side so the two cannot drift apart.
 _SANDBOX_NAME = "api-test-factory"
-_CHECKOUT = "/home/richardwoollcott/Projects/appmilla_github/api_test"
+_CHECKOUT = "/a/checkout/of/api_test"
 _FETCH_COMMAND = (
     f"git -C {_CHECKOUT} fetch sandbox-{_SANDBOX_NAME} main && "
     f"git -C {_CHECKOUT} merge --ff-only sandbox-{_SANDBOX_NAME}/main"

@@ -236,8 +236,10 @@ Called twice in `startup`:
 New fields on `JarvisConfig`:
 
 ```python
-# Group D adapter endpoint
-llama_swap_base_url: str = "http://promaxgb10-41b1:9000"
+# Group D adapter endpoint. NO DEFAULT since 25 September 2026: it used to
+# name one real machine, so an unset setting silently routed at somebody
+# else's box. `JarvisConfig.resolve_llama_swap_base_url()` refuses by name.
+llama_swap_base_url: str | None = None
 
 # Frontier escalation
 frontier_default_target: FrontierTarget = FrontierTarget.GEMINI_3_1_PRO
