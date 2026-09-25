@@ -27,10 +27,22 @@
 venv/
 .git/
 .langgraph_api/
-__pycache__/
-*.pyc
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# COMPILED PYTHON, AT EVERY DEPTH — and the '**/' matters.
+#
+# A pattern here is matched the way Docker matches one, not the way .gitignore
+# does: a bare '__pycache__/' matches ONE directory, at the top, and nothing
+# below it. Written that way on 25 September 2026, and the first image built
+# from it carried a developer's own compiled files all the way down src/ — and
+# each one of those has the absolute path of the machine that compiled it
+# baked into it, which in that first image meant this machine's home directory,
+# in a PUBLIC image. Found by sweeping the built image rather than by reading
+# the file.
+**/__pycache__
+**/*.pyc
+**/*.pyo
