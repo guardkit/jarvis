@@ -69,6 +69,13 @@ import structlog
 
 # Stdlib-only module — safe on the cold import path (unlike the
 # nats_core / slack-sdk chains, which stay lazily imported below).
+from jarvis.infrastructure.slack_heartbeat import (
+    STATE_CONNECTED,
+    STATE_CONNECTING,
+    STATE_DISCONNECTED,
+    SlackHeartbeatWriter,
+    create_slack_heartbeat_writer,
+)
 from jarvis.infrastructure.spec_texts import SpecTextRegistry
 from jarvis.infrastructure.terminal_builds import (
     TerminalBuildRecord,
@@ -1499,6 +1506,7 @@ class SlackSocketModeReplyClient:
         "_client",
         "_events_handler",
         "_handler",
+        "_heartbeat",
         "_started",
         "_stop_timeout",
         "_web_client",
@@ -1512,14 +1520,72 @@ class SlackSocketModeReplyClient:
         web_client: Any,
         events_handler: PlanningIntakeHandler | None = None,
         stop_timeout: float = _DEFAULT_STOP_TIMEOUT,
+        heartbeat: SlackHeartbeatWriter | None = None,
     ) -> None:
         self._app_token = app_token
         self._handler = handler
         self._events_handler = events_handler
         self._web_client = web_client
         self._stop_timeout = stop_timeout
+        self._heartbeat = heartbeat
         self._client: Any = None
         self._started = False
+
+    # -- THE HEARTBEAT (build item E3-j2, 26 September 2026) ---------------
+    #
+    # This wrapper is the only thing in jarvis that knows how the Slack
+    # Socket Mode session is, and until today it only logged it. Now it also
+    # writes it down, so the estate's gateway watch can say "the bus is fine
+    # and Slack is dead" rather than one boolean about a systemd unit. See
+    # jarvis.infrastructure.slack_heartbeat for the file's shape, and for
+    # why a reader's freshness window has to be longer than a rotation.
+    #
+    # THE WRITER NEVER RAISES, so these calls need no guarding of their own
+    # and can never turn a health file into a broken door.
+
+    def _beat(self, state: str, *, kind: str) -> None:
+        """Rewrite the heartbeat file, if one is configured."""
+        if self._heartbeat is not None:
+            self._heartbeat.record(state, kind=kind)
+
+    async def _connection_state(self) -> str:
+        """``connected`` or ``disconnected``, asked of the SDK client."""
+        client = self._client
+        if client is None:
+            return STATE_DISCONNECTED
+        try:
+            return STATE_CONNECTED if await client.is_connected() else STATE_DISCONNECTED
+        except Exception:  # pragma: no cover - defensive; this is local state
+            return STATE_DISCONNECTED
+
+    async def _on_session_closed(self, _message: Any) -> None:
+        """slack-sdk's on_close listener — this session ended.
+
+        WHY IT ASKS THE CLIENT RATHER THAN ASSUMING THE WORST. A healthy
+        Socket Mode session rotates roughly every five hours, and the SDK
+        reconnects BEFORE it runs these listeners (its receive loop answers
+        a CLOSE frame by connecting to a new endpoint and only then calls
+        them). So a close on its own is not a drop: writing ``disconnected``
+        here would mark every healthy rotation as a failure, which is the
+        exact false alarm the retired host watchdog was written to avoid.
+        What is true is whatever the client says about itself once the
+        reconnect has had its go.
+        """
+        self._beat(await self._connection_state(), kind="session_closed")
+
+    async def _on_session_error(self, _message: Any) -> None:
+        """slack-sdk's on_error listener — a transport error on the session."""
+        self._beat(await self._connection_state(), kind="session_error")
+
+    async def _on_session_message(self, _message: Any) -> None:
+        """Any frame from Slack — what keeps an idle door's file fresh.
+
+        An idle door receives no envelopes for hours but does receive
+        Slack's own frames and its rotations, and each of those rewrites
+        the file. That, and not envelope traffic, is what a reader's
+        freshness rule actually rests on.
+        """
+        self._beat(STATE_CONNECTED, kind="slack_frame")
 
     async def start(self) -> None:
         """Construct, register the listener, and connect (idempotent)."""
@@ -1530,6 +1596,12 @@ class SlackSocketModeReplyClient:
         # aiohttp dependency chain) stays off the cold import path.
         from slack_sdk.socket_mode.aiohttp import SocketModeClient
 
+        # WRITTEN BEFORE THE CONNECT IS ATTEMPTED, so a gateway wedged in
+        # its own start-up — a bad app token, a Slack outage — leaves a file
+        # that says 'connecting' rather than no file at all, which a reader
+        # can only honestly call unknown.
+        self._beat(STATE_CONNECTING, kind="connect_started")
+
         self._client = SocketModeClient(
             app_token=self._app_token,
             web_client=self._web_client,
@@ -1538,6 +1610,13 @@ class SlackSocketModeReplyClient:
         # in the SDK client's __init__, so connecting first would open a
         # window where deliveries find zero listeners.
         self._client.socket_mode_request_listeners.append(self._on_request)
+        # The three lifecycle listener lists live on the client OBJECT, the
+        # same as the request listeners above, so this registration also
+        # survives every reconnect and must not be repeated.
+        if self._heartbeat is not None:
+            self._client.on_close_listeners.append(self._on_session_closed)
+            self._client.on_error_listeners.append(self._on_session_error)
+            self._client.on_message_listeners.append(self._on_session_message)
         # Bounded connect (review fix — CRITICAL): the SDK's connect() is
         # an infinite retry loop that never raises (it swallows
         # invalid_auth and network errors alike), so an unbounded await
@@ -1558,8 +1637,13 @@ class SlackSocketModeReplyClient:
                     error_class=type(exc).__name__,
                     error=str(exc),
                 )
+            # The connect failed and the client is gone, so the file must not
+            # be left saying 'connecting' for ever: this process is not going
+            # to connect, and the watch should say the Slack session is lost.
+            self._beat(STATE_DISCONNECTED, kind="connect_failed")
             raise
         self._started = True
+        self._beat(STATE_CONNECTED, kind="connect")
         logger.info("slack_reply_socket_mode_started")
 
     async def stop(self) -> None:
@@ -1581,10 +1665,16 @@ class SlackSocketModeReplyClient:
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
+        self._beat(STATE_DISCONNECTED, kind="disconnect")
         logger.info("slack_reply_socket_mode_stopped")
 
     async def _on_request(self, client: Any, req: Any) -> None:
         """Socket Mode listener — acks FIRST, then routes. Never raises."""
+        # An inbound envelope is the strongest evidence there is that this
+        # session is alive: Slack sent it down the WebSocket this process
+        # holds. Written before the ack so that even a failing ack leaves
+        # the arrival recorded.
+        self._beat(STATE_CONNECTED, kind="inbound_request")
         # --- Ack immediately, before ANY authorization/parse/publish ----
         # Independently wrapped (C2) so an ack failure mid-reconnect is
         # observable rather than silent.
@@ -1786,6 +1876,9 @@ def create_slack_reply_client(
         handler=handler,
         web_client=web_client,
         events_handler=events_handler,
+        # JARVIS_SLACK_HEARTBEAT_PATH, unset everywhere but the estate's bus
+        # gateway. Unset means no file is written and nothing changes.
+        heartbeat=create_slack_heartbeat_writer(config.slack_heartbeat_path),
     )
 
 

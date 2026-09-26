@@ -164,6 +164,17 @@ class JarvisConfig(BaseSettings):
     # password in logs and ``repr()``.
     nats_user: str | None = None
     nats_password: SecretStr | None = None
+    # JARVIS_NATS_CLIENT_NAME — the name this process gives the broker for its
+    # own connection (26 September 2026). The broker reports it on its
+    # monitoring route as each connection's ``name``, which is what lets
+    # anything outside tell two processes of the SAME bus account apart — the
+    # estate deliberately gives the bus gateway and the front door one account,
+    # so "the account is connected" stays true with the gateway stopped. It is
+    # a label and not a credential: it admits nobody, and the broker prints it
+    # to anyone who may read that route. ``None`` — and a blank or
+    # whitespace-only value — sends no name at all, which is what every jarvis
+    # process did until today and is what an unset setting still means.
+    nats_client_name: str | None = None
     # JARVIS_HEARTBEAT_INTERVAL_SECONDS — fleet heartbeat cadence per
     # DDR-021/heartbeat. Constrained to 5..300 seconds.
     heartbeat_interval_seconds: int = Field(default=30, ge=5, le=300)
@@ -292,6 +303,21 @@ class JarvisConfig(BaseSettings):
     # Socket Mode reply path (TASK-JNB-104). None keeps the reply path a
     # logged no-op. SecretStr masks in logs.
     slack_app_token: SecretStr | None = None
+
+    # JARVIS_SLACK_HEARTBEAT_PATH — where this process writes down how its
+    # Slack Socket Mode session is (26 September 2026, rollout step 1 build
+    # item E3-j2). Nothing outside the process could ask that before: the
+    # gateway publishes no port and answers nobody, so the only questions
+    # anything could put were "is its container running" and "does the bus
+    # hold a connection from its account", and neither says a word about
+    # Slack. A FILE rather than a route, deliberately — a route would mean
+    # this process listening on a port it has no other reason to open.
+    #
+    # ``None`` or blank means no file is written, which is what every jarvis
+    # process did until today. The estate sets it for the bus gateway, on a
+    # small volume of the gateway's own that the watch mounts read-only.
+    # :mod:`jarvis.infrastructure.slack_heartbeat` has the file's shape.
+    slack_heartbeat_path: Path | None = None
 
     # JARVIS_SLACK_OPERATOR_USER_IDS — comma-separated allowlist of Slack
     # member ids permitted to click Approve/Reject (TASK-JNB-110). This is the

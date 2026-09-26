@@ -242,6 +242,25 @@ class NATSClient:
         if user_password is not None:
             kwargs["user"], kwargs["password"] = user_password
 
+        # ``JARVIS_NATS_CLIENT_NAME`` — the name this process gives the broker
+        # for its own connection (26 September 2026). The broker records it and
+        # reports it back on its monitoring route as each connection's ``name``
+        # field, which is the only way anything outside can tell two processes
+        # of the SAME account apart: the estate gives the bus gateway and the
+        # front door one shared account, so "a connection from the jarvis
+        # account" is true while the gateway is stopped and the front door is
+        # up. It is a label, not a credential — it admits nobody and the broker
+        # prints it to anyone who can read that route — so it is set plainly in
+        # the env file beside the account name.
+        #
+        # UNSET IS UNCHANGED BEHAVIOUR: no ``name`` keyword is sent at all and
+        # the broker reports an empty name, exactly as every jarvis process has
+        # done until today. A blank or whitespace-only value is treated as
+        # unset rather than sent as an empty label.
+        client_name = (config.nats_client_name or "").strip()
+        if client_name:
+            kwargs["name"] = client_name
+
         budget_seconds = config.startup_connect_timeout_seconds
         started_at = time.monotonic()
         try:
