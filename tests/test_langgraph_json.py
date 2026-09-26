@@ -36,19 +36,33 @@ a CLI-importability smoke test:
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import importlib.util
+import inspect
 import io
 import json
 import os
 import re
 import subprocess
 import sys
+from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+
+
+async def _await(awaitable: Awaitable[Any]) -> Any:
+    """Await one awaitable inside a running loop.
+
+    ``asyncio.run`` needs a coroutine; the ``jarvis`` graph factory returns
+    one, and this wrapper lets these tests drive it the way the server does
+    while staying synchronous themselves.
+    """
+    return await awaitable
+
 
 REPO_ROOT: Path = Path(__file__).resolve().parent.parent
 LANGGRAPH_JSON: Path = REPO_ROOT / "langgraph.json"
@@ -255,6 +269,11 @@ class TestJarvisGraphSymbolResolves:
         TASK-J003-FIX-004 / Contract 5). Both must yield a
         ``CompiledStateGraph`` instance — anything else is a runtime crash on
         the langgraph CLI's first compile.
+
+        26 September 2026: the ``jarvis`` factory is a COROUTINE function now,
+        because the server calls it from inside its own running event loop. So
+        the callable branch below awaits what it returns, which is what the
+        server does (``langgraph_api.asyncio.as_asynccontextmanager``).
         """
         # Arrange
         from langgraph.graph.state import CompiledStateGraph
@@ -299,6 +318,8 @@ class TestJarvisGraphSymbolResolves:
                 ),
             ):
                 graph_obj = resolved()
+                if inspect.isawaitable(graph_obj):
+                    graph_obj = asyncio.run(_await(graph_obj))
         else:
             graph_obj = resolved
 
@@ -364,6 +385,13 @@ class TestJarvisGraphSymbolResolves:
         dispatch._current_session_hook = None
         dispatch._async_subagent_frame_hook = None
 
+        # And the factory's own cached application state is cleared, for the
+        # same reason (26 September 2026). The factory builds the lifecycle
+        # ONCE and hands the same graph out afterwards, so a sibling test in
+        # this class that already called it would leave this one asserting
+        # nothing. The state this test builds is thrown away with the process.
+        module._APP_STATE = None
+
         # Act
         with (
             patch("sys.stderr", new=io.StringIO()),
@@ -376,7 +404,9 @@ class TestJarvisGraphSymbolResolves:
                 return_value=stub_config,
             ),
         ):
-            resolved()
+            produced = resolved()
+            if inspect.isawaitable(produced):
+                asyncio.run(_await(produced))
 
         # Assert — Layer-2 hooks armed (FIX-001 invariant)
         assert dispatch._current_session_hook is not None, (

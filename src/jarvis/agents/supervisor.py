@@ -24,6 +24,7 @@ This module belongs to the agents package (Group C) per ADR-ARCH-006.
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import logging
 from collections.abc import Callable
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
 
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.capabilities_registry import CapabilitiesRegistry
+    from jarvis.infrastructure.lifecycle import AppState
     from jarvis.tools import CapabilityDescriptor
 
 logger = logging.getLogger(__name__)
@@ -397,8 +399,49 @@ def build_supervisor(
     return graph
 
 
-def make_graph() -> CompiledStateGraph[Any, Any, Any, Any]:
-    """Zero-argument factory consumed by ``langgraph.json`` (DDR-013 / F8).
+# ---------------------------------------------------------------------------
+# THE ONE APPLICATION STATE THE SERVED GRAPH IS BUILT FROM.
+#
+# Written 26 September 2026. ``build_app_state`` is not a pure builder: it
+# opens this process's ONE bus connection, registers jarvis on the fleet,
+# starts a heartbeat task, opens the ONE Slack Socket Mode session and starts
+# the approval and notification subscribers. The server asks the factory below
+# for a graph on EVERY run and on every read of the graph's shape, so a factory
+# that built a fresh state each time would open a fresh bus connection and a
+# second Slack socket per request. So the state is built once, on the server's
+# own event loop, and every later call gets the same one.
+#
+# The lock makes "once" true when two runs arrive together: the first builds,
+# the second waits and then finds the built state. An ``asyncio.Lock`` created
+# here at import binds to no event loop on Python 3.10+, so creating it outside
+# the loop is safe.
+# ---------------------------------------------------------------------------
+_APP_STATE: AppState | None = None
+_APP_STATE_LOCK = asyncio.Lock()
+
+
+async def make_graph() -> CompiledStateGraph[Any, Any, Any, Any]:
+    """Factory consumed by ``langgraph.json`` (DDR-013 / F8).
+
+    IT IS A COROUTINE FUNCTION, AND THAT IS THE POINT (26 September 2026).
+    Until this commit this factory was synchronous and called
+    ``asyncio.run(build_app_state(...))``. The server calls the factory from
+    inside its own running event loop, and ``asyncio.run`` refuses to be
+    called there — so every run asked of the front door's API failed inside
+    the server and the front door served nothing. The pinned runtime
+    (``langgraph-api`` 0.8.1) normalises what a factory returns through
+    ``langgraph_api.asyncio.as_asynccontextmanager``, which awaits a
+    coroutine, enters an async context manager, or passes a plain value
+    through. Returning a coroutine is therefore a shape it supports, and it
+    means the lifecycle is awaited ON the server's loop — so the bus
+    connection, the Slack session and the background tasks all belong to the
+    loop that will run the graph, which no thread-and-its-own-loop workaround
+    could give.
+
+    The CLI's own start path (``jarvis serve-nats`` and the other console
+    entry points) still call ``build_app_state`` from their own
+    ``asyncio.run`` at the top of the process, which is correct there: there
+    is no loop running yet.
 
     The langgraph CLI loads each entry in ``langgraph.json`` by importing
     the declared ``module:variable`` path and calling the resolved object
@@ -421,17 +464,23 @@ def make_graph() -> CompiledStateGraph[Any, Any, Any, Any]:
 
     The factory shape sidesteps both: ``JarvisConfig`` and
     ``build_app_state`` are imported inside the function body so importing
-    this module remains side-effect free, and the lifecycle wiring runs
-    once when the langgraph CLI invokes the factory at server load.
+    this module remains side-effect free (and so that this module, which
+    ``jarvis.infrastructure.lifecycle`` itself imports, does not import it
+    back), and the lifecycle wiring runs once when the server first asks
+    for the graph.
 
     Args:
-        (none) — the langgraph CLI invokes the factory with no
-        arguments. Configuration is read from the operator's ``.env``
+        (none) — the server invokes the factory with no arguments.
+        ``langgraph-api`` 0.8.1 reads the factory's signature and passes
+        only what it declares, so a zero-argument factory is called with
+        none. Configuration is read from the operator's ``.env``
         (referenced by ``langgraph.json``'s ``env`` key) and from
         ``JARVIS_*``-prefixed environment variables.
 
     Returns:
-        A fully wired :class:`CompiledStateGraph` ready for invocation.
+        A fully wired :class:`CompiledStateGraph` ready for invocation —
+        the SAME one on every call, because the state it comes from is
+        built once (see ``_APP_STATE`` above).
         Layer 2 of the constitutional ``escalate_to_frontier`` gate is
         armed (``dispatch._current_session_hook`` and
         ``dispatch._async_subagent_frame_hook`` are non-``None``); the
@@ -451,10 +500,15 @@ def make_graph() -> CompiledStateGraph[Any, Any, Any, Any]:
         resolve ``supervisor.py:graph`` because no such symbol exists).
         DDR-013 — repo-root ``langgraph.json`` declares both Jarvis graphs.
     """
-    import asyncio
+    global _APP_STATE
 
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.lifecycle import build_app_state
 
-    state = asyncio.run(build_app_state(JarvisConfig()))
-    return state.supervisor
+    if _APP_STATE is None:
+        async with _APP_STATE_LOCK:
+            # Asked again inside the lock: a second caller that waited here
+            # while the first built the state must not build a second one.
+            if _APP_STATE is None:
+                _APP_STATE = await build_app_state(JarvisConfig())
+    return _APP_STATE.supervisor

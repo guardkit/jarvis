@@ -105,7 +105,29 @@ class JarvisConfig(BaseSettings):
         validation_alias=AliasChoices("TAVILY_API_KEY", "JARVIS_TAVILY_API_KEY"),
     )
     stub_capabilities_path: Path = Path("src/jarvis/config/stub_capabilities.yaml")
-    workspace_root: Path = Path(".").resolve()
+    # THE WORKSPACE ROOT'S DEFAULT IS NOT RESOLVED HERE, AND THAT IS THE POINT
+    # (26 September 2026).
+    #
+    # This line used to read ``Path(".").resolve()``. A field default is
+    # evaluated when the class body runs — that is, when this module is
+    # IMPORTED — and resolving a relative path asks the operating system for
+    # the current directory. The front door's server watches for exactly that:
+    # it builds the graph on its own event loop with a detector that refuses
+    # blocking calls made there, and importing this module from inside that
+    # call raised "Blocking call to os.getcwd" before the graph had been built
+    # at all. So every run asked of the front door's API failed on a default
+    # nobody was using.
+    #
+    # A ``default_factory`` would only move the same call from import time to
+    # construction time, which is also inside that loop, so it would not have
+    # helped. The answer is that the default does no filesystem work at all:
+    # it is the current directory, written as the current directory, and the
+    # one place that reads this setting resolves it when it uses it
+    # (``jarvis.tools.general._resolve_workspace_root`` has always called
+    # ``.resolve()`` itself, and it runs in a worker thread rather than on the
+    # server's loop). An operator who sets JARVIS_WORKSPACE_ROOT is
+    # unaffected — that value was never resolved here either.
+    workspace_root: Path = Path(".")
 
     # -- FEAT-JARVIS-003: routing + frontier-escape settings -----------------
     # The llama-swap base URL of the model seat this process routes through

@@ -312,12 +312,18 @@ class TestAC005NoRegression:
             cfg = JarvisConfig()
         assert cfg.web_search_provider == "tavily"
 
-    def test_phase2_workspace_root_is_absolute(self) -> None:
+    def test_phase2_workspace_root_default_is_the_current_directory(self) -> None:
+        """Unresolved on purpose since 26 September 2026 — see
+        ``tests/test_config_phase2.py`` for why, and for the resolving the
+        consumer does.
+        """
+        from pathlib import Path
+
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig()
-        assert cfg.workspace_root.is_absolute()
+        assert cfg.workspace_root == Path(".")
 
     def test_validate_provider_keys_passes_for_default_openai_supervisor(self) -> None:
         """validate_provider_keys() does NOT raise for ``openai:`` supervisor.

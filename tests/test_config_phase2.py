@@ -81,15 +81,32 @@ class TestAC001Phase2FieldsExist:
             "src/jarvis/config/stub_capabilities.yaml"
         )
 
-    def test_default_workspace_root_is_resolved_cwd(self) -> None:
+    def test_default_workspace_root_is_the_current_directory_unresolved(self) -> None:
+        """The default is the current directory, and it is NOT resolved here.
+
+        26 September 2026. This assertion used to read
+        ``cfg.workspace_root.is_absolute()``, which held because the default
+        was written ``Path(".").resolve()`` — a call to the operating system
+        made while this module was being imported. The front door's server
+        refuses blocking calls made on its event loop and it imports this
+        module there, so that default stopped every run the front door was
+        asked for. The resolving belongs where the value is used, and the one
+        place that uses it has always done it: the test below covers that.
+        """
         from jarvis.config.settings import JarvisConfig
 
         with patch.dict("os.environ", {}, clear=True):
             cfg = JarvisConfig()
         assert isinstance(cfg.workspace_root, Path)
-        # The default is captured at class-definition time as Path(".").resolve();
-        # it must be an absolute path.
-        assert cfg.workspace_root.is_absolute()
+        assert cfg.workspace_root == Path(".")
+
+    def test_the_consumer_of_workspace_root_resolves_it(self) -> None:
+        """``jarvis.tools.general`` is where the absolute path comes from."""
+        from jarvis.tools.general import _resolve_workspace_root
+
+        with patch.dict("os.environ", {}, clear=True):
+            resolved = _resolve_workspace_root()
+        assert resolved.is_absolute()
 
 
 # ---------------------------------------------------------------------------
