@@ -212,6 +212,46 @@ def test_it_does_not_run_as_root() -> None:
     )
 
 
+def test_the_front_doors_saved_state_has_a_folder_this_user_owns() -> None:
+    """THE BLOCKER OF 26 SEPTEMBER 2026, held shut.
+
+    Codex drove the actual release image: a thread created through the front
+    door's API survived stopping and starting the same container and was gone
+    from a replacement container made from the identical image. The server's
+    threads, runs and checkpoints are FILES, written under the relative path
+    ``.langgraph_api`` in its working directory — there is no setting for where
+    — so in the container they sat in its own writable layer and went with it.
+
+    The estate mounts a named volume at that path. Docker fills a fresh volume
+    from what the IMAGE has at the mount point, ownership included, and creates
+    the directory root-owned when the image has nothing there — measured on the
+    2026.09.26-1 image: the jarvis user could not write a byte into it. So the
+    directory has to exist in the image, owned by the user that runs the server,
+    or the estate needs an operator to chown a volume by hand, which is the
+    machine-shaped step this rollout exists to remove.
+    """
+    text = _dockerfile_text()
+    instructions = _instructions(text)
+    made = [line for line in instructions if "/app/.langgraph_api" in line]
+    assert made, (
+        "deploy/Dockerfile does not create /app/.langgraph_api, so a fresh "
+        "named volume mounted there comes up root-owned and the front door "
+        "cannot write the threads Rich's approvals live in"
+    )
+    users = [line for line in instructions if line.startswith("USER ")]
+    assert users, "deploy/Dockerfile names no USER"
+    user = users[-1].split()[1]
+    chowns = [line for line in instructions if "chown" in line and f"{user}:{user}" in line]
+    assert chowns, (
+        f"nothing in deploy/Dockerfile gives {user} what it has to write, so "
+        "the state folder above belongs to root"
+    )
+    assert any("/app" in line for line in chowns), (
+        "the chown does not cover /app, which is where the front door's saved "
+        "state lives"
+    )
+
+
 def test_the_settings_file_cannot_reach_the_image() -> None:
     """The .env family holds live Slack tokens and a bus password.
 
@@ -280,9 +320,17 @@ def test_what_the_image_copies_carries_none_of_this_machines_names() -> None:
                 text = path.read_text(encoding="utf-8")
             except (UnicodeDecodeError, OSError):
                 continue
-            for term in terms:
+            for position, term in enumerate(terms, start=1):
                 if term in text:
-                    hits.append(f"{path.relative_to(REPO_ROOT)}: {term}")
+                    # WHICH WORD, NEVER THE WORD. These are this machine's own
+                    # names and a test log is kept and pasted, so a failure says
+                    # which of them matched by its position in
+                    # RELEASE_SWEEP_TERMS — the same way the factory's release
+                    # sweep reports a hit (26 September 2026).
+                    hits.append(
+                        f"{path.relative_to(REPO_ROOT)}: word {position} of "
+                        f"{len(terms)} in RELEASE_SWEEP_TERMS"
+                    )
 
     assert not hits, (
         "what deploy/Dockerfile copies into the image carries this machine's "

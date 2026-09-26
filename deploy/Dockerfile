@@ -199,8 +199,39 @@ COPY src ./src
 # scratch folder in the working directory. Both are created here, owned by the
 # user that runs them, because a container whose user cannot write its own
 # working directory fails in a way that looks like something else entirely.
+#
+# /app/.langgraph_api IS THE FRONT DOOR'S SAVED STATE, AND IT IS A MOUNT POINT.
+#
+# Added 26 September 2026, after Codex's review of release 2026.09.26-1 drove
+# the actual release image: a thread created through the front door's API
+# survived STOPPING AND STARTING the same container, and was gone — 404 — from a
+# replacement container made from the identical image. The server's threads,
+# runs and checkpoints are files, and they were files in the container's own
+# writable layer, which is deleted with the container.
+#
+# WHERE THEY GO IS NOT A SETTING. The locked development runtime writes them
+# under the RELATIVE path `.langgraph_api` — `os.path.join(".langgraph_api",
+# ...)` in langgraph_runtime_inmem's store, database and checkpoint modules — so
+# the directory is whatever the server's working directory happens to be. There
+# is no environment variable and no flag for it, and `langgraph dev` does not
+# change directory: it reads its config and then imports the graphs by paths
+# relative to the working directory, which has to stay /app because
+# langgraph.json names its two graphs as ./src paths. So the state's home is
+# /app/.langgraph_api, and the way to keep it across a replacement container is
+# to mount a volume THERE rather than to move the code or the working directory.
+#
+# IT IS CREATED HERE, OWNED BY THIS USER, and that is why this line exists
+# rather than the estate's compose file being enough on its own: Docker fills a
+# fresh named volume from what the IMAGE has at the mount point, ownership
+# included, and creates the directory ROOT-OWNED when the image has nothing
+# there. Measured on the 2026.09.26-1 image, which predates this line: a fresh
+# volume mounted at /app/.langgraph_api came up owned by root and the jarvis
+# user could not write a byte into it. A hand-over — an operator chowning a
+# volume after creating it — is the machine-shaped step this rollout exists to
+# remove, so the image carries the answer instead.
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin jarvis \
     && mkdir -p /home/jarvis/.jarvis/traces \
+    && mkdir -p /app/.langgraph_api \
     && chown -R jarvis:jarvis /home/jarvis /app
 USER jarvis
 ENV HOME=/home/jarvis
