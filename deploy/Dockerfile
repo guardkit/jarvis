@@ -229,10 +229,28 @@ COPY src ./src
 # user could not write a byte into it. A hand-over — an operator chowning a
 # volume after creating it — is the machine-shaped step this rollout exists to
 # remove, so the image carries the answer instead.
+#
+# /var/lib/jarvis IS THE BUS GATEWAY'S OWN STATE FOLDER, AND IT IS A MOUNT
+# POINT TOO (26 September 2026, rollout step 1 build item E3-j2).
+#
+# The gateway writes one small file there saying how its Slack Socket Mode
+# session is. The estate names the path in JARVIS_SLACK_HEARTBEAT_PATH and gives
+# the gateway a volume of its own at this folder, which the watch that reads the
+# file mounts read-only. It is NOT under /app, because it is not the front door's
+# and the two services must not share one volume: the gateway keeps this and
+# nothing else, the front door keeps its threads and nothing else.
+#
+# IT IS CREATED HERE FOR EXACTLY THE REASON THE FOLDER ABOVE IS. A fresh named
+# volume takes its ownership from what the image has at the mount point and comes
+# up ROOT-OWNED when the image has nothing there. Without this line the gateway
+# would start, carry Slack traffic perfectly, and silently fail to write the one
+# file anything outside it can read — and the watch would report its Slack
+# session as unknown for ever.
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin jarvis \
     && mkdir -p /home/jarvis/.jarvis/traces \
     && mkdir -p /app/.langgraph_api \
-    && chown -R jarvis:jarvis /home/jarvis /app
+    && mkdir -p /var/lib/jarvis \
+    && chown -R jarvis:jarvis /home/jarvis /app /var/lib/jarvis
 USER jarvis
 ENV HOME=/home/jarvis
 

@@ -252,6 +252,36 @@ def test_the_front_doors_saved_state_has_a_folder_this_user_owns() -> None:
     )
 
 
+def test_the_gateways_heartbeat_folder_has_an_owner_too() -> None:
+    """E3-j2, 26 September 2026 — the same trap, one folder along.
+
+    The bus gateway writes one small file saying how its Slack Socket Mode
+    session is, and that file is the only thing anything outside the process can
+    read about Slack. The estate gives it a volume of its own at /var/lib/jarvis,
+    so that folder has to exist in the image owned by the user the gateway runs
+    as — otherwise a fresh volume comes up root-owned, the gateway carries Slack
+    traffic perfectly, and the watch reports its Slack session as unknown for
+    ever because the file was never written.
+    """
+    instructions = _instructions(_dockerfile_text())
+    made = [line for line in instructions if "/var/lib/jarvis" in line and "mkdir" in line]
+    assert made, (
+        "deploy/Dockerfile does not create /var/lib/jarvis, so a fresh named "
+        "volume mounted there comes up root-owned and the bus gateway cannot "
+        "write the heartbeat the estate's watch reads"
+    )
+    user = [line for line in instructions if line.startswith("USER ")][-1].split()[1]
+    chowns = [
+        line
+        for line in instructions
+        if "chown" in line and f"{user}:{user}" in line and "/var/lib/jarvis" in line
+    ]
+    assert chowns, (
+        f"nothing in deploy/Dockerfile gives {user} /var/lib/jarvis, so the "
+        "gateway's heartbeat folder belongs to root"
+    )
+
+
 def test_the_settings_file_cannot_reach_the_image() -> None:
     """The .env family holds live Slack tokens and a bus password.
 
