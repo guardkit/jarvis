@@ -195,6 +195,10 @@ _DIGEST_CHUNK_SIZE = 8
 _SPEC_MODAL_CHUNK_CHARS = 2800
 _SPEC_MODAL_MAX_CHUNKS = 40
 
+# The possible-contradiction section of the digest card is cut here, defensively;
+# forge already keeps it under 1,400 characters.
+_POSSIBLE_CONTRADICTION_CHARS = 2900
+
 # The label allowlist (2026-08-14 card ruling). A label maps to the words a
 # person reads, or it contributes NOTHING to the card. Composed at the render
 # site — deterministic, no runtime model.
@@ -743,6 +747,23 @@ def _digest_header_blocks(
                     "type": "section",
                     "block_id": "digestwhy",
                     "text": {"type": "mrkdwn", "text": what_happened},
+                }
+            )
+        # The possible contradiction (4 October 2026): a pair the spec writer's
+        # reviewer says cannot both be true, sent as a field of its own so the
+        # opening paragraph above is unchanged. One more section, cut well
+        # inside Slack's 3,000-character section limit. An older forge sends no
+        # such field, and the card then renders byte-for-byte as before.
+        possible_contradiction = str(card.get("possible_contradiction") or "").strip()
+        if possible_contradiction:
+            blocks.append(
+                {
+                    "type": "section",
+                    "block_id": "digestwarn",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": possible_contradiction[:_POSSIBLE_CONTRADICTION_CHARS],
+                    },
                 }
             )
     return blocks

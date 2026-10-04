@@ -682,3 +682,99 @@ class TestSharedSeamWiring:
         )
         assert renderer_call in source
         assert "spec_texts=spec_texts" in source
+
+
+# ---------------------------------------------------------------------------
+# The possible contradiction (4 October 2026, the owner: "yes make the change so
+# it's a warning on the card"). Forge sends it as its own field; it renders as
+# one more section after the opening paragraph, which stays unchanged.
+# ---------------------------------------------------------------------------
+def _max_pair_warning() -> str:
+    """Forge's words for two maximum-sized pairs (titles cut to 150 characters,
+    reasons to 250), then the count of the rest."""
+    pair = '"{a}" and "{b}". Its reason: "{r}".'.format(
+        a="A" * 150, b="B" * 150, r="R" * 250
+    )
+    return (
+        "Possible contradiction, found by the machine's reviewer and not checked "
+        f"by a person: {pair} Also {pair} And 1 more. If they really conflict, "
+        "send a note; otherwise approve as usual."
+    )
+
+
+def _long_opening_paragraph() -> str:
+    """About 2,000 characters: the same-list text quoting a long owner's note,
+    plus the example, provability and repository notices forge appends."""
+    note = (
+        "Please keep the version as the build it was started from, not the "
+        "package metadata, and make sure an unknown format is refused rather "
+        "than guessed at; " * 10
+    ).strip()
+    return " ".join(
+        [
+            f'The rewrite came back with the same list. Your note was: "{note}". '
+            "Approve anyway, send another note, or reject.",
+            "The spec example check removed 1 worked example and kept 2: "
+            "“Version endpoint returns the running build”.",
+            "2 of the worked examples cannot be proven by rule: “Version endpoint "
+            "rejects an unknown format”; “Version endpoint returns the build”.",
+            "The checker did not see what the repository already does, because "
+            "the repository could not be read when the spec was written.",
+        ]
+    )
+
+
+class TestThePossibleContradiction:
+    def test_no_field_gives_todays_blocks(self) -> None:
+        details = make_digest_details()
+        blocks = _blocks(details)
+        assert "digestwarn" not in [b.get("block_id") for b in blocks]
+        details["summary"]["possible_contradiction"] = "   "
+        assert _blocks(details) == blocks
+
+    def test_it_is_one_more_section_after_the_opening_paragraph(self) -> None:
+        details = make_digest_details()
+        before = _blocks(details)
+        details["summary"]["possible_contradiction"] = _max_pair_warning()
+        after = _blocks(details)
+        ids = [b.get("block_id") for b in after]
+        assert ids.index("digestwarn") == ids.index("digestwhy") + 1
+        assert [b for b in after if b.get("block_id") != "digestwarn"] == before
+        warn = next(b for b in after if b.get("block_id") == "digestwarn")
+        assert warn["type"] == "section"
+        assert warn["text"]["text"] == _max_pair_warning()
+
+    def test_a_long_note_card_keeps_every_section_inside_slacks_limit(self) -> None:
+        """Codex R3: a long opening paragraph plus two maximum-sized pairs."""
+        opening = _long_opening_paragraph()
+        assert 1900 <= len(opening) <= 2100
+        plain = make_digest_details()
+        plain["summary"]["what_happened"] = opening
+        warned = make_digest_details()
+        warned["summary"]["what_happened"] = opening
+        warned["summary"]["possible_contradiction"] = _max_pair_warning()
+
+        blocks = _blocks(warned)
+        for block in blocks:
+            text = (block.get("text") or {}).get("text")
+            if isinstance(text, str):
+                assert len(text) <= 3000, block.get("block_id")
+        why = next(b for b in blocks if b.get("block_id") == "digestwhy")
+        plain_why = next(b for b in _blocks(plain) if b.get("block_id") == "digestwhy")
+        assert why == plain_why
+        warn = next(b for b in blocks if b.get("block_id") == "digestwarn")
+        assert warn["text"]["text"] == _max_pair_warning()  # complete, not cut
+
+    def test_an_oversized_field_is_cut_at_2900_characters(self) -> None:
+        details = make_digest_details()
+        details["summary"]["possible_contradiction"] = "W" * 5000
+        warn = next(b for b in _blocks(details) if b.get("block_id") == "digestwarn")
+        assert len(warn["text"]["text"]) == 2900
+
+    def test_it_appears_on_the_first_chunk_only(self) -> None:
+        details = make_digest_details(n_examples=12)
+        details["summary"]["possible_contradiction"] = _max_pair_warning()
+        first = _blocks(details, chunk_index=0, chunk_count=2)
+        second = _blocks(details, chunk_index=1, chunk_count=2)
+        assert "digestwarn" in [b.get("block_id") for b in first]
+        assert "digestwarn" not in [b.get("block_id") for b in second]
