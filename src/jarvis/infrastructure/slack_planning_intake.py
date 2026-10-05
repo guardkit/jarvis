@@ -54,6 +54,12 @@ Behaviour invariants (TASK-REV-3240 findings F3-F6, F10-F12):
   contracts 1 and 2). Anything the grammar does not match is a sentence and
   behaves exactly as before; a ``fix:``/``question:`` prefix is a sentence
   too, with its kind carried in an extra ``kind`` field.
+* ``build: FEAT-XXXX from <branch>`` (register-projects design, 5 October
+  2026, part 3) is one of those commands: verb ``build`` with the feature and
+  branch, and the ``target:`` name as typed (short, canonical or absent) in
+  ``target_repo`` like any sentence. Jarvis resolves nothing and posts
+  nothing; the forge resolves the repository, hands the feature to its build
+  queue and answers in this thread.
 * ``originating_adapter="slack"`` is hard-coded (F4): the wire layer
   verifiably skips its required-when-jarvis validator when the field is
   omitted, so jarvis must never rely on it.
@@ -431,7 +437,7 @@ class PlanningIntakeHandler:
         parsed = parse_queue_message(text)
         if parsed.shape == "refusal":
             # The messages jarvis answers itself: bare "next" is ambiguous,
-            # and "next:" or "before #12:" with nothing after them are
+            # and "next:", "before #12:" or "build:" with a part missing are
             # commands begun and not finished. It asks instead of guessing,
             # and publishes nothing.
             logger.info(

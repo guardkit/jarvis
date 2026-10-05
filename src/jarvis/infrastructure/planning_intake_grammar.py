@@ -33,6 +33,17 @@ Two small choices the spec left open, both the smallest thing that works:
   sentence (the JNB-107 verbatim-config lesson applied to a typed command);
 * ``fix:``/``question:`` and ``next:``/``before`` do not combine — a kind
   prefix inside a command's sentence is just part of that sentence.
+
+Handing over a feature planned elsewhere (register-projects design, 5 October
+2026, part 3): ``build: FEAT-1A2B from prepared/FEAT-1A2B`` asks the factory to
+build a feature whose spec and plan are already committed on that branch. It
+is one more queue command, forwarded with verb ``build`` and the feature and
+branch as typed; the forge resolves the ``target:`` name (or its default) and
+answers in the thread. A ``build:`` begun and not finished — nothing after the
+colon, a feature with no branch, a feature id or branch that cannot be one —
+gets one usage line back and is not forwarded, like the half-typed ``next:``.
+Prose after ``build:`` that does not start like a feature (``build: a users
+page``) stays a sentence, exactly as before.
 """
 
 from __future__ import annotations
@@ -50,6 +61,19 @@ _LINK_RE = re.compile(r"^#(\d+)\s+after\s+#(\d+)$", re.IGNORECASE)
 _KEEP_DROP_RE = re.compile(r"^(keep|drop)\s+#?(\d+)$", re.IGNORECASE)
 _KIND_RE = re.compile(r"^(fix|question):\s+(.+)$", re.IGNORECASE)
 
+# A feature planned elsewhere, handed over by its branch. One line only: the
+# separators are spaces or tabs, never a line break.
+_BUILD_RE = re.compile(r"^build:[ \t]+(FEAT-[A-Z0-9]+)[ \t]+from[ \t]+(\S+)$", re.IGNORECASE)
+# A ``build:`` begun as a command: nothing after the colon, or a first word
+# that is a feature id (or the word ``from``). When the whole shape above does
+# not match, this is a command left unfinished, never a sentence.
+_BUILD_BEGUN_RE = re.compile(r"^build:[ \t]*(?:$|FEAT-|from(?:[ \t]|$))", re.IGNORECASE)
+
+#: The feature ids the wire accepts (nats-core ``FEATURE_ID_PATTERN``), kept
+#: here as a local copy for the same reason as the repository-name set below;
+#: a test pins the two together.
+_FEATURE_ID_RE = re.compile(r"^FEAT-[A-Z0-9]{3,12}$")
+
 # The three shapes jarvis answers itself. Each is a command begun and not
 # finished, so there is no sentence to file and nothing to forward.
 _BARE_NEXT_RE = re.compile(r"^next$", re.IGNORECASE)
@@ -61,6 +85,9 @@ _EMPTY_ADD_BEFORE_RE = re.compile(r"^before\s+#(\d+):\s*$", re.IGNORECASE)
 #: ``next:`` / ``before #12:`` were begun and not finished. The same line
 #: serves all three, so Rich sees one usage reminder rather than three.
 USAGE_REFUSAL = 'Did you mean "next: <sentence>" or "#12 next"?'
+
+#: The one line jarvis posts itself for a ``build:`` begun and not finished.
+BUILD_USAGE_REFUSAL = 'Did you mean "build: FEAT-XXXX from <branch>"?'
 
 #: Which characters a typed repository name may use. The same set the wire
 #: allows (nats-core ``PLANNING_TARGET_REPO_PATTERN``, ``_pipeline.py``):
@@ -83,6 +110,31 @@ def is_allowed_target_name(name: str) -> bool:
     return bool(_ALLOWED_TARGET_NAME_RE.match(name))
 
 
+#: Characters git never allows in a branch name (``git check-ref-format``):
+#: control characters, space, and ``~ ^ : ? * [ \``.
+_BRANCH_FORBIDDEN_RE = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
+
+
+def is_allowed_branch_name(name: str) -> bool:
+    """True when ``name`` is a branch name git would accept.
+
+    The rules of ``git check-ref-format --branch``, written out so jarvis
+    needs no git: none of the forbidden characters; not beginning with ``-``;
+    no ``..``, ``@{`` or ``//``; not ``@`` on its own; not beginning or ending
+    with ``/``, not ending with ``.``; and no path part beginning with ``.``
+    or ending with ``.lock``.
+    """
+    if not name or name == "@" or _BRANCH_FORBIDDEN_RE.search(name):
+        return False
+    if name.startswith(("-", "/")) or name.endswith(("/", ".")):
+        return False
+    if ".." in name or "@{" in name or "//" in name:
+        return False
+    return all(
+        part and not part.startswith(".") and not part.endswith(".lock") for part in name.split("/")
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ParsedMessage:
     """What one planning-channel message turned out to be.
@@ -95,7 +147,8 @@ class ParsedMessage:
             (a command's own sentence lives in :attr:`command`).
         command: The flat object forwarded on the wire as ``queue_command``
             — ``{"verb": ..., "id"?: int, "after"?: int, "sentence"?: str}``,
-            no nesting (spec contract 2).
+            or ``{"verb": "build", "feature_id": str, "branch": str}`` for a
+            hand-over — no nesting (spec contract 2).
         refusal_text: The one line jarvis posts itself, or ``None``.
         kind: ``"fix"`` or ``"question"`` when the sentence carried that
             prefix; ``None`` otherwise (the forge defaults to a feature).
@@ -168,6 +221,21 @@ def parse_queue_message(text: str) -> ParsedMessage:
             command={"verb": match.group(1).lower(), "id": int(match.group(2))},
         )
 
+    match = _BUILD_RE.match(candidate)
+    if match:
+        feature_id = match.group(1).upper()
+        branch = match.group(2)
+        if _FEATURE_ID_RE.match(feature_id) and is_allowed_branch_name(branch):
+            return ParsedMessage(
+                shape="command",
+                command={"verb": "build", "feature_id": feature_id, "branch": branch},
+            )
+    if _BUILD_BEGUN_RE.match(candidate):
+        # A hand-over begun and not finished, or with a feature id or branch
+        # that cannot be one. Filed as prose it would start a planning run
+        # from a typo, so jarvis answers with the usage line instead.
+        return ParsedMessage(shape="refusal", refusal_text=BUILD_USAGE_REFUSAL)
+
     match = _KIND_RE.match(candidate)
     if match:
         kind: Literal["fix", "question"] = "fix" if match.group(1).lower() == "fix" else "question"
@@ -189,9 +257,11 @@ def parse_queue_message(text: str) -> ParsedMessage:
 
 
 __all__ = [
+    "BUILD_USAGE_REFUSAL",
     "INVALID_TARGET_NAME_REPLY",
     "USAGE_REFUSAL",
     "ParsedMessage",
+    "is_allowed_branch_name",
     "is_allowed_target_name",
     "parse_queue_message",
 ]
