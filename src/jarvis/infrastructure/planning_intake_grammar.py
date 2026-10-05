@@ -40,10 +40,12 @@ build a feature whose spec and plan are already committed on that branch. It
 is one more queue command, forwarded with verb ``build`` and the feature and
 branch as typed; the forge resolves the ``target:`` name (or its default) and
 answers in the thread. A ``build:`` begun and not finished — nothing after the
-colon, a feature with no branch, a feature id or branch that cannot be one —
-gets one usage line back and is not forwarded, like the half-typed ``next:``.
-Prose after ``build:`` that does not start like a feature (``build: a users
-page``) stays a sentence, exactly as before.
+colon, or a first word written like a feature id (``FEAT-1…`` in capitals)
+with no branch, or an id or branch that cannot be one — gets one usage line
+back and is not forwarded, like the half-typed ``next:``. Prose after
+``build:`` that does not start like a feature id (``build: a users page``,
+``build: from scratch, a users page``, ``build: feat-flag support``) stays a
+sentence, exactly as before.
 """
 
 from __future__ import annotations
@@ -65,9 +67,14 @@ _KIND_RE = re.compile(r"^(fix|question):\s+(.+)$", re.IGNORECASE)
 # separators are spaces or tabs, never a line break.
 _BUILD_RE = re.compile(r"^build:[ \t]+(FEAT-[A-Z0-9]+)[ \t]+from[ \t]+(\S+)$", re.IGNORECASE)
 # A ``build:`` begun as a command: nothing after the colon, or a first word
-# that is a feature id (or the word ``from``). When the whole shape above does
-# not match, this is a command left unfinished, never a sentence.
-_BUILD_BEGUN_RE = re.compile(r"^build:[ \t]*(?:$|FEAT-|from(?:[ \t]|$))", re.IGNORECASE)
+# that starts like a feature id as the wire writes it — ``FEAT-`` in capitals
+# followed by a capital or a digit. When the whole shape above does not match,
+# this is a command left unfinished, never a sentence. Only ``build:`` is
+# matched case-insensitively here, so prose such as "build: feat-flag support"
+# or "build: from scratch, a users page" stays a sentence. (The complete
+# command above stays case-insensitive: a fully typed "build: feat-1a2b from
+# main" is still a command, its id upper-cased.)
+_BUILD_BEGUN_RE = re.compile(r"^(?i:build:)[ \t]*(?:$|FEAT-[A-Z0-9])")
 
 #: The feature ids the wire accepts (nats-core ``FEATURE_ID_PATTERN``), kept
 #: here as a local copy for the same reason as the repository-name set below;

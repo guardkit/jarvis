@@ -121,8 +121,6 @@ class TestAHalfTypedBuildGetsTheUsageLine:
             "build: FEAT-1A2B",
             "build: FEAT-1A2B from",
             "build: FEAT-1A2B from ",
-            "build: from prepared/FEAT-1A2B",
-            "build: from",
             # a feature id the wire cannot carry
             "build: FEAT-12 from main",
             "build: FEAT-1A2B3C4D5E6F7 from main",
@@ -166,6 +164,12 @@ class TestProseThatBeginsWithBuildIsASentence:
             "rebuild: FEAT-1A2B from main",
             "build FEAT-1A2B from main",  # no colon
             "please build: FEAT-1A2B from main",
+            # the coach's two phrases: prose that only looks like a start
+            "build: from scratch, a users page",
+            "build: feat-flag support on the admin page",
+            "build: from main",
+            "build: FEAT-flag support",
+            "build: feat-1a2b",  # lower case and unfinished: prose
         ],
     )
     def test_it_stays_a_sentence_byte_for_byte(self, message: str) -> None:
