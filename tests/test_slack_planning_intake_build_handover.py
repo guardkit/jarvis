@@ -121,6 +121,12 @@ class TestAHalfTypedBuildGetsTheUsageLine:
             "build: FEAT-1A2B",
             "build: FEAT-1A2B from",
             "build: FEAT-1A2B from ",
+            # unfinished, in any case (Codex round 1, R1)
+            "build: feat-1a2b",
+            "Build: Feat-1A2b",
+            "build: feat-1a2b from",
+            "BUILD: feat-1A2B FROM ",
+            "build: feat-flag",
             # a feature id the wire cannot carry
             "build: FEAT-12 from main",
             "build: FEAT-1A2B3C4D5E6F7 from main",
@@ -131,9 +137,10 @@ class TestAHalfTypedBuildGetsTheUsageLine:
             "build: FEAT-1A2B from main.lock",
             "build: FEAT-1A2B from bad:branch",
             "build: FEAT-1A2B from main/",
-            # more than one branch word, or a command over two lines
-            "build: FEAT-1A2B from main and then deploy",
+            "build: feat-1a2b from bad..branch",
+            # a command over two lines
             "build: FEAT-1A2B\nfrom main",
+            "build:\nFEAT-1A2B from main",
             # no space after the colon
             "build:FEAT-1A2B from main",
         ],
@@ -169,7 +176,10 @@ class TestProseThatBeginsWithBuildIsASentence:
             "build: feat-flag support on the admin page",
             "build: from main",
             "build: FEAT-flag support",
-            "build: feat-1a2b",  # lower case and unfinished: prose
+            "build: a users page",
+            "build: from",
+            # words after the branch: not the command's shape, so prose
+            "build: FEAT-1A2B from main and then deploy",
         ],
     )
     def test_it_stays_a_sentence_byte_for_byte(self, message: str) -> None:
@@ -262,7 +272,19 @@ class TestTheHandlerForwardsAHandOver:
         web_client.chat_postMessage.assert_not_awaited()
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("message", ["build:", "build: FEAT-1A2B", "build: FEAT-1A2B from"])
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "build:",
+            "build: FEAT-1A2B",
+            "build: FEAT-1A2B from",
+            # lower and mixed case, missing the branch (Codex round 1, R1)
+            "build: feat-1a2b",
+            "build: feat-1a2b from",
+            "Build: Feat-1A2b",
+            "BuIlD: fEaT-1a2B FrOm",
+        ],
+    )
     async def test_a_half_typed_build_is_answered_and_nothing_is_published(
         self, message: str
     ) -> None:

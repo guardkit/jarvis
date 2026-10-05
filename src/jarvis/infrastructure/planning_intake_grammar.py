@@ -39,13 +39,16 @@ Handing over a feature planned elsewhere (register-projects design, 5 October
 build a feature whose spec and plan are already committed on that branch. It
 is one more queue command, forwarded with verb ``build`` and the feature and
 branch as typed; the forge resolves the ``target:`` name (or its default) and
-answers in the thread. A ``build:`` begun and not finished — nothing after the
-colon, or a first word written like a feature id (``FEAT-1…`` in capitals)
-with no branch, or an id or branch that cannot be one — gets one usage line
-back and is not forwarded, like the half-typed ``next:``. Prose after
-``build:`` that does not start like a feature id (``build: a users page``,
-``build: from scratch, a users page``, ``build: feat-flag support``) stays a
-sentence, exactly as before.
+answers in the thread. The whole shape is case-insensitive. A ``build:``
+command that is unambiguously unfinished or wrong — nothing after the colon; a
+feature id (``FEAT-`` and 3 to 12 letters or digits, any case) and then
+nothing, or ``from`` and nothing; or the complete ``build: FEAT-… from
+<branch>`` shape with an id the wire cannot carry, a branch git would refuse,
+no space after the colon or a line break inside it — gets one usage line back
+and is not forwarded, like the half-typed ``next:``. Ordinary prose after
+``build:`` (``build: a users page``, ``build: from scratch, a users page``,
+``build: feat-flag support on the admin page``) stays a sentence, exactly as
+before.
 """
 
 from __future__ import annotations
@@ -63,18 +66,19 @@ _LINK_RE = re.compile(r"^#(\d+)\s+after\s+#(\d+)$", re.IGNORECASE)
 _KEEP_DROP_RE = re.compile(r"^(keep|drop)\s+#?(\d+)$", re.IGNORECASE)
 _KIND_RE = re.compile(r"^(fix|question):\s+(.+)$", re.IGNORECASE)
 
-# A feature planned elsewhere, handed over by its branch. One line only: the
-# separators are spaces or tabs, never a line break.
-_BUILD_RE = re.compile(r"^build:[ \t]+(FEAT-[A-Z0-9]+)[ \t]+from[ \t]+(\S+)$", re.IGNORECASE)
-# A ``build:`` begun as a command: nothing after the colon, or a first word
-# that starts like a feature id as the wire writes it — ``FEAT-`` in capitals
-# followed by a capital or a digit. When the whole shape above does not match,
-# this is a command left unfinished, never a sentence. Only ``build:`` is
-# matched case-insensitively here, so prose such as "build: feat-flag support"
-# or "build: from scratch, a users page" stays a sentence. (The complete
-# command above stays case-insensitive: a fully typed "build: feat-1a2b from
-# main" is still a command, its id upper-cased.)
-_BUILD_BEGUN_RE = re.compile(r"^(?i:build:)[ \t]*(?:$|FEAT-[A-Z0-9])")
+# A feature planned elsewhere, handed over by its branch: the complete shape,
+# case-insensitive. Its separators are captured so a command typed with no
+# space after the colon, or broken over two lines, can be told apart (a
+# command is one line, with a space after the colon); the id and branch are
+# checked after the match. Anything matching this shape is either the command
+# or, with one of those parts wrong, the usage line — never a sentence.
+_BUILD_RE = re.compile(r"^build:(\s*)(FEAT-\S+)(\s+)from(\s+)(\S+)$", re.IGNORECASE)
+# A ``build:`` command left unfinished: nothing after the colon, or a feature
+# id (the wire's id characters, any case) and then nothing, or ``from`` and
+# nothing. Prose that merely begins with "from" or "feat-" does not match.
+_BUILD_UNFINISHED_RE = re.compile(
+    r"^build:[ \t]*(?:FEAT-[A-Z0-9]{3,12}(?:[ \t]+from)?[ \t]*)?$", re.IGNORECASE
+)
 
 #: The feature ids the wire accepts (nats-core ``FEATURE_ID_PATTERN``), kept
 #: here as a local copy for the same reason as the repository-name set below;
@@ -230,17 +234,25 @@ def parse_queue_message(text: str) -> ParsedMessage:
 
     match = _BUILD_RE.match(candidate)
     if match:
-        feature_id = match.group(1).upper()
-        branch = match.group(2)
-        if _FEATURE_ID_RE.match(feature_id) and is_allowed_branch_name(branch):
+        after_colon, before_from, after_from = match.group(1, 3, 4)
+        feature_id = match.group(2).upper()
+        branch = match.group(5)
+        one_line = "\n" not in after_colon + before_from + after_from
+        if (
+            after_colon
+            and one_line
+            and _FEATURE_ID_RE.match(feature_id)
+            and is_allowed_branch_name(branch)
+        ):
             return ParsedMessage(
                 shape="command",
                 command={"verb": "build", "feature_id": feature_id, "branch": branch},
             )
-    if _BUILD_BEGUN_RE.match(candidate):
-        # A hand-over begun and not finished, or with a feature id or branch
-        # that cannot be one. Filed as prose it would start a planning run
-        # from a typo, so jarvis answers with the usage line instead.
+        # The command's shape with one part wrong. Filed as prose it would
+        # start a planning run from a typo, so jarvis answers instead.
+        return ParsedMessage(shape="refusal", refusal_text=BUILD_USAGE_REFUSAL)
+    if _BUILD_UNFINISHED_RE.match(candidate):
+        # A hand-over begun and not finished: the usage line, nothing sent.
         return ParsedMessage(shape="refusal", refusal_text=BUILD_USAGE_REFUSAL)
 
     match = _KIND_RE.match(candidate)
