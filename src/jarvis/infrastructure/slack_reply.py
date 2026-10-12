@@ -76,6 +76,10 @@ from jarvis.infrastructure.slack_heartbeat import (
     SlackHeartbeatWriter,
     create_slack_heartbeat_writer,
 )
+
+# The card's producer owns the link buttons' action ids; slack_notifier keeps
+# nats_core and slack-sdk out of its top-level imports too.
+from jarvis.infrastructure.slack_notifier import PREVIEW_LINK_ACTION_IDS
 from jarvis.infrastructure.spec_texts import SpecTextRegistry
 from jarvis.infrastructure.terminal_builds import (
     TerminalBuildRecord,
@@ -320,6 +324,22 @@ class ApprovalReplyHandler:
 
     async def _handle_block_actions(self, payload: dict[str, Any]) -> None:
         user_id = (payload.get("user") or {}).get("id")
+
+        # --- 0. Preview and evidence link buttons (web-readiness W7) ------
+        # A URL button opens its link in the browser; Slack still sends a
+        # block_actions event for the click. It is not a decision: already
+        # acknowledged upstream, it is never published, never takes the
+        # decision lock, never marks a request decided, and is not an
+        # unknown action. Checked before authorization so a reader who may
+        # not decide is not told off for opening a link.
+        clicked = (payload.get("actions") or [{}])[0] or {}
+        if clicked.get("action_id") in PREVIEW_LINK_ACTION_IDS:
+            logger.debug(
+                "slack_reply_preview_link_click_ignored",
+                action_id=clicked.get("action_id"),
+                user_id=user_id,
+            )
+            return
 
         # --- 1. Authorization — the SOLE Slack-side gate ----------------
         # Allowlist membership (TASK-JNB-110): identity says who DID, this

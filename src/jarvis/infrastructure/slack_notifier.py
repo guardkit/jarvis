@@ -90,13 +90,16 @@ import asyncio
 import dataclasses
 import json
 import time
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
+from urllib.parse import urlsplit
 
 import structlog
 from pydantic import ValidationError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.msg import Msg
+    from nats_core.events import ReviewEvidence
 
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.build_audience import BuildAudienceRegistry
@@ -153,6 +156,30 @@ _monotonic = time.monotonic
 # strips a retained pause card's action surface and records terminal
 # truth for the reply path's tap-races-terminal consult.
 _TERMINAL_EVENT_TYPES = frozenset({"build_cancelled", "build_complete", "build_failed"})
+
+# Preview and test evidence on the merge card (web-readiness W7). The link
+# buttons are plain URL buttons in their own actions block; each has its own
+# action_id so the reply path can acknowledge a click and ignore it — opening
+# a link is never a decision (slack_reply lists these as explicit no-ops).
+ACTION_PREVIEW_OPEN = "forge_preview_open"
+ACTION_PREVIEW_REPORT = "forge_preview_report"
+ACTION_PREVIEW_MEDIA = "forge_preview_media"
+ACTION_PREVIEW_DIAGNOSTICS = "forge_preview_diagnostics"
+PREVIEW_LINK_ACTION_IDS = frozenset(
+    {
+        ACTION_PREVIEW_OPEN,
+        ACTION_PREVIEW_REPORT,
+        ACTION_PREVIEW_MEDIA,
+        ACTION_PREVIEW_DIAGNOSTICS,
+    }
+)
+_PREVIEW_LINKS_BLOCK_ID = "forge_preview_links"
+
+# Slack's limit on a button's url.
+_SLACK_BUTTON_URL_LIMIT = 3000
+
+# The longest failure reason the card quotes before cutting it short.
+_EVIDENCE_REASON_CHARS = 1000
 
 
 def _terminal_status_line(notification: ForgeNotification) -> str:
@@ -838,11 +865,138 @@ def _rationale_chunks(notification: ForgeNotification) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Preview and test evidence (web-readiness W7)
+# ---------------------------------------------------------------------------
+
+
+def _evidence_counts(evidence: ReviewEvidence) -> str:
+    """The driver's reported counts; a count it did not report says unknown."""
+    outcome = evidence.outcome
+    parts = []
+    for word, value in (
+        ("passed", outcome.passed),
+        ("failed", outcome.failed),
+        ("skipped", outcome.skipped),
+        ("flaky", outcome.flaky),
+    ):
+        parts.append(f"{word} {value if value is not None else 'unknown'}")
+    return "Tests: " + ", ".join(parts)
+
+
+def _evidence_clock(at: datetime) -> str:
+    """``Tue 13 Oct 16:00 UTC`` — local time, with the zone said."""
+    local = at.astimezone()
+    return f"{local:%a} {local.day} {local:%b %H:%M} {local:%Z}".rstrip()
+
+
+def _evidence_day(at: datetime) -> str:
+    """``26 Oct`` — the day the kept evidence is deleted."""
+    local = at.astimezone()
+    return f"{local.day} {local:%b}"
+
+
+def _evidence_lines(evidence: ReviewEvidence) -> list[str]:
+    """The evidence in plain sentences, shared by the card and its text."""
+    kept_until = _evidence_day(evidence.evidence_expires_at)
+    if evidence.state == "ready":
+        return [
+            f"Preview ready. {_evidence_counts(evidence)}.",
+            "Preview and Approve available until "
+            f"{_evidence_clock(evidence.app_expires_at)} · "
+            f"report and video kept until {kept_until}.",
+        ]
+    # Kept well inside Block Kit's 3000-character section limit, so a long
+    # reason can never cost the card (the diagnostics link has the rest).
+    reason = evidence.failure_reason or ""
+    if len(reason) > _EVIDENCE_REASON_CHARS:
+        reason = reason[: _EVIDENCE_REASON_CHARS - 1] + "…"
+    return [
+        f"Preview could not be prepared: {reason}",
+        "Approve is not offered for this build. Reject it, then run the feature again.",
+        f"{_evidence_counts(evidence)} · diagnostics kept until {kept_until}.",
+    ]
+
+
+def _allowed_link(
+    url: str | None,
+    link_hosts: frozenset[str],
+    *,
+    link: str,
+    build_id: str | None,
+) -> str | None:
+    """``url`` when it is https on an allowed host, else None (logged).
+
+    The URL itself is never logged: an app link carries its preview token.
+    """
+    if not url:
+        return None
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").lower()
+    if (
+        parsed.scheme != "https"
+        or not host
+        or host not in link_hosts
+        or len(url) > _SLACK_BUTTON_URL_LIMIT
+    ):
+        logger.warning(
+            "slack_preview_link_dropped",
+            link=link,
+            scheme=parsed.scheme or None,
+            host=host or None,
+            host_allowed=host in link_hosts,
+            build_id=build_id,
+        )
+        return None
+    return url
+
+
+def _evidence_link_buttons(
+    evidence: ReviewEvidence,
+    link_hosts: frozenset[str],
+    *,
+    build_id: str | None,
+) -> list[dict[str, Any]]:
+    """The URL buttons for the evidence, in card order, allowed links only.
+
+    A failed preview never offers the app; it offers its diagnostics plus
+    any report or media it kept.
+    """
+    candidates: list[tuple[str, str, str | None]] = []
+    if evidence.state == "ready":
+        candidates.append((ACTION_PREVIEW_OPEN, "Try the app", evidence.app_url))
+    else:
+        candidates.append((ACTION_PREVIEW_DIAGNOSTICS, "Diagnostics", evidence.diagnostics_url))
+    candidates.append((ACTION_PREVIEW_REPORT, "Test report", evidence.report_url))
+    candidates.append(
+        (
+            ACTION_PREVIEW_MEDIA,
+            "Screenshots / video",
+            evidence.media_urls[0] if evidence.media_urls else None,
+        )
+    )
+    buttons: list[dict[str, Any]] = []
+    for action_id, label, url in candidates:
+        allowed = _allowed_link(url, link_hosts, link=action_id, build_id=build_id)
+        if allowed is None:
+            continue
+        buttons.append(
+            {
+                "type": "button",
+                "action_id": action_id,
+                "text": {"type": "plain_text", "text": label, "emoji": False},
+                "url": allowed,
+            }
+        )
+    return buttons
+
+
 def build_pause_blocks(
     notification: ForgeNotification,
     button_value: str | None = None,
     *,
     status_line: str | None = None,
+    link_hosts: frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Render a ``build_paused`` notification as Block Kit blocks.
 
@@ -882,6 +1036,16 @@ def build_pause_blocks(
             "This build was cancelled at 14:07 by rich". When set it
             REPLACES the action surface entirely — no buttons and no CLI
             hint render on a terminal card.
+        link_hosts: Host names the preview and evidence links may point
+            at (``JarvisConfig.resolve_evidence_link_hosts``). Only used
+            when the notification carries ``review_evidence``; empty
+            means no link buttons.
+
+    Preview and test evidence (web-readiness W7): when the notification
+    carries ``review_evidence``, the card adds the evidence in plain
+    sentences before the provenance line and, on a live card, a block of
+    URL buttons for the allowed links. A ``failed`` preview offers Reject
+    only. A notification without evidence renders exactly as before.
 
     Returns:
         Block Kit blocks list suitable for ``chat.postMessage`` /
@@ -905,9 +1069,34 @@ def build_pause_blocks(
     if score_line is not None:
         blocks.append(_plain_text_section(score_line))
 
+    evidence = notification.review_evidence
+    link_buttons: list[dict[str, Any]] = []
+    if evidence is not None:
+        if status_line is None:
+            link_buttons = _evidence_link_buttons(
+                evidence, link_hosts, build_id=notification.build_id
+            )
+        lines = _evidence_lines(evidence)
+        if link_buttons:
+            lines.append("The links work only on the tailnet.")
+        blocks.append(_plain_text_section("\n".join(lines)))
+
     # R1-A provenance, now ONE muted line labelled in words and still
     # rendered before the action surface.
     blocks.append(_muted_context(_provenance_line(notification)))
+
+    if link_buttons:
+        blocks.append(
+            {
+                "type": "actions",
+                "block_id": _PREVIEW_LINKS_BLOCK_ID,
+                "elements": link_buttons,
+            }
+        )
+
+    # A preview that could not be prepared is never approvable (W7, R1):
+    # the card offers Reject only, and forge refuses an approval anyway.
+    reject_only = evidence is not None and evidence.state == "failed"
 
     if status_line is not None:
         # Terminal card (R3-A): the stamp replaces the whole action
@@ -915,40 +1104,46 @@ def build_pause_blocks(
         # buttons nor a CLI approval hint.
         blocks.append(_plain_text_section(status_line))
     elif button_value is None:
-        blocks.append(_plain_text_section("Use CLI to approve or reject this build."))
+        blocks.append(_plain_text_section(_cli_hint(reject_only=reject_only)))
     else:
+        approve = {
+            "type": "button",
+            "action_id": "forge_approve",
+            "text": {
+                "type": "plain_text",
+                "text": "Approve",
+                "emoji": False,
+            },
+            "style": "primary",
+            "value": button_value,
+        }
+        reject = {
+            "type": "button",
+            "action_id": "forge_reject",
+            "text": {
+                "type": "plain_text",
+                "text": "Reject",
+                "emoji": False,
+            },
+            "style": "danger",
+            "value": button_value,
+        }
         blocks.append(
             {
                 "type": "actions",
                 "block_id": "forge_approval",
-                "elements": [
-                    {
-                        "type": "button",
-                        "action_id": "forge_approve",
-                        "text": {
-                            "type": "plain_text",
-                            "text": "Approve",
-                            "emoji": False,
-                        },
-                        "style": "primary",
-                        "value": button_value,
-                    },
-                    {
-                        "type": "button",
-                        "action_id": "forge_reject",
-                        "text": {
-                            "type": "plain_text",
-                            "text": "Reject",
-                            "emoji": False,
-                        },
-                        "style": "danger",
-                        "value": button_value,
-                    },
-                ],
+                "elements": [reject] if reject_only else [approve, reject],
             }
         )
 
     return blocks
+
+
+def _cli_hint(*, reject_only: bool) -> str:
+    """How the decision is made when the card carries no buttons."""
+    if reject_only:
+        return "Use CLI to reject this build."
+    return "Use CLI to approve or reject this build."
 
 
 # ---------------------------------------------------------------------------
@@ -970,6 +1165,7 @@ class SlackNotifier:
         "_channel_id",
         "_client",
         "_dedup_map",
+        "_evidence_link_hosts",
         "_operator_ids",
         "_pause_messages",
         "_pending_approvals",
@@ -992,6 +1188,7 @@ class SlackNotifier:
         terminal_registry: TerminalBuildRegistry | None = None,
         audience: BuildAudienceRegistry | None = None,
         operator_ids: frozenset[str] = frozenset(),
+        evidence_link_hosts: frozenset[str] = frozenset(),
     ) -> None:
         """Construct the Slack notifier.
 
@@ -1021,6 +1218,10 @@ class SlackNotifier:
                 unambiguously the person who wants the build line. Two
                 or more members is not a fact about THIS build, so
                 nobody is mentioned.
+            evidence_link_hosts: Host names a merge card's preview and
+                evidence links may point at
+                (:meth:`JarvisConfig.resolve_evidence_link_hosts`). Empty
+                means the card carries no link buttons.
         """
         from slack_sdk.web.async_client import AsyncWebClient
 
@@ -1031,6 +1232,7 @@ class SlackNotifier:
         self._terminal_registry = terminal_registry
         self._audience = audience
         self._operator_ids = operator_ids
+        self._evidence_link_hosts = evidence_link_hosts
         self._client = AsyncWebClient(token=bot_token)
         self._queue: asyncio.Queue[ForgeNotification] = asyncio.Queue(maxsize=queue_maxsize)
         self._started = False
@@ -1623,7 +1825,9 @@ class SlackNotifier:
                 posted_at_mono=_monotonic(),
             )
             self._pause_messages[build_id] = record
-            blocks = build_pause_blocks(notification, button_value=value)
+            blocks = build_pause_blocks(
+                notification, button_value=value, link_hosts=self._evidence_link_hosts
+            )
             response = await self._post_with_retry(notification, text=text, blocks=blocks)
             await self._settle_pause_post(
                 build_id,
@@ -1722,6 +1926,7 @@ class SlackNotifier:
             record.notification,
             button_value=record.value_json if record.buttoned else None,
             status_line=record.terminal_line,
+            link_hosts=self._evidence_link_hosts,
         )
         text = self._render(record.notification)
         if record.terminal_line is not None:
@@ -2046,13 +2251,19 @@ class SlackNotifier:
             if score_line is not None:
                 parts.append(score_line)
 
+            # Preview and test evidence (W7), in the card's own words.
+            # The links themselves are buttons on the card only.
+            evidence = notification.review_evidence
+            if evidence is not None:
+                parts.extend(_evidence_lines(evidence))
+
             # Approval-card truth R1-A on the text path too: one line,
             # labelled in words, so junk traffic is visibly junk here as
             # well.
             parts.append(_provenance_line(notification))
 
             # No buttons on this path — say how the decision is made.
-            parts.append("Use CLI to approve or reject this build.")
+            parts.append(_cli_hint(reject_only=evidence is not None and evidence.state == "failed"))
 
             return "\n".join(parts)
 
@@ -2442,6 +2653,7 @@ def create_slack_sink(
         terminal_registry=terminal_registry,
         audience=audience,
         operator_ids=config.resolve_operator_allowlist(),
+        evidence_link_hosts=config.resolve_evidence_link_hosts(),
     )
 
 

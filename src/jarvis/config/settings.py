@@ -381,6 +381,15 @@ class JarvisConfig(BaseSettings):
     # for the exemplar). None keeps planning intake a logged no-op.
     slack_planning_originator_user_id: str | None = None
 
+    # JARVIS_SLACK_EVIDENCE_LINK_HOSTS — comma-separated host names a merge
+    # card's preview and test-evidence links may point at (web-readiness W7),
+    # e.g. the tailnet names of the machines serving the preview and the
+    # evidence. A link must be https AND on one of these hosts to become a
+    # button; anything else is dropped with a logged warning. Empty / unset
+    # means no link buttons at all — the card still shows the test counts,
+    # the expiry times and, for a failed preview, Reject only.
+    slack_evidence_link_hosts: str | None = None
+
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
         env_file=".env",
@@ -520,6 +529,21 @@ class JarvisConfig(BaseSettings):
         if self.slack_operator_user_id and self.slack_operator_user_id.strip():
             ids.add(self.slack_operator_user_id.strip())
         return frozenset(ids)
+
+    def resolve_evidence_link_hosts(self) -> frozenset[str]:
+        """The host names a merge card's evidence links may point at.
+
+        Parsed from ``slack_evidence_link_hosts``: blank entries dropped,
+        case folded (host names are case-insensitive). Empty means no
+        evidence link renders as a button.
+        """
+        if not self.slack_evidence_link_hosts:
+            return frozenset()
+        return frozenset(
+            entry.strip().lower()
+            for entry in self.slack_evidence_link_hosts.split(",")
+            if entry.strip()
+        )
 
     # -- Runtime validation --------------------------------------------------
 

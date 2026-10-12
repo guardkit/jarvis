@@ -69,15 +69,23 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.msg import Msg
     from nats.js import JetStreamContext
+    from nats_core.events import ReviewEvidence
 
     from jarvis.infrastructure.nats_client import NATSClient
     from jarvis.infrastructure.routing_history import RoutingHistoryWriter
     from jarvis.sessions.manager import SessionManager
+
+    _ReviewEvidenceField = ReviewEvidence | None
+else:
+    # At runtime the field is declared ``Any`` so this schema module keeps
+    # nats_core out of its top-level imports; the field's validator below
+    # does the real typing through nats_core's own ReviewEvidence.
+    _ReviewEvidenceField = Any
 
 
 logger = structlog.get_logger(__name__)
@@ -317,6 +325,32 @@ def _sandbox_merge(value: object) -> SandboxMerge | None:
         fetch_command=_outcome_str(value.get("fetch_command")),
         sentence=sentence,
     )
+
+
+def _review_evidence(value: object, *, correlation_id: str | None) -> ReviewEvidence | None:
+    """The pause payload's ``review_evidence`` record, typed, or None.
+
+    The record is nats-core's ``ReviewEvidence`` (web-readiness W7): the
+    preview and test evidence forge prepared for a merge offer. Absent
+    means the offer has no preview and the card reads as it always did.
+    A record that does not validate is logged and dropped, never costing
+    the card itself; forge refuses an approval of a preview offer whose
+    preview is not ready, whatever the card shows.
+    """
+    if value is None:
+        return None
+    from nats_core.events import ReviewEvidence
+
+    try:
+        return ReviewEvidence.model_validate(value)
+    except ValidationError as exc:
+        logger.warning(
+            "forge_notification_review_evidence_dropped",
+            correlation_id=correlation_id,
+            error_class=type(exc).__name__,
+            error=str(exc),
+        )
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -688,6 +722,29 @@ class ForgeNotification(BaseModel):
             "were. Optional field added per frozen-model rule."
         ),
     )
+    review_evidence: _ReviewEvidenceField = Field(
+        default=None,
+        description=(
+            "Preview and test evidence for a merge offer (nats-core "
+            "ReviewEvidence, web-readiness W7), off the pause payload's "
+            "review_evidence field. Present only when the project prepares a "
+            "preview before the merge card; None keeps the card's blocks "
+            "and text exactly as they were. Optional field added per "
+            "frozen-model rule."
+        ),
+    )
+
+    @field_validator("review_evidence", mode="before")
+    @classmethod
+    def _type_review_evidence(cls, value: object) -> object:
+        """Type the evidence through nats-core's model (imported lazily)."""
+        if value is None:
+            return None
+        from nats_core.events import ReviewEvidence
+
+        if isinstance(value, ReviewEvidence):
+            return value
+        return ReviewEvidence.model_validate(value)
 
     def render_line(self) -> str:
         """Render the canonical notification line per DDR-030 / DM-forge-notification §1.
@@ -1866,6 +1923,12 @@ class ForgeNotificationsSubscriber:
                 feature_title = (
                     raw_title.strip() or None if isinstance(raw_title, str) else None
                 )
+                # Preview and test evidence for a merge offer (W7). Absent
+                # on every other pause, which then renders as before.
+                review_evidence = _review_evidence(
+                    raw_payload_dict.get("review_evidence"),
+                    correlation_id=correlation_id,
+                )
                 cancelled_by = None
                 reason = None
             else:  # build_cancelled
@@ -1877,6 +1940,7 @@ class ForgeNotificationsSubscriber:
                 approval_subject = None
                 stage_label = None
                 feature_title = None
+                review_evidence = None
 
         except (KeyError, ValueError) as exc:
             logger.warning(
@@ -1906,6 +1970,7 @@ class ForgeNotificationsSubscriber:
                     reason=reason,
                     stage_label=stage_label,
                     feature_title=feature_title,
+                    review_evidence=review_evidence,
                 )
                 await self._notification_sink.notify(sink_notification)
             except Exception as exc:
@@ -1940,6 +2005,7 @@ class ForgeNotificationsSubscriber:
                 cancelled_by=cancelled_by,
                 reason=reason,
                 stage_label=stage_label,
+                review_evidence=review_evidence,
             )
         except ValidationError as exc:
             logger.warning(
