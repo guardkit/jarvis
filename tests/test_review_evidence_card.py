@@ -39,6 +39,7 @@ from jarvis.infrastructure.forge_notifications import (
 from jarvis.infrastructure.slack_notifier import (
     PREVIEW_LINK_ACTION_IDS,
     SlackNotifier,
+    _allowed_link,
     build_pause_blocks,
 )
 from jarvis.infrastructure.slack_reply import build_reply_handler
@@ -120,7 +121,13 @@ def _notification(evidence: dict[str, Any] | None = None) -> ForgeNotification:
 
 
 def _actions(blocks: list[dict[str, Any]], block_id: str) -> list[dict[str, Any]]:
-    return [b for b in blocks if b.get("type") == "actions" and b.get("block_id") == block_id]
+    """Actions blocks whose id is ``block_id`` or starts ``block_id.``."""
+    return [
+        b
+        for b in blocks
+        if b.get("type") == "actions"
+        and (b.get("block_id") == block_id or str(b.get("block_id")).startswith(block_id + "."))
+    ]
 
 
 def _section_texts(blocks: list[dict[str, Any]]) -> list[str]:
@@ -241,7 +248,10 @@ class TestReadyEvidenceCard:
         (decision,) = _actions(blocks, "forge_approval")
         assert blocks.index(links) < blocks.index(decision)
         golden = json.loads(_GOLDEN_BUTTONED)[-1]
-        assert decision == golden
+        assert decision["elements"] == golden["elements"]
+        # The block id carries the preview state and the Approve window's end.
+        expires = int(datetime(2026, 10, 13, 14, 0, tzinfo=UTC).timestamp())
+        assert decision["block_id"] == f"forge_approval.preview.ready.{expires}"
 
     def test_unknown_counts_said_as_unknown_never_zero(self) -> None:
         blocks = build_pause_blocks(
@@ -367,6 +377,32 @@ class TestHostAllowList:
         # Approve and Reject are still there.
         assert _actions(blocks, "forge_approval")
 
+    @pytest.mark.parametrize(
+        ("url", "kept"),
+        [
+            # The reviewer's probe shapes, on a neutral host name.
+            (f"https://{_HOST_APP}:8950/?preview=T", True),
+            (f"http://{_HOST_APP}/", False),
+            (f"https://{_HOST_APP}.evil.test/", False),
+            (f"https://{_HOST_APP}@evil.test/", False),
+            (f"https://evil.test\\@{_HOST_APP}/", False),
+            (f"https://evil.test#@{_HOST_APP}/", False),
+            (f"https://user:pw@{_HOST_APP}/", False),
+            (f"https://{_HOST_APP.upper()}/", True),
+            (f"javascript://{_HOST_APP}/%0aalert(1)", False),
+            (f"https://{_HOST_APP}/a b", False),
+            (f"https://{_HOST_APP}/\tx", False),
+            (f"https://{_HOST_APP}/\nx", False),
+            (f"https://{_HOST_APP}/\x00", False),
+        ],
+    )
+    def test_allow_list_probes(self, url: str, kept: bool) -> None:
+        with capture_logs():
+            result = _allowed_link(url, _HOSTS, link="x", build_id="b")
+        assert (result == url) is kept
+        if not kept:
+            assert result is None
+
     def test_host_match_ignores_case_and_port(self) -> None:
         blocks = build_pause_blocks(
             _notification(_evidence(app_url="https://PREVIEW.example.test:8951/?preview=t")),
@@ -489,11 +525,23 @@ class TestProjection:
         notification = notify.await_args.args[0]
         assert notification.review_evidence is None
         assert notification.rationale == "Ready to merge"
-        assert any(
-            e["event"] == "forge_notification_review_evidence_dropped"
-            and e["log_level"] == "warning"
-            for e in logs
-        )
+        dropped = [e for e in logs if e["event"] == "forge_notification_review_evidence_dropped"]
+        assert len(dropped) == 1
+        assert dropped[0]["log_level"] == "warning"
+        assert dropped[0]["errors"] == [{"loc": "", "type": "value_error"}]
+
+    @pytest.mark.asyncio
+    async def test_dropped_evidence_log_never_carries_the_link(self) -> None:
+        subscriber, _, _ = _subscriber()
+        bad = "https://evil.test\\@preview.example.test/?preview=tok-secret-123"
+        with capture_logs() as logs:
+            await subscriber._handle_message(
+                _pause_msg({"review_evidence": _evidence(app_url=bad)})
+            )
+        dropped = [e for e in logs if e["event"] == "forge_notification_review_evidence_dropped"]
+        assert dropped[0]["errors"] == [{"loc": "app_url", "type": "value_error"}]
+        assert "tok-secret-123" not in repr(logs)
+        assert "evil.test" not in repr(logs)
 
     def test_model_types_a_dict_and_rejects_a_bad_one(self) -> None:
         notification = _notification(_evidence())
@@ -527,7 +575,16 @@ def _click(
         for e in b["elements"]
         if e["action_id"] == action_id
     )
-    action: dict[str, Any] = {"action_id": action_id, "type": "button"}
+    block = next(
+        b
+        for b in blocks
+        if b.get("type") == "actions" and any(e["action_id"] == action_id for e in b["elements"])
+    )
+    action: dict[str, Any] = {
+        "action_id": action_id,
+        "block_id": block["block_id"],
+        "type": "button",
+    }
     if "value" in element:
         action["value"] = element["value"]
     if "url" in element:
@@ -580,7 +637,8 @@ class TestLinkClicksAreNoOps:
         assert "slack_reply_malformed_value_dropped" not in events
 
         # The card is still decidable: Approve publishes exactly once.
-        await handler.handle_block_actions(_click(ready, "forge_approve"))
+        with _at(_WINDOW_END - timedelta(hours=1)):
+            await handler.handle_block_actions(_click(ready, "forge_approve"))
         publisher.publish.assert_awaited_once()
         kwargs = publisher.publish.await_args.kwargs
         assert kwargs["subject"] == f"{_SUBJECT}.response"
@@ -613,3 +671,95 @@ class TestLinkClicksAreNoOps:
         assert kwargs["payload"].decision == "reject"
         assert kwargs["payload"].decided_by == _OPERATOR
         assert kwargs["correlation_id"] == "corr-golden-1"
+
+
+# ---------------------------------------------------------------------------
+# Reply path: Approve after the preview's window
+# ---------------------------------------------------------------------------
+
+_WINDOW_END = datetime(2026, 10, 13, 14, 0, tzinfo=UTC)
+
+
+def _at(now: datetime) -> Any:
+    return patch("jarvis.infrastructure.slack_reply._wall_clock", lambda: now)
+
+
+class TestPreviewApproveWindow:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("now", [_WINDOW_END, _WINDOW_END + timedelta(hours=3)])
+    async def test_expired_approve_is_not_published_and_reject_still_works(
+        self, now: datetime
+    ) -> None:
+        handler, publisher, web_client = _handler()
+        ready = build_pause_blocks(
+            _notification(_evidence()), button_value=_VALUE, link_hosts=_HOSTS
+        )
+        with _at(now), capture_logs() as logs:
+            await handler.handle_block_actions(_click(ready, "forge_approve"))
+
+        publisher.publish.assert_not_awaited()
+        web_client.chat_update.assert_not_awaited()
+        assert handler._decided_request_ids == set()
+        web_client.chat_postEphemeral.assert_awaited_once()
+        kwargs = web_client.chat_postEphemeral.await_args.kwargs
+        assert kwargs["user"] == _OPERATOR
+        assert kwargs["text"] == (
+            "This preview's approval window has ended (or the preview failed); "
+            "Approve is no longer accepted. Reject still works."
+        )
+        assert any(e["event"] == "slack_reply_preview_approve_closed" for e in logs)
+
+        with _at(now):
+            await handler.handle_block_actions(_click(ready, "forge_reject"))
+        publisher.publish.assert_awaited_once()
+        assert publisher.publish.await_args.kwargs["payload"].decision == "reject"
+
+    @pytest.mark.asyncio
+    async def test_approve_inside_the_window_is_unchanged(self) -> None:
+        handler, publisher, web_client = _handler()
+        ready = build_pause_blocks(
+            _notification(_evidence()), button_value=_VALUE, link_hosts=_HOSTS
+        )
+        with _at(_WINDOW_END - timedelta(seconds=1)):
+            await handler.handle_block_actions(_click(ready, "forge_approve"))
+        publisher.publish.assert_awaited_once()
+        kwargs = publisher.publish.await_args.kwargs
+        assert kwargs["payload"].decision == "approve"
+        assert kwargs["subject"] == f"{_SUBJECT}.response"
+        web_client.chat_postEphemeral.assert_not_awaited()
+        assert handler._decided_request_ids == {"apr-1"}
+
+    @pytest.mark.asyncio
+    async def test_approve_on_a_failed_preview_is_refused(self) -> None:
+        # The failed card has no Approve; a hand-made or stale one is refused.
+        handler, publisher, web_client = _handler()
+        failed = build_pause_blocks(
+            _notification(_evidence("failed")), button_value=_VALUE, link_hosts=_HOSTS
+        )
+        payload = _click(failed, "forge_reject")
+        payload["actions"][0]["action_id"] = "forge_approve"
+        with _at(_WINDOW_END - timedelta(hours=1)):
+            await handler.handle_block_actions(payload)
+        publisher.publish.assert_not_awaited()
+        web_client.chat_postEphemeral.assert_awaited_once()
+        assert handler._decided_request_ids == set()
+
+    @pytest.mark.asyncio
+    async def test_unreadable_preview_window_refuses_approve(self) -> None:
+        handler, publisher, _ = _handler()
+        ready = build_pause_blocks(
+            _notification(_evidence()), button_value=_VALUE, link_hosts=_HOSTS
+        )
+        payload = _click(ready, "forge_approve")
+        payload["actions"][0]["block_id"] = "forge_approval.preview.ready.soon"
+        await handler.handle_block_actions(payload)
+        publisher.publish.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_card_without_evidence_is_never_window_checked(self) -> None:
+        handler, publisher, web_client = _handler()
+        plain = build_pause_blocks(_notification(), button_value=_VALUE, link_hosts=_HOSTS)
+        with _at(_WINDOW_END + timedelta(days=30)):
+            await handler.handle_block_actions(_click(plain, "forge_approve"))
+        publisher.publish.assert_awaited_once()
+        web_client.chat_postEphemeral.assert_not_awaited()

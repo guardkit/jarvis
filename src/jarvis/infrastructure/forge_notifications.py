@@ -344,11 +344,16 @@ def _review_evidence(value: object, *, correlation_id: str | None) -> ReviewEvid
     try:
         return ReviewEvidence.model_validate(value)
     except ValidationError as exc:
+        # Where and what kind of error only: the message and input can
+        # carry a URL, and an app link carries its preview token.
         logger.warning(
             "forge_notification_review_evidence_dropped",
             correlation_id=correlation_id,
             error_class=type(exc).__name__,
-            error=str(exc),
+            errors=[
+                {"loc": ".".join(str(part) for part in err["loc"]), "type": err["type"]}
+                for err in exc.errors(include_url=False, include_input=False)
+            ],
         )
         return None
 

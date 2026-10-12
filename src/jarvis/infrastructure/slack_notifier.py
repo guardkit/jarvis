@@ -89,6 +89,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import re
 import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Protocol
@@ -174,6 +175,19 @@ PREVIEW_LINK_ACTION_IDS = frozenset(
     }
 )
 _PREVIEW_LINKS_BLOCK_ID = "forge_preview_links"
+
+# On a preview card the Approve/Reject block's id also carries the preview's
+# state and the end of its Approve window, as
+# ``forge_approval.preview.<state>.<epoch seconds>``. Slack serves the id
+# back with every click, so the reply path can refuse an Approve after the
+# window without any state of its own, across restarts. Cards without
+# evidence keep the plain ``forge_approval`` id.
+PREVIEW_DECISION_BLOCK_PREFIX = "forge_approval.preview."
+
+# Characters an evidence link may never contain. A browser reads a
+# backslash as a slash and drops userinfo, so "https://evil\@allowed/"
+# opens evil while a naive parse says allowed.
+_LINK_FORBIDDEN_CHARS = re.compile(r"[\\\s\x00-\x1f\x7f-\x9f]")
 
 # Slack's limit on a button's url.
 _SLACK_BUTTON_URL_LIMIT = 3000
@@ -934,7 +948,9 @@ def _allowed_link(
     parsed = urlsplit(url)
     host = (parsed.hostname or "").lower()
     if (
-        parsed.scheme != "https"
+        _LINK_FORBIDDEN_CHARS.search(url) is not None
+        or parsed.scheme != "https"
+        or "@" in parsed.netloc
         or not host
         or host not in link_hosts
         or len(url) > _SLACK_BUTTON_URL_LIMIT
@@ -1128,10 +1144,16 @@ def build_pause_blocks(
             "style": "danger",
             "value": button_value,
         }
+        block_id = "forge_approval"
+        if evidence is not None:
+            block_id = (
+                f"{PREVIEW_DECISION_BLOCK_PREFIX}{evidence.state}."
+                f"{int(evidence.app_expires_at.timestamp())}"
+            )
         blocks.append(
             {
                 "type": "actions",
-                "block_id": "forge_approval",
+                "block_id": block_id,
                 "elements": [reject] if reject_only else [approve, reject],
             }
         )

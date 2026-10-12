@@ -40,8 +40,16 @@ Behaviour invariants (task ACs + Phase 2.5B review C1/C2):
   check-and-mark is synchronous (no ``await`` between them): the SDK
   dispatches each WS message via ``asyncio.ensure_future``, so a
   double-click is two concurrent tasks.
-* Jarvis implements NO approval-window/expiry checks — enforcement is
-  exclusively forge-side; a stale click is safely refused there.
+* Jarvis implements no approval-window/expiry checks of its own, with
+  one courtesy exception: a preview card (web-readiness W7) carries its
+  preview state and the end of its Approve window in the Approve/Reject
+  block's id, and an Approve tapped after that end, or on a preview that
+  is not ready, is answered ephemerally and NEVER published or marked —
+  the card keeps Reject. Forge enforces the same rule and remains the
+  authority. Any other forge-side refusal of an Approve (main moved since
+  the preview, a changed candidate) is not visible here: like today's
+  moved-branch refusal, the card still reads "Decision recorded: approve"
+  while forge records the refusal.
 * DDR-007: nothing raises into the Socket Mode client or the supervisor
   event loop. EVERY ``chat.*`` call (ephemeral refusal,
   optimistic-disable, success-update, failure-restore) and the ack
@@ -63,6 +71,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
@@ -79,7 +88,10 @@ from jarvis.infrastructure.slack_heartbeat import (
 
 # The card's producer owns the link buttons' action ids; slack_notifier keeps
 # nats_core and slack-sdk out of its top-level imports too.
-from jarvis.infrastructure.slack_notifier import PREVIEW_LINK_ACTION_IDS
+from jarvis.infrastructure.slack_notifier import (
+    PREVIEW_DECISION_BLOCK_PREFIX,
+    PREVIEW_LINK_ACTION_IDS,
+)
 from jarvis.infrastructure.spec_texts import SpecTextRegistry
 from jarvis.infrastructure.terminal_builds import (
     TerminalBuildRecord,
@@ -109,6 +121,37 @@ _SPEC_DECLINED_LINE = (
     "You said reject, so this run will be cancelled and nothing will be built. "
     "Send a fresh sentence whenever you are ready to start again."
 )
+
+# What the owner is told when an Approve on a preview card can no longer be
+# accepted (web-readiness W7). Reject still works, so the card is left as is.
+_PREVIEW_APPROVE_CLOSED_TEXT = (
+    "This preview's approval window has ended (or the preview failed); "
+    "Approve is no longer accepted. Reject still works."
+)
+
+
+def _wall_clock() -> datetime:
+    """Now, as an aware UTC datetime. Tests patch this seam."""
+    return datetime.now(UTC)
+
+
+def _preview_approve_closed(block_id: object) -> bool:
+    """True when a preview card's Approve can no longer be accepted.
+
+    Reads the window the card itself carries in its Approve/Reject block id
+    (``slack_notifier.PREVIEW_DECISION_BLOCK_PREFIX``). A card without that
+    prefix is not a preview card, and this says False. A preview id that
+    cannot be read says True: forge would refuse that Approve anyway.
+    """
+    if not isinstance(block_id, str) or not block_id.startswith(PREVIEW_DECISION_BLOCK_PREFIX):
+        return False
+    state, _, expires = block_id[len(PREVIEW_DECISION_BLOCK_PREFIX) :].partition(".")
+    try:
+        expires_at = int(expires)
+    except ValueError:
+        return True
+    return state != "ready" or _wall_clock().timestamp() >= expires_at
+
 
 # The exact BUTTON_METADATA keys (producer contract, TASK-JNB-103).
 _BUTTON_VALUE_KEYS = ("request_id", "build_id", "correlation_id", "approval_subject")
@@ -434,6 +477,19 @@ class ApprovalReplyHandler:
             return
 
         request_id = button["request_id"]
+
+        # Preview cards (web-readiness W7): an Approve after the preview's
+        # window, or on a preview that is not ready, is answered privately
+        # and goes no further — not published, not marked decided, and the
+        # card is left alone so Reject still works. Forge enforces the same.
+        if decision == "approve" and _preview_approve_closed(action.get("block_id")):
+            logger.info(
+                "slack_reply_preview_approve_closed",
+                request_id=request_id,
+                build_id=button["build_id"],
+            )
+            await self._send_ephemeral_refusal(payload, user_id, text=_PREVIEW_APPROVE_CLOSED_TEXT)
+            return
 
         # The decision sequence (check/mark → publish → update/restore)
         # is serialized across concurrently dispatched clicks (review
@@ -1328,7 +1384,13 @@ class ApprovalReplyHandler:
     # Slack side-effects — every call independently wrapped (C2)
     # ------------------------------------------------------------------
 
-    async def _send_ephemeral_refusal(self, payload: dict[str, Any], user_id: str | None) -> None:
+    async def _send_ephemeral_refusal(
+        self,
+        payload: dict[str, Any],
+        user_id: str | None,
+        *,
+        text: str = "You are not authorized to decide build approvals from Slack.",
+    ) -> None:
         """Best-effort ephemeral refusal; WARNING-only on any failure."""
         if self._web_client is None or not user_id:
             return
@@ -1348,7 +1410,7 @@ class ApprovalReplyHandler:
                 # Plain-name sweep (factory phrase-book, ratified 2026-07-31):
                 # the refusal a Slack reader sees says "build approvals", not
                 # the "forge" codename.
-                text=("You are not authorized to decide build approvals from Slack."),
+                text=text,
             )
         except Exception as exc:
             logger.warning(
