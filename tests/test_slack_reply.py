@@ -1205,9 +1205,20 @@ class TestBuildAppStateReplyWiring:
         # Pinned call shape moved 2026-08-15 (build-side mention lane): a third
         # shared seam, ``audience`` — the handler WRITES the gate clicker so
         # the build-side line can @-mention whoever asked for the build.
+        # Pinned call shape moved 2026-10-16 (previews): a fourth shared seam,
+        # ``merge_cards`` — the durable merge card record the sink and the
+        # reply handler share (its lock is the handler's click lock).
         factory.assert_called_once_with(
-            cfg, fake_nats, terminal_registry=ANY, spec_texts=ANY, audience=ANY
+            cfg,
+            fake_nats,
+            terminal_registry=ANY,
+            spec_texts=ANY,
+            audience=ANY,
+            merge_cards=ANY,
         )
+        from jarvis.infrastructure.merge_cards import MergeCardStore
+
+        assert isinstance(factory.call_args.kwargs["merge_cards"], MergeCardStore)
         assert isinstance(
             factory.call_args.kwargs["terminal_registry"], TerminalBuildRegistry
         )

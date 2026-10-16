@@ -87,16 +87,23 @@ Notes
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import json
 import re
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import urlsplit
 
 import structlog
 from pydantic import ValidationError
+
+from jarvis.infrastructure.merge_cards import (
+    MergeCardEntry,
+    MergeCardStore,
+    content_digest,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.msg import Msg
@@ -175,6 +182,16 @@ PREVIEW_LINK_ACTION_IDS = frozenset(
     }
 )
 _PREVIEW_LINKS_BLOCK_ID = "forge_preview_links"
+
+# The decision buttons' action ids. Approve and Reject are the two the card
+# has always carried. Rebuild preview (previews design, 16 October 2026)
+# answers the card's own request with ``decision="defer"`` and these notes;
+# it asks Forge to prepare the preview again for the same candidate, and it
+# is not a decision on the card.
+ACTION_FORGE_APPROVE = "forge_approve"
+ACTION_FORGE_REJECT = "forge_reject"
+ACTION_REBUILD_PREVIEW = "forge_rebuild_preview"
+REBUILD_PREVIEW_NOTES = "rebuild-preview"
 
 # On a preview card the Approve/Reject block's id also carries the preview's
 # state and the end of its Approve window, as
@@ -925,8 +942,9 @@ def _evidence_lines(evidence: ReviewEvidence) -> list[str]:
     reason = evidence.failure_reason or ""
     if len(reason) > _EVIDENCE_REASON_CHARS:
         reason = reason[: _EVIDENCE_REASON_CHARS - 1] + "…"
+    opening = "Preview stopped" if evidence.state == "ended" else "Preview could not be prepared"
     return [
-        f"Preview could not be prepared: {reason}",
+        f"{opening}: {reason}",
         "Approve is not offered for this build. Reject it, then run the feature again.",
         f"{_evidence_counts(evidence)} · diagnostics kept until {kept_until}.",
     ]
@@ -1112,7 +1130,9 @@ def build_pause_blocks(
 
     # A preview that could not be prepared is never approvable (W7, R1):
     # the card offers Reject only, and forge refuses an approval anyway.
-    reject_only = evidence is not None and evidence.state == "failed"
+    # An "ended" preview (16 October 2026) is not approvable either; it only
+    # reaches this older card when Forge's merge_card block was unreadable.
+    reject_only = evidence is not None and evidence.state != "ready"
 
     if status_line is not None:
         # Terminal card (R3-A): the stamp replaces the whole action
@@ -1169,6 +1189,258 @@ def _cli_hint(*, reject_only: bool) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Merge cards described by Forge (previews design, 16 October 2026)
+# ---------------------------------------------------------------------------
+
+# What Jarvis says for a status when Forge sent no sentence of its own.
+# Forge normally sends ``status_text`` for every status but ready.
+_MERGE_CARD_DEFAULT_STATUS = {
+    "rebuilding": "Rebuilding the preview for the same build.",
+    "ended": "The preview has ended.",
+    "failed": "The preview could not be prepared.",
+}
+
+# A Slack member id, which the decided line shows as a mention. Anything
+# else is shown as the plain words Forge sent.
+_SLACK_MEMBER_ID = re.compile(r"^[UW][A-Z0-9]{2,}$")
+
+
+def _now_utc() -> datetime:
+    """Now, as an aware UTC datetime. Tests patch this seam."""
+    return datetime.now(UTC)
+
+
+def _merge_cards_wall_now() -> float:
+    """The merge card store's wall clock (one seam for tests to patch)."""
+    from jarvis.infrastructure import merge_cards
+
+    return merge_cards._wall_now()
+
+
+def _short(text: str) -> str:
+    """A Forge sentence cut to the card's limit for one quoted line."""
+    if len(text) > _EVIDENCE_REASON_CHARS:
+        return text[: _EVIDENCE_REASON_CHARS - 1] + "…"
+    return text
+
+
+def _merge_card_status_lines(notification: ForgeNotification) -> list[str]:
+    """The preview's lines on a merge card Forge described (not decided)."""
+    card = notification.merge_card
+    evidence = notification.review_evidence
+    if card.status == "ready" and evidence is not None and evidence.state == "ready":
+        return _evidence_lines(evidence)
+    sentence = (card.status_text or "").strip()
+    if not sentence:
+        reason = (evidence.failure_reason or "").strip() if evidence is not None else ""
+        if card.status == "ended" and evidence is not None:
+            sentence = (
+                f"Preview stopped: {reason}"
+                if reason
+                else f"Preview expired at {_evidence_clock(evidence.app_expires_at)}."
+            )
+        elif card.status == "failed" and reason:
+            sentence = f"Preview could not be prepared: {reason}"
+        else:
+            sentence = _MERGE_CARD_DEFAULT_STATUS.get(card.status, "The preview is not ready.")
+    lines = [_short(sentence)]
+    if evidence is not None:
+        lines.append(
+            f"{_evidence_counts(evidence)} · report and video kept until "
+            f"{_evidence_day(evidence.evidence_expires_at)}."
+        )
+    return lines
+
+
+def _merge_card_decided_words(notification: ForgeNotification) -> tuple[str, bool]:
+    """``("Approved by <@U1>.", True)`` — the decided line, and is it a mention."""
+    card = notification.merge_card
+    verb = "Approved" if card.decision == "approve" else "Rejected"
+    who = (card.decided_by or "").strip()
+    if _SLACK_MEMBER_ID.match(who):
+        return f"{verb} by <@{who}>.", True
+    return f"{verb} by {who}.", False
+
+
+def _merge_card_link_buttons(
+    notification: ForgeNotification, link_hosts: frozenset[str]
+) -> list[dict[str, Any]]:
+    """The URL buttons a described merge card shows, allowed links only.
+
+    The app only on a ready card; the diagnostics on a failed preview; the
+    report and video in every undecided state while they are kept.
+    """
+    card = notification.merge_card
+    evidence = notification.review_evidence
+    if evidence is None or card.status == "decided":
+        return []
+    candidates: list[tuple[str, str, str | None]] = []
+    if card.status == "ready" and evidence.state == "ready":
+        candidates.append((ACTION_PREVIEW_OPEN, "Try the app", evidence.app_url))
+    elif evidence.state == "failed":
+        candidates.append((ACTION_PREVIEW_DIAGNOSTICS, "Diagnostics", evidence.diagnostics_url))
+    if _now_utc() < evidence.evidence_expires_at:
+        candidates.append((ACTION_PREVIEW_REPORT, "Test report", evidence.report_url))
+        candidates.append(
+            (
+                ACTION_PREVIEW_MEDIA,
+                "Screenshots / video",
+                evidence.media_urls[0] if evidence.media_urls else None,
+            )
+        )
+    buttons: list[dict[str, Any]] = []
+    for action_id, label, url in candidates:
+        allowed = _allowed_link(url, link_hosts, link=action_id, build_id=notification.build_id)
+        if allowed is None:
+            continue
+        buttons.append(
+            {
+                "type": "button",
+                "action_id": action_id,
+                "text": {"type": "plain_text", "text": label, "emoji": False},
+                "url": allowed,
+            }
+        )
+    return buttons
+
+
+def _decision_button(action_id: str, label: str, value: str, style: str | None) -> dict[str, Any]:
+    button: dict[str, Any] = {
+        "type": "button",
+        "action_id": action_id,
+        "text": {"type": "plain_text", "text": label, "emoji": False},
+        "value": value,
+    }
+    if style is not None:
+        button["style"] = style
+    return button
+
+
+def merge_card_decision_elements(
+    notification: ForgeNotification, button_value: str
+) -> list[dict[str, Any]]:
+    """The decision buttons a described merge card shows, by its status.
+
+    ready: Approve and Reject. rebuilding: Reject. ended and failed:
+    Rebuild preview when Forge offers it, and Reject. decided: none.
+    """
+    card = notification.merge_card
+    evidence = notification.review_evidence
+    reject = _decision_button(ACTION_FORGE_REJECT, "Reject", button_value, "danger")
+    if card.status == "ready":
+        if evidence is not None and evidence.state == "ready":
+            approve = _decision_button(ACTION_FORGE_APPROVE, "Approve", button_value, "primary")
+            return [approve, reject]
+        return [reject]
+    if card.status == "rebuilding":
+        return [reject]
+    if card.status in ("ended", "failed"):
+        if card.rebuild_offered:
+            rebuild = _decision_button(
+                ACTION_REBUILD_PREVIEW, "Rebuild preview", button_value, None
+            )
+            return [rebuild, reject]
+        return [reject]
+    return []
+
+
+def merge_card_decision_block_id(notification: ForgeNotification) -> str:
+    """The decision block's id: the preview id form, with the card's status.
+
+    ``forge_approval.preview.<status>.<end of the Approve window>``, so the
+    reply path's Approve-window courtesy check keeps working. Only a ready
+    card carries Approve.
+    """
+    evidence = notification.review_evidence
+    expires = int(evidence.app_expires_at.timestamp()) if evidence is not None else 0
+    return f"{PREVIEW_DECISION_BLOCK_PREFIX}{notification.merge_card.status}.{expires}"
+
+
+def build_merge_card_message(
+    notification: ForgeNotification,
+    button_value: str | None,
+    *,
+    link_hosts: frozenset[str] = frozenset(),
+) -> tuple[list[dict[str, Any]], str]:
+    """Draw a merge card Forge described: ``(blocks, notification text)``.
+
+    The card, top to bottom: the headline; the feature; the offer's own
+    sentences (``merge_card.words``); the preview's state in plain words —
+    or "Approved by …" / "Rejected by …" once decided; the provenance line;
+    the preview links; then the buttons for the status. The buttons carry
+    the card's synthetic id (``merge-FEAT-…``, the payload's ``build_id``),
+    never the real build id. Every string Forge wrote is ``plain_text`` and
+    so arrives inert; the one ``mrkdwn`` section is the decided line when
+    it names a Slack member id, and it holds nothing but that mention.
+    """
+    card = notification.merge_card
+    decided = card.status == "decided"
+    headline = _pause_headline(notification, settled=decided)
+    feature_text, is_title = _feature_line(notification)
+    words = (card.words or "").strip() or (notification.rationale or "")
+
+    blocks: list[dict[str, Any]] = [_plain_text_header(headline)]
+    blocks.append(_plain_text_section(feature_text) if is_title else _muted_context(feature_text))
+    for start in range(0, len(words), _RATIONALE_CHUNK_CHARS):
+        blocks.append(_plain_text_section(words[start : start + _RATIONALE_CHUNK_CHARS]))
+    score_line = _score_line(notification)
+    if score_line is not None:
+        blocks.append(_plain_text_section(score_line))
+
+    text_parts = [headline, feature_text]
+    if words:
+        text_parts.append(words)
+    if score_line is not None:
+        text_parts.append(score_line)
+
+    link_buttons: list[dict[str, Any]] = []
+    if decided:
+        decided_line, is_mention = _merge_card_decided_words(notification)
+        if is_mention:
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": decided_line}})
+        else:
+            blocks.append(_plain_text_section(decided_line))
+        text_parts.append(decided_line)
+    else:
+        lines = _merge_card_status_lines(notification)
+        link_buttons = _merge_card_link_buttons(notification, link_hosts)
+        if link_buttons:
+            lines.append("The links work only on the tailnet.")
+        blocks.append(_plain_text_section("\n".join(lines)))
+        text_parts.extend(lines)
+
+    provenance = _provenance_line(notification)
+    blocks.append(_muted_context(provenance))
+    text_parts.append(provenance)
+
+    if link_buttons:
+        blocks.append(
+            {"type": "actions", "block_id": _PREVIEW_LINKS_BLOCK_ID, "elements": link_buttons}
+        )
+
+    if not decided:
+        elements = (
+            merge_card_decision_elements(notification, button_value)
+            if button_value is not None
+            else []
+        )
+        if elements:
+            blocks.append(
+                {
+                    "type": "actions",
+                    "block_id": merge_card_decision_block_id(notification),
+                    "elements": elements,
+                }
+            )
+        else:
+            hint = _cli_hint(reject_only=card.status != "ready")
+            blocks.append(_plain_text_section(hint))
+            text_parts.append(hint)
+
+    return blocks, "\n".join(text_parts)
+
+
+# ---------------------------------------------------------------------------
 # §2 — Slack sink implementation
 # ---------------------------------------------------------------------------
 
@@ -1188,6 +1460,7 @@ class SlackNotifier:
         "_client",
         "_dedup_map",
         "_evidence_link_hosts",
+        "_merge_cards",
         "_operator_ids",
         "_pause_messages",
         "_pending_approvals",
@@ -1211,6 +1484,7 @@ class SlackNotifier:
         audience: BuildAudienceRegistry | None = None,
         operator_ids: frozenset[str] = frozenset(),
         evidence_link_hosts: frozenset[str] = frozenset(),
+        merge_cards: MergeCardStore | None = None,
     ) -> None:
         """Construct the Slack notifier.
 
@@ -1244,6 +1518,11 @@ class SlackNotifier:
                 evidence links may point at
                 (:meth:`JarvisConfig.resolve_evidence_link_hosts`). Empty
                 means the card carries no link buttons.
+            merge_cards: The shared record of merge cards Forge describes
+                (previews design, 16 October 2026): where each was posted
+                and what it last showed, in the gateway's state volume, plus
+                the click lock and latch the reply handler shares. ``None``
+                keeps an in-memory record for this notifier alone.
         """
         from slack_sdk.web.async_client import AsyncWebClient
 
@@ -1255,6 +1534,7 @@ class SlackNotifier:
         self._audience = audience
         self._operator_ids = operator_ids
         self._evidence_link_hosts = evidence_link_hosts
+        self._merge_cards = merge_cards if merge_cards is not None else MergeCardStore(None)
         self._client = AsyncWebClient(token=bot_token)
         self._queue: asyncio.Queue[ForgeNotification] = asyncio.Queue(maxsize=queue_maxsize)
         self._started = False
@@ -1309,6 +1589,14 @@ class SlackNotifier:
         dedup_key = self._make_dedup_key(notification)
         now_mono = _monotonic()
 
+        # A merge card Forge describes (16 October 2026) skips the
+        # five-minute filter: Forge sends the same card again on purpose,
+        # and the card's own revision and drawn content decide whether
+        # anything changes.
+        if notification.event_type == "build_paused" and notification.merge_card is not None:
+            self._enqueue(notification)
+            return
+
         if dedup_key in self._dedup_map:
             # Duplicate within TTL — drop silently
             logger.debug(
@@ -1321,7 +1609,10 @@ class SlackNotifier:
 
         # Record this notification in the dedup map
         self._dedup_map[dedup_key] = now_mono
+        self._enqueue(notification)
 
+    def _enqueue(self, notification: ForgeNotification) -> None:
+        """Queue one notification, dropping the oldest when full."""
         try:
             # put_nowait raises QueueFull if at capacity
             self._queue.put_nowait(notification)
@@ -1416,7 +1707,13 @@ class SlackNotifier:
             try:
                 notification = await self._queue.get()
 
-                if notification.event_type == "build_paused":
+                if (
+                    notification.event_type == "build_paused"
+                    and notification.merge_card is not None
+                    and notification.build_id
+                ):
+                    await self._deliver_merge_card(notification)
+                elif notification.event_type == "build_paused":
                     await self._deliver_pause_message(notification)
                 else:
                     if notification.event_type in _TERMINAL_EVENT_TYPES:
@@ -1880,6 +2177,189 @@ class SlackNotifier:
             posted_buttoned=False,
         )
 
+    # ------------------------------------------------------------------
+    # Merge cards Forge describes (previews design, 16 October 2026)
+    # ------------------------------------------------------------------
+
+    async def _deliver_merge_card(self, notification: ForgeNotification) -> None:
+        """Make the Slack message for one described merge card match Forge.
+
+        * WHICH CARD: the offer's request id, checked against the real build
+          id and correlation stored with it; the preview's candidate commit
+          is checked separately. A mismatch is refused and logged.
+        * WHICH DESCRIPTION: one older than the revision last accepted is
+          ignored; one at the same revision is applied when its drawing
+          differs from what the message last showed.
+        * THE EDIT: ``chat.update`` only when the drawing differs, and the new
+          content is recorded only after Slack confirms it, so a failed edit
+          is tried again on the next description.
+        * NO RECORD (lost, or the first post failed): a replacement card is
+          posted, its buttons built from the block's reply data, so it answers
+          the original offer. A decided card is not reposted.
+        * THE CLICK LATCH: a newer undecided description clears it.
+
+        Runs under the click lock, so an update waits for a click on the
+        card to finish. Never raises.
+        """
+        try:
+            await self._apply_merge_card(notification)
+        except Exception as exc:  # pragma: no cover - defensive backstop
+            logger.warning(
+                "slack_merge_card_update_error",
+                build_id=notification.build_id,
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+
+    async def _apply_merge_card(self, notification: ForgeNotification) -> None:
+        card = notification.merge_card
+        store = self._merge_cards
+        evidence = notification.review_evidence
+        log = logger.bind(
+            request_id=card.request_id,
+            build_id=card.build_id,
+            revision=card.revision,
+            status=card.status,
+        )
+        if evidence is not None and evidence.candidate_sha != card.candidate_sha:
+            log.warning(
+                "slack_merge_card_refused",
+                reason="the preview's candidate commit is not the card's",
+            )
+            return
+
+        # The approval request Forge published for this offer was parked for
+        # the old join; this card's buttons come from the block instead.
+        pending = self._pending_approvals.get(notification.build_id or "")
+        if pending is not None and pending.request_id == card.request_id:
+            del self._pending_approvals[notification.build_id or ""]
+
+        value = _build_button_value(
+            request_id=card.request_id,
+            # The card's synthetic id (merge-FEAT-…), never the real one:
+            # the reply path refuses taps on builds it has seen finish.
+            build_id=notification.build_id or "",
+            correlation_id=card.correlation_id,
+            approval_subject=card.approval_subject,
+        )
+        blocks, text = build_merge_card_message(
+            notification, value, link_hosts=self._evidence_link_hosts
+        )
+        digest = content_digest(blocks, text)
+
+        async with store.lock:
+            store.prune()
+            entry = store.get(card.request_id)
+            if entry is not None:
+                if entry.build_id != card.build_id or entry.correlation_id != card.correlation_id:
+                    log.warning(
+                        "slack_merge_card_refused",
+                        reason="the description's build or correlation is not the card's",
+                    )
+                    return
+                if entry.candidate_sha != card.candidate_sha:
+                    log.warning(
+                        "slack_merge_card_refused",
+                        reason="the description's candidate commit is not the card's",
+                    )
+                    return
+                if card.revision < entry.revision:
+                    log.info("slack_merge_card_stale_ignored", applied_revision=entry.revision)
+                    return
+                changed = False
+                if card.revision > entry.revision:
+                    entry.revision = card.revision
+                    changed = True
+                if card.status == "decided" and entry.decided_at is None:
+                    entry.decided_at = _merge_cards_wall_now()
+                    changed = True
+                if card.status != "decided" and store.clear_latch_if_newer(
+                    card.request_id, card.revision
+                ):
+                    log.info("slack_merge_card_click_latch_cleared")
+                if changed:
+                    store.save()
+                if entry.displayed == digest:
+                    return
+                outcome = await self._edit_merge_card(entry, blocks, text, log)
+                if outcome == "ok":
+                    store.record_displayed(card.request_id, entry.ts, digest)
+                    log.info("slack_merge_card_updated")
+                    return
+                if outcome != "gone":
+                    return
+                # The message is gone from Slack: post a replacement below.
+                store.forget(card.request_id)
+
+            if card.status == "decided":
+                log.info("slack_merge_card_decided_not_reposted")
+                return
+            response = await self._post_with_retry(notification, text=text, blocks=blocks)
+            ts: str | None = None
+            if response is not None:
+                try:
+                    ts = response.get("ts")
+                except Exception:  # pragma: no cover - defensive on exotic mocks
+                    ts = None
+            if not ts:
+                log.warning("slack_merge_card_post_failed")
+                return
+            now = _merge_cards_wall_now()
+            store.put(
+                MergeCardEntry(
+                    request_id=card.request_id,
+                    build_id=card.build_id,
+                    correlation_id=card.correlation_id,
+                    candidate_sha=card.candidate_sha,
+                    channel=self._channel_id,
+                    ts=str(ts),
+                    revision=max(card.revision, entry.revision if entry is not None else 0),
+                    displayed=digest,
+                    created_at=entry.created_at if entry is not None else now,
+                )
+            )
+            log.info(
+                "slack_merge_card_replacement_posted"
+                if entry is not None
+                else "slack_merge_card_posted"
+            )
+
+    async def _edit_merge_card(
+        self,
+        entry: MergeCardEntry,
+        blocks: list[dict[str, Any]],
+        text: str,
+        log: Any,
+    ) -> str:
+        """``chat.update`` a merge card: ``ok``, ``gone`` or ``failed``. Never raises."""
+        from slack_sdk.errors import SlackApiError
+
+        try:
+            await self._client.chat_update(
+                channel=entry.channel, ts=entry.ts, text=text, blocks=blocks
+            )
+        except SlackApiError as exc:
+            error: Any = None
+            with contextlib.suppress(Exception):
+                error = exc.response.get("error")
+            if error == "message_not_found":
+                log.warning("slack_merge_card_message_gone")
+                return "gone"
+            log.warning(
+                "slack_merge_card_update_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            return "failed"
+        except Exception as exc:
+            log.warning(
+                "slack_merge_card_update_failed",
+                error_class=type(exc).__name__,
+                error=str(exc),
+            )
+            return "failed"
+        return "ok"
+
     async def _settle_pause_post(
         self,
         build_id: str,
@@ -2285,7 +2765,7 @@ class SlackNotifier:
             parts.append(_provenance_line(notification))
 
             # No buttons on this path — say how the decision is made.
-            parts.append(_cli_hint(reject_only=evidence is not None and evidence.state == "failed"))
+            parts.append(_cli_hint(reject_only=evidence is not None and evidence.state != "ready"))
 
             return "\n".join(parts)
 
@@ -2623,6 +3103,7 @@ def create_slack_sink(
     stop_timeout: float = _DEFAULT_STOP_TIMEOUT,
     terminal_registry: TerminalBuildRegistry | None = None,
     audience: BuildAudienceRegistry | None = None,
+    merge_cards: MergeCardStore | None = None,
 ) -> NotificationSink:
     """Create a Slack notification sink from JarvisConfig.
 
@@ -2644,6 +3125,10 @@ def create_slack_sink(
             from ``config`` here — one resolution site, the same
             :meth:`JarvisConfig.resolve_operator_allowlist` the reply
             path's authorization gate uses.
+        merge_cards: The shared merge card record (previews design, 16
+            October 2026) the live notifier keeps Forge-described cards
+            true with, and whose lock and latch the reply handler shares.
+            ``None`` gives the notifier a record of its own in memory.
 
     Returns:
         A :class:`NotificationSink` implementation. Either a live
@@ -2676,6 +3161,7 @@ def create_slack_sink(
         audience=audience,
         operator_ids=config.resolve_operator_allowlist(),
         evidence_link_hosts=config.resolve_evidence_link_hosts(),
+        merge_cards=merge_cards,
     )
 
 
@@ -2689,6 +3175,7 @@ __all__ = [
     "NotificationSink",
     "PendingApproval",
     "SlackNotifier",
+    "build_merge_card_message",
     "build_pause_blocks",
     "create_slack_sink",
 ]

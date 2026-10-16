@@ -74,18 +74,20 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.msg import Msg
     from nats.js import JetStreamContext
-    from nats_core.events import ReviewEvidence
+    from nats_core.events import MergeCard, ReviewEvidence
 
     from jarvis.infrastructure.nats_client import NATSClient
     from jarvis.infrastructure.routing_history import RoutingHistoryWriter
     from jarvis.sessions.manager import SessionManager
 
     _ReviewEvidenceField = ReviewEvidence | None
+    _MergeCardField = MergeCard | None
 else:
     # At runtime the field is declared ``Any`` so this schema module keeps
     # nats_core out of its top-level imports; the field's validator below
     # does the real typing through nats_core's own ReviewEvidence.
     _ReviewEvidenceField = Any
+    _MergeCardField = Any
 
 
 logger = structlog.get_logger(__name__)
@@ -348,6 +350,34 @@ def _review_evidence(value: object, *, correlation_id: str | None) -> ReviewEvid
         # carry a URL, and an app link carries its preview token.
         logger.warning(
             "forge_notification_review_evidence_dropped",
+            correlation_id=correlation_id,
+            error_class=type(exc).__name__,
+            errors=[
+                {"loc": ".".join(str(part) for part in err["loc"]), "type": err["type"]}
+                for err in exc.errors(include_url=False, include_input=False)
+            ],
+        )
+        return None
+
+
+def _merge_card(value: object, *, correlation_id: str | None) -> MergeCard | None:
+    """The pause payload's ``merge_card`` block, typed, or None.
+
+    The block is nats-core's ``MergeCard`` (previews design, 16 October
+    2026): Forge's description of a merge card with a preview, from its own
+    ledger. Absent means the card is from before that release and keeps
+    today's behaviour. A block that does not validate is logged and
+    dropped, and the card is then handled the old way.
+    """
+    if value is None:
+        return None
+    from nats_core.events import MergeCard
+
+    try:
+        return MergeCard.model_validate(value)
+    except ValidationError as exc:
+        logger.warning(
+            "forge_notification_merge_card_dropped",
             correlation_id=correlation_id,
             error_class=type(exc).__name__,
             errors=[
@@ -738,6 +768,29 @@ class ForgeNotification(BaseModel):
             "frozen-model rule."
         ),
     )
+
+    merge_card: _MergeCardField = Field(
+        default=None,
+        description=(
+            "Forge's description of a merge card with a preview (nats-core "
+            "MergeCard, previews design 16 October 2026), off the pause "
+            "payload's merge_card block. Present only for offers made from "
+            "that release on; None keeps today's card behaviour. Optional "
+            "field added per frozen-model rule."
+        ),
+    )
+
+    @field_validator("merge_card", mode="before")
+    @classmethod
+    def _type_merge_card(cls, value: object) -> object:
+        """Type the block through nats-core's model (imported lazily)."""
+        if value is None:
+            return None
+        from nats_core.events import MergeCard
+
+        if isinstance(value, MergeCard):
+            return value
+        return MergeCard.model_validate(value)
 
     @field_validator("review_evidence", mode="before")
     @classmethod
@@ -1934,6 +1987,13 @@ class ForgeNotificationsSubscriber:
                     raw_payload_dict.get("review_evidence"),
                     correlation_id=correlation_id,
                 )
+                # Forge's description of a merge card with a preview
+                # (16 October 2026). Absent on older cards and every
+                # other pause, which then behave as before.
+                merge_card = _merge_card(
+                    raw_payload_dict.get("merge_card"),
+                    correlation_id=correlation_id,
+                )
                 cancelled_by = None
                 reason = None
             else:  # build_cancelled
@@ -1946,6 +2006,7 @@ class ForgeNotificationsSubscriber:
                 stage_label = None
                 feature_title = None
                 review_evidence = None
+                merge_card = None
 
         except (KeyError, ValueError) as exc:
             logger.warning(
@@ -1976,6 +2037,7 @@ class ForgeNotificationsSubscriber:
                     stage_label=stage_label,
                     feature_title=feature_title,
                     review_evidence=review_evidence,
+                    merge_card=merge_card,
                 )
                 await self._notification_sink.notify(sink_notification)
             except Exception as exc:
