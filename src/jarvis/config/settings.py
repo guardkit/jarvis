@@ -341,6 +341,14 @@ class JarvisConfig(BaseSettings):
     # :mod:`jarvis.infrastructure.slack_heartbeat` has the file's shape.
     slack_heartbeat_path: Path | None = None
 
+    # JARVIS_SLACK_MERGE_CARD_PATH — where the Slack gateway remembers each
+    # merge card with a preview: the Slack message it was posted as and what it
+    # last showed, so it can keep the card true after a restart (previews
+    # design, 16 October 2026). Unset means "beside the heartbeat file" when
+    # one is written (the gateway's own state volume), otherwise memory only.
+    # :mod:`jarvis.infrastructure.merge_cards` has the file's shape.
+    slack_merge_card_path: Path | None = None
+
     # JARVIS_SLACK_OPERATOR_USER_IDS — comma-separated allowlist of Slack
     # member ids permitted to click Approve/Reject (TASK-JNB-110). This is the
     # AUTHORIZATION gate ("who MAY decide"); it is deliberately separate from

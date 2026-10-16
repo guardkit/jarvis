@@ -76,6 +76,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
+from jarvis.infrastructure.merge_cards import MergeCardStore, content_digest
+
 # Stdlib-only module — safe on the cold import path (unlike the
 # nats_core / slack-sdk chains, which stay lazily imported below).
 from jarvis.infrastructure.slack_heartbeat import (
@@ -89,8 +91,12 @@ from jarvis.infrastructure.slack_heartbeat import (
 # The card's producer owns the link buttons' action ids; slack_notifier keeps
 # nats_core and slack-sdk out of its top-level imports too.
 from jarvis.infrastructure.slack_notifier import (
+    ACTION_FORGE_APPROVE,
+    ACTION_FORGE_REJECT,
+    ACTION_REBUILD_PREVIEW,
     PREVIEW_DECISION_BLOCK_PREFIX,
     PREVIEW_LINK_ACTION_IDS,
+    REBUILD_PREVIEW_NOTES,
 )
 from jarvis.infrastructure.spec_texts import SpecTextRegistry
 from jarvis.infrastructure.terminal_builds import (
@@ -109,9 +115,20 @@ logger = structlog.get_logger(__name__)
 
 # The two action_ids TASK-JNB-103 places on the pause message buttons.
 _ACTION_DECISIONS: dict[str, str] = {
-    "forge_approve": "approve",
-    "forge_reject": "reject",
+    ACTION_FORGE_APPROVE: "approve",
+    ACTION_FORGE_REJECT: "reject",
 }
+
+# The decision buttons a merge card can carry (the Rebuild preview button,
+# 16 October 2026, among them): an actions block holding any of these is the
+# card's decision block.
+_MERGE_DECISION_ACTION_IDS = frozenset(
+    {ACTION_FORGE_APPROVE, ACTION_FORGE_REJECT, ACTION_REBUILD_PREVIEW}
+)
+
+# What a merge card says while its preview is being rebuilt, before Forge's
+# own description arrives (previews design, 16 October 2026).
+_REBUILDING_TEXT = "Rebuilding the preview…"
 
 # What the card says once the owner has said no to a spec. ONE sentence for
 # BOTH ways of saying it — the typed note whose first word is "reject", and the
@@ -306,6 +323,7 @@ class ApprovalReplyHandler:
         "_audience",
         "_decided_request_ids",
         "_decision_lock",
+        "_merge_cards",
         "_operator_ids",
         "_publisher",
         "_spec_texts",
@@ -322,6 +340,7 @@ class ApprovalReplyHandler:
         terminal_registry: TerminalBuildRegistry | None = None,
         spec_texts: SpecTextRegistry | None = None,
         audience: BuildAudienceRegistry | None = None,
+        merge_cards: MergeCardStore | None = None,
     ) -> None:
         """See :func:`build_reply_handler` (the public factory)."""
         self._operator_ids = operator_ids
@@ -350,7 +369,15 @@ class ApprovalReplyHandler:
         # for an already-recorded decision. The Socket Mode ack happens
         # upstream in _on_request, so holding the lock here never
         # threatens the ack deadline.
-        self._decision_lock = asyncio.Lock()
+        #
+        # Merge cards Forge describes (16 October 2026): the card record is
+        # shared with the notification sink, and its lock IS this click lock,
+        # so the sink's update of a card waits for a click on it to finish.
+        # The record also holds those cards' click latch, which a newer
+        # undecided description from Forge clears (a refused Approve then
+        # lets Reject through).
+        self._merge_cards = merge_cards
+        self._decision_lock = merge_cards.lock if merge_cards is not None else asyncio.Lock()
 
     async def handle_block_actions(self, payload: dict[str, Any]) -> None:
         """Handle one authorized-or-not button click. Never raises."""
@@ -446,6 +473,10 @@ class ApprovalReplyHandler:
             await self._handle_dialogue_click(payload, action, action_id, user_id)
             return
 
+        if action_id == ACTION_REBUILD_PREVIEW:
+            await self._handle_rebuild_preview(payload, action, user_id)
+            return
+
         decision = _ACTION_DECISIONS.get(action_id or "")
         if decision is None:
             logger.warning(
@@ -499,8 +530,11 @@ class ApprovalReplyHandler:
         async with self._decision_lock:
             # --- 3. First-click-wins (check-and-mark under the lock) -----
             # Courtesy only — forge's request_id dedup is authoritative
-            # (DDR-027).
-            if request_id in self._decided_request_ids:
+            # (DDR-027). A merge card Forge describes keeps its latch in the
+            # shared card record, where a newer undecided description clears
+            # it (16 October 2026).
+            merge_card = self._is_merge_card(request_id)
+            if self._latched(request_id, merge_card=merge_card):
                 logger.info(
                     "slack_reply_duplicate_click_dropped",
                     request_id=request_id,
@@ -543,7 +577,7 @@ class ApprovalReplyHandler:
                 )
                 return
 
-            self._decided_request_ids.add(request_id)
+            self._latch(request_id, merge_card=merge_card)
 
             # --- 3b. Identity — the ACTUAL clicker (TASK-JNB-110) ---------
             # ``decided_by`` is a factual claim about who clicked, not a
@@ -568,8 +602,9 @@ class ApprovalReplyHandler:
             # dedups the wire.
             original_blocks = (payload.get("message") or {}).get("blocks")
             if original_blocks:
-                await self._update_message(
+                await self._show_on_card(
                     payload,
+                    request_id if merge_card else None,
                     blocks=_blocks_with_status(original_blocks, f"Recording {decision}…"),
                     text=f"Recording {decision}…",
                     log_event="slack_reply_optimistic_update_failed",
@@ -607,10 +642,11 @@ class ApprovalReplyHandler:
                     error_class=type(exc).__name__,
                     error=str(exc),
                 )
-                self._decided_request_ids.discard(request_id)
+                self._unlatch(request_id, merge_card=merge_card)
                 if original_blocks:
-                    await self._update_message(
+                    await self._show_on_card(
                         payload,
+                        request_id if merge_card else None,
                         blocks=original_blocks,
                         text=("Approval buttons re-enabled after a publish failure."),
                         log_event="slack_reply_restore_update_failed",
@@ -628,8 +664,9 @@ class ApprovalReplyHandler:
             # The decision is durably published: even if this chat.update
             # fails, first-click-wins stays marked and the buttons are
             # never re-enabled.
-            await self._update_message(
+            await self._show_on_card(
                 payload,
+                request_id if merge_card else None,
                 blocks=_blocks_with_status(
                     original_blocks,
                     f"Decision recorded: {decision} (by {decided_by})",
@@ -637,6 +674,133 @@ class ApprovalReplyHandler:
                 text=f"Decision recorded: {decision}",
                 log_event="slack_reply_success_update_failed",
             )
+
+    # ------------------------------------------------------------------
+    # Merge cards Forge describes (previews design, 16 October 2026)
+    # ------------------------------------------------------------------
+
+    def _is_merge_card(self, request_id: str) -> bool:
+        """True when the shared card record tracks this offer."""
+        return self._merge_cards is not None and self._merge_cards.knows(request_id)
+
+    def _latched(self, request_id: str, *, merge_card: bool) -> bool:
+        if merge_card and self._merge_cards is not None:
+            return self._merge_cards.is_latched(request_id)
+        return request_id in self._decided_request_ids
+
+    def _latch(self, request_id: str, *, merge_card: bool) -> None:
+        if merge_card and self._merge_cards is not None:
+            self._merge_cards.latch(request_id)
+        else:
+            self._decided_request_ids.add(request_id)
+
+    def _unlatch(self, request_id: str, *, merge_card: bool) -> None:
+        if merge_card and self._merge_cards is not None:
+            self._merge_cards.unlatch(request_id)
+        else:
+            self._decided_request_ids.discard(request_id)
+
+    async def _show_on_card(
+        self,
+        payload: dict[str, Any],
+        merge_request_id: str | None,
+        *,
+        blocks: list[dict[str, Any]],
+        text: str,
+        log_event: str,
+    ) -> bool:
+        """``chat.update`` the clicked card; on a merge card, record what it shows.
+
+        Jarvis's own click messages count as what the card displays, so the
+        next description from Forge replaces them whenever the truth
+        differs. Recorded only after Slack confirms the edit, and only for
+        the message the card record tracks.
+        """
+        shown = await self._update_message(payload, blocks=blocks, text=text, log_event=log_event)
+        if shown and merge_request_id is not None and self._merge_cards is not None:
+            ts = (payload.get("container") or {}).get("message_ts")
+            self._merge_cards.record_displayed(merge_request_id, ts, content_digest(blocks, text))
+        return shown
+
+    async def _handle_rebuild_preview(
+        self,
+        payload: dict[str, Any],
+        action: dict[str, Any],
+        user_id: str,
+    ) -> None:
+        """The Rebuild preview press: ask Forge to prepare the preview again.
+
+        Answers the card's own request on its reply subject with
+        ``decision="defer"`` and ``notes="rebuild-preview"`` (allowed by the
+        message contract; Forge hands it to the rebuild only for an offer
+        with a preview and no decision). It is NOT a decision on the card:
+        nothing is latched, and the card shows "Rebuilding the preview…"
+        with Reject only, until Forge's own description replaces it — the
+        ready card when the rebuild commits, or the truth again if the press
+        was refused or lost. Never raises (the caller's backstop).
+        """
+        try:
+            button = parse_button_value(action.get("value") or "")
+        except ValueError as exc:
+            logger.warning(
+                "slack_reply_malformed_value_dropped",
+                action_id=ACTION_REBUILD_PREVIEW,
+                error=str(exc),
+            )
+            return
+        request_id = button["request_id"]
+
+        async with self._decision_lock:
+            merge_card = self._is_merge_card(request_id)
+            if self._latched(request_id, merge_card=merge_card):
+                # An Approve or Reject on this card is already on its way.
+                logger.info("slack_reply_rebuild_after_decision_dropped", request_id=request_id)
+                return
+
+            original_blocks = (payload.get("message") or {}).get("blocks")
+            if original_blocks:
+                await self._show_on_card(
+                    payload,
+                    request_id if merge_card else None,
+                    blocks=_rebuilding_blocks(original_blocks),
+                    text=_REBUILDING_TEXT,
+                    log_event="slack_reply_rebuild_update_failed",
+                )
+
+            from nats_core.events import ApprovalResponsePayload
+
+            response = ApprovalResponsePayload(
+                request_id=request_id,
+                decision="defer",
+                decided_by=user_id,
+                notes=REBUILD_PREVIEW_NOTES,
+            )
+            subject = button["approval_subject"] + ".response"
+            try:
+                await self._publisher.publish(
+                    subject=subject,
+                    payload=response,
+                    correlation_id=button["correlation_id"] or None,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "slack_reply_rebuild_publish_failed",
+                    request_id=request_id,
+                    subject=subject,
+                    error_class=type(exc).__name__,
+                    error=str(exc),
+                )
+                if original_blocks:
+                    await self._show_on_card(
+                        payload,
+                        request_id if merge_card else None,
+                        blocks=original_blocks,
+                        text="The Rebuild press could not be sent; the buttons are back.",
+                        log_event="slack_reply_restore_update_failed",
+                    )
+                return
+
+            logger.info("slack_reply_rebuild_published", request_id=request_id, subject=subject)
 
     def _record_gate_clicker(self, build_id: str | None, user_id: str) -> None:
         """Record ``build_id -> clicker`` for the build-side mention. Never raises."""
@@ -1427,21 +1591,22 @@ class ApprovalReplyHandler:
         blocks: list[dict[str, Any]] | None,
         text: str,
         log_event: str,
-    ) -> None:
+    ) -> bool:
         """One independently wrapped ``chat.update``; WARNING-only.
 
         A ``None`` web client (or unresolvable channel/ts) degrades to a
         logged no-op — authorization + publish never depend on Slack UI
-        updates succeeding (C2).
+        updates succeeding (C2). Returns True only when Slack accepted the
+        edit.
         """
         if self._web_client is None:
-            return
+            return False
         container = payload.get("container") or {}
         channel_id = (payload.get("channel") or {}).get("id") or container.get("channel_id")
         ts = container.get("message_ts")
         if not channel_id or not ts:
             logger.warning(log_event, detail="channel or message_ts unresolved")
-            return
+            return False
         try:
             kwargs: dict[str, Any] = {
                 "channel": channel_id,
@@ -1457,6 +1622,45 @@ class ApprovalReplyHandler:
                 error_class=type(exc).__name__,
                 error=str(exc),
             )
+            return False
+        return True
+
+
+def _rebuilding_blocks(original_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The card as it shows while its preview is rebuilt: Reject only.
+
+    Built from Slack's served copy, like every click message: the decision
+    block (Approve, Reject, Rebuild preview) is replaced by the status line
+    and a block holding only the card's own Reject button. Other blocks, the
+    report and video links among them, stay.
+    """
+    kept: list[dict[str, Any]] = []
+    reject: dict[str, Any] | None = None
+    decision_block_id: str | None = None
+    for block in original_blocks:
+        elements = (block.get("elements") or []) if block.get("type") == "actions" else []
+        if any(el.get("action_id") in _MERGE_DECISION_ACTION_IDS for el in elements):
+            decision_block_id = block.get("block_id")
+            for el in elements:
+                if el.get("action_id") == ACTION_FORGE_REJECT:
+                    reject = el
+            continue
+        kept.append(block)
+    kept.append(
+        {
+            "type": "section",
+            "text": {"type": "plain_text", "text": _REBUILDING_TEXT, "emoji": False},
+        }
+    )
+    if reject is not None:
+        kept.append(
+            {
+                "type": "actions",
+                "block_id": decision_block_id or "forge_approval",
+                "elements": [reject],
+            }
+        )
+    return kept
 
 
 def _extract_action_value(action: dict[str, Any]) -> str:
@@ -1513,6 +1717,7 @@ def build_reply_handler(
     terminal_registry: TerminalBuildRegistry | None = None,
     spec_texts: SpecTextRegistry | None = None,
     audience: BuildAudienceRegistry | None = None,
+    merge_cards: MergeCardStore | None = None,
 ) -> ApprovalReplyHandler:
     """Public factory for :class:`ApprovalReplyHandler`.
 
@@ -1540,6 +1745,11 @@ def build_reply_handler(
             the handler WRITES ``build_id -> clicker`` so the notification
             sink can @-mention the person who asked for the build when it
             ends. ``None`` (unwired) records nothing.
+        merge_cards: The merge card record shared with the notification sink
+            (previews design, 16 October 2026). Its lock becomes this
+            handler's click lock, its latch serves the cards it tracks, and
+            the handler records what its click messages put on those cards.
+            ``None`` keeps today's behaviour for every card.
 
     Returns:
         A ready :class:`ApprovalReplyHandler`.
@@ -1551,6 +1761,7 @@ def build_reply_handler(
         terminal_registry=terminal_registry,
         spec_texts=spec_texts,
         audience=audience,
+        merge_cards=merge_cards,
     )
 
 
@@ -1850,6 +2061,7 @@ def create_slack_reply_client(
     terminal_registry: TerminalBuildRegistry | None = None,
     spec_texts: SpecTextRegistry | None = None,
     audience: BuildAudienceRegistry | None = None,
+    merge_cards: MergeCardStore | None = None,
 ) -> SlackSocketModeReplyClient | None:
     """Create the shared Socket Mode client, or a logged no-op (``None``).
 
@@ -1931,6 +2143,7 @@ def create_slack_reply_client(
             terminal_registry=terminal_registry,
             spec_texts=spec_texts,
             audience=audience,
+            merge_cards=merge_cards,
         )
     else:
         logger.info(

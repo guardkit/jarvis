@@ -94,6 +94,7 @@ from jarvis.infrastructure.forge_notifications import (
     is_workqueue_overlap_error,
 )
 from jarvis.infrastructure.logging import configure
+from jarvis.infrastructure.merge_cards import MergeCardStore, resolve_merge_card_path
 from jarvis.infrastructure.nats_client import (
     NATSClient,
     ReconnectContext,
@@ -905,8 +906,18 @@ async def build_app_state(config: JarvisConfig) -> AppState:
     # restart, and an empty consult just posts the line unmentioned.
     terminal_registry = TerminalBuildRegistry()
     audience_registry = BuildAudienceRegistry()
+    # Merge cards with a preview (previews design, 16 October 2026): ONE
+    # record shared by the sink, which keeps each card's Slack message true
+    # to Forge's description, and the reply handler, whose click lock and
+    # latch it holds. Unlike the maps above it is DURABLE — a small file in
+    # the bus gateway's own state volume (beside its heartbeat file) — so a
+    # restart does not lose where each card was posted.
+    merge_card_store = MergeCardStore(resolve_merge_card_path(config))
     notification_sink = create_slack_sink(
-        config, terminal_registry=terminal_registry, audience=audience_registry
+        config,
+        terminal_registry=terminal_registry,
+        audience=audience_registry,
+        merge_cards=merge_card_store,
     )
     try:
         await notification_sink.start()
@@ -980,6 +991,7 @@ async def build_app_state(config: JarvisConfig) -> AppState:
         terminal_registry=terminal_registry,
         spec_texts=spec_texts,
         audience=audience_registry,
+        merge_cards=merge_card_store,
     )
     if slack_reply_client is not None:
         try:

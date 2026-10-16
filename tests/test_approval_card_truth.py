@@ -714,9 +714,14 @@ class TestSharedSeamWiring:
         # factories gained a SECOND shared seam, ``audience`` — the
         # who-to-tell registry. The terminal_registry assertions are unchanged
         # in substance; only the surrounding argument list grew.
+        # Moved again 2026-10-16 (previews): both gained ``merge_cards``, the
+        # one durable merge card record they share.
         sink_call = (
             "create_slack_sink(\n"
-            "        config, terminal_registry=terminal_registry, audience=audience_registry\n"
+            "        config,\n"
+            "        terminal_registry=terminal_registry,\n"
+            "        audience=audience_registry,\n"
+            "        merge_cards=merge_card_store,\n"
             "    )"
         )
         assert sink_call in source
@@ -727,6 +732,7 @@ class TestSharedSeamWiring:
             "        terminal_registry=terminal_registry,\n"
             "        spec_texts=spec_texts,\n"
             "        audience=audience_registry,\n"
+            "        merge_cards=merge_card_store,\n"
             "    )"
         )
         assert reply_call in source

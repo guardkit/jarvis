@@ -198,8 +198,12 @@ class TestBuildAppStateNotificationSinkHappyPath:
 
         # Pinned call shape moved 2026-08-15 (build-side mention lane): the
         # sink factory gained the shared ``audience`` who-to-tell registry.
+        # Moved again 2026-10-16 (previews): the shared merge card record.
         mock_create_sink.assert_called_once_with(
-            stub_registry_config_with_slack, terminal_registry=ANY, audience=ANY
+            stub_registry_config_with_slack,
+            terminal_registry=ANY,
+            audience=ANY,
+            merge_cards=ANY,
         )
         assert isinstance(
             mock_create_sink.call_args.kwargs["terminal_registry"], TerminalBuildRegistry
@@ -295,7 +299,7 @@ class TestBuildAppStateNotificationSinkHappyPath:
         from unittest.mock import ANY
 
         mock_create_sink.assert_called_once_with(
-            stub_registry_config, terminal_registry=ANY, audience=ANY
+            stub_registry_config, terminal_registry=ANY, audience=ANY, merge_cards=ANY
         )
         assert state.notification_sink is fake_noop_sink
 
