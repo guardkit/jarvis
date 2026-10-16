@@ -8,7 +8,8 @@ Jarvis keeps the Slack message true to that description. To do that across a
 restart it has to remember, for each card:
 
 * which Slack message it is (channel and message id), keyed by the offer's
-  request id;
+  request id — or that it has no message right now (never posted, the post
+  failed, or Slack says the message is gone);
 * who the card belongs to (the real build id and the correlation id it was
   first posted with, and the candidate commit), so an update for a different
   offer can never land on it;
@@ -37,9 +38,14 @@ While a click is latched, a description at a revision no newer than the
 click is not drawn either: it would put back live buttons whose taps the
 latch then drops. Only a newer revision clears the latch and redraws.
 
-A decided card whose Slack message has gone keeps its record (a placeholder
-showing nothing), so a late, older description can never repost it with
-buttons.
+THE RECORD OUTLIVES THE MESSAGE. A card's identity and the highest
+revision accepted for it are written down the moment a description is
+accepted, before anything is posted, and are never forgotten while the card
+is remembered at all: a missing Slack message only clears the message
+reference. So a late, older description is always recognised as stale — even
+after a failed post or a deleted message, and across a restart — and a
+decided card (including one Jarvis first hears of already decided) is kept as
+a placeholder that is never posted with buttons.
 
 One lock, :attr:`MergeCardStore.lock`, is shared by the Slack reply handler
 (it is the handler's click lock) and the notifier's card updates, so an update
@@ -104,7 +110,7 @@ class MergeCardEntry:
     correlation_id: str
     candidate_sha: str
     channel: str
-    ts: str
+    ts: str | None
     revision: int
     displayed: str
     created_at: float
@@ -124,8 +130,8 @@ class MergeCardEntry:
                 build_id=str(data["build_id"]),
                 correlation_id=str(data["correlation_id"]),
                 candidate_sha=str(data["candidate_sha"]),
-                channel=str(data["channel"]),
-                ts=str(data["ts"]),
+                channel=str(data.get("channel") or ""),
+                ts=(str(data["ts"]) if data.get("ts") else None),
                 revision=int(data["revision"]),
                 displayed=str(data["displayed"]),
                 created_at=float(data["created_at"]),
@@ -133,7 +139,7 @@ class MergeCardEntry:
             )
         except (KeyError, TypeError, ValueError):
             return None
-        if not entry.request_id or not entry.channel or not entry.ts:
+        if not entry.request_id:
             return None
         return entry
 
@@ -180,10 +186,24 @@ class MergeCardStore:
         self._entries[entry.request_id] = entry
         self.save()
 
-    def forget(self, request_id: str) -> None:
-        """Drop an entry (its message is gone) and save."""
-        if self._entries.pop(request_id, None) is not None:
+    def clear_message(self, request_id: str) -> None:
+        """The card's Slack message is gone: keep the record, drop the reference."""
+        entry = self._entries.get(request_id)
+        if entry is not None and entry.ts is not None:
+            entry.channel = ""
+            entry.ts = None
+            entry.displayed = ""
             self.save()
+
+    def set_message(self, request_id: str, channel: str, ts: str, digest: str) -> None:
+        """The card was posted: note its message and what it shows."""
+        entry = self._entries.get(request_id)
+        if entry is None:
+            return
+        entry.channel = channel
+        entry.ts = ts
+        entry.displayed = digest
+        self.save()
 
     def record_displayed(self, request_id: str, ts: str | None, digest: str) -> None:
         """Note what the card's message now shows, after Slack confirmed it.
@@ -192,7 +212,7 @@ class MergeCardStore:
         says nothing about what the tracked message shows.
         """
         entry = self._entries.get(request_id)
-        if entry is None or (ts is not None and entry.ts != ts):
+        if entry is None or entry.ts is None or (ts is not None and entry.ts != ts):
             return
         if entry.displayed != digest:
             entry.displayed = digest

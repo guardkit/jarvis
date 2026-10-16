@@ -777,7 +777,8 @@ class TestRestartAndReplacement:
         notifier, client, _ = _make_notifier(store)
         await notifier._deliver_merge_card(_notification(status, 1))
         if which == "replacement":
-            store.forget(_REQUEST)
+            # Its message is gone (deleted in Slack): only the reference goes.
+            store.clear_message(_REQUEST)
             await notifier._deliver_merge_card(_notification(status, 2))
         ts = store.get(_REQUEST).ts
         handler, publisher, _ = _handler(store, terminal_registry=terminal)
@@ -1021,3 +1022,93 @@ class TestCoachFindings:
         calls = client.chat_update.await_count
         await notifier._deliver_merge_card(_notification("decided", 3, decided_by="U0OTHER"))
         assert client.chat_update.await_count == calls
+
+
+class TestTheRecordOutlivesTheMessage:
+    """Codex implementation review round 1, R1 (16 October 2026).
+
+    The store keeps each card's identity and highest accepted revision
+    whether or not a Slack message exists; a missing message only clears the
+    message reference, and a card first heard of already decided is kept as a
+    placeholder. Each test reloads the store from its file between
+    descriptions, as a restart would.
+    """
+
+    @staticmethod
+    def _restart(path: Path) -> tuple[SlackNotifier, AsyncMock, MergeCardStore]:
+        return _make_notifier(MergeCardStore(path))
+
+    @pytest.mark.asyncio
+    async def test_gone_message_and_failed_replacement_keep_the_revision(
+        self, tmp_path: Path
+    ) -> None:
+        from slack_sdk.errors import SlackApiError
+
+        path = tmp_path / "merge-cards.json"
+        notifier, client, store = self._restart(path)
+        await notifier._deliver_merge_card(_notification("ready", 1))
+        await notifier._deliver_merge_card(_notification("ended", 3))
+
+        # A new process. Slack says the message is gone, and the replacement
+        # post fails too.
+        notifier, client, store = self._restart(path)
+        client.chat_update.side_effect = SlackApiError(
+            "gone", {"ok": False, "error": "message_not_found"}
+        )
+        client.chat_postMessage.side_effect = RuntimeError("slack is down")
+        stopped = "Preview stopped: to make room for FEAT-C."
+        await notifier._deliver_merge_card(_notification("ended", 4, status_text=stopped))
+        client.chat_update.assert_awaited_once()
+        entry = store.get(_REQUEST)
+        assert entry is not None
+        assert (entry.revision, entry.ts) == (4, None)
+
+        # Another restart; a delayed, older "ready" arrives. It is stale.
+        notifier, client, store = self._restart(path)
+        with capture_logs() as logs:
+            await notifier._deliver_merge_card(_notification("ready", 2))
+        client.chat_postMessage.assert_not_awaited()
+        assert any(e["event"] == "slack_merge_card_stale_ignored" for e in logs)
+
+        # The next description at the accepted revision posts the replacement.
+        await notifier._deliver_merge_card(_notification("ended", 4, status_text=stopped))
+        client.chat_postMessage.assert_awaited_once()
+        assert _decision_ids(_posted_blocks(client)) == [ACTION_REBUILD_PREVIEW, "forge_reject"]
+        assert MergeCardStore(path).get(_REQUEST).ts == "1720.0001"
+
+    @pytest.mark.asyncio
+    async def test_a_card_first_heard_of_as_decided_is_a_placeholder(self, tmp_path: Path) -> None:
+        path = tmp_path / "merge-cards.json"
+        notifier, client, store = self._restart(path)
+        await notifier._deliver_merge_card(_notification("decided", 5))
+        client.chat_postMessage.assert_not_awaited()
+        entry = store.get(_REQUEST)
+        assert entry is not None
+        assert (entry.revision, entry.ts) == (5, None)
+        assert entry.decided_at is not None
+
+        notifier, client, store = self._restart(path)
+        await notifier._deliver_merge_card(_notification("ready", 3))
+        await notifier._deliver_merge_card(_notification("decided", 5))
+        client.chat_postMessage.assert_not_awaited()
+        client.chat_update.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_failed_first_post_keeps_the_revision(self, tmp_path: Path) -> None:
+        path = tmp_path / "merge-cards.json"
+        notifier, client, store = self._restart(path)
+        client.chat_postMessage.side_effect = RuntimeError("slack is down")
+        await notifier._deliver_merge_card(_notification("ended", 3))
+        assert store.get(_REQUEST).revision == 3
+
+        notifier, client, store = self._restart(path)
+        await notifier._deliver_merge_card(_notification("ready", 2))
+        client.chat_postMessage.assert_not_awaited()
+        await notifier._deliver_merge_card(_notification("ended", 3))
+        client.chat_postMessage.assert_awaited_once()
+
+    def test_an_old_record_without_a_message_still_reads(self, tmp_path: Path) -> None:
+        path = tmp_path / "merge-cards.json"
+        store = MergeCardStore(path)
+        store.put(_entry(channel="", ts=None, displayed=""))
+        assert MergeCardStore(path).get(_REQUEST).ts is None

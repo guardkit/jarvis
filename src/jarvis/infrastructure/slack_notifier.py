@@ -2258,7 +2258,27 @@ class SlackNotifier:
         async with store.lock:
             store.prune()
             entry = store.get(card.request_id)
-            if entry is not None:
+            now = _merge_cards_wall_now()
+            first = entry is None
+            if entry is None:
+                # Accept this description: the card's identity and revision
+                # are written down BEFORE anything is posted, so a failed post
+                # never loses them and a late, older description is still
+                # recognised as stale.
+                entry = MergeCardEntry(
+                    request_id=card.request_id,
+                    build_id=card.build_id,
+                    correlation_id=card.correlation_id,
+                    candidate_sha=card.candidate_sha,
+                    channel="",
+                    ts=None,
+                    revision=card.revision,
+                    displayed="",
+                    created_at=now,
+                    decided_at=now if card.status == "decided" else None,
+                )
+                store.put(entry)
+            else:
                 if entry.build_id != card.build_id or entry.correlation_id != card.correlation_id:
                     log.warning(
                         "slack_merge_card_refused",
@@ -2279,7 +2299,7 @@ class SlackNotifier:
                     entry.revision = card.revision
                     changed = True
                 if card.status == "decided" and entry.decided_at is None:
-                    entry.decided_at = _merge_cards_wall_now()
+                    entry.decided_at = now
                     changed = True
                 if card.status != "decided" and store.clear_latch_if_newer(
                     card.request_id, card.revision
@@ -2296,6 +2316,8 @@ class SlackNotifier:
                     # so its "Rebuilding…" still goes back to the truth.)
                     log.info("slack_merge_card_redraw_held_while_clicked")
                     return
+
+            if entry.ts is not None:
                 if entry.displayed == digest:
                     return
                 outcome = await self._edit_merge_card(entry, blocks, text, log)
@@ -2305,19 +2327,14 @@ class SlackNotifier:
                     return
                 if outcome != "gone":
                     return
-                if card.status == "decided":
-                    # Nothing to press on a decided card, so it is never
-                    # reposted; its record stays as a placeholder (revision
-                    # kept, nothing more to draw) so a late, older
-                    # description cannot repost it with buttons.
-                    store.record_displayed(card.request_id, entry.ts, digest)
-                    log.info("slack_merge_card_decided_message_gone_kept")
-                    return
-                # The message is gone from Slack: post a replacement below.
-                store.forget(card.request_id)
+                # The message is gone from Slack. The record (identity and
+                # revision) stays; only the message reference is cleared.
+                store.clear_message(card.request_id)
 
             if card.status == "decided":
-                log.info("slack_merge_card_decided_not_reposted")
+                # Nothing to press on a decided card, so it is never posted
+                # (again); its record stays as a placeholder at its revision.
+                log.info("slack_merge_card_decided_not_posted")
                 return
             response = await self._post_with_retry(notification, text=text, blocks=blocks)
             ts: str | None = None
@@ -2327,27 +2344,12 @@ class SlackNotifier:
                 except Exception:  # pragma: no cover - defensive on exotic mocks
                     ts = None
             if not ts:
+                # The record keeps the accepted revision; the next
+                # description at this revision or newer tries the post again.
                 log.warning("slack_merge_card_post_failed")
                 return
-            now = _merge_cards_wall_now()
-            store.put(
-                MergeCardEntry(
-                    request_id=card.request_id,
-                    build_id=card.build_id,
-                    correlation_id=card.correlation_id,
-                    candidate_sha=card.candidate_sha,
-                    channel=self._channel_id,
-                    ts=str(ts),
-                    revision=max(card.revision, entry.revision if entry is not None else 0),
-                    displayed=digest,
-                    created_at=entry.created_at if entry is not None else now,
-                )
-            )
-            log.info(
-                "slack_merge_card_replacement_posted"
-                if entry is not None
-                else "slack_merge_card_posted"
-            )
+            store.set_message(card.request_id, self._channel_id, str(ts), digest)
+            log.info("slack_merge_card_posted" if first else "slack_merge_card_replacement_posted")
 
     async def _edit_merge_card(
         self,
@@ -2359,10 +2361,11 @@ class SlackNotifier:
         """``chat.update`` a merge card: ``ok``, ``gone`` or ``failed``. Never raises."""
         from slack_sdk.errors import SlackApiError
 
+        ts = entry.ts
+        if ts is None:
+            return "gone"
         try:
-            await self._client.chat_update(
-                channel=entry.channel, ts=entry.ts, text=text, blocks=blocks
-            )
+            await self._client.chat_update(channel=entry.channel, ts=ts, text=text, blocks=blocks)
         except SlackApiError as exc:
             error: Any = None
             with contextlib.suppress(Exception):
