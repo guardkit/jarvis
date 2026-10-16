@@ -33,6 +33,14 @@ has. When a click is recorded the card's revision at that moment is noted
 with it, and a NEWER description that says the card is still undecided
 clears the latch — that is how Reject works after Forge refuses an Approve.
 
+While a click is latched, a description at a revision no newer than the
+click is not drawn either: it would put back live buttons whose taps the
+latch then drops. Only a newer revision clears the latch and redraws.
+
+A decided card whose Slack message has gone keeps its record (a placeholder
+showing nothing), so a late, older description can never repost it with
+buttons.
+
 One lock, :attr:`MergeCardStore.lock`, is shared by the Slack reply handler
 (it is the handler's click lock) and the notifier's card updates, so an update
 for a card waits while a click on it is being sent.
@@ -195,6 +203,10 @@ class MergeCardStore:
     def is_latched(self, request_id: str) -> bool:
         """True while a click on this card has been recorded."""
         return request_id in self._latches
+
+    def latched_revision(self, request_id: str) -> int | None:
+        """The card's revision when its click was recorded, or None."""
+        return self._latches.get(request_id)
 
     def latch(self, request_id: str) -> None:
         """Record a click, noting the card's revision at this moment."""

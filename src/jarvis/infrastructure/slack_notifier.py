@@ -107,7 +107,7 @@ from jarvis.infrastructure.merge_cards import (
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from nats.aio.msg import Msg
-    from nats_core.events import ReviewEvidence
+    from nats_core.events import MergeCard, ReviewEvidence
 
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.build_audience import BuildAudienceRegistry
@@ -1210,6 +1210,14 @@ def _now_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def _card_of(notification: ForgeNotification) -> MergeCard:
+    """The notification's merge card block; callers have checked it is there."""
+    card = notification.merge_card
+    if card is None:
+        raise ValueError("this notification carries no merge_card block")
+    return card
+
+
 def _merge_cards_wall_now() -> float:
     """The merge card store's wall clock (one seam for tests to patch)."""
     from jarvis.infrastructure import merge_cards
@@ -1226,7 +1234,7 @@ def _short(text: str) -> str:
 
 def _merge_card_status_lines(notification: ForgeNotification) -> list[str]:
     """The preview's lines on a merge card Forge described (not decided)."""
-    card = notification.merge_card
+    card = _card_of(notification)
     evidence = notification.review_evidence
     if card.status == "ready" and evidence is not None and evidence.state == "ready":
         return _evidence_lines(evidence)
@@ -1254,7 +1262,7 @@ def _merge_card_status_lines(notification: ForgeNotification) -> list[str]:
 
 def _merge_card_decided_words(notification: ForgeNotification) -> tuple[str, bool]:
     """``("Approved by <@U1>.", True)`` — the decided line, and is it a mention."""
-    card = notification.merge_card
+    card = _card_of(notification)
     verb = "Approved" if card.decision == "approve" else "Rejected"
     who = (card.decided_by or "").strip()
     if _SLACK_MEMBER_ID.match(who):
@@ -1270,7 +1278,7 @@ def _merge_card_link_buttons(
     The app only on a ready card; the diagnostics on a failed preview; the
     report and video in every undecided state while they are kept.
     """
-    card = notification.merge_card
+    card = _card_of(notification)
     evidence = notification.review_evidence
     if evidence is None or card.status == "decided":
         return []
@@ -1324,7 +1332,7 @@ def merge_card_decision_elements(
     ready: Approve and Reject. rebuilding: Reject. ended and failed:
     Rebuild preview when Forge offers it, and Reject. decided: none.
     """
-    card = notification.merge_card
+    card = _card_of(notification)
     evidence = notification.review_evidence
     reject = _decision_button(ACTION_FORGE_REJECT, "Reject", button_value, "danger")
     if card.status == "ready":
@@ -1353,7 +1361,7 @@ def merge_card_decision_block_id(notification: ForgeNotification) -> str:
     """
     evidence = notification.review_evidence
     expires = int(evidence.app_expires_at.timestamp()) if evidence is not None else 0
-    return f"{PREVIEW_DECISION_BLOCK_PREFIX}{notification.merge_card.status}.{expires}"
+    return f"{PREVIEW_DECISION_BLOCK_PREFIX}{_card_of(notification).status}.{expires}"
 
 
 def build_merge_card_message(
@@ -1373,7 +1381,7 @@ def build_merge_card_message(
     so arrives inert; the one ``mrkdwn`` section is the decided line when
     it names a Slack member id, and it holds nothing but that mention.
     """
-    card = notification.merge_card
+    card = _card_of(notification)
     decided = card.status == "decided"
     headline = _pause_headline(notification, settled=decided)
     feature_text, is_title = _feature_line(notification)
@@ -2212,7 +2220,7 @@ class SlackNotifier:
             )
 
     async def _apply_merge_card(self, notification: ForgeNotification) -> None:
-        card = notification.merge_card
+        card = _card_of(notification)
         store = self._merge_cards
         evidence = notification.review_evidence
         log = logger.bind(
@@ -2279,6 +2287,15 @@ class SlackNotifier:
                     log.info("slack_merge_card_click_latch_cleared")
                 if changed:
                     store.save()
+                clicked_at = store.latched_revision(card.request_id)
+                if clicked_at is not None and card.revision <= clicked_at:
+                    # A click on this card is recorded and this description
+                    # is no newer than it: redrawing would show live buttons
+                    # whose taps the latch then drops. Only a newer revision
+                    # clears the click and redraws. (Rebuild never latches,
+                    # so its "Rebuilding…" still goes back to the truth.)
+                    log.info("slack_merge_card_redraw_held_while_clicked")
+                    return
                 if entry.displayed == digest:
                     return
                 outcome = await self._edit_merge_card(entry, blocks, text, log)
@@ -2287,6 +2304,14 @@ class SlackNotifier:
                     log.info("slack_merge_card_updated")
                     return
                 if outcome != "gone":
+                    return
+                if card.status == "decided":
+                    # Nothing to press on a decided card, so it is never
+                    # reposted; its record stays as a placeholder (revision
+                    # kept, nothing more to draw) so a late, older
+                    # description cannot repost it with buttons.
+                    store.record_displayed(card.request_id, entry.ts, digest)
+                    log.info("slack_merge_card_decided_message_gone_kept")
                     return
                 # The message is gone from Slack: post a replacement below.
                 store.forget(card.request_id)

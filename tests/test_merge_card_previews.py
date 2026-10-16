@@ -947,3 +947,77 @@ class TestOlderCardWithAnEndedPreview:
         blocks = build_pause_blocks(notification, button_value=value, link_hosts=_HOSTS)
         assert _decision_ids(blocks) == ["forge_reject"]
         assert "Preview stopped: the preview's time ran out" in _texts(blocks)
+
+
+class TestCoachFindings:
+    """Independent coach review of 4477503 (16 October 2026), findings 2 and 3."""
+
+    @pytest.mark.asyncio
+    async def test_a_clicked_card_is_not_redrawn_at_the_same_revision(self) -> None:
+        """Coach scratch test s1, now asserting the fix.
+
+        Approve is pressed at revision 4. A sweep at the SAME revision, still
+        undecided (it ran before Forge recorded the press), used to redraw live
+        Approve/Reject while the click latch stayed, so a tap on them was
+        silently dropped. Now the card keeps the click message until a newer
+        revision arrives, which clears the click and redraws.
+        """
+        store = MergeCardStore(None)
+        notifier, client, _ = _make_notifier(store)
+        await notifier._deliver_merge_card(_notification("ready", 4))
+        ready = _posted_blocks(client)
+        handler, publisher, web_client = _handler(store)
+        await handler.handle_block_actions(_click(ready, "forge_approve", ts="1720.0001"))
+        assert len(_published(publisher)) == 1
+        shown = web_client.chat_update.await_args.kwargs
+        assert "Decision recorded: approve" in _texts(shown["blocks"])
+
+        with capture_logs() as logs:
+            await notifier._deliver_merge_card(_notification("ready", 4))
+        client.chat_update.assert_not_awaited()
+        assert store.get(_REQUEST).displayed == content_digest(shown["blocks"], shown["text"])
+        assert any(e["event"] == "slack_merge_card_redraw_held_while_clicked" for e in logs)
+
+        # A newer undecided revision (Forge refused the press) clears the click
+        # and redraws, and the restored buttons work.
+        await notifier._deliver_merge_card(_notification("ready", 5))
+        restored = client.chat_update.await_args.kwargs["blocks"]
+        assert _decision_ids(restored) == ["forge_approve", "forge_reject"]
+        await handler.handle_block_actions(_click(restored, "forge_reject", ts="1720.0001"))
+        assert [p.decision for _, p in _published(publisher)] == ["approve", "reject"]
+
+    @pytest.mark.asyncio
+    async def test_a_newer_decided_description_still_redraws_a_clicked_card(self) -> None:
+        store = MergeCardStore(None)
+        notifier, client, _ = _make_notifier(store)
+        await notifier._deliver_merge_card(_notification("ready", 4))
+        handler, _, _ = _handler(store)
+        await handler.handle_block_actions(
+            _click(_posted_blocks(client), "forge_approve", ts="1720.0001")
+        )
+        await notifier._deliver_merge_card(_notification("decided", 5))
+        assert "Approved by" in json.dumps(client.chat_update.await_args.kwargs["blocks"])
+        assert store.is_latched(_REQUEST)
+
+    @pytest.mark.asyncio
+    async def test_a_decided_card_whose_message_is_gone_is_never_reposted(self) -> None:
+        """Coach scratch test s4, now asserting the fix."""
+        from slack_sdk.errors import SlackApiError
+
+        notifier, client, store = _make_notifier()
+        await notifier._deliver_merge_card(_notification("ready", 1))
+        await notifier._deliver_merge_card(_notification("decided", 3))
+        client.chat_update.side_effect = SlackApiError(
+            "gone", {"ok": False, "error": "message_not_found"}
+        )
+        await notifier._deliver_merge_card(_notification("decided", 3, decided_by="U0OTHER"))
+        assert client.chat_postMessage.await_count == 1
+        # The record stays as a placeholder at the decided revision.
+        assert store.get(_REQUEST).revision == 3
+        # A late, older, undecided description arrives out of order.
+        await notifier._deliver_merge_card(_notification("ready", 2))
+        assert client.chat_postMessage.await_count == 1
+        # And the next sweep of the decided card does not try the edit again.
+        calls = client.chat_update.await_count
+        await notifier._deliver_merge_card(_notification("decided", 3, decided_by="U0OTHER"))
+        assert client.chat_update.await_count == calls
