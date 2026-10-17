@@ -189,7 +189,7 @@ class TestAMalformedMissionGetsTheUsageLine:
             "mission: M\ntarget: react-go-notes-fixture\nA: Store tags",
             "mission: M\nA: Store tags\nTARGET: react-go-notes-fixture",
             # a sentence that is only a non-ASCII space
-            "mission: M\nA:\u00a0",
+            "mission: M\nA:\u00a0\nB: y",
             # a missing colon or sentence
             "mission: M\nA Store tags",
             "mission: M\nA:",
