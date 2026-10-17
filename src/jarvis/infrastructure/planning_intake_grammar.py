@@ -96,16 +96,22 @@ _BUILD_UNFINISHED_RE = re.compile(
 
 # A mission: the first line names it, every following non-blank line is one
 # feature. Only the first line decides whether the message is a mission at
-# all; the feature lines are then checked one by one.
-_MISSION_FIRST_LINE_RE = re.compile(r"^mission:(.*)$", re.IGNORECASE)
+# all; the feature lines are then checked one by one. Both patterns are
+# ASCII-only: without ``re.ASCII`` case-insensitive matching lets look-alike
+# letters through (the Kelvin sign matches ``k``, the long s ``s``, the
+# dotless i ``i``), and ``.upper()`` would put them on the wire as keys.
+_MISSION_FIRST_LINE_RE = re.compile(r"^mission:(.*)$", re.IGNORECASE | re.ASCII)
 _MISSION_KEY = r"[A-Za-z0-9]{1,12}"
 _MISSION_FEATURE_RE = re.compile(
     rf"^(?P<key>{_MISSION_KEY})"
     rf"(?:[ \t]*\(needs[ \t]+(?P<needs>{_MISSION_KEY}(?:[ \t]*,[ \t]*{_MISSION_KEY})*)[ \t]*\))?"
     r"(?P<no_sign_in>[ \t]*\[no sign-in\])?"
     r"[ \t]*:[ \t]*(?P<sentence>\S.*)$",
-    re.IGNORECASE,
+    re.IGNORECASE | re.ASCII,
 )
+# A ``target:`` line typed under the ``mission:`` line would otherwise read as
+# a feature keyed TARGET; it is a misplaced target, so it gets the usage line.
+_MISSION_RESERVED_KEYS = frozenset({"TARGET"})
 
 #: The feature ids the wire accepts (nats-core ``FEATURE_ID_PATTERN``), kept
 #: here as a local copy for the same reason as the repository-name set below;
@@ -232,13 +238,17 @@ def _parse_mission(candidate: str) -> ParsedMessage | None:
         feature = _MISSION_FEATURE_RE.match(line)
         if feature is None:
             return refusal
+        key = feature.group("key").upper()
+        sentence = feature.group("sentence").strip()
+        if key in _MISSION_RESERVED_KEYS or not sentence:
+            return refusal
         needs = feature.group("needs")
         features.append(
             {
-                "key": feature.group("key").upper(),
-                "needs": [key.strip().upper() for key in needs.split(",")] if needs else [],
+                "key": key,
+                "needs": [need.strip().upper() for need in needs.split(",")] if needs else [],
                 "no_sign_in": feature.group("no_sign_in") is not None,
-                "sentence": feature.group("sentence").strip(),
+                "sentence": sentence,
             }
         )
     if not features:

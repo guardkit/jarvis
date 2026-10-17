@@ -146,6 +146,15 @@ class TestTheMissionShape:
         parsed = parse_queue_message("mission: M\nABCDEFGHIJ12: one feature")
         assert parsed.command["features"][0]["key"] == "ABCDEFGHIJ12"
 
+    def test_a_key_that_only_contains_target_is_allowed(self) -> None:
+        parsed = parse_queue_message("mission: M\nTARGETS: one\nT: two")
+        assert [f["key"] for f in parsed.command["features"]] == ["TARGETS", "T"]
+
+    def test_non_ascii_letters_in_a_sentence_are_kept(self) -> None:
+        parsed = parse_queue_message("mission: Café tags\nA: Show the \u212a and \u017f signs")
+        assert parsed.command["title"] == "Café tags"
+        assert parsed.command["features"][0]["sentence"] == "Show the \u212a and \u017f signs"
+
     def test_the_meaning_is_left_to_the_forge(self) -> None:
         # An unknown key, a cycle and a repeated key are all well-formed
         # lines; jarvis forwards them and the forge answers.
@@ -171,6 +180,16 @@ class TestAMalformedMissionGetsTheUsageLine:
             "mission: M\nfirst feature: two words",
             "mission: M\nÄ: not ascii",
             "mission: M\n: no key",
+            # look-alike letters that case-folding would let through
+            "mission: M\n\u212aEY: Kelvin sign",
+            "mission: M\n\u017fTORE: long s",
+            "mission: M\nL\u0131ST: dotless i",
+            "mission: M\nB (needs \u212a): Kelvin sign in needs",
+            # a target line typed under the mission line
+            "mission: M\ntarget: react-go-notes-fixture\nA: Store tags",
+            "mission: M\nA: Store tags\nTARGET: react-go-notes-fixture",
+            # a sentence that is only a non-ASCII space
+            "mission: M\nA:\u00a0",
             # a missing colon or sentence
             "mission: M\nA Store tags",
             "mission: M\nA:",
@@ -219,6 +238,9 @@ class TestOtherMessagesAreNotMissions:
             # the mission line not at the top
             "Add tags to notes\nmission: Tags for notes\nA: Store tags",
             "fix: the mission page crashes",
+            # look-alike letters do not make the first line a mission
+            "mi\u017f\u017fion: Tags for notes\nA: Store tags",
+            "m\u0131ssion: Tags for notes\nA: Store tags",
         ],
     )
     def test_a_sentence_mentioning_a_mission_stays_a_sentence(self, message: str) -> None:
