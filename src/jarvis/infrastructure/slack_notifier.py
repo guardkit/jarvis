@@ -830,6 +830,12 @@ _MERGE_READY_SETTLED_HEADLINE = "Ready to merge and deploy"
 # rendered.
 _MERGE_READY_STAGE_LABEL = "the merge-ready checkpoint"
 
+# A mission's plan card (missions design, 17 October 2026, section 3) rides
+# the same build-paused envelope; forge marks it with this stage label.
+_MISSION_PLAN_STAGE_LABEL = "the mission plan"
+_MISSION_PLAN_HEADLINE = "Mission plan — waiting for your go-ahead"
+_MISSION_PLAN_SETTLED_HEADLINE = "Mission plan"
+
 
 def _pause_headline(notification: ForgeNotification, *, settled: bool = False) -> str:
     """Which headline this paused build wears.
@@ -842,6 +848,8 @@ def _pause_headline(notification: ForgeNotification, *, settled: bool = False) -
     label = (notification.stage_label or "").strip().casefold()
     if label == _MERGE_READY_STAGE_LABEL:
         return _MERGE_READY_SETTLED_HEADLINE if settled else _MERGE_READY_HEADLINE
+    if label == _MISSION_PLAN_STAGE_LABEL:
+        return _MISSION_PLAN_SETTLED_HEADLINE if settled else _MISSION_PLAN_HEADLINE
     return _PAUSE_SETTLED_HEADLINE if settled else _PAUSE_HEADLINE
 
 

@@ -49,6 +49,20 @@ and is not forwarded, like the half-typed ``next:``. Ordinary prose after
 ``build:`` (``build: a users page``, ``build: from scratch, a users page``,
 ``build: feat-flag support on the admin page``) stays a sentence, exactly as
 before.
+
+Starting a mission (missions design, 17 October 2026, section 1): a message
+whose first line (after any ``target:`` line) is ``mission: <title>``, and
+whose every following non-blank line is one feature,
+``<key>[ (needs <key>[, <key>...])][ [no sign-in]]: <sentence>``. A key is 1
+to 12 letters or digits, no hyphen, and goes on the wire upper-cased. It is
+forwarded as one more queue command, verb ``mission``, with the title and the
+features in the order typed. Jarvis checks the SHAPE only; the forge checks
+the meaning (unknown or repeated keys, cycles, how many features) and answers
+in the thread. Any message beginning ``mission:`` is either a mission or, with
+a line that does not parse (or no title, or no features), one usage line back
+and nothing sent, like a half-typed ``build:``. A message that merely mentions
+a mission anywhere else (``our mission: ...``, ``missions: ...``, ``mission``
+on a later line) stays a sentence.
 """
 
 from __future__ import annotations
@@ -80,6 +94,19 @@ _BUILD_UNFINISHED_RE = re.compile(
     r"^build:[ \t]*(?:FEAT-[A-Z0-9]{3,12}(?:[ \t]+from)?[ \t]*)?$", re.IGNORECASE
 )
 
+# A mission: the first line names it, every following non-blank line is one
+# feature. Only the first line decides whether the message is a mission at
+# all; the feature lines are then checked one by one.
+_MISSION_FIRST_LINE_RE = re.compile(r"^mission:(.*)$", re.IGNORECASE)
+_MISSION_KEY = r"[A-Za-z0-9]{1,12}"
+_MISSION_FEATURE_RE = re.compile(
+    rf"^(?P<key>{_MISSION_KEY})"
+    rf"(?:[ \t]*\(needs[ \t]+(?P<needs>{_MISSION_KEY}(?:[ \t]*,[ \t]*{_MISSION_KEY})*)[ \t]*\))?"
+    r"(?P<no_sign_in>[ \t]*\[no sign-in\])?"
+    r"[ \t]*:[ \t]*(?P<sentence>\S.*)$",
+    re.IGNORECASE,
+)
+
 #: The feature ids the wire accepts (nats-core ``FEATURE_ID_PATTERN``), kept
 #: here as a local copy for the same reason as the repository-name set below;
 #: a test pins the two together.
@@ -99,6 +126,13 @@ USAGE_REFUSAL = 'Did you mean "next: <sentence>" or "#12 next"?'
 
 #: The one line jarvis posts itself for a ``build:`` begun and not finished.
 BUILD_USAGE_REFUSAL = 'Did you mean "build: FEAT-XXXX from <branch>"?'
+
+#: The one line jarvis posts itself for a ``mission:`` message with a line
+#: it cannot read.
+MISSION_USAGE_REFUSAL = (
+    'Did you mean "mission: <title>" and then one line per feature, '
+    'such as "B (needs A) [no sign-in]: <sentence>"?'
+)
 
 #: Which characters a typed repository name may use. The same set the wire
 #: allows (nats-core ``PLANNING_TARGET_REPO_PATTERN``, ``_pipeline.py``):
@@ -159,7 +193,10 @@ class ParsedMessage:
         command: The flat object forwarded on the wire as ``queue_command``
             — ``{"verb": ..., "id"?: int, "after"?: int, "sentence"?: str}``,
             or ``{"verb": "build", "feature_id": str, "branch": str}`` for a
-            hand-over — no nesting (spec contract 2).
+            hand-over — no nesting (spec contract 2). The one exception is
+            a mission (missions design, 17 October 2026): ``{"verb":
+            "mission", "title": str, "features": [{"key": str, "needs":
+            [str, ...], "no_sign_in": bool, "sentence": str}, ...]}``.
         refusal_text: The one line jarvis posts itself, or ``None``.
         kind: ``"fix"`` or ``"question"`` when the sentence carried that
             prefix; ``None`` otherwise (the forge defaults to a feature).
@@ -170,6 +207,46 @@ class ParsedMessage:
     command: dict[str, Any] | None = None
     refusal_text: str | None = None
     kind: Literal["fix", "question"] | None = None
+
+
+def _parse_mission(candidate: str) -> ParsedMessage | None:
+    """A mission, the mission usage line, or ``None`` when it is not one.
+
+    Only a message whose first line begins ``mission:`` is a mission. From
+    then on there is no falling back to a sentence: a typo in one feature
+    line would otherwise start a single planning run from the whole list.
+    """
+    first_line, _, rest = candidate.partition("\n")
+    match = _MISSION_FIRST_LINE_RE.match(first_line.strip())
+    if match is None:
+        return None
+    refusal = ParsedMessage(shape="refusal", refusal_text=MISSION_USAGE_REFUSAL)
+    title = match.group(1).strip()
+    if not title:
+        return refusal
+    features: list[dict[str, Any]] = []
+    for line in rest.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        feature = _MISSION_FEATURE_RE.match(line)
+        if feature is None:
+            return refusal
+        needs = feature.group("needs")
+        features.append(
+            {
+                "key": feature.group("key").upper(),
+                "needs": [key.strip().upper() for key in needs.split(",")] if needs else [],
+                "no_sign_in": feature.group("no_sign_in") is not None,
+                "sentence": feature.group("sentence").strip(),
+            }
+        )
+    if not features:
+        return refusal
+    return ParsedMessage(
+        shape="command",
+        command={"verb": "mission", "title": title, "features": features},
+    )
 
 
 def parse_queue_message(text: str) -> ParsedMessage:
@@ -255,6 +332,10 @@ def parse_queue_message(text: str) -> ParsedMessage:
         # A hand-over begun and not finished: the usage line, nothing sent.
         return ParsedMessage(shape="refusal", refusal_text=BUILD_USAGE_REFUSAL)
 
+    mission = _parse_mission(candidate)
+    if mission is not None:
+        return mission
+
     match = _KIND_RE.match(candidate)
     if match:
         kind: Literal["fix", "question"] = "fix" if match.group(1).lower() == "fix" else "question"
@@ -278,6 +359,7 @@ def parse_queue_message(text: str) -> ParsedMessage:
 __all__ = [
     "BUILD_USAGE_REFUSAL",
     "INVALID_TARGET_NAME_REPLY",
+    "MISSION_USAGE_REFUSAL",
     "USAGE_REFUSAL",
     "ParsedMessage",
     "is_allowed_branch_name",

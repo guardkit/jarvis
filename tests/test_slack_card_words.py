@@ -251,6 +251,37 @@ class TestTheMergeReadyCard:
         assert text.startswith(_MERGE_HEADLINE)
 
 
+# ---------------------------------------------------------------------------
+# The mission plan card — same envelope, same renderer, its own headline
+# (missions design, 17 October 2026, section 3)
+# ---------------------------------------------------------------------------
+
+
+class TestTheMissionPlanCard:
+    def _mission_payload(self, **overrides: Any) -> ForgeNotification:
+        return _live_payload(
+            stage_label="the mission plan", feature_title="Tags for notes", **overrides
+        )
+
+    def test_headline_asks_for_the_go_ahead_on_the_plan(self) -> None:
+        blocks = build_pause_blocks(self._mission_payload(), button_value=_button_value())
+        assert blocks[0]["text"]["text"] == "Mission plan — waiting for your go-ahead"
+
+    def test_a_settled_plan_card_stops_asking(self) -> None:
+        blocks = build_pause_blocks(
+            self._mission_payload(), button_value=None, status_line="Approved by rich"
+        )
+        assert blocks[0]["text"]["text"] == "Mission plan"
+
+    def test_the_text_rendering_carries_the_mission_headline(self) -> None:
+        text = _make_notifier()._render(self._mission_payload())
+        assert text.startswith("Mission plan — waiting for your go-ahead")
+
+    def test_other_cards_keep_their_headlines(self) -> None:
+        build = build_pause_blocks(_live_payload(), button_value=_button_value())
+        assert build[0]["text"]["text"] == _PAUSE_HEADLINE
+
+
 # The merge card's sentence once the candidate is checked before the merge
 # (protect-main spec, 2026-09-07), byte for byte as the spec writes it.
 # Forge authors the card's body (``merge_offer.py`` composes the rationale

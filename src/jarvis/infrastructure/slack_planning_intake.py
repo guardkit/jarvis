@@ -60,6 +60,10 @@ Behaviour invariants (TASK-REV-3240 findings F3-F6, F10-F12):
   ``target_repo`` like any sentence. Jarvis resolves nothing and posts
   nothing; the forge resolves the repository, hands the feature to its build
   queue and answers in this thread.
+* A ``mission: <title>`` message, one feature per following line (missions
+  design, 17 October 2026, section 1), is another: verb ``mission`` with the
+  title and the features, sent the same way and answered by the forge. A
+  mission line jarvis cannot read gets one usage line and nothing is sent.
 * ``originating_adapter="slack"`` is hard-coded (F4): the wire layer
   verifiably skips its required-when-jarvis validator when the field is
   omitted, so jarvis must never rely on it.
@@ -437,8 +441,8 @@ class PlanningIntakeHandler:
         parsed = parse_queue_message(text)
         if parsed.shape == "refusal":
             # The messages jarvis answers itself: bare "next" is ambiguous,
-            # and "next:", "before #12:" or "build:" with a part missing are
-            # commands begun and not finished. It asks instead of guessing,
+            # and "next:", "before #12:", "build:" or a "mission:" list with
+            # a part missing are commands begun and not finished. It asks instead of guessing,
             # and publishes nothing.
             logger.info(
                 "planning_intake_ambiguous_refused",
