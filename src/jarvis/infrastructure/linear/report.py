@@ -41,6 +41,12 @@ sending was not confirmed is looked for before it is written again
 
 Nothing here decides an outcome from a reply: what happened is reported later
 from Forge's record.
+
+5. **Project updates** (design section 11.4). When a single issue's attempt is
+   on main with its merge report, or a mission is MERGED, one project update
+   is posted to the Linear project its repository maps to (:mod:`.updates`),
+   before the attempt ends; nothing for a declined or failed merge, nor to an
+   archived or completed project.
 """
 
 from __future__ import annotations
@@ -48,11 +54,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, ClassVar, Protocol
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 from urllib.parse import unquote
 
 import structlog
@@ -91,6 +99,9 @@ from jarvis.infrastructure.linear.progress import (
     phase_step,
 )
 from jarvis.infrastructure.linear.store import CardComment, DoorStore
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from jarvis.infrastructure.linear.projects import ProjectMap
 
 logger = structlog.get_logger(__name__)
 
@@ -149,19 +160,47 @@ async def write_once(
     stopped), the issue's comments are searched for the reference first, so
     the comment is never written twice (Codex review R3).
     """
-    started, comment_id = store.comment_ref(ref)
-    if comment_id:
-        return comment_id
+
+    async def find(marker: str) -> str | None:
+        for found in await client.comments_containing(issue_id, marker):
+            return str(found.id)
+        return None
+
+    async def create(text: str) -> str:
+        return str(await client.create_comment(issue_id, text, parent_id=parent_id))
+
+    return await write_once_to(store, ref, issue_id, body, find=find, create=create)
+
+
+async def write_once_to(
+    store: DoorStore,
+    ref: str,
+    owner_id: str,
+    body: str,
+    *,
+    find: Callable[[str], Awaitable[str | None]],
+    create: Callable[[str], Awaitable[str]],
+) -> str:
+    """The write-once guard for anything the door writes with a reference (a
+    comment on an issue, a project update on a project ``owner_id``).
+
+    The reference is recorded before the write and ends the text; if an
+    earlier try was not confirmed, ``find`` looks for the reference first.
+    """
+    started, written_id = store.comment_ref(ref)
+    if written_id:
+        return written_id
     marker = f"{REF_WORD} {ref}"
     if started:
-        for found in await client.comments_containing(issue_id, marker):
-            store.finish_comment(ref, found.id)
-            return str(found.id)
+        found = await find(marker)
+        if found:
+            store.finish_comment(ref, found)
+            return found
     else:
-        store.begin_comment(ref, issue_id)
-    comment_id = await client.create_comment(issue_id, f"{body}\n\n_{marker}_", parent_id=parent_id)
-    store.finish_comment(ref, comment_id)
-    return str(comment_id)
+        store.begin_comment(ref, owner_id)
+    written_id = await create(f"{body}\n\n_{marker}_")
+    store.finish_comment(ref, written_id)
+    return str(written_id)
 
 
 class AttemptRecordUnavailable(Exception):
@@ -420,6 +459,7 @@ class Reporter:
         feed: BusFeed | None,
         answers: AnswerPublisher | None,
         approvers: dict[str, str],
+        dashboard_summary: Path | None = None,
     ) -> None:
         self._client = client
         self._store = store
@@ -429,6 +469,11 @@ class Reporter:
         self._approvers = approvers
         # Cards Linear refused to take, by request id (in memory only).
         self._card_failures: dict[str, int] = {}
+        # Section 11: this poll's read of the team's projects (set by the door
+        # before :meth:`report`; ``None`` when it could not be read), and the
+        # dashboard's summary file.
+        self.projects: ProjectMap | None = None
+        self._summary_path = dashboard_summary
 
     async def _write(
         self, issue_id: str, body: str, ref: str, *, parent_id: str | None = None
@@ -605,9 +650,112 @@ class Reporter:
                 self._store.set_progress(cid, issue_id, "moved", "refused")
         if not outcome.ended:
             return  # on main, waiting for Forge's merge report
+        if outcome.phase in (fr.ON_MAIN, fr.ON_MAIN_DEPLOY_FAILED) and not (
+            await self._project_update(attempt)
+        ):
+            return  # the projects could not be read: tried again next poll
         reason = f"{outcome.phase}: {outcome.reason}"[:500]
         self._store.end_attempt(cid, reason)
         logger.info("linear_door_attempt_ended", correlation_id=cid, phase=attempt.outcome.phase)
+
+    # -- project updates (section 11.4) ----------------------------------------------
+
+    def _attempt_repo(self, cid: str) -> str | None:
+        """The repository the attempt was sent to, from its frozen payload."""
+        send = self._store.get_send(cid)
+        if send is None:
+            return None
+        try:
+            payload = json.loads(send.payload).get("payload") or {}
+        except (ValueError, AttributeError):
+            return None
+        repo = payload.get("target_repo") if isinstance(payload, dict) else None
+        return str(repo) if repo else None
+
+    async def _project_update(self, attempt: _Attempt) -> bool:
+        """Post the merge's project update once. ``False`` when it cannot be
+        decided this poll (the projects read failed), so the attempt waits."""
+        from jarvis.infrastructure.linear import updates as up
+
+        cid = attempt.correlation_id
+        if self._store.progress(cid, "", "project-update") is not None:
+            return True
+        projects = self.projects
+        if projects is None:
+            logger.info("linear_door_project_update_waits", correlation_id=cid)
+            return False
+        log = logger.bind(correlation_id=cid)
+        repo = self._attempt_repo(cid)
+        issues = {i.id: i for i in await self._client.issues_by_id([i for i, _ in attempt.issues])}
+        if repo is None:
+            # A rebuilt record keeps no payload: the issues' own project.
+            found = {
+                m.repo
+                for i in issues.values()
+                if i.project_id and (m := projects.for_project(i.project_id)) and m.repo
+            }
+            repo = found.pop() if len(found) == 1 else None
+        project = projects.project_for_repo(repo) if repo else None
+        if repo is None or project is None or project.archived or project.completed:
+            why = (
+                "no repository"
+                if repo is None
+                else "no project"
+                if project is None
+                else "archived or completed project"
+            )
+            self._store.set_progress(cid, "", "project-update", f"skipped: {why}")
+            log.info("linear_door_project_update_skipped", reason=why)
+            return True
+
+        outcome = attempt.outcome
+        landed_keys = set(getattr(outcome, "landed_keys", ()) or ())
+
+        def line(issue_id: str, identifier: str | None) -> tuple[str, str]:
+            found = issues.get(issue_id)
+            return (identifier or issue_id, found.title if found is not None else "")
+
+        mission = is_mission(cid)
+        landed, not_landed = [], []
+        for issue_id, identifier in attempt.issues:
+            if not mission or feature_key(identifier or "") in landed_keys:
+                landed.append(line(issue_id, identifier))
+            else:
+                not_landed.append(line(issue_id, identifier))
+        send = self._store.get_send(cid)
+        delivered = up.Delivered(
+            correlation_id=cid,
+            repo=repo,
+            landed=landed,
+            not_landed=not_landed,
+            commit=getattr(outcome, "j_commit", None),
+            mission_title=send.mission_title if send is not None else None,
+            deploy_failed=_deploy_reason(outcome)
+            if outcome.phase == fr.ON_MAIN_DEPLOY_FAILED
+            else "",
+            is_mission=mission,
+        )
+        open_in_linear = await self._client.project_open_issues(project.id)
+        summary = up.read_summary(self._summary_path)
+        health, health_line = up.update_health(delivered, summary)
+        body = up.update_body(delivered, summary, open_in_linear, health_line)
+        try:
+            await up.post_update_once(
+                self._client,
+                self._store,
+                project.id,
+                body,
+                ref_for("project-update", cid),
+                health=health,
+            )
+        except LinearRefused as exc:
+            # The project was deleted, say: given up, so the attempt still ends.
+            log.warning("linear_door_project_update_refused", error=str(exc)[:300])
+            self._store.set_progress(cid, "", "project-update", "refused")
+            return True
+        self._store.set_progress(cid, "", "project-update", "posted")
+        log.info("linear_door_project_update_posted", health=health or "omitted")
+        return True
 
     # -- the bus -------------------------------------------------------------------
 
@@ -1073,6 +1221,14 @@ def _gate_build(card: Card) -> str | None:
     return unquote(parts[0]) if len(parts) == 3 and parts[2].isdigit() else None
 
 
+def _deploy_reason(outcome: Any) -> str:
+    """Why the deploy after a merge failed, from the reader's "merged into
+    main, but its deploy failed: …"."""
+    text = " ".join(str(outcome.reason or "").split()).rstrip(".")
+    _, sep, after = text.partition("deploy failed: ")
+    return after if sep and after else "no reason was given"
+
+
 def _move_to(target: str, issue: Any, state_ids: dict[str, str]) -> str | None:
     """The status to move an ending issue to, or ``None`` to leave it.
 
@@ -1111,4 +1267,5 @@ __all__ = [
     "ref_for",
     "wakes_for",
     "write_once",
+    "write_once_to",
 ]

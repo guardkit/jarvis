@@ -435,6 +435,15 @@ class JarvisConfig(BaseSettings):
     # JARVIS_LINEAR_FORGE_DB — Forge's record, mounted read-only, from which
     # stage 4 reads progress and whether an attempt has finished.
     linear_forge_db: Path = Path("/forge-state/forge.db")
+    # JARVIS_LINEAR_FORGE_SETTINGS — the coordinator's forge.yaml, mounted
+    # read-only: its ``planning.sandboxes`` keys are the registered
+    # repositories, each given a Linear project (design section 11.1). Not
+    # readable: no project is created.
+    linear_forge_settings: Path | None = Path("/etc/forge/forge.yaml")
+    # JARVIS_LINEAR_DASHBOARD_SUMMARY — the dashboard's
+    # ``project-summaries.json``, a path inside its data directory mounted
+    # read-only (section 11.5). Unset or missing: not available.
+    linear_dashboard_summary: Path | None = None
 
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
@@ -451,6 +460,14 @@ class JarvisConfig(BaseSettings):
     )
 
     # -- Validators ----------------------------------------------------------
+
+    @field_validator("linear_forge_settings", "linear_dashboard_summary", mode="before")
+    @classmethod
+    def _blank_linear_path_is_unset(cls, value: object) -> object:
+        """The estate's compose file passes an unset value as an empty string."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("supervisor_model")
     @classmethod

@@ -13,6 +13,14 @@ Every poll (30 seconds by default):
    duplicate) is in Todo.
 3. Write the edits-after-sending comment, once per attempt.
 
+Linear projects (design section 11): before stage 4 reports, each poll reads
+the team's projects once (:class:`.projects.ProjectMap`), writes
+``linear-projects.json`` for the dashboard, and creates the project of each
+repository registered in the coordinator's ``forge.yaml`` that no project
+links to. The repository of each issue is then decided by the decision table
+(:func:`.mapping.choose_repo`), and a project update is posted after each
+merge (:mod:`.updates`).
+
 Between 1 and 2, stage 4 reports the factory's progress, cards and outcomes
 back to the issues and reads the answers to cards (:class:`.report.Reporter`);
 an attempt that Forge's record shows has ended is brought to its final status
@@ -45,6 +53,7 @@ import contextlib
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
@@ -82,6 +91,12 @@ from jarvis.infrastructure.linear.mapping import (
     single_prefix,
 )
 from jarvis.infrastructure.linear.progress import BACKLOG, finals
+from jarvis.infrastructure.linear.projects import (
+    ProjectMap,
+    ensure_projects,
+    registered_repositories,
+    write_projects_file,
+)
 from jarvis.infrastructure.linear.report import (
     AnswerPublisher,
     AssumeAttemptsOpen,
@@ -198,6 +213,15 @@ class DoorSettings:
     poll_seconds: float = 30.0
     #: Linear user id → the identity its answers are sent as (JARVIS_LINEAR_APPROVERS).
     approvers: dict[str, str] = field(default_factory=dict)
+    #: The coordinator's forge.yaml, read-only (JARVIS_LINEAR_FORGE_SETTINGS);
+    #: ``None``: no repository is registered, so no project is created.
+    forge_settings: Path | None = None
+    #: The dashboard's ``project-summaries.json`` (JARVIS_LINEAR_DASHBOARD_SUMMARY);
+    #: ``None``: the summary is not available.
+    dashboard_summary: Path | None = None
+    #: Where ``linear-projects.json`` is written (the door's state directory);
+    #: ``None``: not written.
+    state_dir: Path | None = None
 
 
 def _safe_error(exc: BaseException) -> str:
@@ -233,6 +257,7 @@ class LinearDoor:
             feed=feed,
             answers=answers,
             approvers=dict(settings.approvers),
+            dashboard_summary=settings.dashboard_summary,
         )
         # Set by the bus feed when a card or notification arrives, so it
         # reaches Linear without waiting for the next poll.
@@ -240,6 +265,9 @@ class LinearDoor:
         self._team: LinearTeam | None = None
         self._state_ids: dict[str, str] = {}
         self._rebuilt = False
+        # This poll's read of the team's projects (section 11); ``None`` when
+        # it could not be read.
+        self._projects: ProjectMap | None = None
         # Loop state, for the back-off rules of section 7.
         self._failures = 0
         self._bad_key_reported = False
@@ -471,6 +499,8 @@ class LinearDoor:
         await self._finish_recoveries()
         for send in self._store.unfinished_sends():
             await self._resume(send)
+        await self._read_projects(team)
+        self._reporter.projects = self._projects
         # Factory → Linear: progress, cards, answers; an ended attempt frees
         # its issues here, before the ready list is read.
         await self._reporter.report(
@@ -505,11 +535,50 @@ class LinearDoor:
         await self._check_edits()
 
     # ------------------------------------------------------------------
+    # Linear projects (section 11)
+    # ------------------------------------------------------------------
+
+    async def _read_projects(self, team: LinearTeam) -> None:
+        """Read the team's projects once; write ``linear-projects.json``; create
+        the projects of registered repositories that no project links to.
+
+        A projects read that fails (other than a refused key or the rate
+        limit, which stop the poll) leaves the map ``None`` this poll: issues
+        in a project wait, nothing is created and no update is posted.
+        """
+        self._projects = None
+        try:
+            found = await self._client.projects(team.id)
+        except (LinearAuthError, LinearRateLimited):
+            raise
+        except LinearError as exc:
+            logger.warning("linear_door_projects_unreadable", error=_safe_error(exc))
+            return
+        registered = registered_repositories(self._settings.forge_settings)
+        self._projects = ProjectMap(found, registered or [])
+        if self._settings.state_dir is not None:
+            try:
+                write_projects_file(self._settings.state_dir, self._projects)
+            except OSError as exc:
+                logger.warning("linear_door_projects_file_failed", error=_safe_error(exc))
+        if registered is None:
+            return  # forge.yaml not configured or unreadable: create nothing
+        await ensure_projects(
+            self._client,
+            self._store,
+            team_id=team.id,
+            registered=registered,
+            projects=self._projects,
+        )
+
+    # ------------------------------------------------------------------
     # A single issue
     # ------------------------------------------------------------------
 
     async def _consider_single(self, issue: LinearIssue) -> None:
-        choice = choose_repo(issue, self._settings.default_repo)
+        choice = choose_repo(issue, self._settings.default_repo, self._projects)
+        if choice.wait:
+            return  # its project was not in this poll's read
         if choice.problem:
             await self._notice(issue, choice.problem)
             return
@@ -581,7 +650,10 @@ class LinearDoor:
         problems: dict[str, list[str]] = {}
         repos: dict[str, str] = {}
         for member in members:
-            choice = choose_repo(member, self._settings.default_repo)
+            choice = choose_repo(member, self._settings.default_repo, self._projects)
+            if choice.wait:
+                log.debug("linear_door_mission_waits_for_projects", issue=member.identifier)
+                return
             if choice.problem:
                 problems.setdefault(member.id, []).append(choice.problem)
             elif choice.repo:
@@ -1007,6 +1079,9 @@ def door_config(config: JarvisConfig) -> DoorConfig | str:
             default_repo=default_repo,
             poll_seconds=float(config.linear_poll_seconds),
             approvers=approvers,
+            forge_settings=config.linear_forge_settings,
+            dashboard_summary=config.linear_dashboard_summary,
+            state_dir=config.linear_state_dir,
         ),
         linear_auth=linear_auth,
         state_path=config.linear_state_dir / "linear-door.sqlite3",
