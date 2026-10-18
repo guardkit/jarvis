@@ -3,6 +3,9 @@
 See the Linear front door design (18 October 2026). Stage 3 is Linear →
 factory: :mod:`.client` talks to Linear, :mod:`.mapping` turns issues into
 requests, :mod:`.store` is the door's own record, and :mod:`.door` polls.
+Stage 4 is factory → Linear: :mod:`.forge_record` reads Forge's record
+read-only, :mod:`.progress` and :mod:`.cards` say what to write, and
+:mod:`.report` writes progress, cards and outcomes and reads answers.
 ``jarvis serve-linear`` runs it.
 """
 
@@ -20,6 +23,7 @@ from jarvis.infrastructure.linear.door import (
     LinearDoor,
     door_config,
 )
+from jarvis.infrastructure.linear.report import ForgeAttempts, NatsBusFeed, Reporter
 from jarvis.infrastructure.linear.store import DoorStore
 
 __all__ = [
@@ -28,10 +32,13 @@ __all__ = [
     "AttemptRecordUnavailable",
     "DoorSettings",
     "DoorStore",
+    "ForgeAttempts",
     "LinearAuthError",
     "LinearClient",
     "LinearDoor",
     "LinearError",
     "LinearRateLimited",
+    "NatsBusFeed",
+    "Reporter",
     "door_config",
 ]

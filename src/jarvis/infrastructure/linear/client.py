@@ -5,7 +5,8 @@ Only what the door needs: find the team, read its workflow states, read issues
 door's own comments on an issue, write a comment and move an issue. Stage 4
 (writing the factory's cards and progress back to Linear) reuses
 :meth:`LinearClient.create_comment` (with ``parent_id`` for replies) and
-:meth:`LinearClient.move_issue`, and adds its own reads beside these.
+:meth:`LinearClient.move_issue`, and reads the replies under the door's card
+comments with one query (:meth:`LinearClient.replies_under`).
 
 Facts about Linear this file relies on (checked 18 October 2026 against
 Linear's published schema, ``packages/sdk/src/schema.graphql`` in
@@ -157,6 +158,16 @@ class LinearComment:
     body: str
 
 
+@dataclass(frozen=True)
+class LinearReply:
+    """A reply under one of the door's card comments."""
+
+    id: str
+    body: str
+    parent_id: str
+    user_id: str | None  # None for a reply not written by a person (a bot or integration)
+
+
 # ---------------------------------------------------------------------------
 # GraphQL text
 # ---------------------------------------------------------------------------
@@ -272,6 +283,22 @@ query DoorComments($issueId: String!, $text: String!, $after: String) {{
       nodes {{ id body }}
       pageInfo {{ hasNextPage endCursor }}
     }}
+  }}
+}}
+"""
+
+# Root ``comments`` with ``filter.parent.id.in`` (``CommentFilter.parent:
+# NullableCommentFilter``; ``Comment.parentId`` and ``Comment.user``): every
+# reply under the door's open card comments in one request a poll.
+REPLIES_QUERY = f"""
+query DoorReplies($parentIds: [ID!]!, $after: String) {{
+  comments(
+    first: {_FLAT_PAGE}
+    after: $after
+    filter: {{ parent: {{ id: {{ in: $parentIds }} }} }}
+  ) {{
+    nodes {{ id body parentId user {{ id }} }}
+    pageInfo {{ hasNextPage endCursor }}
   }}
 }}
 """
@@ -544,6 +571,26 @@ class LinearClient:
         )
         return [LinearComment(id=str(n["id"]), body=str(n.get("body") or "")) for n in nodes]
 
+    async def replies_under(self, parent_ids: list[str]) -> list[LinearReply]:
+        """Every reply under these comments, oldest first."""
+        if not parent_ids:
+            return []
+        nodes = await self._paginate(
+            REPLIES_QUERY, {"parentIds": sorted(set(parent_ids))}, ("comments",)
+        )
+        replies = []
+        for n in nodes:
+            user = n.get("user") or {}
+            replies.append(
+                LinearReply(
+                    id=str(n["id"]),
+                    body=str(n.get("body") or ""),
+                    parent_id=str(n.get("parentId") or ""),
+                    user_id=str(user["id"]) if user.get("id") else None,
+                )
+            )
+        return replies
+
     # -- writes --------------------------------------------------------------
 
     async def create_comment(
@@ -580,6 +627,7 @@ __all__ = [
     "LinearLabel",
     "LinearRateLimited",
     "LinearRelation",
+    "LinearReply",
     "LinearState",
     "LinearTeam",
 ]

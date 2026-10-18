@@ -1,4 +1,5 @@
-"""The Linear door: Linear → factory (design sections 1 and 7, stage 3).
+"""The Linear door: Linear → factory (design sections 1 and 7, stage 3), and
+factory → Linear (section 2, stage 4, in :mod:`.report`).
 
 Every poll (30 seconds by default):
 
@@ -12,22 +13,26 @@ Every poll (30 seconds by default):
    duplicate) is in Todo.
 3. Write the edits-after-sending comment, once per attempt.
 
+Between 1 and 2, stage 4 reports the factory's progress, cards and outcomes
+back to the issues and reads the answers to cards (:class:`.report.Reporter`);
+an attempt that Forge's record shows has ended is brought to its final status
+and its issues are released there, so they can be sent again in the same
+poll.
+
 A send is written ``pending`` with its exact bytes before it is published,
 and in the same transaction its issues are reserved: an issue is in at most
 one open attempt, and a reserved issue is left out of every other send. Only
 JetStream's acknowledgement moves a send on, and nothing is written to Linear
 until then. Whether an attempt has ended (which releases its reservations) is
-asked of one object, :class:`AttemptRecord`; stage 4 answers it from Forge's
-own record. Until then :class:`AssumeAttemptsOpen` says every attempt is still
-open, so nothing is ever sent twice from Linear.
+asked of one object, :class:`.report.AttemptRecord`, answered from Forge's own
+record (:class:`.report.ForgeAttempts`).
 
 A new or lost record is rebuilt before anything is sent, only from Forge's
-record (:meth:`AttemptRecord.recorded_attempts`) and the requests still waiting
-in the PIPELINE stream (:class:`NatsIntakeQueue`, which never consumes). If
-either cannot be read, nothing is sent that poll.
-
-Stage 4 (factory → Linear) adds a bus listener and the card and progress
-comments beside this, reusing :class:`LinearClient` and :class:`DoorStore`.
+record (:meth:`.report.AttemptRecord.recorded_attempts`) and the requests still
+waiting in the PIPELINE stream (:class:`NatsIntakeQueue`, which never
+consumes). If either cannot be read, nothing is sent that poll. The issues of
+the latest attempts that had already ended are brought to their final state
+once (design section 1, "Each issue is in at most one open attempt").
 
 Log hygiene: no log line carries an issue's title or description, or the key.
 """
@@ -37,7 +42,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -75,7 +80,23 @@ from jarvis.infrastructure.linear.mapping import (
     sentence_of,
     single_prefix,
 )
-from jarvis.infrastructure.linear.store import DoorStore, IssueAlreadyReserved, Send, SendIssue
+from jarvis.infrastructure.linear.progress import BACKLOG, finals
+from jarvis.infrastructure.linear.report import (
+    AnswerPublisher,
+    AssumeAttemptsOpen,
+    AttemptRecord,
+    AttemptRecordUnavailable,
+    BusFeed,
+    RecordedAttempt,
+    Reporter,
+)
+from jarvis.infrastructure.linear.store import (
+    DoorStore,
+    IssueAlreadyReserved,
+    Recovery,
+    Send,
+    SendIssue,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from jarvis.config.settings import JarvisConfig
@@ -93,64 +114,12 @@ POLL_TIMEOUT_SECONDS = 120.0
 EDIT_WATCH_DAYS = 30
 #: Issue ids per edit-check read.
 _EDIT_CHUNK = 50
+#: After a card arrives, how long the door waits for the rest of a burst.
+WAKE_SETTLE_SECONDS = 2.0
 
 
 class BusUnavailable(Exception):
     """A publish was not acknowledged; the send stays ``pending``."""
-
-
-class AttemptRecordUnavailable(Exception):
-    """Whether an attempt is still open could not be read this poll."""
-
-
-@dataclass(frozen=True)
-class RecordedAttempt:
-    """One ``lin-`` correlation id Forge has recorded.
-
-    ``mission_keys`` are a mission's ``mission_features`` keys (the issue
-    identifiers without their hyphen); empty for a single issue, whose
-    identifier is inside its correlation id.
-    """
-
-    correlation_id: str
-    open: bool
-    mission_keys: tuple[str, ...] = ()
-
-
-class AttemptRecord(Protocol):
-    """Forge's record of the door's attempts. Stage 4 reads Forge's database,
-    read-only; stage 3 has only this interface, a test fake and
-    :class:`AssumeAttemptsOpen`.
-
-    ``is_open`` is the one question that ends an attempt. An attempt is open
-    from the moment it is sent until Forge's record shows it ended (design
-    section 2, "When an attempt ends"; a mission: REJECTED, NOT_STARTED, MERGED
-    or NOT_MERGED). When it says an attempt is no longer open, the door
-    releases its issues' reservations, and they may be sent again as the next
-    attempt.
-
-    ``recorded_attempts`` lists every ``lin-`` correlation id Forge has
-    recorded, open or ended, for rebuilding a new or lost door record.
-
-    Both raise :class:`AttemptRecordUnavailable` when the record cannot be
-    read; the door then changes nothing that depends on it this poll.
-    """
-
-    def is_open(self, correlation_id: str) -> bool: ...
-
-    def recorded_attempts(self) -> list[RecordedAttempt]: ...
-
-
-class AssumeAttemptsOpen:
-    """Stage 3: every attempt counts as open, so no reservation is released;
-    and Forge's record cannot be listed, so a new or lost door record cannot
-    be rebuilt and the door sends nothing until it can (it fails closed)."""
-
-    def is_open(self, correlation_id: str) -> bool:
-        return True
-
-    def recorded_attempts(self) -> list[RecordedAttempt]:
-        raise AttemptRecordUnavailable("Forge's record is not read until stage 4")
 
 
 class RebuildUnavailable(Exception):
@@ -224,6 +193,8 @@ class DoorSettings:
     backlog_state: str = "Backlog"
     default_repo: str | None = None
     poll_seconds: float = 30.0
+    #: Linear user id → the identity its answers are sent as (JARVIS_LINEAR_APPROVERS).
+    approvers: dict[str, str] = field(default_factory=dict)
 
 
 def _safe_error(exc: BaseException) -> str:
@@ -242,6 +213,9 @@ class LinearDoor:
         settings: DoorSettings,
         attempts: AttemptRecord | None = None,
         intake: IntakeQueue | None = None,
+        feed: BusFeed | None = None,
+        answers: AnswerPublisher | None = None,
+        wake: asyncio.Event | None = None,
     ) -> None:
         self._client = client
         self._publisher = publisher
@@ -249,6 +223,17 @@ class LinearDoor:
         self._settings = settings
         self._attempts: AttemptRecord = attempts or AssumeAttemptsOpen()
         self._intake = intake
+        self._reporter = Reporter(
+            client=client,
+            store=store,
+            attempts=self._attempts,
+            feed=feed,
+            answers=answers,
+            approvers=dict(settings.approvers),
+        )
+        # Set by the bus feed when a card or notification arrives, so it
+        # reaches Linear without waiting for the next poll.
+        self._wake = wake or asyncio.Event()
         self._team: LinearTeam | None = None
         self._state_ids: dict[str, str] = {}
         self._rebuilt = False
@@ -332,10 +317,11 @@ class LinearDoor:
             open_attempts[request.correlation_id] = self._identifiers(
                 team, request.correlation_id, keys
             )
+        ended = self._latest_ended(team, recorded, set(open_attempts))
 
         numbers = {
             int(identifier.rpartition("-")[2])
-            for identifiers in open_attempts.values()
+            for identifiers in [*open_attempts.values(), *(i for _, _, i in ended)]
             for identifier in identifiers
         }
         by_identifier = {
@@ -348,11 +334,30 @@ class LinearDoor:
             for identifier in identifiers
             if identifier in by_identifier
         ]
+        held = {issue_id for issue_id, _, _ in holds}
+        recoveries = []
+        for cid, outcome, identifiers in ended:
+            members: list[tuple[str, str | None]] = [
+                (by_identifier[i], i)
+                for i in identifiers
+                if i in by_identifier and by_identifier[i] not in held
+            ]
+            for issue_id, final in finals(outcome, members).items():
+                recoveries.append(
+                    Recovery(
+                        cid,
+                        issue_id,
+                        dict(members).get(issue_id),
+                        final.target,
+                        f"Recovered after a restart: {final.text}",
+                    )
+                )
         # Everything is written at once, after every read has succeeded, so a
         # failure part-way leaves the record empty and the next poll rebuilds.
         self._store.apply_rebuild(
             known=[a.correlation_id for a in recorded] + [r.correlation_id for r in waiting],
             reservations=holds,
+            recoveries=recoveries,
         )
         reserved = len(holds)
         self._rebuilt = True
@@ -377,24 +382,77 @@ class LinearDoor:
         team_key, _, number = identifier.rpartition("-")
         return [identifier] if team_key == team.key and number.isdigit() else []
 
-    def _release_ended_attempts(self) -> None:
-        """Release the issues of every attempt the record says has ended."""
-        unfinished = {send.correlation_id for send in self._store.unfinished_sends()}
-        for cid in sorted(set(self._store.reservations().values())):
-            if cid in unfinished:
-                continue  # still being delivered
-            try:
-                still_open = self._attempts.is_open(cid)
-            except AttemptRecordUnavailable as exc:
-                logger.info(
-                    "linear_door_attempt_record_unreadable",
-                    correlation_id=cid,
-                    error=_safe_error(exc),
-                )
+    def _latest_ended(
+        self, team: LinearTeam, recorded: list[RecordedAttempt], open_cids: set[str]
+    ) -> list[tuple[str, Any, list[str]]]:
+        """``(correlation id, outcome, identifiers)`` of the latest ended attempt
+        of each issue or mission that has no open attempt.
+
+        Older ended attempts are history: only the latest says where the issue
+        should be now. Raises :class:`RebuildUnavailable` if an outcome cannot
+        be read (nothing is written).
+        """
+
+        def split(cid: str) -> tuple[str, int]:
+            prefix, _, number = cid.rpartition("-")
+            return f"{prefix}-", int(number) if number.isdigit() else 0
+
+        open_prefixes = {split(cid)[0] for cid in open_cids}
+        latest: dict[str, tuple[int, RecordedAttempt]] = {}
+        for attempt in recorded:
+            prefix, number = split(attempt.correlation_id)
+            if prefix in open_prefixes:
                 continue
-            if not still_open:
-                self._store.end_attempt(cid, "Forge's record shows it ended")
-                logger.info("linear_door_attempt_ended", correlation_id=cid)
+            if prefix not in latest or number > latest[prefix][0]:
+                latest[prefix] = (number, attempt)
+        found = []
+        for _, attempt in sorted(latest.values(), key=lambda pair: pair[1].correlation_id):
+            if attempt.open:
+                continue
+            try:
+                outcome = self._attempts.outcome(attempt.correlation_id)
+            except AttemptRecordUnavailable as exc:
+                raise RebuildUnavailable(f"Forge's record could not be read: {exc}") from None
+            if not outcome.ended:
+                continue
+            identifiers = self._identifiers(
+                team, attempt.correlation_id, list(attempt.mission_keys)
+            )
+            found.append((attempt.correlation_id, outcome, identifiers))
+        return found
+
+    async def _finish_recoveries(self) -> None:
+        """Bring the issues of attempts that had ended before a rebuild to their
+        final state, once: a comment and the move, only when the issue is not
+        already where that attempt left it (Done unless finished; Backlog only
+        while still In Progress), and never for an issue an open attempt holds."""
+        pending = self._store.pending_recoveries()
+        if not pending:
+            return
+        from jarvis.infrastructure.linear.report import _move_to
+
+        reserved = self._store.reservations()
+        current = {
+            issue.id: issue
+            for issue in await self._client.issues_by_id(sorted({r.issue_id for r in pending}))
+        }
+        for recovery in pending:
+            issue = current.get(recovery.issue_id)
+            state_id = (
+                None
+                if issue is None or recovery.issue_id in reserved
+                else _move_to(recovery.target, issue, self._state_ids)
+            )
+            if state_id is not None:
+                await self._client.create_comment(recovery.issue_id, comment(recovery.text))
+                await self._client.move_issue(recovery.issue_id, state_id)
+                logger.info(
+                    "linear_door_recovered_issue",
+                    correlation_id=recovery.correlation_id,
+                    issue=recovery.identifier,
+                    target=recovery.target,
+                )
+            self._store.finish_recovery(recovery.correlation_id, recovery.issue_id)
 
     # ------------------------------------------------------------------
     # One poll
@@ -402,11 +460,17 @@ class LinearDoor:
 
     async def poll_once(self) -> None:
         """One pass of the door. Raises on a Linear or bus failure."""
+        self._wake.clear()
         team = await self._ensure_team()
         await self._rebuild(team)
-        self._release_ended_attempts()
+        await self._finish_recoveries()
         for send in self._store.unfinished_sends():
             await self._advance(send, resumed=True)
+        # Factory → Linear: progress, cards, answers; an ended attempt frees
+        # its issues here, before the ready list is read.
+        await self._reporter.report(
+            self._state_ids, {send.correlation_id for send in self._store.unfinished_sends()}
+        )
 
         ready = await self._client.issues_in_state(team.id, self._state_ids["ready"])
         reserved = self._store.reservations()
@@ -726,7 +790,7 @@ class LinearDoor:
         if cid is None:
             raise LookupError(f"no open attempt holds {identifier}")
         await self._ensure_team()
-        backlog = self._state_ids.get("backlog")
+        backlog = self._state_ids.get(BACKLOG)
         if backlog is None:
             raise LinearError(f"the team has no status called {self._settings.backlog_state!r}")
         released: list[str] = []
@@ -799,9 +863,24 @@ class LinearDoor:
             except Exception as exc:  # every failure waits and tries again
                 error = exc
             delay = self.next_delay(error)
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), timeout=delay)
+            await self._sleep(stop, delay, wake=error is None)
         logger.info("linear_door_stopped")
+
+    async def _sleep(self, stop: asyncio.Event, delay: float, *, wake: bool) -> None:
+        """Wait ``delay`` seconds, until stopped, or (after a good poll) until a
+        card or notification arrives — then a moment more, so a burst is one
+        poll."""
+        waits = [asyncio.ensure_future(stop.wait())]
+        if wake:
+            waits.append(asyncio.ensure_future(self._wake.wait()))
+        try:
+            await asyncio.wait(waits, timeout=delay, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for waiting in waits:
+                waiting.cancel()
+        if wake and self._wake.is_set() and not stop.is_set():
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), timeout=WAKE_SETTLE_SECONDS)
 
 
 def _already_running(cid: str) -> str:
@@ -848,6 +927,7 @@ class DoorConfig:
     settings: DoorSettings
     linear_auth: str
     state_path: Any
+    forge_db: Any = None
     publish_timeout_seconds: float = 5.0
 
     def __repr__(self) -> str:  # never show the key
@@ -876,6 +956,15 @@ def door_config(config: JarvisConfig) -> DoorConfig | str:
         )
     assert linear_auth is not None and owner is not None
     default_repo = (config.linear_default_repo or "").strip() or None
+    from jarvis.infrastructure.linear.cards import parse_approvers
+
+    try:
+        approvers = parse_approvers(config.linear_approvers)
+    except ValueError:
+        return (
+            "the Linear door is not running: JARVIS_LINEAR_APPROVERS has an entry that is "
+            "not <linear user id>=<identity>"
+        )
     return DoorConfig(
         settings=DoorSettings(
             team=team,
@@ -886,9 +975,11 @@ def door_config(config: JarvisConfig) -> DoorConfig | str:
             backlog_state=config.linear_backlog_state,
             default_repo=default_repo,
             poll_seconds=float(config.linear_poll_seconds),
+            approvers=approvers,
         ),
         linear_auth=linear_auth,
         state_path=config.linear_state_dir / "linear-door.sqlite3",
+        forge_db=config.linear_forge_db,
         publish_timeout_seconds=float(config.pipeline_publish_timeout_seconds),
     )
 

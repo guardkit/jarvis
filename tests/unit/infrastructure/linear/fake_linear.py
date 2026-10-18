@@ -53,6 +53,7 @@ class FakeComment:
     issue_id: str
     body: str
     parent_id: str | None = None
+    user_id: str | None = None
 
 
 class FakeLinear:
@@ -74,6 +75,8 @@ class FakeLinear:
                 ("Duplicate", "duplicate"),
             ]
         }
+        # The key's owner: the door's own comments are written as this user.
+        self.key_owner = "user-key-owner"
         self.labels: dict[str, FakeLabel] = {}
         self.issues: dict[str, FakeIssue] = {}
         self.comments: list[FakeComment] = []
@@ -134,6 +137,18 @@ class FakeLinear:
 
     def comments_on(self, issue: FakeIssue) -> list[str]:
         return [c.body for c in self.comments if c.issue_id == issue.id]
+
+    def top_comments_on(self, issue: FakeIssue) -> list[FakeComment]:
+        return [c for c in self.comments if c.issue_id == issue.id and c.parent_id is None]
+
+    def replies_to(self, comment_id: str) -> list[FakeComment]:
+        return [c for c in self.comments if c.parent_id == comment_id]
+
+    def reply(self, parent: FakeComment, body: str, *, user_id: str) -> FakeComment:
+        """A person's reply under a comment."""
+        found = FakeComment(_uuid(), parent.issue_id, body, parent.id, user_id)
+        self.comments.append(found)
+        return found
 
     def client(self) -> LinearClient:
         return LinearClient(FAKE_KEY, transport=httpx.MockTransport(self.handle))
@@ -272,9 +287,25 @@ class FakeLinear:
         ]
         return {"issue": {"comments": self._page(nodes, v.get("after"))}}
 
+    def _op_DoorReplies(self, v: dict[str, Any]) -> dict[str, Any]:
+        wanted = set(v["parentIds"])
+        nodes = [
+            {
+                "id": c.id,
+                "body": c.body,
+                "parentId": c.parent_id,
+                "user": {"id": c.user_id} if c.user_id else None,
+            }
+            for c in self.comments
+            if c.parent_id in wanted
+        ]
+        return {"comments": self._page(nodes, v.get("after"))}
+
     def _op_DoorCommentCreate(self, v: dict[str, Any]) -> dict[str, Any]:
         data = v["input"]
-        comment = FakeComment(_uuid(), data["issueId"], data["body"], data.get("parentId"))
+        comment = FakeComment(
+            _uuid(), data["issueId"], data["body"], data.get("parentId"), self.key_owner
+        )
         self.comments.append(comment)
         return {"commentCreate": {"success": True, "comment": {"id": comment.id}}}
 
@@ -333,29 +364,82 @@ class CapturedBus:
 
 
 class FakeAttempts:
-    """Forge's record, as the test describes it."""
+    """Forge's record, as the test describes it.
+
+    ``outcomes`` gives an attempt's outcome outright (the reader's own
+    dataclasses); otherwise an attempt in ``ended`` (or recorded as ended) has
+    ended quietly (withdrawn, or a mission that did not start) and any other is
+    waiting in the queue. ``cards`` are the cards the record shows open.
+    """
 
     def __init__(self) -> None:
         self.ended: set[str] = set()
+        self.outcomes: dict[str, Any] = {}
+        self.cards: list[Any] = []
         self.recorded: list[Any] = []
         self.unreadable = False
         self.asked: list[str] = []
 
-    def is_open(self, correlation_id: str) -> bool:
-        from jarvis.infrastructure.linear.door import AttemptRecordUnavailable
+    def _check(self, what: str) -> None:
+        from jarvis.infrastructure.linear.report import AttemptRecordUnavailable
 
-        self.asked.append(correlation_id)
+        self.asked.append(what)
         if self.unreadable:
             raise AttemptRecordUnavailable("record locked")
-        return correlation_id not in self.ended
+
+    def outcome(self, correlation_id: str) -> Any:
+        from jarvis.infrastructure.linear import forge_record as fr
+
+        self._check(correlation_id)
+        if correlation_id in self.outcomes:
+            return self.outcomes[correlation_id]
+        ended = correlation_id in self.ended or any(
+            a.correlation_id == correlation_id and not a.open for a in self.recorded
+        )
+        if correlation_id.startswith("lin-m-"):
+            if ended:
+                return fr.MissionOutcome(correlation_id, fr.NOT_STARTED, True, reason="no seed")
+            return fr.MissionOutcome(correlation_id, fr.QUEUED, False)
+        if ended:
+            return fr.SingleOutcome(correlation_id, fr.WITHDRAWN, True, "withdrawn")
+        return fr.SingleOutcome(correlation_id, fr.QUEUED, False)
 
     def recorded_attempts(self) -> list[Any]:
-        from jarvis.infrastructure.linear.door import AttemptRecordUnavailable
-
-        self.asked.append("recorded_attempts")
-        if self.unreadable:
-            raise AttemptRecordUnavailable("record locked")
+        self._check("recorded_attempts")
         return list(self.recorded)
+
+    def open_cards(self, correlation_ids: list[str]) -> list[Any]:
+        self._check("open_cards")
+        return [c for c in self.cards if c.correlation_id in correlation_ids]
+
+
+class FakeFeed:
+    """The bus feed: messages the test pushes, kept until the door handles them."""
+
+    def __init__(self) -> None:
+        self.buffers: dict[str, list[Any]] = {"cards": [], "notifications": []}
+
+    def push(self, name: str, message: Any) -> None:
+        self.buffers[name].append(message)
+
+    def pending(self, name: str) -> list[Any]:
+        return list(self.buffers[name])
+
+    def done(self, name: str, message: Any) -> None:
+        self.buffers[name].remove(message)
+
+
+class CapturedAnswers:
+    """The approval-response publisher; can be told to fail."""
+
+    def __init__(self) -> None:
+        self.published: list[tuple[str, Any, str | None]] = []
+        self.fail = False
+
+    async def publish(self, *, subject: str, payload: Any, correlation_id: str | None) -> None:
+        if self.fail:
+            raise ConnectionError("no connection")
+        self.published.append((subject, payload, correlation_id))
 
 
 class FakeIntake:

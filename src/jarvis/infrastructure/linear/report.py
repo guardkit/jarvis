@@ -1,0 +1,818 @@
+"""The Linear door, factory → Linear (design section 2, stage 4).
+
+Every poll, after the door has finished delivering its own sends:
+
+1. **Progress.** For each open attempt, read Forge's record
+   (:class:`ForgeAttempts`) and write the comment each issue is owed for any
+   change since the door last wrote (:mod:`.progress`; what was written is in
+   the door's record, so a restart repeats nothing). When the record shows the
+   attempt has ended, write each issue's final comment, move it (Done, or
+   Backlog — Backlog only when the issue is still In Progress, so a person who
+   already moved it back to Todo keeps their retry), and only then end the
+   attempt, which releases its issues.
+2. **Cards from the bus.** Card messages from ``agents.approval.forge.*`` on
+   the AGENTS stream (:class:`NatsBusFeed`) are matched to an open attempt by
+   correlation id, mission id and the build ids Forge's record links, checked
+   against the record to be still open, and posted on the attempt's issues
+   (on every member for a mission). Slack notifications from the JARVIS stream
+   are copied onto the issues of an attempt Forge has not filed (visibility
+   only). Each feed's last handled time is recorded, so a restart resumes
+   from there.
+3. **Cards the stream no longer holds** are posted from the record: a merge
+   card in full; a plan card asking for its answer in Slack.
+4. **Answers.** Replies under the door's open card comments are read with one
+   request; ``approve``/``merge`` approve, ``reject``/``decline`` reject,
+   anything else is ignored. A listed author's answer is published as the
+   Slack button does; an unlisted author is told once that only the people
+   listed can answer. Each reply is recorded before its answer is published,
+   so it is never published twice.
+
+Nothing here decides an outcome from a reply: what happened is reported later
+from Forge's record.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Any, ClassVar, Protocol
+
+import structlog
+
+from jarvis.infrastructure.linear import forge_record as fr
+from jarvis.infrastructure.linear.cards import (
+    MERGE,
+    MISSION_PLAN,
+    NOT_LISTED,
+    PLAN,
+    Card,
+    answer_notes,
+    card_comment,
+    notification_comment,
+    parse_card,
+    parse_notification,
+    parse_reply,
+    recovered_card_comment,
+)
+from jarvis.infrastructure.linear.mapping import COMMENT_PREFIX, comment, feature_key, is_finished
+from jarvis.infrastructure.linear.progress import (
+    BACKLOG,
+    DONE,
+    Final,
+    finals,
+    is_mission,
+    key_step,
+    phase_step,
+)
+from jarvis.infrastructure.linear.store import CardComment, DoorStore
+
+logger = structlog.get_logger(__name__)
+
+#: Feeds and their marks in the door's record.
+CARDS = "cards"
+NOTIFICATIONS = "notifications"
+
+#: How long a published request may wait with no Forge row before the door
+#: says so once (design section 2, "Refusals with nothing filed").
+UNFILED_NOTICE_AFTER = timedelta(hours=1)
+UNFILED_NOTICE = (
+    "The factory has not filed this request. If it was refused (see the reason above or "
+    "in Slack), the operator can release it."
+)
+#: A card found open in the record is posted from the record only after this
+#: long, so the full card from the stream, which arrives within moments, wins.
+RECOVERY_GRACE = timedelta(seconds=60)
+
+#: Phases in which a plan card can still be waiting.
+_PLANNING_PHASES = frozenset({fr.UNFILED, fr.QUEUED, fr.PLANNING, fr.PLAN_CARD_OPEN})
+
+
+class AttemptRecordUnavailable(Exception):
+    """Forge's record could not be read this poll."""
+
+
+# ---------------------------------------------------------------------------
+# Forge's record, as the door asks it
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RecordedAttempt:
+    """One ``lin-`` correlation id Forge has recorded (for a rebuild).
+
+    ``mission_keys`` are a mission's ``mission_features`` keys (the issue
+    identifiers without their hyphen); empty for a single issue, whose
+    identifier is inside its correlation id.
+    """
+
+    correlation_id: str
+    open: bool
+    mission_keys: tuple[str, ...] = ()
+
+
+class AttemptRecord(Protocol):
+    """Forge's record of the door's attempts, read-only.
+
+    ``outcome`` is where one attempt has got to (a single issue's or a
+    mission's outcome from :mod:`.forge_record`); its ``ended`` is the one
+    thing that ends an attempt (design section 2, "When an attempt ends").
+    ``recorded_attempts`` lists every ``lin-`` attempt Forge has recorded, for
+    rebuilding a new or lost door record. ``open_cards`` lists the cards still
+    waiting for these attempts. Each raises :class:`AttemptRecordUnavailable`
+    when the record cannot be read; the door then changes nothing that depends
+    on it that poll.
+    """
+
+    def outcome(self, correlation_id: str) -> Any: ...
+
+    def recorded_attempts(self) -> list[RecordedAttempt]: ...
+
+    def open_cards(self, correlation_ids: list[str]) -> list[Any]: ...
+
+
+class AssumeAttemptsOpen:
+    """No Forge record: nothing can be read, so no attempt ever ends, a new or
+    lost door record cannot be rebuilt (nothing is sent until it can), and
+    nothing is reported. Only for commands that never poll (the release)."""
+
+    def outcome(self, correlation_id: str) -> Any:
+        raise AttemptRecordUnavailable("Forge's record is not configured")
+
+    def recorded_attempts(self) -> list[RecordedAttempt]:
+        raise AttemptRecordUnavailable("Forge's record is not configured")
+
+    def open_cards(self, correlation_ids: list[str]) -> list[Any]:
+        raise AttemptRecordUnavailable("Forge's record is not configured")
+
+
+class ForgeAttempts:
+    """:class:`AttemptRecord` from Forge's own SQLite record (read-only)."""
+
+    def __init__(self, record: fr.ForgeRecord) -> None:
+        self._record = record
+
+    def outcome(self, correlation_id: str) -> Any:
+        try:
+            if is_mission(correlation_id):
+                return self._record.outcome_for_mission(correlation_id)
+            return self._record.outcome_for_single(correlation_id)
+        except fr.ForgeRecordUnavailable as exc:
+            raise AttemptRecordUnavailable(str(exc)) from None
+
+    def recorded_attempts(self) -> list[RecordedAttempt]:
+        try:
+            found = []
+            for attempt in self._record.all_linear_attempts():
+                keys: tuple[str, ...] = ()
+                if is_mission(attempt.correlation_id):
+                    keys = tuple(self._record.outcome_for_mission(attempt.correlation_id).keys)
+                found.append(RecordedAttempt(attempt.correlation_id, not attempt.ended, keys))
+            return found
+        except fr.ForgeRecordUnavailable as exc:
+            raise AttemptRecordUnavailable(str(exc)) from None
+
+    def open_cards(self, correlation_ids: list[str]) -> list[Any]:
+        try:
+            return self._record.open_cards_for(correlation_ids)
+        except fr.ForgeRecordUnavailable as exc:
+            raise AttemptRecordUnavailable(str(exc)) from None
+
+
+# ---------------------------------------------------------------------------
+# The bus
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class BusMessage:
+    subject: str
+    data: bytes
+    at: datetime | None = None  # the stream's own time for the message
+
+
+class BusFeed(Protocol):
+    """Messages from the bus, kept until the door has handled them."""
+
+    def pending(self, name: str) -> list[BusMessage]: ...
+
+    def done(self, name: str, message: BusMessage) -> None: ...
+
+
+class NatsBusFeed:
+    """Two non-consuming JetStream subscriptions, buffered for the poll.
+
+    * cards: ``agents.approval.forge.*`` on AGENTS (limits retention). The
+      ``*`` matches one token, so only four-token card subjects arrive, never
+      ``.response``.
+    * notifications: ``jarvis.notification.slack`` on JARVIS (limits, 1 hour).
+
+    Each is an ordered consumer (ephemeral, no acknowledgements), starting
+    from the time the door last recorded for it, or from the start of what the
+    stream still holds. Neither is on the PIPELINE work queue, so neither can
+    take a message from Forge.
+    """
+
+    STREAMS: ClassVar[dict[str, str]] = {CARDS: "AGENTS", NOTIFICATIONS: "JARVIS"}
+
+    def __init__(self, nats_client: Any, *, wake: asyncio.Event | None = None) -> None:
+        self._nats_client = nats_client
+        self._wake = wake
+        self._buffers: dict[str, deque[BusMessage]] = {CARDS: deque(), NOTIFICATIONS: deque()}
+        self._subscriptions: list[Any] = []
+
+    @staticmethod
+    def subjects() -> dict[str, str]:
+        from nats_core import Topics
+
+        cards = Topics.Agents.APPROVAL_REQUEST.replace("{agent_id}", "forge").replace(
+            "{task_id}", "*"
+        )
+        return {CARDS: cards, NOTIFICATIONS: Topics.Jarvis.NOTIFICATION.format(adapter="slack")}
+
+    async def start(self, marks: dict[str, str | None]) -> None:
+        from nats.js.api import ConsumerConfig, DeliverPolicy
+
+        js = self._nats_client.js
+        for name, subject in self.subjects().items():
+            mark = marks.get(name)
+            if mark:
+                config = ConsumerConfig(
+                    deliver_policy=DeliverPolicy.BY_START_TIME,
+                    opt_start_time=datetime.fromisoformat(mark),
+                )
+            else:
+                config = ConsumerConfig(deliver_policy=DeliverPolicy.ALL)
+
+            async def on_message(msg: Any, name: str = name) -> None:
+                self._receive(name, msg)
+
+            self._subscriptions.append(
+                await js.subscribe(
+                    subject,
+                    stream=self.STREAMS[name],
+                    cb=on_message,
+                    ordered_consumer=True,
+                    config=config,
+                )
+            )
+            logger.info("linear_door_bus_subscribed", feed=name, subject=subject, since=mark)
+
+    def _receive(self, name: str, msg: Any) -> None:
+        at = None
+        with contextlib.suppress(Exception):
+            at = msg.metadata.timestamp
+        self._buffers[name].append(BusMessage(msg.subject, bytes(msg.data or b""), at))
+        if self._wake is not None:
+            self._wake.set()
+
+    def pending(self, name: str) -> list[BusMessage]:
+        return list(self._buffers[name])
+
+    def done(self, name: str, message: BusMessage) -> None:
+        buffer = self._buffers[name]
+        if buffer and buffer[0] is message:
+            buffer.popleft()
+        else:
+            with contextlib.suppress(ValueError):
+                buffer.remove(message)
+
+    async def stop(self) -> None:
+        for sub in self._subscriptions:
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(sub.unsubscribe(), timeout=5.0)
+        self._subscriptions.clear()
+
+
+class AnswerPublisher(Protocol):
+    """Publishes an ``ApprovalResponsePayload`` (Jarvis's
+    :class:`~jarvis.infrastructure.slack_reply.NatsApprovalResponsePublisher`:
+    core publish and flush on the AGENTS subject)."""
+
+    async def publish(self, *, subject: str, payload: Any, correlation_id: str | None) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# The reporter
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _Attempt:
+    """One open attempt, as read this poll."""
+
+    correlation_id: str
+    issues: list[tuple[str, str | None]]  # (issue id, identifier)
+    outcome: Any = None
+    by_key: dict[str, tuple[str, str | None]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _Target:
+    attempt: _Attempt
+    issues: list[tuple[str, str | None]]
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+class Reporter:
+    """Factory → Linear for one door. Called by the door once per poll."""
+
+    def __init__(
+        self,
+        *,
+        client: Any,
+        store: DoorStore,
+        attempts: AttemptRecord,
+        feed: BusFeed | None,
+        answers: AnswerPublisher | None,
+        approvers: dict[str, str],
+    ) -> None:
+        self._client = client
+        self._store = store
+        self._attempts = attempts
+        self._feed = feed
+        self._answers = answers
+        self._approvers = approvers
+
+    # -- one poll ---------------------------------------------------------------
+
+    async def report(self, state_ids: dict[str, str], unfinished: set[str]) -> None:
+        """Progress, cards, notifications and answers for every open attempt.
+
+        ``unfinished`` are sends still being delivered; they are left alone.
+        Raises on a Linear failure (the poll then backs off); a Forge record
+        that cannot be read only skips what depends on it.
+        """
+        attempts, unreadable = self._read_attempts(unfinished)
+        for attempt in attempts.values():
+            await self._progress(attempt, state_ids)
+        live = {cid: a for cid, a in attempts.items() if not a.outcome.ended}
+        if unreadable:
+            # A card or notification is matched only against every open
+            # attempt; wait for a poll that can read them all.
+            logger.info("linear_door_cards_wait_for_the_record", unreadable=len(unreadable))
+        else:
+            open_cards = self._open_cards(list(live))
+            if open_cards is not None:
+                await self._cards_from_bus(live, open_cards)
+                await self._notifications(live)
+                await self._cards_from_record(live, open_cards)
+                self._close_settled_cards(live, open_cards)
+        await self._read_answers()
+
+    def _read_attempts(self, unfinished: set[str]) -> tuple[dict[str, _Attempt], list[str]]:
+        found: dict[str, _Attempt] = {}
+        unreadable: list[str] = []
+        for cid in self._store.open_attempts():
+            if cid in unfinished:
+                continue
+            try:
+                outcome = self._attempts.outcome(cid)
+            except AttemptRecordUnavailable as exc:
+                logger.info(
+                    "linear_door_attempt_record_unreadable", correlation_id=cid, error=str(exc)
+                )
+                unreadable.append(cid)
+                continue
+            issues = self._store.reserved_issues(cid)
+            found[cid] = _Attempt(
+                cid,
+                issues,
+                outcome,
+                {feature_key(ident or ""): (iid, ident) for iid, ident in issues},
+            )
+        return found, unreadable
+
+    def _open_cards(self, cids: list[str]) -> list[Any] | None:
+        if not cids:
+            return []
+        try:
+            return self._attempts.open_cards(cids)
+        except AttemptRecordUnavailable as exc:
+            logger.info("linear_door_open_cards_unreadable", error=str(exc))
+            return None
+
+    # -- progress -----------------------------------------------------------------
+
+    async def _progress(self, attempt: _Attempt, state_ids: dict[str, str]) -> None:
+        outcome = attempt.outcome
+        cid = attempt.correlation_id
+        if outcome.phase == fr.UNFILED and not outcome.ended:
+            await self._unfiled(attempt)
+            return
+        if is_mission(cid):
+            for key_attempt in getattr(outcome, "attempts", ()) or ():
+                member = attempt.by_key.get(key_attempt.key)
+                step = key_step(key_attempt)
+                if member is not None and step is not None:
+                    await self._write_step(cid, member[0], step.topic, step.key, step.text)
+        step = phase_step(outcome)
+        if step is not None:
+            for issue_id, _ in attempt.issues:
+                await self._write_step(cid, issue_id, step.topic, step.key, step.text)
+        if outcome.ended:
+            await self._end(attempt, finals(outcome, attempt.issues), state_ids)
+
+    async def _write_step(self, cid: str, issue_id: str, topic: str, key: str, text: str) -> None:
+        if self._store.progress(cid, issue_id, topic) == key:
+            return
+        await self._client.create_comment(issue_id, comment(text))
+        self._store.set_progress(cid, issue_id, topic, key)
+        logger.info("linear_door_progress_comment", correlation_id=cid, topic=topic, key=key)
+
+    async def _unfiled(self, attempt: _Attempt) -> None:
+        cid = attempt.correlation_id
+        since = self._store.progress(cid, "", "unfiled_since")
+        if since is None:
+            self._store.set_progress(cid, "", "unfiled_since", _now().isoformat())
+            return
+        if _now() - datetime.fromisoformat(since) < UNFILED_NOTICE_AFTER:
+            return
+        for issue_id, _ in attempt.issues:
+            await self._write_step(cid, issue_id, "unfiled", "noted", UNFILED_NOTICE)
+
+    async def _end(
+        self, attempt: _Attempt, ends: dict[str, Final], state_ids: dict[str, str]
+    ) -> None:
+        """Final comment and move for each issue, then end the attempt.
+
+        Linear is written first and each step is recorded, so a failure part
+        way is resumed next poll without repeating a comment; the attempt (and
+        its reservations) ends only after every issue is done.
+        """
+        cid = attempt.correlation_id
+        pending = [
+            iid for iid, _ in attempt.issues if self._store.progress(cid, iid, "moved") is None
+        ]
+        current = {i.id: i for i in await self._client.issues_by_id(pending)} if pending else {}
+        for issue_id, _ in attempt.issues:
+            final = ends.get(issue_id)
+            if final is None:
+                continue
+            if self._store.progress(cid, issue_id, "final") is None:
+                await self._client.create_comment(issue_id, comment(final.text))
+                self._store.set_progress(cid, issue_id, "final", final.target)
+            if self._store.progress(cid, issue_id, "moved") is None:
+                issue = current.get(issue_id)
+                state_id = _move_to(final.target, issue, state_ids)
+                if state_id is not None:
+                    await self._client.move_issue(issue_id, state_id)
+                self._store.set_progress(cid, issue_id, "moved", final.target)
+        reason = f"{attempt.outcome.phase}: {attempt.outcome.reason}"[:500]
+        self._store.end_attempt(cid, reason)
+        logger.info("linear_door_attempt_ended", correlation_id=cid, phase=attempt.outcome.phase)
+
+    # -- cards ---------------------------------------------------------------------
+
+    @staticmethod
+    def _index(live: dict[str, _Attempt]) -> dict[str, _Target]:
+        """Every id a card may name an open attempt's work by."""
+        index: dict[str, _Target] = {}
+        for cid, attempt in live.items():
+            outcome = attempt.outcome
+            everyone = _Target(attempt, attempt.issues)
+            for key in (
+                cid,
+                getattr(outcome, "build_id", None),
+                getattr(outcome, "merge_build_id", None),
+                getattr(outcome, "mission_id", None),
+            ):
+                if key:
+                    index.setdefault(str(key), everyone)
+            mission_id = getattr(outcome, "mission_id", None)
+            if mission_id:
+                index.setdefault(f"mission-{mission_id}", everyone)
+            for key_attempt in getattr(outcome, "attempts", ()) or ():
+                member = attempt.by_key.get(key_attempt.key)
+                if member is not None and key_attempt.correlation_id:
+                    index.setdefault(key_attempt.correlation_id, _Target(attempt, [member]))
+        return index
+
+    @staticmethod
+    def _still_open(card: Card, attempt: _Attempt, open_cards: list[Any]) -> bool:
+        """Whether Forge's record still shows the card waiting (a card already
+        answered, in Slack or anywhere, is not posted as open)."""
+        outcome = attempt.outcome
+        if outcome.ended:
+            return False
+        if card.kind == MERGE:
+            return any(c.kind == "merge" and c.request_id == card.request_id for c in open_cards)
+        if card.kind == MISSION_PLAN:
+            return bool(outcome.phase == fr.PLAN_CARD_OPEN)
+        if card.kind == PLAN:
+            if outcome.phase not in _PLANNING_PHASES:
+                return False
+            waiting = getattr(outcome, "request_id", None)
+            return not (
+                outcome.phase == fr.PLAN_CARD_OPEN and waiting and waiting != card.request_id
+            )
+        return True
+
+    def _members(self, attempt: _Attempt) -> tuple[list[str], list[str]]:
+        """For a mission merge card: the members that landed and those that did not."""
+        if not is_mission(attempt.correlation_id):
+            return [], []
+        landed = set(getattr(attempt.outcome, "landed_keys", ()) or ())
+        yes = [ident or iid for key, (iid, ident) in attempt.by_key.items() if key in landed]
+        no = [ident or iid for key, (iid, ident) in attempt.by_key.items() if key not in landed]
+        return sorted(yes), sorted(no)
+
+    async def _cards_from_bus(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
+        if self._feed is None:
+            return
+        index = self._index(live)
+        for message in self._feed.pending(CARDS):
+            card = parse_card(message.subject, message.data, message.at)
+            if card is not None:
+                target = next((index[k] for k in card.match_keys() if k in index), None)
+                if target is not None:
+                    if self._still_open(card, target.attempt, open_cards):
+                        await self._post_card(card, target)
+                    else:
+                        logger.info(
+                            "linear_door_card_not_open",
+                            request_id=card.request_id,
+                            correlation_id=target.attempt.correlation_id,
+                        )
+            self._handled(CARDS, message)
+
+    def _handled(self, name: str, message: BusMessage) -> None:
+        assert self._feed is not None
+        if message.at is not None:
+            self._store.set_mark(name, message.at.isoformat())
+        self._feed.done(name, message)
+
+    async def _post_card(self, card: Card, target: _Target) -> None:
+        attempt = target.attempt
+        landed, missing = self._members(attempt) if card.kind == MERGE else ([], [])
+        body = card_comment(card, landed=landed, missing=missing)
+        if card.kind == PLAN:
+            # A newer plan card replaces an older one of the same attempt.
+            for old in self._store.cards_of(attempt.correlation_id):
+                if old.kind == PLAN and old.request_id != card.request_id and old.status == "open":
+                    self._store.set_card_status(old.request_id, "closed")
+        for issue_id, _ in target.issues:
+            if self._store.card_posted(card.request_id, issue_id):
+                continue
+            comment_id = await self._client.create_comment(issue_id, body)
+            self._store.record_card(
+                CardComment(
+                    request_id=card.request_id,
+                    issue_id=issue_id,
+                    comment_id=comment_id,
+                    correlation_id=attempt.correlation_id,
+                    kind=card.kind,
+                    answerable=True,
+                    approval_subject=card.subject,
+                    reply_correlation_id=card.correlation_id,
+                    assumption_ids=card.assumption_ids(),
+                )
+            )
+            logger.info(
+                "linear_door_card_posted",
+                kind=card.kind,
+                request_id=card.request_id,
+                correlation_id=attempt.correlation_id,
+            )
+
+    async def _notifications(self, live: dict[str, _Attempt]) -> None:
+        if self._feed is None:
+            return
+        for message in self._feed.pending(NOTIFICATIONS):
+            note = parse_notification(message.data)
+            attempt = live.get(note.correlation_id) if note is not None else None
+            if note is not None and attempt is not None and attempt.outcome.phase == fr.UNFILED:
+                body = notification_comment(note)
+                key = f"{attempt.correlation_id}\n{note.message_id}"
+                for issue_id, _ in attempt.issues:
+                    if self._store.notice_posted(issue_id, key):
+                        continue
+                    await self._client.create_comment(issue_id, body)
+                    self._store.record_notice(issue_id, key)
+                logger.info(
+                    "linear_door_notification_copied", correlation_id=attempt.correlation_id
+                )
+            self._handled(NOTIFICATIONS, message)
+
+    async def _cards_from_record(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
+        index = self._index(live)
+        now = _now()
+        for found in open_cards:
+            target = next(
+                (
+                    index[k]
+                    for k in (found.correlation_id, getattr(found, "build_id", None))
+                    if k and k in index
+                ),
+                None,
+            )
+            if target is None:
+                continue
+            cid = target.attempt.correlation_id
+            issues = [
+                (iid, ident)
+                for iid, ident in target.issues
+                if not self._store.card_posted(found.request_id, iid)
+            ]
+            if not issues:
+                continue
+            topic = f"card-seen:{found.request_id}"
+            seen = self._store.progress(cid, "", topic)
+            if seen is None:
+                self._store.set_progress(cid, "", topic, now.isoformat())
+                continue
+            if now - datetime.fromisoformat(seen) < RECOVERY_GRACE:
+                continue
+            kind = (
+                MERGE if found.kind == "merge" else (PLAN if found.kind == "plan" else MISSION_PLAN)
+            )
+            landed, missing = self._members(target.attempt) if kind == MERGE else ([], [])
+            body, answerable = recovered_card_comment(
+                kind,
+                found.request_id,
+                app_url=getattr(found, "app_url", None),
+                report_url=getattr(found, "report_url", None),
+                landed=landed,
+                missing=missing,
+            )
+            for issue_id, _ in issues:
+                comment_id = await self._client.create_comment(issue_id, body)
+                self._store.record_card(
+                    CardComment(
+                        request_id=found.request_id,
+                        issue_id=issue_id,
+                        comment_id=comment_id,
+                        correlation_id=cid,
+                        kind=kind,
+                        answerable=answerable and bool(found.approval_subject),
+                        approval_subject=found.approval_subject,
+                        reply_correlation_id=found.correlation_id,
+                    )
+                )
+            logger.info(
+                "linear_door_card_posted_from_record",
+                kind=kind,
+                request_id=found.request_id,
+                correlation_id=cid,
+            )
+
+    def _close_settled_cards(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
+        """Stop reading answers under cards Forge's record no longer shows open."""
+        waiting_merges = {c.request_id for c in open_cards if c.kind == "merge"}
+        for card in self._store.open_cards():
+            attempt = live.get(card.correlation_id)
+            if attempt is None:
+                continue
+            outcome = attempt.outcome
+            settled = (
+                (card.kind == MERGE and card.request_id not in waiting_merges)
+                or (card.kind == MISSION_PLAN and outcome.phase != fr.PLAN_CARD_OPEN)
+                or (card.kind == PLAN and outcome.phase not in _PLANNING_PHASES)
+            )
+            if settled:
+                self._store.set_card_status(card.request_id, "closed")
+
+    # -- answers -------------------------------------------------------------------
+
+    async def _read_answers(self) -> None:
+        cards = self._store.open_cards(answerable_only=True)
+        if not cards or self._answers is None:
+            return
+        by_comment = {c.comment_id: c for c in cards}
+        for reply in await self._client.replies_under(list(by_comment)):
+            if self._store.reply_handled(reply.id):
+                continue
+            card = by_comment.get(reply.parent_id)
+            if card is None:
+                continue
+            if reply.body.lstrip().startswith(COMMENT_PREFIX.strip()):
+                self._store.record_reply(reply.id, card.request_id, "the door's own")
+                continue
+            decision, notes = parse_reply(reply.body)
+            if decision is None:
+                self._store.record_reply(reply.id, card.request_id, "not an answer")
+                continue
+            current = next(
+                (
+                    c
+                    for c in self._store.cards_of(card.correlation_id)
+                    if c.comment_id == card.comment_id
+                ),
+                card,
+            )
+            if current.status != "open":
+                self._store.record_reply(reply.id, card.request_id, "card already answered")
+                continue
+            identity = self._approvers.get(reply.user_id or "")
+            if identity is None:
+                await self._refuse(card, reply.id, reply.user_id)
+                continue
+            await self._answer(card, reply.id, decision, notes, identity)
+
+    async def _refuse(self, card: CardComment, reply_id: str, user_id: str | None) -> None:
+        key = f"not-listed\n{card.comment_id}\n{user_id or ''}"
+        if not self._store.notice_posted(card.issue_id, key):
+            own = await self._client.create_comment(
+                card.issue_id, comment(NOT_LISTED), parent_id=card.comment_id
+            )
+            self._store.record_reply(own, card.request_id, "the door's own")
+            self._store.record_notice(card.issue_id, key)
+        self._store.record_reply(reply_id, card.request_id, "author not listed")
+        logger.info("linear_door_answer_refused", request_id=card.request_id)
+
+    async def _answer(
+        self, card: CardComment, reply_id: str, decision: str, notes: str | None, identity: str
+    ) -> None:
+        from nats_core.events import ApprovalResponsePayload, AssumptionDisposition
+
+        assert self._answers is not None and card.approval_subject
+        dispositions = (
+            [
+                AssumptionDisposition(assumption_id=a, disposition="accepted")
+                for a in card.assumption_ids
+            ]
+            if decision == "approve"
+            else []
+        )
+        payload = ApprovalResponsePayload(
+            request_id=card.request_id,
+            decision=decision,  # type: ignore[arg-type]
+            decided_by=identity,
+            notes=answer_notes(card.kind, decision, notes),
+            dispositions=dispositions or None,
+        )
+        # Recorded first, so a reply is never published twice; undone only
+        # when the publish certainly failed, so the next poll tries again.
+        self._store.record_reply(reply_id, card.request_id, decision, answers=True)
+        try:
+            await self._answers.publish(
+                subject=f"{card.approval_subject}.response",
+                payload=payload,
+                correlation_id=card.reply_correlation_id,
+            )
+        except Exception as exc:
+            self._store.forget_reply(reply_id, card.request_id)
+            logger.warning(
+                "linear_door_answer_publish_failed",
+                request_id=card.request_id,
+                error_class=type(exc).__name__,
+            )
+            return
+        logger.info(
+            "linear_door_answer_published",
+            request_id=card.request_id,
+            decision=decision,
+            decided_by=identity,
+        )
+        words = {"approve": "merge", "reject": "decline"} if card.kind == MERGE else {}
+        word = words.get(decision, decision)
+        own = await self._client.create_comment(
+            card.issue_id,
+            comment(
+                f"Sent **{word}** to the factory. What happens next is reported here from the "
+                "factory's own record."
+            ),
+            parent_id=card.comment_id,
+        )
+        self._store.record_reply(own, card.request_id, "the door's own")
+
+
+def _move_to(target: str, issue: Any, state_ids: dict[str, str]) -> str | None:
+    """The status to move an ending issue to, or ``None`` to leave it.
+
+    Done: unless it is already finished (Done, Canceled, a duplicate).
+    Backlog: only while it is still In Progress, the door's own status, so a
+    person who has already moved it (back to Todo to retry, or anywhere else)
+    is not overruled.
+    """
+    if issue is None:
+        return None
+    if target == DONE:
+        return None if is_finished(issue.state.type) else state_ids.get("done")
+    if target == BACKLOG:
+        return state_ids.get("backlog") if issue.state.id == state_ids.get("started") else None
+    return None
+
+
+__all__ = [
+    "CARDS",
+    "NOTIFICATIONS",
+    "RECOVERY_GRACE",
+    "UNFILED_NOTICE",
+    "UNFILED_NOTICE_AFTER",
+    "AnswerPublisher",
+    "AssumeAttemptsOpen",
+    "AttemptRecord",
+    "AttemptRecordUnavailable",
+    "BusFeed",
+    "BusMessage",
+    "ForgeAttempts",
+    "NatsBusFeed",
+    "RecordedAttempt",
+    "Reporter",
+]

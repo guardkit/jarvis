@@ -28,6 +28,7 @@ structured events rather than bare ``click.echo`` writes.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import os
 import signal
@@ -634,9 +635,17 @@ async def _run_serve_linear() -> None:
     from jarvis.config.settings import JarvisConfig
     from jarvis.infrastructure.linear.client import LinearClient
     from jarvis.infrastructure.linear.door import LinearDoor, NatsIntakeQueue, door_config
+    from jarvis.infrastructure.linear.forge_record import ForgeRecord
+    from jarvis.infrastructure.linear.report import (
+        CARDS,
+        NOTIFICATIONS,
+        ForgeAttempts,
+        NatsBusFeed,
+    )
     from jarvis.infrastructure.linear.store import DoorStore
     from jarvis.infrastructure.nats_client import NATSClient
     from jarvis.infrastructure.slack_planning_intake import NatsPlanningQueuedPublisher
+    from jarvis.infrastructure.slack_reply import NatsApprovalResponsePublisher
 
     _configure_default_logging()
     log = structlog.get_logger(__name__)
@@ -665,6 +674,20 @@ async def _run_serve_linear() -> None:
 
     store = DoorStore(resolved.state_path)
     client = LinearClient(resolved.linear_auth)
+    # Factory → Linear: Forge's record read-only, cards and Slack
+    # notifications from the bus (never PIPELINE), answers as the Slack
+    # button sends them.
+    wake = asyncio.Event()
+    feed = NatsBusFeed(nats_client, wake=wake)
+    try:
+        await feed.start({CARDS: store.mark(CARDS), NOTIFICATIONS: store.mark(NOTIFICATIONS)})
+    except Exception as exc:
+        log.error("jarvis_serve_linear_bus_subscribe_failed", error_class=type(exc).__name__)
+        store.close()
+        await client.aclose()
+        with contextlib.suppress(Exception):
+            await nats_client.drain(timeout=5.0)
+        raise SystemExit(1) from None
     door = LinearDoor(
         client=client,
         publisher=NatsPlanningQueuedPublisher(
@@ -672,7 +695,11 @@ async def _run_serve_linear() -> None:
         ),
         store=store,
         settings=resolved.settings,
+        attempts=ForgeAttempts(ForgeRecord(resolved.forge_db)),
         intake=NatsIntakeQueue(nats_client),
+        feed=feed,
+        answers=NatsApprovalResponsePublisher(nats_client),
+        wake=wake,
     )
 
     stop = asyncio.Event()
@@ -698,6 +725,7 @@ async def _run_serve_linear() -> None:
         await door.run(stop)
     finally:
         watcher.cancel()
+        await feed.stop()
         await client.aclose()
         store.close()
         bus_closed = nats_client.client.is_closed

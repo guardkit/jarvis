@@ -28,19 +28,39 @@ One SQLite file in the door's own volume, one writer (the door). Tables:
     Comments the door has already written about an issue that was not sent, so
     each is written once.
 
-Stage 4 adds its own tables (card comments, progress steps, the last card time)
-beside these and raises ``user_version``.
+Stage 4 (factory → Linear) adds, at ``user_version`` 2:
+
+``progress``
+    What the door last wrote about an open attempt, per issue and topic (the
+    phase it last commented, each mission key's last reported attempt, the
+    final comment and move), so each change is commented once, across
+    restarts.
+``card_comments``
+    Each card posted on an issue: the card's request id, the comment's id,
+    whether it can be answered from Linear (and the subject and correlation id
+    the answer goes to, and the assumption ids an approve accepts), and
+    whether it is open, answered or closed.
+``replies``
+    Replies under card comments that the door has handled (or written itself),
+    so an answer is never published twice.
+``marks``
+    The time of the last bus message handled on each feed (cards,
+    notifications), where the subscription restarts.
+``recoveries``
+    After a rebuild, the issues of attempts that had already ended, to be
+    brought to their final state once.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sends (
@@ -89,6 +109,49 @@ CREATE TABLE IF NOT EXISTS notices (
     notice_hash TEXT NOT NULL,
     posted_at   TEXT NOT NULL,
     PRIMARY KEY (issue_id, notice_hash)
+);
+CREATE TABLE IF NOT EXISTS progress (
+    correlation_id TEXT NOT NULL,
+    issue_id       TEXT NOT NULL,
+    topic          TEXT NOT NULL,
+    value          TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    PRIMARY KEY (correlation_id, issue_id, topic)
+);
+CREATE TABLE IF NOT EXISTS card_comments (
+    request_id       TEXT NOT NULL,
+    issue_id         TEXT NOT NULL,
+    comment_id       TEXT NOT NULL,
+    correlation_id   TEXT NOT NULL,
+    kind             TEXT NOT NULL,
+    answerable       INTEGER NOT NULL,
+    approval_subject TEXT,
+    reply_correlation_id TEXT,
+    assumption_ids   TEXT NOT NULL DEFAULT '[]',
+    status           TEXT NOT NULL DEFAULT 'open'
+                     CHECK (status IN ('open', 'answered', 'closed')),
+    posted_at        TEXT NOT NULL,
+    PRIMARY KEY (request_id, issue_id)
+);
+CREATE INDEX IF NOT EXISTS card_comments_by_comment ON card_comments (comment_id);
+CREATE TABLE IF NOT EXISTS replies (
+    comment_id TEXT PRIMARY KEY,
+    request_id TEXT,
+    outcome    TEXT NOT NULL,
+    handled_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS marks (
+    name  TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recoveries (
+    correlation_id TEXT NOT NULL,
+    issue_id       TEXT NOT NULL,
+    identifier     TEXT,
+    target         TEXT NOT NULL CHECK (target IN ('done', 'backlog')),
+    text           TEXT NOT NULL,
+    done           INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (correlation_id, issue_id)
 );
 """
 
@@ -331,12 +394,27 @@ class DoorStore:
             for table in ("sends", "reservations", "known_attempts")
         )
 
-    def apply_rebuild(self, *, known: list[str], reservations: list[tuple[str, str, str]]) -> None:
+    def apply_rebuild(
+        self,
+        *,
+        known: list[str],
+        reservations: list[tuple[str, str, str]],
+        recoveries: list[Recovery] | None = None,
+    ) -> None:
         """Write a rebuild in one transaction: every attempt found (for the
-        numbering) and ``(issue id, correlation id, identifier)`` for each
-        issue an open attempt holds."""
+        numbering), ``(issue id, correlation id, identifier)`` for each
+        issue an open attempt holds, and the issues of ended attempts to bring
+        to their final state once."""
         now = _now()
         with self._db:
+            self._db.executemany(
+                "INSERT OR IGNORE INTO recoveries "
+                "(correlation_id, issue_id, identifier, target, text) VALUES (?, ?, ?, ?, ?)",
+                [
+                    (r.correlation_id, r.issue_id, r.identifier, r.target, r.text)
+                    for r in recoveries or []
+                ],
+            )
             self._db.executemany(
                 "INSERT OR IGNORE INTO known_attempts (correlation_id, learned_at) VALUES (?, ?)",
                 [(cid, now) for cid in known],
@@ -385,8 +463,14 @@ class DoorStore:
         return row[0] if row else None
 
     def end_attempt(self, correlation_id: str, reason: str) -> None:
-        """The attempt has ended: free its issues, and never deliver it again."""
+        """The attempt has ended: free its issues, never deliver it again, and
+        stop reading answers under its cards."""
         with self._db:
+            self._db.execute(
+                "UPDATE card_comments SET status = 'closed' "
+                "WHERE correlation_id = ? AND status = 'open'",
+                (correlation_id,),
+            )
             self._db.execute(
                 "INSERT OR IGNORE INTO ended_attempts (correlation_id, reason, ended_at) "
                 "VALUES (?, ?, ?)",
@@ -431,5 +515,206 @@ class DoorStore:
                 "DELETE FROM notices WHERE issue_id = ?", [(i,) for i in issue_ids]
             )
 
+    def open_attempts(self) -> list[str]:
+        """The correlation ids of every open attempt (those holding issues)."""
+        return [
+            row[0]
+            for row in self._db.execute(
+                "SELECT DISTINCT correlation_id FROM reservations ORDER BY correlation_id"
+            )
+        ]
 
-__all__ = ["STATUSES", "DoorStore", "IssueAlreadyReserved", "Send", "SendIssue"]
+    def reserved_at(self, correlation_id: str) -> str | None:
+        row = self._db.execute(
+            "SELECT min(reserved_at) FROM reservations WHERE correlation_id = ?",
+            (correlation_id,),
+        ).fetchone()
+        return row[0] if row else None
+
+    # -- progress (stage 4) --------------------------------------------------
+
+    def progress(self, correlation_id: str, issue_id: str, topic: str) -> str | None:
+        row = self._db.execute(
+            "SELECT value FROM progress WHERE correlation_id = ? AND issue_id = ? AND topic = ?",
+            (correlation_id, issue_id, topic),
+        ).fetchone()
+        return row[0] if row else None
+
+    def set_progress(self, correlation_id: str, issue_id: str, topic: str, value: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO progress "
+                "(correlation_id, issue_id, topic, value, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (correlation_id, issue_id, topic, value, _now()),
+            )
+
+    # -- card comments (stage 4) ---------------------------------------------
+
+    def card_posted(self, request_id: str, issue_id: str) -> bool:
+        return (
+            self._db.execute(
+                "SELECT 1 FROM card_comments WHERE request_id = ? AND issue_id = ?",
+                (request_id, issue_id),
+            ).fetchone()
+            is not None
+        )
+
+    def record_card(self, card: CardComment) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR IGNORE INTO card_comments (request_id, issue_id, comment_id, "
+                "correlation_id, kind, answerable, approval_subject, reply_correlation_id, "
+                "assumption_ids, status, posted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    card.request_id,
+                    card.issue_id,
+                    card.comment_id,
+                    card.correlation_id,
+                    card.kind,
+                    int(card.answerable),
+                    card.approval_subject,
+                    card.reply_correlation_id,
+                    json.dumps(list(card.assumption_ids)),
+                    card.status,
+                    _now(),
+                ),
+            )
+
+    @staticmethod
+    def _card_from_row(row: sqlite3.Row) -> CardComment:
+        return CardComment(
+            request_id=row["request_id"],
+            issue_id=row["issue_id"],
+            comment_id=row["comment_id"],
+            correlation_id=row["correlation_id"],
+            kind=row["kind"],
+            answerable=bool(row["answerable"]),
+            approval_subject=row["approval_subject"],
+            reply_correlation_id=row["reply_correlation_id"],
+            assumption_ids=tuple(json.loads(row["assumption_ids"] or "[]")),
+            status=row["status"],
+        )
+
+    def open_cards(self, *, answerable_only: bool = False) -> list[CardComment]:
+        sql = "SELECT * FROM card_comments WHERE status = 'open'"
+        if answerable_only:
+            sql += " AND answerable = 1"
+        return [self._card_from_row(r) for r in self._db.execute(sql + " ORDER BY rowid")]
+
+    def cards_of(self, correlation_id: str) -> list[CardComment]:
+        return [
+            self._card_from_row(r)
+            for r in self._db.execute(
+                "SELECT * FROM card_comments WHERE correlation_id = ? ORDER BY rowid",
+                (correlation_id,),
+            )
+        ]
+
+    def set_card_status(self, request_id: str, status: str) -> None:
+        """Answer or close a card on every issue it was posted on."""
+        with self._db:
+            self._db.execute(
+                "UPDATE card_comments SET status = ? WHERE request_id = ? AND status = 'open'",
+                (status, request_id),
+            )
+
+    # -- replies (stage 4) ---------------------------------------------------
+
+    def reply_handled(self, comment_id: str) -> bool:
+        return (
+            self._db.execute("SELECT 1 FROM replies WHERE comment_id = ?", (comment_id,)).fetchone()
+            is not None
+        )
+
+    def record_reply(
+        self, comment_id: str, request_id: str | None, outcome: str, *, answers: bool = False
+    ) -> None:
+        """Record a handled reply; with ``answers`` the card is answered in the
+        same transaction (written before the answer is published)."""
+        with self._db:
+            self._db.execute(
+                "INSERT OR IGNORE INTO replies (comment_id, request_id, outcome, handled_at) "
+                "VALUES (?, ?, ?, ?)",
+                (comment_id, request_id, outcome, _now()),
+            )
+            if answers and request_id:
+                self._db.execute(
+                    "UPDATE card_comments SET status = 'answered' "
+                    "WHERE request_id = ? AND status = 'open'",
+                    (request_id,),
+                )
+
+    def forget_reply(self, comment_id: str, request_id: str) -> None:
+        """Undo :meth:`record_reply` after a publish that certainly failed."""
+        with self._db:
+            self._db.execute("DELETE FROM replies WHERE comment_id = ?", (comment_id,))
+            self._db.execute(
+                "UPDATE card_comments SET status = 'open' "
+                "WHERE request_id = ? AND status = 'answered'",
+                (request_id,),
+            )
+
+    # -- marks (stage 4) -----------------------------------------------------
+
+    def mark(self, name: str) -> str | None:
+        row = self._db.execute("SELECT value FROM marks WHERE name = ?", (name,)).fetchone()
+        return row[0] if row else None
+
+    def set_mark(self, name: str, value: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO marks (name, value) VALUES (?, ?)", (name, value)
+            )
+
+    # -- recoveries (stage 4) ------------------------------------------------
+
+    def pending_recoveries(self) -> list[Recovery]:
+        return [
+            Recovery(r["correlation_id"], r["issue_id"], r["identifier"], r["target"], r["text"])
+            for r in self._db.execute("SELECT * FROM recoveries WHERE done = 0 ORDER BY rowid")
+        ]
+
+    def finish_recovery(self, correlation_id: str, issue_id: str) -> None:
+        with self._db:
+            self._db.execute(
+                "UPDATE recoveries SET done = 1 WHERE correlation_id = ? AND issue_id = ?",
+                (correlation_id, issue_id),
+            )
+
+
+@dataclass(frozen=True)
+class CardComment:
+    """A card posted as a comment on one issue."""
+
+    request_id: str
+    issue_id: str
+    comment_id: str
+    correlation_id: str  # the door's attempt
+    kind: str  # plan | mission_plan | merge | other
+    answerable: bool
+    approval_subject: str | None = None
+    reply_correlation_id: str | None = None
+    assumption_ids: tuple[str, ...] = ()
+    status: str = "open"
+
+
+@dataclass(frozen=True)
+class Recovery:
+    """An issue of an attempt that had ended before a rebuild."""
+
+    correlation_id: str
+    issue_id: str
+    identifier: str | None
+    target: str  # done | backlog
+    text: str
+
+
+__all__ = [
+    "STATUSES",
+    "CardComment",
+    "DoorStore",
+    "IssueAlreadyReserved",
+    "Recovery",
+    "Send",
+    "SendIssue",
+]
