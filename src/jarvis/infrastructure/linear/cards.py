@@ -248,10 +248,11 @@ def _plan_parts(details: dict[str, Any]) -> list[str]:
             lines = [f"**{check.get('title') or 'One thing to confirm'}**"]
             if check.get("statement"):
                 lines.append(f"> {check['statement']}")
+            # Forge counts an approval that leaves this item unanswered as
+            # "no sign-in" (planning/driver.py 5940-5948).
             lines.append(
-                "Approving here leaves this question unanswered"
-                + (f": {check['no_answer_means']}" if check.get("no_answer_means") else ".")
-                + " To answer it, use the card in Slack."
+                "Approving here counts as agreeing that nothing here involves signing in. "
+                "To disagree, answer the card in Slack."
             )
             parts.append("\n\n".join(lines))
         return parts

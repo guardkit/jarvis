@@ -361,7 +361,7 @@ def test_approved_and_not_yet_reported_is_publication_in_flight(ledger: Ledger) 
     ledger.decide(build_id, "approve")
     ledger.publication(build_id, "publication pending")
     out = single(ledger)
-    assert (out.phase, out.ended, out.required_action) == (fr.PUBLICATION_IN_FLIGHT, False, None)
+    assert (out.phase, out.ended) == (fr.PUBLICATION_IN_FLIGHT, False)
     assert ledger.record.open_cards_for([CID]) == []
 
 
@@ -380,7 +380,6 @@ def test_press_finished_without_publishing_is_publication_stopped(ledger: Ledger
     out = single(ledger)
     assert (out.phase, out.ended) == (fr.PUBLICATION_STOPPED, False)
     assert out.reason == "it was checked but not published: the publisher refused"
-    assert out.required_action is not None and build_id in out.required_action
 
 
 def test_merge_report_that_failed_before_publication_ends_the_attempt(ledger: Ledger) -> None:

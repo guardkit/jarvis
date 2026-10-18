@@ -34,9 +34,10 @@ Every poll, after the door has finished delivering its own sends:
    still shows the card open, the door says once under the card that it
    could not confirm the answer, and the card takes a new reply.
 
-Every comment the door writes here ends with a short reference (``ref: …``)
-recorded before it is sent, so a comment whose sending was not confirmed is
-looked for before it is written again (:func:`write_once`).
+Every comment the door writes here ends with a short note in small italics
+(``_factory note <12 hex>_``) recorded before it is sent, so a comment whose
+sending was not confirmed is looked for before it is written again
+(:func:`write_once`).
 
 Nothing here decides an outcome from a reply: what happened is reported later
 from Forge's record.
@@ -48,6 +49,7 @@ import asyncio
 import contextlib
 import hashlib
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, Protocol
@@ -71,7 +73,12 @@ from jarvis.infrastructure.linear.cards import (
     parse_reply,
     recovered_card_comment,
 )
-from jarvis.infrastructure.linear.client import LinearAuthError, LinearError, LinearRateLimited
+from jarvis.infrastructure.linear.client import (
+    LinearAuthError,
+    LinearError,
+    LinearRateLimited,
+    LinearRefused,
+)
 from jarvis.infrastructure.linear.mapping import COMMENT_PREFIX, comment, feature_key, is_finished
 from jarvis.infrastructure.linear.progress import (
     BACKLOG,
@@ -115,8 +122,9 @@ _OPEN = "open"
 _SETTLED = "settled"
 _UNKNOWN = "unknown"  # a card the record cannot show either way: Slack only
 
-#: The last line of every comment written once: ``ref: <ref>``.
-REF_WORD = "ref:"
+#: The last line of every comment written once, in Linear's small italics:
+#: ``_factory note <ref>_`` (searchable, and quiet for the person reading).
+REF_WORD = "factory note"
 
 
 def ref_for(*parts: str) -> str:
@@ -150,7 +158,7 @@ async def write_once(
             return str(found.id)
     else:
         store.begin_comment(ref, issue_id)
-    comment_id = await client.create_comment(issue_id, f"{body}\n\n{marker}", parent_id=parent_id)
+    comment_id = await client.create_comment(issue_id, f"{body}\n\n_{marker}_", parent_id=parent_id)
     store.finish_comment(ref, comment_id)
     return str(comment_id)
 
@@ -288,9 +296,17 @@ class NatsBusFeed:
 
     STREAMS: ClassVar[dict[str, str]] = {CARDS: "AGENTS", NOTIFICATIONS: "JARVIS"}
 
-    def __init__(self, nats_client: Any, *, wake: asyncio.Event | None = None) -> None:
+    def __init__(
+        self,
+        nats_client: Any,
+        *,
+        wake: asyncio.Event | None = None,
+        wake_if: Callable[[BusMessage], bool] | None = None,
+    ) -> None:
         self._nats_client = nats_client
         self._wake = wake
+        # Wake the door early only for messages about its own work.
+        self._wake_if = wake_if
         self._buffers: dict[str, deque[BusMessage]] = {CARDS: deque(), NOTIFICATIONS: deque()}
         self._subscriptions: list[Any] = []
 
@@ -335,8 +351,9 @@ class NatsBusFeed:
         at = None
         with contextlib.suppress(Exception):
             at = msg.metadata.timestamp
-        self._buffers[name].append(BusMessage(msg.subject, bytes(msg.data or b""), at))
-        if self._wake is not None:
+        message = BusMessage(msg.subject, bytes(msg.data or b""), at)
+        self._buffers[name].append(message)
+        if self._wake is not None and (self._wake_if is None or self._wake_if(message)):
             self._wake.set()
 
     def pending(self, name: str) -> list[BusMessage]:
@@ -549,15 +566,26 @@ class Reporter:
             final = ends.get(issue_id)
             if final is None:
                 continue
-            if self._store.progress(cid, issue_id, "final") is None:
-                await self._write(issue_id, comment(final.text), ref_for("final", cid, issue_id))
-                self._store.set_progress(cid, issue_id, "final", final.target)
-            if self._store.progress(cid, issue_id, "moved") is None:
-                issue = current.get(issue_id)
-                state_id = _move_to(final.target, issue, state_ids)
-                if state_id is not None:
-                    await self._client.move_issue(issue_id, state_id)
-                self._store.set_progress(cid, issue_id, "moved", final.target)
+            try:
+                if self._store.progress(cid, issue_id, "final") is None:
+                    await self._write(
+                        issue_id, comment(final.text), ref_for("final", cid, issue_id)
+                    )
+                    self._store.set_progress(cid, issue_id, "final", final.target)
+                if self._store.progress(cid, issue_id, "moved") is None:
+                    issue = current.get(issue_id)
+                    state_id = _move_to(final.target, issue, state_ids)
+                    if state_id is not None:
+                        await self._client.move_issue(issue_id, state_id)
+                    self._store.set_progress(cid, issue_id, "moved", final.target)
+            except LinearRefused as exc:
+                # The issue was deleted (or Linear refuses it for good): it is
+                # finished here, so the others still end and are released.
+                logger.warning(
+                    "linear_door_final_refused", correlation_id=cid, error=str(exc)[:300]
+                )
+                self._store.set_progress(cid, issue_id, "final", "refused")
+                self._store.set_progress(cid, issue_id, "moved", "refused")
         reason = f"{attempt.outcome.phase}: {attempt.outcome.reason}"[:500]
         self._store.end_attempt(cid, reason)
         logger.info("linear_door_attempt_ended", correlation_id=cid, phase=attempt.outcome.phase)
@@ -684,22 +712,29 @@ class Reporter:
                         answerable = state == _OPEN and not card.slack_only
                         try:
                             await self._post_card(card, target, answerable=answerable)
-                        except (LinearAuthError, LinearRateLimited):
-                            raise
-                        except LinearError as exc:
-                            # Kept for the next poll; a card Linear keeps
-                            # refusing (its issue deleted) is let go after a
-                            # few polls so the cards behind it still arrive.
+                        except LinearRefused as exc:
+                            # Linear refused this comment (its issue deleted,
+                            # say): the card is kept in the door's record for
+                            # the next poll, and let go after a few refusals
+                            # so the cards behind it still arrive.
                             tries = self._card_failures.get(card.request_id, 0) + 1
                             self._card_failures[card.request_id] = tries
                             logger.warning(
-                                "linear_door_card_post_failed",
+                                "linear_door_card_refused",
                                 request_id=card.request_id,
                                 tries=tries,
                                 error=str(exc)[:300],
                             )
                             if tries < MAX_CARD_TRIES:
+                                self._hold(CARDS, held_id, message)
                                 return
+                        except BaseException:
+                            # An outage (no answer, a time-out, HTTP 5xx), the
+                            # rate limit or a refused key: nothing is counted;
+                            # the full card is kept in the door's record and
+                            # the poll stops (Codex review R9, coach C3).
+                            self._hold(CARDS, held_id, message)
+                            raise
             self._handled(CARDS, held_id, message)
 
     async def _post_card(self, card: Card, target: _Target, *, answerable: bool) -> None:
@@ -765,7 +800,16 @@ class Reporter:
     async def _cards_from_record(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
         index = self._index(live)
         now = _now()
+        # Cards the door has in full, held or still buffered: these wait for
+        # the full card, never for the Slack-only fallback (Codex review R9).
+        waiting = {
+            card.request_id
+            for _, message in self._pending(CARDS)
+            if (card := parse_card(message.subject, message.data)) is not None
+        }
         for found in open_cards:
+            if found.request_id in waiting:
+                continue
             target = next(
                 (
                     index[k]
@@ -974,6 +1018,23 @@ class Reporter:
 _RECORD_KINDS = {"merge": MERGE, "plan": PLAN, "mission_plan": MISSION_PLAN}
 
 
+def wakes_for(store: DoorStore) -> Callable[[BusMessage], bool]:
+    """Whether a card or notification is about one of the door's own open
+    attempts (its correlation id is the attempt's, or a child of it), so the
+    door polls at once rather than at the next poll (coach C6)."""
+
+    def ours(message: BusMessage) -> bool:
+        card = parse_card(message.subject, message.data)
+        if card is not None:
+            named = [card.correlation_id, card.details.get("correlation_id")]
+        else:
+            note = parse_notification(message.data)
+            named = [note.correlation_id] if note is not None else []
+        return _belongs_to([str(c) for c in named if c], set(store.open_attempts()))
+
+    return ours
+
+
 def _belongs_to(correlation_ids: list[str], unfinished: set[str]) -> bool:
     """Whether a message is for a send not yet delivered: its correlation id
     is the send's, or a child of it (a mission feature's
@@ -1029,5 +1090,6 @@ __all__ = [
     "RecordedAttempt",
     "Reporter",
     "ref_for",
+    "wakes_for",
     "write_once",
 ]

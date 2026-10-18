@@ -374,6 +374,19 @@ def server_error() -> httpx.Response:
     return httpx.Response(503, text="unavailable")
 
 
+def refused() -> httpx.Response:
+    """Linear answered and refused the request's input."""
+    return httpx.Response(
+        200,
+        json={
+            "data": None,
+            "errors": [
+                {"message": "Argument Validation Error", "extensions": {"code": "INVALID_INPUT"}}
+            ],
+        },
+    )
+
+
 class CapturedBus:
     """A bus publisher that keeps what it was given; can be told to fail."""
 

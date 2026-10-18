@@ -641,6 +641,7 @@ async def _run_serve_linear() -> None:
         NOTIFICATIONS,
         ForgeAttempts,
         NatsBusFeed,
+        wakes_for,
     )
     from jarvis.infrastructure.linear.store import DoorStore
     from jarvis.infrastructure.nats_client import NATSClient
@@ -678,7 +679,7 @@ async def _run_serve_linear() -> None:
     # notifications from the bus (never PIPELINE), answers as the Slack
     # button sends them.
     wake = asyncio.Event()
-    feed = NatsBusFeed(nats_client, wake=wake)
+    feed = NatsBusFeed(nats_client, wake=wake, wake_if=wakes_for(store))
     try:
         await feed.start({CARDS: store.mark(CARDS), NOTIFICATIONS: store.mark(NOTIFICATIONS)})
     except Exception as exc:

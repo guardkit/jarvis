@@ -48,6 +48,7 @@ from .fake_linear import (
     FakeFeed,
     FakeIntake,
     FakeLinear,
+    refused,
     server_error,
 )
 
@@ -56,11 +57,11 @@ OWNER_LINEAR = "user-owner"
 OWNER_IDENTITY = "U0OWNER0001"
 STRANGER = "user-stranger"
 SCHEMA = Path(__file__).parents[3] / "infrastructure" / "linear" / "forge_schema_dbd40c7e.sql"
-_REF = re.compile(r"\n\nref: [0-9a-f]{12}$")
+_REF = re.compile(r"\n\n_factory note [0-9a-f]{12}_$")
 
 
 def plain(body: str) -> str:
-    """A door comment without its closing ``ref: …`` line."""
+    """A door comment without its closing ``_factory note …_`` line."""
     return _REF.sub("", body)
 
 
@@ -359,18 +360,16 @@ async def test_publication_in_flight_then_stopped_keeps_the_issue_open(h: Harnes
         cid,
         fr.PUBLICATION_STOPPED,
         reason="the remote refused the push",
-        required_action="Someone needs to deal with the reason given, then run the merge again.",
     )
     await h.poll(2)
     comments = h.factory(h.linear.comments_on(issue))
     assert comments[0] == (
         "Factory: Approver approved the merge; it is being joined, checked and published."
     )
-    assert comments[1].startswith(
-        "Factory: The merge stopped before anything was published: The remote refused the push."
+    assert comments[1] == (
+        "Factory: The merge was approved but publishing stopped: the remote refused the push. "
+        "Someone needs to sort this out before it can finish; the details are in Slack."
     )
-    assert "Someone needs to deal with the reason given" in comments[1]
-    assert "stays In Progress" in comments[1]
     assert len(comments) == 2
     assert h.linear.state_name(issue) == "In Progress"
     assert h.store.reservations() == {issue.id: cid}
@@ -1142,7 +1141,10 @@ async def test_comments_whose_answer_was_lost_are_not_written_twice(h: Harness) 
     comments = h.factory(h.linear.comments_on(issue))
     assert len(comments) == 2 and comments[1].startswith("Factory: Ended without a merge")
     assert h.linear.state_name(issue) == "Backlog"
-    assert all(c.splitlines()[-1].startswith("ref: ") for c in h.linear.comments_on(issue)[1:])
+    assert all(
+        re.fullmatch(r"_factory note [0-9a-f]{12}_", c.splitlines()[-1])
+        for c in h.linear.comments_on(issue)[1:]
+    )
 
 
 async def test_a_card_whose_answer_was_lost_is_posted_once_and_answered(h: Harness) -> None:
@@ -1152,8 +1154,9 @@ async def test_a_card_whose_answer_was_lost_is_posted_once_and_answered(h: Harne
     h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
     h.feed.push(CARDS, plan_card(cid))
     h.linear.lose_response["DoorCommentCreate"] = 1
-    await h.poll()  # the card is on the issue; the door did not hear back
-    assert len(h.feed.pending(CARDS)) == 1
+    with pytest.raises(LinearError):  # an outage stops the poll (coach C3)
+        await h.poll()  # the card is on the issue; the door did not hear back
+    assert len(h.store.held_messages(CARDS)) == 1
     h.restart()
     await h.poll()
     (card,) = h.card_comments(issue)
@@ -1369,3 +1372,115 @@ async def test_an_unpublished_claim_for_a_settled_card_says_nothing(h: Harness) 
     await h.poll(2)
     assert _unconfirmed_notices(h, card) == []
     assert h.store.unpublished_claims() == []
+
+
+# ---------------------------------------------------------------------------
+# Coach review of 3dde0e4 (C1-C6) and Codex round 3 on 16c3c63 (R9)
+# ---------------------------------------------------------------------------
+
+
+async def test_a_digest_sign_in_question_says_what_approving_means(h: Harness) -> None:
+    # C1: Forge counts an approval that leaves the item unanswered as "no
+    # sign-in" (planning/driver.py 5940-5948).
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    message = plan_card(cid)
+    data = json.loads(message.data)
+    data["payload"]["details"]["summary"]["sign_in_check"] = {
+        "title": "One thing to confirm",
+        "statement": "Only signed-in users can see their notes.",
+        "no_answer_means": "the run stops",
+    }
+    h.attempts.outcomes[cid] = single(cid, fr.PLANNING)
+    h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
+    h.feed.push(CARDS, BusMessage(message.subject, json.dumps(data).encode(), message.at))
+    await h.poll()
+    (card,) = h.card_comments(issue)
+    assert (
+        "> Only signed-in users can see their notes.\n\n"
+        "Approving here counts as agreeing that nothing here involves signing in. "
+        "To disagree, answer the card in Slack."
+    ) in card.body
+    assert "the run stops" not in card.body and "unanswered" not in card.body
+
+
+async def test_a_deleted_mission_member_does_not_keep_the_mission_open(h: Harness) -> None:
+    # C2: Linear refuses the first member's final comment (it was deleted);
+    # the other member still ends and every reservation is released.
+    cid, a, b = await sent_mission(h)
+    h.linear.gone.add(a.id)
+    h.attempts.outcomes[cid] = mission(cid, fr.NOT_STARTED, True, reason="no seed")
+    await h.poll()
+    assert h.factory(h.linear.comments_on(b))[-1].startswith("Factory: Ended without a merge")
+    assert h.linear.state_name(b) == "Backlog"
+    assert h.store.reservations() == {}
+
+
+async def test_a_long_outage_never_downgrades_a_card(h: Harness) -> None:
+    # C3, R9 (a): Linear is down for longer than five polls while a plan card
+    # waits; then it comes back after a restart. The full card is posted once,
+    # answerable, and no "answer in Slack" fallback is written.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(cid, fr.PLANNING)
+    h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
+    h.store.set_progress(
+        cid, "", "card-seen:req-plan-1", (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    )
+    h.feed.push(CARDS, plan_card(cid))
+    h.linear.fail_next["DoorCommentCreate"] = [server_error() for _ in range(7)]
+    for _ in range(7):
+        with pytest.raises(LinearError):
+            await h.poll()
+    assert h.feed.pending(CARDS) == [] and len(h.store.held_messages(CARDS)) == 1
+    h.restart()
+    await h.poll(2)
+    (card,) = h.card_comments(issue)
+    assert card.body.startswith("Factory: **The plan card is waiting for your answer.**")
+    assert all("answer it in Slack" not in c for c in h.linear.comments_on(issue))
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    await h.poll()
+    assert [p.request_id for _, p, _ in h.answers.published] == ["req-plan-1"]
+
+
+async def test_no_slack_fallback_while_the_full_card_waits(h: Harness) -> None:
+    # R9 (b): Linear refuses the full card twice; the record's fallback is
+    # not written meanwhile, and the full card is posted when Linear takes it.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(cid, fr.PLANNING)
+    h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
+    h.store.set_progress(
+        cid, "", "card-seen:req-plan-1", (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    )
+    h.feed.push(CARDS, plan_card(cid))
+    h.linear.fail_next["DoorCommentCreate"] = [refused(), refused()]
+    await h.poll(2)
+    assert h.card_comments(issue) == []
+    await h.poll()
+    (card,) = h.card_comments(issue)
+    assert plain(card.body).endswith("**approve** or **reject**.")
+    assert h.store.open_cards(answerable_only=True)
+
+
+async def test_only_the_doors_own_cards_wake_it(h: Harness) -> None:
+    # C6
+    from jarvis.infrastructure.linear.report import wakes_for
+
+    await sent_single(h)
+    cid = "lin-ENG-1-1"
+    wake = asyncio.Event()
+    feed = NatsBusFeed(SimpleNamespace(js=None), wake=wake, wake_if=wakes_for(h.store))
+
+    def arrive(message: BusMessage) -> bool:
+        wake.clear()
+        feed._receive(CARDS, SimpleNamespace(subject=message.subject, data=message.data))
+        return wake.is_set()
+
+    assert arrive(plan_card(cid))
+    assert arrive(gate_card(f"{cid}-x-a1", "build-1"))
+    assert not arrive(plan_card("slack-abc"))
+    assert not arrive(plan_card("lin-ENG-1-10"))
+    assert not arrive(notification("slack-abc", "Not ours."))
+    assert arrive(notification(cid, "Ours."))
+    assert len(feed.pending(CARDS)) == 6  # every message is still kept

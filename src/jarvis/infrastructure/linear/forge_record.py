@@ -36,8 +36,8 @@ next merge word, or the plain command" (``merge_executor.py`` 3874-3879).
 Forge's own queue calls that ``NOT_PUBLISHED`` and treats it as work that
 "will not land without someone acting" (``work_queue_loop.py`` 731-734,
 793-794). This module reports the first as ``publication_in_flight`` and the
-second as ``publication_stopped`` with the report's reason and the action
-needed. Neither ends the attempt.
+second as ``publication_stopped`` with the report's reason. Neither ends the
+attempt.
 
 Checked against Forge commit dbd40c7e (main, 18 October 2026). File and line
 of each fact, paths under ``src/forge/``:
@@ -165,8 +165,6 @@ MERGE_DECISION_TARGET_IDENTIFIER = "merge_deploy_decision"
 MERGE_DECISION_DETAILS_KEY = "merge_decision"
 #: forge/pipeline/merge_executor.py 261 (the merge report, stage "merge-deploy").
 MERGE_REPORT_TARGET_IDENTIFIER = "merge_deploy_executor"
-#: forge/pipeline/merge_executor.py 356.
-RESULT_WORD_PUBLICATION_PENDING = "publication-pending"
 #: forge/pipeline/publication_record.py 109, 127.
 ON_MAIN_RESULTS = frozenset({"published, deployment pending", "merged into the remote and running"})
 #: forge/pipeline/mission_finish.py 90-92.
@@ -266,12 +264,6 @@ _SINGLE_ENDS = frozenset(
     }
 )
 
-_STOPPED_ACTION = (
-    "Nothing was published. Someone needs to deal with the reason given, then run "
-    "the merge again (the next merge word, or forge merge-deploy for build {build_id})."
-)
-
-
 # ---------------------------------------------------------------------------
 # What it hands back
 # ---------------------------------------------------------------------------
@@ -293,8 +285,6 @@ class SingleOutcome:
     j_commit: str | None = None
     #: The already-done proof lines (``path:line - why``).
     proof: tuple[str, ...] = ()
-    #: For ``publication_stopped``: what someone has to do.
-    required_action: str | None = None
 
 
 @dataclass(frozen=True)
@@ -326,7 +316,6 @@ class MissionOutcome:
     app_url: str | None = None
     report_url: str | None = None
     j_commit: str | None = None
-    required_action: str | None = None
 
 
 @dataclass(frozen=True)
@@ -465,11 +454,10 @@ class ForgeRecord:
 
 @dataclass(frozen=True)
 class _MergeView:
-    """What a build's merge rows say, as (phase, reason, action) plus details."""
+    """What a build's merge rows say, as (phase, reason) plus details."""
 
     phase: str | None
     reason: str = ""
-    required_action: str | None = None
     request_id: str | None = None
     app_url: str | None = None
     report_url: str | None = None
@@ -554,7 +542,6 @@ class _Reader:
             return view(
                 PUBLICATION_STOPPED,
                 detail or f"the merge ended {word or 'without a word'} and nothing was published",
-                required_action=_STOPPED_ACTION.format(build_id=build_id),
             )
         if offer_row is not None:
             return view(
@@ -599,7 +586,6 @@ class _Reader:
                     app_url=view.app_url,
                     report_url=view.report_url,
                     j_commit=view.j_commit,
-                    required_action=view.required_action,
                 )
             if status in _BUILD_FAILED_STATES:
                 reason = _text(build[2]) or f"the build ended {status.lower()}"
@@ -715,7 +701,6 @@ class _Reader:
         view = self.merge_view(*merge) if merge else _MergeView(None)
 
         request_id = view.request_id
-        required_action = view.required_action
         reason = closed_reason
         if status == "PROPOSED":
             phase, request_id = PLAN_CARD_OPEN, _text(row[3])
@@ -749,7 +734,6 @@ class _Reader:
             app_url=view.app_url,
             report_url=view.report_url,
             j_commit=view.j_commit,
-            required_action=required_action,
         )
 
     # -- open cards ----------------------------------------------------------

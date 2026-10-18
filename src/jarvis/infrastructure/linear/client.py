@@ -79,6 +79,12 @@ class LinearAuthError(LinearError):
     """Linear refused the API key."""
 
 
+class LinearRefused(LinearError):
+    """Linear answered and refused this request's input (an issue that no
+    longer exists, an invalid value): trying again will not help. Outages
+    (no answer, a time-out, HTTP 5xx) are plain :class:`LinearError`."""
+
+
 class LinearRateLimited(LinearError):
     """Linear's rate limit was reached.
 
@@ -489,7 +495,8 @@ class LinearClient:
                 f"Linear refused the API key (HTTP {response.status_code}): {detail}"
             )
         if errors:
-            raise LinearError(
+            refused = LinearRefused if response.status_code < 500 else LinearError
+            raise refused(
                 f"Linear answered with errors (HTTP {response.status_code}, "
                 f"codes {sorted(codes) or 'none'}): {detail}"
             )
@@ -631,13 +638,13 @@ class LinearClient:
         result = data.get("commentCreate") or {}
         comment = result.get("comment") or {}
         if not result.get("success") or not comment.get("id"):
-            raise LinearError("Linear did not confirm the comment")
+            raise LinearRefused("Linear did not confirm the comment")
         return str(comment["id"])
 
     async def move_issue(self, issue_id: str, state_id: str) -> None:
         data = await self.execute(ISSUE_MOVE_MUTATION, {"id": issue_id, "stateId": state_id})
         if not (data.get("issueUpdate") or {}).get("success"):
-            raise LinearError("Linear did not confirm the status change")
+            raise LinearRefused("Linear did not confirm the status change")
 
 
 __all__ = [
@@ -650,6 +657,7 @@ __all__ = [
     "LinearIssueRef",
     "LinearLabel",
     "LinearRateLimited",
+    "LinearRefused",
     "LinearRelation",
     "LinearReply",
     "LinearState",

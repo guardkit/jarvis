@@ -98,13 +98,12 @@ def phase_step(outcome: Any) -> Step | None:
     if phase == fr.PUBLICATION_IN_FLIGHT:
         return Step("phase", phase, _sentence(outcome.reason or "the merge is being published"))
     if phase == fr.PUBLICATION_STOPPED:
-        action = f" {outcome.required_action}" if outcome.required_action else ""
+        reason = " ".join(str(outcome.reason or "no reason was given").split()).rstrip(".")
         return Step(
             "phase",
             f"{phase}|{outcome.reason}",
-            f"The merge stopped before anything was published: "
-            f"{_sentence(outcome.reason) or 'no reason was given.'}{action} "
-            "This issue stays In Progress until it is published.",
+            f"The merge was approved but publishing stopped: {reason}. Someone needs to sort "
+            "this out before it can finish; the details are in Slack.",
         )
     # A phase this door does not know yet: say it once, plainly.
     return Step("phase", phase, _sentence(outcome.reason or phase))
