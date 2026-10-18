@@ -4,9 +4,9 @@
 ``stop-mission``, with the mission id lower-cased, on today's wire. Jarvis
 checks the shape only and posts nothing of its own: the forge decides whether
 the person may stop the mission and answers in the thread. ``stop mission``
-with no id, or with an ``m-`` word that is not an id, gets one usage line back
-and nothing is published. Other prose beginning ``stop mission`` stays a
-sentence.
+with no id, with an ``m-`` word that is not an id, or with a whole id and more
+after it, gets one usage line back and nothing is published. Other prose
+beginning ``stop mission`` stays a sentence.
 
 No live Slack and no broker: the web client is an ``AsyncMock`` and the
 publisher seam is mocked.
@@ -69,6 +69,10 @@ class TestTheStopShape:
             "stop mission m-3fa21",
             "stop mission m-3fa21cc",
             "stop mission m-3fa21g",
+            # a whole stop with more typed after it: a near-miss, not prose
+            "stop mission m-3fa21c please",
+            "stop mission m-3fa21c and start another",
+            "stop mission m-3fa21c\nand another line",
         ],
     )
     def test_a_stop_without_a_usable_id_gets_the_usage_line(self, text: str) -> None:
@@ -80,7 +84,6 @@ class TestTheStopShape:
         "text",
         [
             "stop mission creep on the notes page",
-            "stop mission m-3fa21c and start another",
             "please stop mission m-3fa21c",
         ],
     )

@@ -67,9 +67,10 @@ on a later line) stays a sentence.
 Stopping a mission (missions design, section 11, 18 October 2026): ``stop
 mission m-3fa21c`` is one more queue command, verb ``stop-mission``, with the
 mission's id lower-cased. The forge decides whether the person may stop it and
-answers in the thread. ``stop mission`` with nothing after it, or with an
-``m-`` word that is not a mission id, gets one usage line back and is not
-sent; other prose that happens to begin ``stop mission`` stays a sentence.
+answers in the thread. ``stop mission`` with nothing after it, with an
+``m-`` word that is not a mission id, or with a whole id and more words after
+it, gets one usage line back and is not sent; other prose that happens to
+begin ``stop mission`` stays a sentence.
 """
 
 from __future__ import annotations
@@ -126,13 +127,19 @@ _MISSION_RESERVED_KEYS = frozenset({"TARGET"})
 _FEATURE_ID_RE = re.compile(r"^FEAT-[A-Z0-9]{3,12}$")
 
 # Stopping a mission: the id is ``m-`` and six hexadecimal digits, as the
-# forge makes it. ``stop mission`` alone, or with an ``m-`` word that is not
-# an id, is a command begun wrong and gets the usage line; other prose after
-# ``stop mission`` stays a sentence.
+# forge makes it. ``stop mission`` alone, with an ``m-`` word that is not an
+# id, or with a whole id and more after it, is a command typed wrong and gets
+# the usage line; other prose after ``stop mission`` stays a sentence.
 _STOP_MISSION_RE = re.compile(
     r"^stop[ \t]+mission[ \t]+(m-[0-9a-f]{6})$", re.IGNORECASE | re.ASCII
 )
 _STOP_MISSION_WRONG_RE = re.compile(r"^stop[ \t]+mission(?:[ \t]+m-\S*)?$", re.IGNORECASE)
+# A whole stop command with more typed after it ("stop mission m-3fa21c
+# please") is a near-miss, like a ``build:`` with one part wrong: filed as
+# prose it would start a feature from a typo.
+_STOP_MISSION_NEAR_MISS_RE = re.compile(
+    r"^stop[ \t]+mission[ \t]+m-[0-9a-f]{6}\b.+", re.IGNORECASE | re.ASCII | re.DOTALL
+)
 
 # The three shapes jarvis answers itself. Each is a command begun and not
 # finished, so there is no sentence to file and nothing to forward.
@@ -367,7 +374,7 @@ def parse_queue_message(text: str) -> ParsedMessage:
             shape="command",
             command={"verb": "stop-mission", "mission_id": match.group(1).lower()},
         )
-    if _STOP_MISSION_WRONG_RE.match(candidate):
+    if _STOP_MISSION_WRONG_RE.match(candidate) or _STOP_MISSION_NEAR_MISS_RE.match(candidate):
         # A stop begun without a usable mission id: the usage line, nothing sent.
         return ParsedMessage(shape="refusal", refusal_text=STOP_MISSION_USAGE_REFUSAL)
 
