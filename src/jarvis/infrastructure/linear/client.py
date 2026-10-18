@@ -51,8 +51,10 @@ _FLAT_PAGE = 100
 # A guard against a cursor that never ends; 100 pages of 50 is 5,000 issues.
 _MAX_PAGES = 100
 
-# Linear error codes that mean "this key is not accepted".
-_AUTH_CODES = frozenset({"AUTHENTICATION_ERROR", "UNAUTHENTICATED", "FORBIDDEN"})
+# Linear error codes that mean "this key is not accepted". FORBIDDEN is not
+# one: it refuses one request (an issue or team the key cannot touch), and is
+# an ordinary error for that request.
+_AUTH_CODES = frozenset({"AUTHENTICATION_ERROR", "UNAUTHENTICATED"})
 _RATE_LIMITED = "RATELIMITED"
 # Reset headers, epoch milliseconds. The first is the hourly request window;
 # the others are the complexity window and a per-endpoint window, which Linear
@@ -150,6 +152,9 @@ class LinearIssue:
     state: LinearState
     labels: tuple[LinearLabel, ...] = ()
     inverse_relations: tuple[LinearRelation, ...] = ()
+    #: More than one page of labels or relations: what the door would read
+    #: from them is not the whole truth, so it is not guessed from.
+    truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -181,9 +186,13 @@ fragment DoorIssue on Issue {{
   url
   updatedAt
   state {{ id name type }}
-  labels(first: {_NESTED_PAGE}) {{ nodes {{ id name parent {{ name }} }} }}
+  labels(first: {_NESTED_PAGE}) {{
+    nodes {{ id name parent {{ name }} }}
+    pageInfo {{ hasNextPage }}
+  }}
   inverseRelations(first: {_NESTED_PAGE}) {{
     nodes {{ type issue {{ id identifier state {{ name type }} }} }}
+    pageInfo {{ hasNextPage }}
   }}
 }}
 """
@@ -392,6 +401,10 @@ def _parse_issue(node: dict[str, Any]) -> LinearIssue:
         ),
         labels=tuple(labels),
         inverse_relations=tuple(relations),
+        truncated=any(
+            ((node.get(name) or {}).get("pageInfo") or {}).get("hasNextPage")
+            for name in ("labels", "inverseRelations")
+        ),
     )
 
 
@@ -541,11 +554,22 @@ class LinearClient:
         return [_parse_issue(node) for node in nodes]
 
     async def issues_with_label(self, team_id: str, label_id: str) -> list[LinearIssue]:
-        """Every issue of the team carrying the label, in every state."""
+        """Every issue of the team carrying the label, in every state.
+
+        Raises:
+            LinearError: also when an issue has more labels or links than one
+                page holds, so the mission is skipped rather than guessed.
+        """
         nodes = await self._paginate(
             ISSUES_WITH_LABEL_QUERY, {"teamId": team_id, "labelId": label_id}, ("issues",)
         )
-        return [_parse_issue(node) for node in nodes]
+        issues = [_parse_issue(node) for node in nodes]
+        if any(issue.truncated for issue in issues):
+            raise LinearError(
+                f"an issue has more than {_NESTED_PAGE} labels or links, so the mission "
+                "cannot be read whole"
+            )
+        return issues
 
     async def issues_by_id(self, issue_ids: list[str]) -> list[LinearIssue]:
         if not issue_ids:

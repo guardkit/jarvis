@@ -18,7 +18,8 @@ from jarvis.infrastructure.planning_intake_grammar import is_allowed_target_name
 
 #: Every comment the door writes starts with this.
 COMMENT_PREFIX = "Factory: "
-#: The words of the "sent" comment; attempt numbers are rebuilt from them.
+#: The words of the "sent" comment; a resumed send looks for them so the
+#: comment is not written twice (attempt numbers come from the door's record).
 SENT_WORDS = "Sent to the factory as"
 
 # The wire's correlation-id rule (the same characters Forge checks).
@@ -173,14 +174,6 @@ def correlation_id(prefix: str, attempt: int) -> str:
     if attempt < 1 or not CORRELATION_ID_RE.match(value):
         raise ValueError(f"not a usable correlation id: {value!r}")
     return value
-
-
-def attempt_of(cid: str, prefix: str) -> int | None:
-    """The attempt number of ``cid`` if it is ``<prefix><n>``, else ``None``."""
-    if not cid.startswith(prefix):
-        return None
-    rest = cid[len(prefix) :]
-    return int(rest) if rest.isdigit() else None
 
 
 def sent_ids_in(body: str) -> list[str]:
@@ -355,7 +348,6 @@ __all__ = [
     "MissionFeature",
     "MissionLabel",
     "RepoChoice",
-    "attempt_of",
     "blockers_of",
     "check_mission",
     "choose_repo",

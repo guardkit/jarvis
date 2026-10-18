@@ -87,6 +87,8 @@ class FakeLinear:
         # Failure injection: operation name -> list of responses to give first.
         self.fail_next: dict[str, list[httpx.Response]] = {}
         self.fail_all: httpx.Response | None = None
+        # Issues deleted after they were read: writes to them are refused.
+        self.gone: set[str] = set()
 
     # -- building the workspace ---------------------------------------------
 
@@ -205,8 +207,14 @@ class FakeLinear:
             "url": f"https://linear.example/issue/{self.identifier(issue)}",
             "updatedAt": issue.updated_at.isoformat().replace("+00:00", "Z"),
             "state": self._state(issue.state_id),
-            "labels": {"nodes": labels},
-            "inverseRelations": {"nodes": relations},
+            "labels": {
+                "nodes": labels[:20],
+                "pageInfo": {"hasNextPage": len(labels) > 20},
+            },
+            "inverseRelations": {
+                "nodes": relations[:20],
+                "pageInfo": {"hasNextPage": len(relations) > 20},
+            },
         }
 
     @staticmethod
@@ -242,6 +250,19 @@ class FakeLinear:
         queued = self.fail_next.get(operation)
         if queued:
             return queued.pop(0)
+        target = (body.get("variables") or {}).get("input", {}).get("issueId") or (
+            body.get("variables") or {}
+        ).get("id")
+        if operation in ("DoorCommentCreate", "DoorIssueMove") and target in self.gone:
+            return httpx.Response(
+                200,
+                json={
+                    "data": None,
+                    "errors": [
+                        {"message": "Entity not found", "extensions": {"code": "INVALID_INPUT"}}
+                    ],
+                },
+            )
         variables = body.get("variables") or {}
         data = getattr(self, f"_op_{operation}")(variables)
         return httpx.Response(200, json={"data": data})

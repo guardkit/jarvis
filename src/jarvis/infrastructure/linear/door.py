@@ -465,7 +465,7 @@ class LinearDoor:
         await self._rebuild(team)
         await self._finish_recoveries()
         for send in self._store.unfinished_sends():
-            await self._advance(send, resumed=True)
+            await self._resume(send)
         # Factory → Linear: progress, cards, answers; an ended attempt frees
         # its issues here, before the ready list is read.
         await self._reporter.report(
@@ -484,6 +484,8 @@ class LinearDoor:
                 # In an open attempt: left out of every other send, whatever
                 # its labels say now (design review round 2, R9).
                 await self._notice(issue, _already_running(reserved[issue.id]))
+            elif issue.truncated:
+                await self._notice(issue, _too_many_links())
             elif len(labels) > 1:
                 await self._notice(issue, _two_mission_labels(labels))
             elif not labels:
@@ -717,6 +719,23 @@ class LinearDoor:
             self._store.clear_notices([i.issue_id for i in send.issues])
             log.info("linear_door_sent", issues=[i.identifier for i in send.issues])
 
+    async def _resume(self, send: Send) -> None:
+        """Finish one unfinished send. A Linear failure for this send alone
+        (say its issue was deleted after it was published) is logged and
+        tried again next poll, so it never holds up every other issue. A
+        refused key, the rate limit and an unacknowledged publish still stop
+        the poll."""
+        try:
+            await self._advance(send, resumed=True)
+        except (LinearAuthError, LinearRateLimited, BusUnavailable):
+            raise
+        except LinearError as exc:
+            logger.warning(
+                "linear_door_resume_failed",
+                correlation_id=send.correlation_id,
+                error=_safe_error(exc),
+            )
+
     def _reload(self, cid: str) -> Send:
         send = self._store.get_send(cid)
         assert send is not None
@@ -894,6 +913,13 @@ def _mission_running(title: str, cid: str) -> str:
     return (
         f"The mission “{title}” is already running as `{cid}`; this issue will be included "
         "in the next attempt if it is still in Todo then."
+    )
+
+
+def _too_many_links() -> str:
+    return (
+        "This issue has more labels or blocking links than the door reads at once, so it "
+        "was not sent. Remove some and move it to Todo again."
     )
 
 

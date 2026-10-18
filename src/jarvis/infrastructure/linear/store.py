@@ -361,18 +361,18 @@ class DoorStore:
                 best = max(best, int(rest))
         return best
 
-    def latest_send(self, prefix: str) -> Send | None:
-        """The send ``<prefix><n>`` with the highest ``n``, if any."""
-        attempt = self.max_attempt(prefix)
-        return self.get_send(f"{prefix}{attempt}") if attempt else None
-
     def sends_to_watch_for_edits(self, since: str) -> list[tuple[Send, SendIssue]]:
         """The latest fully sent attempt of each issue, sent after ``since`` (ISO
-        time), whose edits-after-sending comment is not written yet."""
+        time), still open and still holding the issue, whose edits-after-sending
+        comment is not written yet. Once an attempt has ended (or been
+        released) an edit is the next attempt's business, not this one's."""
         rows = self._db.execute(
             "SELECT s.correlation_id, si.issue_id FROM send_issues si "
             "JOIN sends s USING (correlation_id) "
             "WHERE s.status = 'moved' AND si.edit_noted = 0 AND s.created_at >= ? "
+            "AND s.correlation_id NOT IN (SELECT correlation_id FROM ended_attempts) "
+            "AND EXISTS (SELECT 1 FROM reservations r "
+            "  WHERE r.issue_id = si.issue_id AND r.correlation_id = s.correlation_id) "
             "AND s.created_at = (SELECT max(s2.created_at) FROM sends s2 "
             "  JOIN send_issues si2 USING (correlation_id) WHERE si2.issue_id = si.issue_id)",
             (since,),
@@ -434,15 +434,6 @@ class DoorStore:
             for row in self._db.execute("SELECT issue_id, correlation_id FROM reservations")
         }
 
-    def reserve(self, issue_id: str, correlation_id: str, identifier: str | None = None) -> None:
-        """Reserve one issue for an open attempt found in a rebuild."""
-        with self._db:
-            self._db.execute(
-                "INSERT OR IGNORE INTO reservations "
-                "(issue_id, correlation_id, identifier, reserved_at) VALUES (?, ?, ?, ?)",
-                (issue_id, correlation_id, identifier, _now()),
-            )
-
     def reserved_issues(self, correlation_id: str) -> list[tuple[str, str | None]]:
         """``(issue id, identifier)`` of each issue an open attempt holds."""
         return [
@@ -477,14 +468,6 @@ class DoorStore:
                 (correlation_id, reason, _now()),
             )
             self._db.execute("DELETE FROM reservations WHERE correlation_id = ?", (correlation_id,))
-
-    def is_ended(self, correlation_id: str) -> bool:
-        return (
-            self._db.execute(
-                "SELECT 1 FROM ended_attempts WHERE correlation_id = ?", (correlation_id,)
-            ).fetchone()
-            is not None
-        )
 
     # -- notices -------------------------------------------------------------
 

@@ -739,3 +739,79 @@ async def test_a_rebuild_that_fails_part_way_writes_nothing(harness: Harness) ->
     await harness.poll()
     assert harness.store.reservations() == {issue.id: "lin-ENG-1-1"}
     assert harness.bus.published == []
+
+
+# ---------------------------------------------------------------------------
+# Stage 3 repair pass (the coach's review of f4d6698)
+# ---------------------------------------------------------------------------
+
+
+async def test_a_send_linear_keeps_refusing_does_not_stop_the_others(harness: Harness) -> None:
+    linear = harness.linear
+    deleted = linear.issue("Deleted after it was published")
+    linear.fail_next["DoorCommentCreate"] = [server_error()]
+    with pytest.raises(LinearError):
+        await harness.poll()  # published; its comment failed
+    linear.gone.add(deleted.id)  # and now the issue is gone
+    other = linear.issue("Sent anyway")
+    await harness.poll()
+    await harness.poll()
+    assert [p["correlation_id"] for p in harness.bus.payloads()] == ["lin-ENG-1-1", "lin-ENG-2-1"]
+    assert linear.state_name(other) == "In Progress"
+    assert harness.store.get_send("lin-ENG-1-1").status == "published"
+
+
+async def test_a_pending_send_that_cannot_publish_still_stops_the_poll(harness: Harness) -> None:
+    harness.linear.issue("Bus down")
+    harness.bus.fail = True
+    with pytest.raises(BusUnavailable):
+        await harness.poll()
+    harness.linear.issue("Not reached while the bus is down")
+    with pytest.raises(BusUnavailable):
+        await harness.poll()
+    assert harness.bus.published == []
+
+
+async def test_no_edit_comment_after_the_attempt_has_ended(harness: Harness) -> None:
+    linear = harness.linear
+    issue = linear.issue("Before")
+    await harness.poll()
+    await harness.door.release("ENG-1")
+    issue.title = "After"
+    linear.touch(issue)
+    await harness.poll()
+    assert not [c for c in linear.comments_on(issue) if "changed after it was sent" in c]
+
+
+async def test_an_issue_with_too_many_labels_is_not_guessed_from(harness: Harness) -> None:
+    linear = harness.linear
+    many = [linear.label(f"tag {n}") for n in range(21)]
+    crowded = linear.issue("Crowded", labels=many)
+    label = linear.label("mission: Crowd")
+    member = linear.issue("Member", labels=[label])
+    crowded_member = linear.issue("Crowded member", labels=[label, *many])
+    await harness.poll()
+    await harness.poll()
+    # Neither the crowded issue nor the mission whose membership read would
+    # be incomplete is sent.
+    assert harness.bus.published == []
+    for issue in (crowded, crowded_member):
+        (only,) = linear.comments_on(issue)
+        assert "more labels or blocking links" in only
+    assert linear.comments_on(member) == []
+
+
+async def test_forbidden_is_an_ordinary_error_not_a_bad_key() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"errors": [{"message": "Forbidden", "extensions": {"code": "FORBIDDEN"}}]},
+        )
+
+    from jarvis.infrastructure.linear.client import LinearClient
+
+    client = LinearClient(FAKE_KEY, transport=httpx.MockTransport(handler))
+    with pytest.raises(LinearError) as caught:
+        await client.find_team("ENG")
+    assert not isinstance(caught.value, LinearAuthError)
+    await client.aclose()

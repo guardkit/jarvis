@@ -23,7 +23,6 @@ from jarvis.infrastructure.linear.cards import (
     parse_card,
     parse_reply,
 )
-from jarvis.infrastructure.linear.client import LinearError
 from jarvis.infrastructure.linear.door import DoorSettings, LinearDoor, RecordedAttempt
 from jarvis.infrastructure.linear.mapping import mission_prefix
 from jarvis.infrastructure.linear.report import (
@@ -258,7 +257,6 @@ async def test_on_main_is_done_with_the_commit_and_ends_the_attempt(h: Harness) 
     ]
     assert h.linear.state_name(issue) == "Done"
     assert h.store.reservations() == {}
-    assert h.store.is_ended(cid)
 
 
 async def test_on_main_with_a_failed_deploy_says_so(h: Harness) -> None:
@@ -373,13 +371,22 @@ async def test_a_failed_linear_write_while_ending_repeats_nothing(h: Harness) ->
     cid = "lin-ENG-1-1"
     h.attempts.outcomes[cid] = single(cid, fr.BUILD_FAILED, True, "tests failed")
     h.linear.fail_next["DoorIssueMove"] = [server_error()]
-    with pytest.raises(LinearError):
-        await h.poll()
+    await h.poll()  # logged for this attempt alone; the poll carries on
     assert h.store.reservations() == {issue.id: cid}  # not ended until Linear is written
     await h.poll()
     assert len(h.factory(h.linear.comments_on(issue))) == 1
     assert h.linear.state_name(issue) == "Backlog"
     assert h.store.reservations() == {}
+
+
+async def test_one_attempt_linear_refuses_does_not_hold_up_the_others(h: Harness) -> None:
+    gone = await sent_single(h, "Deleted later")
+    kept = await sent_single(h, "Still here")
+    h.linear.gone.add(gone.id)
+    h.attempts.outcomes["lin-ENG-1-1"] = single("lin-ENG-1-1", fr.BUILDING)
+    h.attempts.outcomes["lin-ENG-2-1"] = single("lin-ENG-2-1", fr.BUILDING)
+    await h.poll(2)
+    assert h.factory(h.linear.comments_on(kept)) == ["Factory: Building."]
 
 
 async def test_unfiled_request_is_noted_once_after_an_hour(h: Harness) -> None:

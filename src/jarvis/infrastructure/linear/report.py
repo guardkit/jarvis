@@ -57,6 +57,7 @@ from jarvis.infrastructure.linear.cards import (
     parse_reply,
     recovered_card_comment,
 )
+from jarvis.infrastructure.linear.client import LinearAuthError, LinearError, LinearRateLimited
 from jarvis.infrastructure.linear.mapping import COMMENT_PREFIX, comment, feature_key, is_finished
 from jarvis.infrastructure.linear.progress import (
     BACKLOG,
@@ -85,6 +86,9 @@ UNFILED_NOTICE = (
 #: A card found open in the record is posted from the record only after this
 #: long, so the full card from the stream, which arrives within moments, wins.
 RECOVERY_GRACE = timedelta(seconds=60)
+
+#: Polls a card is tried on before a card Linear keeps refusing is let go.
+MAX_CARD_TRIES = 5
 
 #: Phases in which a plan card can still be waiting.
 _PLANNING_PHASES = frozenset({fr.UNFILED, fr.QUEUED, fr.PLANNING, fr.PLAN_CARD_OPEN})
@@ -338,6 +342,8 @@ class Reporter:
         self._feed = feed
         self._answers = answers
         self._approvers = approvers
+        # Cards Linear refused to take, by request id (in memory only).
+        self._card_failures: dict[str, int] = {}
 
     # -- one poll ---------------------------------------------------------------
 
@@ -350,7 +356,18 @@ class Reporter:
         """
         attempts, unreadable = self._read_attempts(unfinished)
         for attempt in attempts.values():
-            await self._progress(attempt, state_ids)
+            try:
+                await self._progress(attempt, state_ids)
+            except (LinearAuthError, LinearRateLimited):
+                raise
+            except LinearError as exc:
+                # This attempt alone (an issue deleted, say): tried again next
+                # poll, never holding up the others.
+                logger.warning(
+                    "linear_door_progress_failed",
+                    correlation_id=attempt.correlation_id,
+                    error=str(exc)[:300],
+                )
         live = {cid: a for cid, a in attempts.items() if not a.outcome.ended}
         if unreadable:
             # A card or notification is matched only against every open
@@ -532,7 +549,24 @@ class Reporter:
                 target = next((index[k] for k in card.match_keys() if k in index), None)
                 if target is not None:
                     if self._still_open(card, target.attempt, open_cards):
-                        await self._post_card(card, target)
+                        try:
+                            await self._post_card(card, target)
+                        except (LinearAuthError, LinearRateLimited):
+                            raise
+                        except LinearError as exc:
+                            # Kept for the next poll; a card Linear keeps
+                            # refusing (its issue deleted) is let go after a
+                            # few polls so the cards behind it still arrive.
+                            tries = self._card_failures.get(card.request_id, 0) + 1
+                            self._card_failures[card.request_id] = tries
+                            logger.warning(
+                                "linear_door_card_post_failed",
+                                request_id=card.request_id,
+                                tries=tries,
+                                error=str(exc)[:300],
+                            )
+                            if tries < MAX_CARD_TRIES:
+                                return
                     else:
                         logger.info(
                             "linear_door_card_not_open",

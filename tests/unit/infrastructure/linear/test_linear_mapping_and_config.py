@@ -21,7 +21,6 @@ from jarvis.infrastructure.linear.client import (
 from jarvis.infrastructure.linear.door import door_config
 from jarvis.infrastructure.linear.mapping import (
     CORRELATION_ID_RE,
-    attempt_of,
     blockers_of,
     check_mission,
     choose_repo,
@@ -128,10 +127,7 @@ def test_correlation_ids() -> None:
         correlation_id("lin-" + "x" * 130 + "-", 1)
 
 
-def test_attempt_parsing_and_sent_comments() -> None:
-    assert attempt_of("lin-ENG-1-3", "lin-ENG-1-") == 3
-    assert attempt_of("lin-ENG-12-3", "lin-ENG-1-") is None
-    assert attempt_of("lin-ENG-1-x", "lin-ENG-1-") is None
+def test_sent_comments() -> None:
     assert sent_ids_in("Factory: Sent to the factory as `lin-ENG-1-2`") == ["lin-ENG-1-2"]
     assert sent_ids_in("factory: sent to the factory as `lin-ENG-1-2`") == ["lin-ENG-1-2"]
     assert sent_ids_in("Someone: Sent to the factory as `lin-ENG-1-2`") == []
@@ -210,6 +206,28 @@ def test_key_from_file_and_owner_fallback(tmp_path: Path, monkeypatch: pytest.Mo
     config = JarvisConfig()
     assert config.resolve_linear_api_key() == "env-key-wins"
     assert config.resolve_linear_owner_identity() == "U0OWNER"
+
+
+def test_empty_settings_count_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The estate's compose file passes unset values as empty strings.
+    monkeypatch.setenv("JARVIS_LINEAR_API_KEY", FAKE_KEY)
+    monkeypatch.setenv("JARVIS_LINEAR_OWNER_IDENTITY", "U0OWNER")
+    for name in ("JARVIS_LINEAR_TEAM", "JARVIS_LINEAR_DEFAULT_REPO", "JARVIS_LINEAR_APPROVERS"):
+        monkeypatch.setenv(name, "")
+    reason = door_config(JarvisConfig())
+    assert isinstance(reason, str) and "JARVIS_LINEAR_TEAM" in reason
+
+    monkeypatch.setenv("JARVIS_LINEAR_TEAM", "ENG")
+    resolved = door_config(JarvisConfig())
+    assert not isinstance(resolved, str)
+    assert resolved.settings.default_repo is None
+    assert resolved.settings.approvers == {}
+
+
+def test_empty_key_file_setting_counts_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JARVIS_LINEAR_API_KEY", "")
+    monkeypatch.setenv("JARVIS_LINEAR_API_KEY_FILE", "")
+    assert JarvisConfig().resolve_linear_api_key() is None
 
 
 def test_door_config_names_what_is_missing() -> None:
