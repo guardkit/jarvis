@@ -63,6 +63,13 @@ a line that does not parse (or no title, or no features), one usage line back
 and nothing sent, like a half-typed ``build:``. A message that merely mentions
 a mission anywhere else (``our mission: ...``, ``missions: ...``, ``mission``
 on a later line) stays a sentence.
+
+Stopping a mission (missions design, section 11, 18 October 2026): ``stop
+mission m-3fa21c`` is one more queue command, verb ``stop-mission``, with the
+mission's id lower-cased. The forge decides whether the person may stop it and
+answers in the thread. ``stop mission`` with nothing after it, or with an
+``m-`` word that is not a mission id, gets one usage line back and is not
+sent; other prose that happens to begin ``stop mission`` stays a sentence.
 """
 
 from __future__ import annotations
@@ -118,6 +125,15 @@ _MISSION_RESERVED_KEYS = frozenset({"TARGET"})
 #: a test pins the two together.
 _FEATURE_ID_RE = re.compile(r"^FEAT-[A-Z0-9]{3,12}$")
 
+# Stopping a mission: the id is ``m-`` and six hexadecimal digits, as the
+# forge makes it. ``stop mission`` alone, or with an ``m-`` word that is not
+# an id, is a command begun wrong and gets the usage line; other prose after
+# ``stop mission`` stays a sentence.
+_STOP_MISSION_RE = re.compile(
+    r"^stop[ \t]+mission[ \t]+(m-[0-9a-f]{6})$", re.IGNORECASE | re.ASCII
+)
+_STOP_MISSION_WRONG_RE = re.compile(r"^stop[ \t]+mission(?:[ \t]+m-\S*)?$", re.IGNORECASE)
+
 # The three shapes jarvis answers itself. Each is a command begun and not
 # finished, so there is no sentence to file and nothing to forward.
 _BARE_NEXT_RE = re.compile(r"^next$", re.IGNORECASE)
@@ -132,6 +148,9 @@ USAGE_REFUSAL = 'Did you mean "next: <sentence>" or "#12 next"?'
 
 #: The one line jarvis posts itself for a ``build:`` begun and not finished.
 BUILD_USAGE_REFUSAL = 'Did you mean "build: FEAT-XXXX from <branch>"?'
+
+#: The one line jarvis posts itself for a ``stop mission`` without a mission id.
+STOP_MISSION_USAGE_REFUSAL = 'Did you mean "stop mission m-xxxxxx"?'
 
 #: The one line jarvis posts itself for a ``mission:`` message with a line
 #: it cannot read.
@@ -342,6 +361,16 @@ def parse_queue_message(text: str) -> ParsedMessage:
         # A hand-over begun and not finished: the usage line, nothing sent.
         return ParsedMessage(shape="refusal", refusal_text=BUILD_USAGE_REFUSAL)
 
+    match = _STOP_MISSION_RE.match(candidate)
+    if match:
+        return ParsedMessage(
+            shape="command",
+            command={"verb": "stop-mission", "mission_id": match.group(1).lower()},
+        )
+    if _STOP_MISSION_WRONG_RE.match(candidate):
+        # A stop begun without a usable mission id: the usage line, nothing sent.
+        return ParsedMessage(shape="refusal", refusal_text=STOP_MISSION_USAGE_REFUSAL)
+
     mission = _parse_mission(candidate)
     if mission is not None:
         return mission
@@ -368,6 +397,7 @@ def parse_queue_message(text: str) -> ParsedMessage:
 
 __all__ = [
     "BUILD_USAGE_REFUSAL",
+    "STOP_MISSION_USAGE_REFUSAL",
     "INVALID_TARGET_NAME_REPLY",
     "MISSION_USAGE_REFUSAL",
     "USAGE_REFUSAL",
