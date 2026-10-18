@@ -398,6 +398,44 @@ class JarvisConfig(BaseSettings):
     # the expiry times and, for a failed preview, Reject only.
     slack_evidence_link_hosts: str | None = None
 
+    # -- The Linear door (Linear front door design, 18 October 2026) ---------
+    # ``jarvis serve-linear`` reads the factory's Linear team every
+    # ``linear_poll_seconds`` and sends issues in the ready status to the
+    # factory. It runs only when the key, the team and the owner identity are
+    # all set; otherwise it says so in one line and exits cleanly.
+    #
+    # JARVIS_LINEAR_API_KEY — a Linear personal API key. Never logged.
+    linear_api_key: SecretStr | None = None
+    # JARVIS_LINEAR_API_KEY_FILE — a file holding the key (a compose secret
+    # under /run/secrets), read when JARVIS_LINEAR_API_KEY is unset or blank.
+    linear_api_key_file: Path | None = None
+    # JARVIS_LINEAR_TEAM — the team's key (e.g. "ENG") or, failing that, its
+    # exact name. No default: the door does not guess a team.
+    linear_team: str | None = None
+    # The status names the door reads and moves issues to.
+    linear_ready_state: str = "Todo"
+    linear_started_state: str = "In Progress"
+    linear_done_state: str = "Done"
+    linear_backlog_state: str = "Backlog"
+    # JARVIS_LINEAR_POLL_SECONDS — how often Linear is read.
+    linear_poll_seconds: int = Field(default=30, ge=5, le=3600)
+    # JARVIS_LINEAR_DEFAULT_REPO — the repository for an issue with no
+    # ``repo:`` label. Unset: such an issue gets a comment and is not sent.
+    linear_default_repo: str | None = None
+    # JARVIS_LINEAR_APPROVERS — ``<linear user id>=<identity>,...``: who may
+    # answer a card from Linear, and as whom (read by stage 4).
+    linear_approvers: str | None = None
+    # JARVIS_LINEAR_STATE_DIR — where the door keeps its record
+    # (``linear-door.sqlite3``); its own volume in the estate.
+    linear_state_dir: Path = Path("/var/lib/jarvis")
+    # JARVIS_LINEAR_OWNER_IDENTITY — the identity a Linear request is sent as
+    # (``originating_user``), which Forge makes the plan card's expected
+    # answerer. Unset: the first id of JARVIS_SLACK_PLANNING_ORIGINATOR_USER_ID.
+    linear_owner_identity: str | None = None
+    # JARVIS_LINEAR_FORGE_DB — Forge's record, mounted read-only, from which
+    # stage 4 reads progress and whether an attempt has finished.
+    linear_forge_db: Path = Path("/forge-state/forge.db")
+
     model_config = SettingsConfigDict(
         env_prefix="JARVIS_",
         env_file=".env",
@@ -552,6 +590,42 @@ class JarvisConfig(BaseSettings):
             for entry in self.slack_evidence_link_hosts.split(",")
             if entry.strip()
         )
+
+    # -- Linear door resolution ---------------------------------------------
+
+    def resolve_linear_api_key(self) -> str | None:
+        """The Linear API key, from the setting or else from its file.
+
+        ``None`` when neither gives a non-blank value (an unreadable file
+        counts as unset; the caller says the key is not set, never why the
+        file could not be read beyond that).
+        """
+        if self.linear_api_key is not None:
+            value = self.linear_api_key.get_secret_value().strip()
+            if value:
+                return value
+        if self.linear_api_key_file is not None:
+            try:
+                value = self.linear_api_key_file.read_text(encoding="utf-8").strip()
+            except OSError:
+                return None
+            return value or None
+        return None
+
+    def resolve_linear_owner_identity(self) -> str | None:
+        """The identity Linear requests are sent as.
+
+        ``linear_owner_identity`` when set, otherwise the first id of
+        ``slack_planning_originator_user_id`` (the factory owner's Slack
+        member id), otherwise ``None``.
+        """
+        own = (self.linear_owner_identity or "").strip()
+        if own:
+            return own
+        for part in (self.slack_planning_originator_user_id or "").split(","):
+            if part.strip():
+                return part.strip()
+        return None
 
     # -- Runtime validation --------------------------------------------------
 

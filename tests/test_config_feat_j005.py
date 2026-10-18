@@ -137,9 +137,12 @@ class TestAC004NoOtherModuleConsumesNewFields:
         # TASK-SPL-J01 — the planning-intake factory injects the same DDR-025
         # timeout into NatsPlanningQueuedPublisher (TASK-REV-3240 F-PLAN-1:
         # config-sourced, never dispatch's private _resolve_publish_timeout).
+        # The Linear door (18 October 2026) gives the same timeout to the same
+        # publisher, read once in its configuration.
         "pipeline_publish_timeout_seconds": {
             "tools/dispatch.py",
             "infrastructure/slack_planning_intake.py",
+            "infrastructure/linear/door.py",
         },
         # TASK-J005-008 — lifecycle constructs ``ForgeNotificationsSubscriber``
         # with ``queue_cap=config.forge_notifications_queue_cap`` and
