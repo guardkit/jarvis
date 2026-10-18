@@ -175,7 +175,10 @@ def finals(outcome: Any, issues: list[tuple[str, str | None]]) -> dict[str, Fina
         return {}
     if not is_mission(outcome.correlation_id):
         if on_main:
-            final = Final(DONE, _merged_words(outcome))
+            # A failed deploy is said in its own notice (report.py), so the
+            # merge and the deploy are each said once, whenever each is known.
+            commit = f" as `{outcome.j_commit}`" if outcome.j_commit else ""
+            final = Final(DONE, f"Merged into the main branch{commit}.")
         elif outcome.phase == fr.ALREADY_DONE:
             proof = "".join(f"\n- {line}" for line in getattr(outcome, "proof", ()) or ())
             final = Final(

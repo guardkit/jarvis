@@ -576,22 +576,19 @@ class Reporter:
             if final is None:
                 continue
             try:
-                written = self._store.progress(cid, issue_id, "final")
-                if written is None:
+                if self._store.progress(cid, issue_id, "final") is None:
                     await self._write(
                         issue_id, comment(final.text), ref_for("final", cid, issue_id)
                     )
                     self._store.set_progress(cid, issue_id, "final", outcome.phase)
-                elif (
-                    written == fr.ON_MAIN_REPORT_PENDING
-                    and outcome.phase == fr.ON_MAIN_DEPLOY_FAILED
-                ):
+                if outcome.phase == fr.ON_MAIN_DEPLOY_FAILED and not is_mission(cid):
+                    # Its own ref, whatever the final comment said or when:
+                    # written once, and the attempt ends only after it.
                     await self._write(
                         issue_id,
                         comment(deploy_failed_words(outcome)),
                         ref_for("deploy-failed", cid, issue_id),
                     )
-                    self._store.set_progress(cid, issue_id, "final", outcome.phase)
                 if self._store.progress(cid, issue_id, "moved") is None:
                     issue = current.get(issue_id)
                     state_id = _move_to(final.target, issue, state_ids)

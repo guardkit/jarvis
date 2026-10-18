@@ -294,11 +294,10 @@ async def test_on_main_with_a_failed_deploy_says_so(h: Harness) -> None:
         j_commit="abc1234",
     )
     await h.poll()
-    (only,) = h.factory(h.linear.comments_on(issue))
-    assert only == (
-        "Factory: Merged into the main branch as `abc1234`, but its deploy failed: "
-        "the health check timed out."
-    )
+    assert h.factory(h.linear.comments_on(issue)) == [
+        "Factory: Merged into the main branch as `abc1234`.",
+        "Factory: The deploy failed: the health check timed out.",
+    ]
     assert h.linear.state_name(issue) == "Done"
 
 
@@ -1584,6 +1583,34 @@ async def test_a_deploy_failure_reported_after_the_merge_is_still_said(h: Harnes
     ]
     assert h.linear.state_name(issue) == "Done"
     assert h.store.reservations() == {issue.id: cid}
+    h.restart()
+    h.attempts.outcomes[cid] = single(
+        cid,
+        fr.ON_MAIN_DEPLOY_FAILED,
+        True,
+        "merged into main, but its deploy failed: the health check timed out",
+        j_commit="abc1234",
+    )
+    await h.poll(2)
+    assert h.factory(h.linear.comments_on(issue)) == [
+        "Factory: Merged into the main branch as `abc1234`.",
+        "Factory: The deploy failed: the health check timed out.",
+    ]
+    assert h.linear.state_name(issue) == "Done"
+    assert h.store.reservations() == {}
+
+
+async def test_a_lost_merged_comment_still_gets_its_deploy_failed_notice(h: Harness) -> None:
+    # R11 follow-up: the merged comment reaches Linear but its answer is lost;
+    # after a restart Forge's report says the deploy failed.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(
+        cid, fr.ON_MAIN_REPORT_PENDING, False, "merged into main", j_commit="abc1234"
+    )
+    h.linear.lose_response["DoorCommentCreate"] = 1
+    await h.poll()
+    assert h.store.progress(cid, issue.id, "final") is None
     h.restart()
     h.attempts.outcomes[cid] = single(
         cid,
