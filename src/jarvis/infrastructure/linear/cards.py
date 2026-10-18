@@ -44,6 +44,13 @@ ANSWER_IN_SLACK = (
     "A plan card is waiting. Its details have expired from the message stream; "
     "please answer it in Slack."
 )
+OTHER_IN_SLACK = (
+    "A factory card is waiting. Its details have expired from the message stream; "
+    "please answer it in Slack."
+)
+#: The ending of a card whose openness the door cannot check in Forge's
+#: record: shown, but answered in Slack only (Codex review R6).
+SLACK_ONLY_ENDING = "Answer this card in Slack; it cannot be answered here."
 NOT_LISTED = "Only the people listed can answer this card."
 
 # A comment is cut here; Forge's cards are far shorter.
@@ -249,12 +256,17 @@ def _plan_parts(details: dict[str, Any]) -> list[str]:
 
 
 def card_comment(
-    card: Card, *, landed: list[str] | None = None, missing: list[str] | None = None
+    card: Card,
+    *,
+    landed: list[str] | None = None,
+    missing: list[str] | None = None,
+    answerable: bool = True,
 ) -> str:
-    """The comment for a card from the bus (every kind can be answered here).
+    """The comment for a card from the bus.
 
     ``landed`` and ``missing`` are the mission members whose keys did and did
-    not land on the mission branch (merge card of a mission).
+    not land on the mission branch (merge card of a mission). A card that is
+    not ``answerable`` here ends by saying to answer it in Slack.
     """
     details = card.details
     if card.kind == MERGE:
@@ -280,7 +292,7 @@ def card_comment(
         parts.append(_lines(card.action_description))
     if details.get("rationale") and str(details["rationale"]) != card.action_description:
         parts.append(_lines(str(details["rationale"])))
-    return _finish(parts, APPROVE_ENDING)
+    return _finish(parts, APPROVE_ENDING if answerable else SLACK_ONLY_ENDING)
 
 
 def _mission_lines(landed: list[str] | None, missing: list[str] | None) -> list[str]:
@@ -315,7 +327,8 @@ def recovered_card_comment(
         parts.extend(_links(app_url, report_url))
         parts.extend(_mission_lines(landed, missing))
         return _finish(parts, MERGE_ENDING), True
-    return _finish([f"{ANSWER_IN_SLACK} (`{request_id}`)"], None), False
+    words = ANSWER_IN_SLACK if kind in (PLAN, MISSION_PLAN) else OTHER_IN_SLACK
+    return _finish([f"{words} (`{request_id}`)"], None), False
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +417,9 @@ __all__ = [
     "MISSION_PLAN",
     "NOT_LISTED",
     "OTHER",
+    "OTHER_IN_SLACK",
     "PLAN",
+    "SLACK_ONLY_ENDING",
     "Card",
     "Notification",
     "answer_notes",

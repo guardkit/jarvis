@@ -8,6 +8,7 @@ Forge record built from Forge's schema. All names and ids are made up.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -18,16 +19,19 @@ import pytest
 
 from jarvis.infrastructure.linear import forge_record as fr
 from jarvis.infrastructure.linear.cards import (
+    SLACK_ONLY_ENDING,
     https_link,
     parse_approvers,
     parse_card,
     parse_reply,
 )
+from jarvis.infrastructure.linear.client import LinearError
 from jarvis.infrastructure.linear.door import DoorSettings, LinearDoor, RecordedAttempt
 from jarvis.infrastructure.linear.mapping import mission_prefix
 from jarvis.infrastructure.linear.report import (
     CARDS,
     NOTIFICATIONS,
+    UNCONFIRMED_ANSWER,
     UNFILED_NOTICE,
     BusMessage,
     ForgeAttempts,
@@ -50,6 +54,12 @@ OWNER_LINEAR = "user-owner"
 OWNER_IDENTITY = "U0OWNER0001"
 STRANGER = "user-stranger"
 SCHEMA = Path(__file__).parents[3] / "infrastructure" / "linear" / "forge_schema_dbd40c7e.sql"
+_REF = re.compile(r"\n\nref: [0-9a-f]{12}$")
+
+
+def plain(body: str) -> str:
+    """A door comment without its closing ``ref: …`` line."""
+    return _REF.sub("", body)
 
 
 class Harness:
@@ -93,8 +103,8 @@ class Harness:
             await self.door.poll_once()
 
     def factory(self, comments: list[str]) -> list[str]:
-        """The door's own comments, minus its "sent" comment."""
-        return [c for c in comments if "Sent to the factory as" not in c]
+        """The door's own comments, minus its "sent" comment and the refs."""
+        return [plain(c) for c in comments if "Sent to the factory as" not in c]
 
     def card_comments(self, issue: Any) -> list[Any]:
         return [
@@ -207,6 +217,16 @@ def merge_card(
             "resume_options": ["approve", "reject"],
         },
         action="Merge autobuild/FEAT-1 into main?",
+    )
+
+
+def gate_card(cid: str, build_id: str) -> BusMessage:
+    return card_message(
+        f"agents.approval.forge.{build_id}",
+        f"{build_id}:autobuild:0",
+        cid=cid,
+        details={"build_id": build_id, "stage_label": "autobuild"},
+        action="Start the build?",
     )
 
 
@@ -485,6 +505,7 @@ async def test_plan_card_is_posted_once_with_its_summary(h: Harness) -> None:
     issue = await sent_single(h)
     cid = "lin-ENG-1-1"
     h.attempts.outcomes[cid] = single(cid, fr.PLANNING)
+    h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
     message = plan_card(cid)
     h.feed.push(CARDS, message)
     await h.poll()
@@ -495,7 +516,7 @@ async def test_plan_card_is_posted_once_with_its_summary(h: Harness) -> None:
     assert card.body.startswith("Factory: **The plan card is waiting for your answer.**")
     assert "A toggle switches the theme. _(the main one)_" in card.body
     assert "The setting is per browser." in card.body and "the input did not say" in card.body
-    assert card.body.endswith("Reply to this comment with **approve** or **reject**.")
+    assert plain(card.body).endswith("Reply to this comment with **approve** or **reject**.")
     assert h.feed.pending(CARDS) == []
     assert h.store.mark(CARDS) == message.at.isoformat()
 
@@ -509,7 +530,7 @@ async def test_mission_plan_card_is_posted_on_every_member(h: Harness) -> None:
         (card,) = h.card_comments(issue)
         assert "The mission's plan card is waiting for your answer." in card.body
         assert 'Mission "Sharing" — 2 features' in card.body
-        assert card.body.endswith("**approve** or **reject**.")
+        assert plain(card.body).endswith("**approve** or **reject**.")
 
 
 async def test_merge_card_shows_https_links_only(h: Harness) -> None:
@@ -533,7 +554,7 @@ async def test_merge_card_shows_https_links_only(h: Harness) -> None:
     assert "Merge autobuild/FEAT-1 into main?" in card.body
     assert "[Try the preview](https://preview.example/app?preview=t)" in card.body
     assert "plain.example" not in card.body
-    assert card.body.endswith("Reply to this comment with **merge** or **decline**.")
+    assert plain(card.body).endswith("Reply to this comment with **merge** or **decline**.")
 
 
 async def test_mission_merge_card_says_which_keys_landed(h: Harness) -> None:
@@ -559,20 +580,20 @@ async def test_a_build_gate_card_is_posted_like_any_other(h: Harness) -> None:
     issue = await sent_single(h)
     cid = "lin-ENG-1-1"
     h.attempts.outcomes[cid] = single(cid, fr.BUILDING, build_id="build-1")
-    h.feed.push(
-        CARDS,
-        card_message(
-            "agents.approval.forge.build-1",
-            "build-1:autobuild:0",
-            cid=cid,
-            details={"build_id": "build-1", "stage_label": "autobuild"},
-            action="Start the build?",
-        ),
-    )
+    h.attempts.cards = [fr.OpenCard("build", cid, "build-1:autobuild:0", build_id="build-1")]
+    h.feed.push(CARDS, gate_card(cid, "build-1"))
     await h.poll()
     (card,) = h.card_comments(issue)
     assert "A factory card is waiting for your answer (autobuild)." in card.body
     assert "Start the build?" in card.body
+    assert plain(card.body).endswith("**approve** or **reject**.")
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    await h.poll()
+    (subject, payload, _) = h.answers.published[0]
+    assert (subject, payload.request_id) == (
+        "agents.approval.forge.build-1.response",
+        "build-1:autobuild:0",
+    )
 
 
 async def test_a_card_already_answered_is_not_posted(h: Harness) -> None:
@@ -600,6 +621,7 @@ async def test_cards_for_other_work_and_responses_are_ignored(h: Harness) -> Non
 
 async def test_cards_wait_while_the_record_cannot_be_read(h: Harness) -> None:
     issue = await sent_single(h)
+    h.attempts.cards = [fr.OpenCard("plan", "lin-ENG-1-1", "req-plan-1")]
     h.attempts.unreadable = True
     h.feed.push(CARDS, plan_card("lin-ENG-1-1"))
     await h.poll()
@@ -648,7 +670,7 @@ async def test_recovered_merge_card_can_be_answered(h: Harness) -> None:
     (card,) = h.card_comments(issue)
     assert "[Try the preview](https://preview.example/app)" in card.body
     assert "javascript" not in card.body
-    assert card.body.endswith("**merge** or **decline**.")
+    assert plain(card.body).endswith("**merge** or **decline**.")
     h.linear.reply(card, "merge", user_id=OWNER_LINEAR)
     await h.poll()
     (subject, payload, correlation) = h.answers.published[0]
@@ -665,6 +687,7 @@ async def _plan_card_posted(h: Harness) -> tuple[Any, Any]:
     issue = await sent_single(h)
     cid = "lin-ENG-1-1"
     h.attempts.outcomes[cid] = single(cid, fr.PLANNING)
+    h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
     h.feed.push(CARDS, plan_card(cid))
     await h.poll()
     (card,) = h.card_comments(issue)
@@ -741,7 +764,9 @@ async def test_an_unlisted_author_is_told_once_and_nothing_is_published(h: Harne
     h.linear.reply(card, "approve please", user_id=STRANGER)
     await h.poll(2)
     assert h.answers.published == []
-    refusals = [c.body for c in h.linear.replies_to(card.id) if c.body.startswith("Factory:")]
+    refusals = [
+        plain(c.body) for c in h.linear.replies_to(card.id) if c.body.startswith("Factory:")
+    ]
     assert refusals == ["Factory: Only the people listed can answer this card."]
     # A listed person can still answer.
     h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
@@ -757,19 +782,41 @@ async def test_discussion_in_the_thread_is_ignored(h: Harness) -> None:
     assert h.answers.published == []
 
 
-async def test_a_failed_publish_is_tried_again(h: Harness) -> None:
+def _unconfirmed_notices(h: Harness, card: Any) -> list[str]:
+    return [plain(c.body) for c in h.linear.replies_to(card.id) if UNCONFIRMED_ANSWER in c.body]
+
+
+async def test_a_failed_publish_is_not_repeated_and_a_new_reply_is_taken(h: Harness) -> None:
     _, card = await _plan_card_posted(h)
     h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
     h.answers.fail = True
     await h.poll()
-    assert h.answers.published == []
     h.answers.fail = False
     await h.poll(2)
+    assert h.answers.published == []
+    assert _unconfirmed_notices(h, card) == [f"Factory: {UNCONFIRMED_ANSWER}"]
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)  # the person replies again
+    await h.poll()
     assert len(h.answers.published) == 1
+
+
+async def test_an_answer_whose_flush_timed_out_is_never_sent_again(h: Harness) -> None:
+    # Codex review R2: the answer reached the bus, then the flush timed out.
+    _, card = await _plan_card_posted(h)
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    h.answers.flush_times_out = True
+    await h.poll()
+    h.answers.flush_times_out = False
+    await h.poll(2)
+    h.restart()
+    await h.poll()
+    assert len(h.answers.published) == 1
+    assert _unconfirmed_notices(h, card) == [f"Factory: {UNCONFIRMED_ANSWER}"]
 
 
 async def test_a_newer_plan_card_closes_the_older_one(h: Harness) -> None:
     issue, first = await _plan_card_posted(h)
+    h.attempts.cards = [fr.OpenCard("plan", "lin-ENG-1-1", "req-plan-2")]
     h.feed.push(CARDS, plan_card("lin-ENG-1-1", request_id="req-plan-2"))
     await h.poll()
     h.linear.reply(first, "approve", user_id=OWNER_LINEAR)
@@ -849,7 +896,7 @@ async def test_rebuild_brings_ended_attempts_to_their_final_state_once(h: Harnes
     )
     h.attempts.outcomes["lin-ENG-2-1"] = single("lin-ENG-2-1", fr.BUILD_FAILED, True, "tests")
     await h.poll(2)
-    assert linear.comments_on(landed) == [
+    assert [plain(c) for c in linear.comments_on(landed)] == [
         "Factory: Recovered after a restart: Merged into the main branch as `abc1234`."
     ]
     assert linear.state_name(landed) == "Done"
@@ -1007,3 +1054,200 @@ def test_door_config_reads_approvers_and_the_forge_record(
     monkeypatch.setenv("JARVIS_LINEAR_APPROVERS", "not-a-pair")
     reason = door_config(JarvisConfig())
     assert isinstance(reason, str) and "JARVIS_LINEAR_APPROVERS" in reason
+
+
+# ---------------------------------------------------------------------------
+# Codex review of 5c34f70: the repairs (R1-R6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mission_first", [True, False])
+async def test_rebuild_moves_each_issue_by_its_own_latest_attempt(
+    h: Harness, mission_first: bool
+) -> None:
+    # R1: a failed mission containing ENG-1, then a successful single retry
+    # (and the other way round). Only the later attempt decides.
+    label = h.linear.label("mission: Sharing")
+    issue = h.linear.issue("Share a note", state="In Progress", labels=[label])
+    mcid = f"{mission_prefix(label)}1"
+    early, late = "2026-10-18T09:00:00+00:00", "2026-10-18T10:00:00+00:00"
+    h.attempts.recorded = [
+        RecordedAttempt(
+            mcid, open=False, mission_keys=("ENG1",), filed_at=early if mission_first else late
+        ),
+        RecordedAttempt("lin-ENG-1-1", open=False, filed_at=late if mission_first else early),
+    ]
+    h.attempts.outcomes[mcid] = mission(mcid, fr.NOT_STARTED, True, reason="no seed")
+    h.attempts.outcomes["lin-ENG-1-1"] = single(
+        "lin-ENG-1-1", fr.ON_MAIN, True, "merged", j_commit="abc1234"
+    )
+    await h.poll(2)
+    comments = [plain(c) for c in h.linear.comments_on(issue)]
+    if mission_first:
+        assert h.linear.state_name(issue) == "Done"
+        assert comments == [
+            "Factory: Recovered after a restart: Merged into the main branch as `abc1234`."
+        ]
+        assert mcid not in h.attempts.asked
+    else:
+        assert h.linear.state_name(issue) == "Backlog"
+        (only,) = comments
+        assert only.startswith("Factory: Recovered after a restart: Ended without a merge")
+        assert "lin-ENG-1-1" not in h.attempts.asked
+
+
+async def test_a_card_and_a_refusal_wait_for_their_send_to_finish(h: Harness) -> None:
+    # R4: the "sent" comment fails for a while; the plan card and a refusal
+    # arrive meanwhile, and the stream will not deliver them again.
+    issue = h.linear.issue("Add a dark mode")
+    cid = "lin-ENG-1-1"
+    h.linear.fail_next["DoorCommentCreate"] = [server_error(), server_error()]
+    with pytest.raises(LinearError):
+        await h.poll()  # published; its "sent" comment failed
+    assert h.bus.payloads()[0]["correlation_id"] == cid
+    h.feed.push(CARDS, plan_card(cid))
+    h.feed.push(NOTIFICATIONS, notification(cid, "Missions are switched off."))
+    await h.poll()  # the "sent" comment fails again: both are held
+    assert h.card_comments(issue) == []
+    assert h.feed.pending(CARDS) == [] and h.feed.pending(NOTIFICATIONS) == []
+    assert len(h.store.held_messages(CARDS)) == len(h.store.held_messages(NOTIFICATIONS)) == 1
+    h.restart()
+    h.attempts.outcomes[cid] = single(cid, fr.UNFILED)
+    h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
+    await h.poll()
+    assert h.linear.state_name(issue) == "In Progress"
+    assert len(h.card_comments(issue)) == 1
+    assert any("Missions are switched off." in c for c in h.linear.comments_on(issue))
+    assert h.store.held_messages(CARDS) == h.store.held_messages(NOTIFICATIONS) == []
+
+
+async def test_comments_whose_answer_was_lost_are_not_written_twice(h: Harness) -> None:
+    # R3: Linear writes the comment, the door does not hear back, then restarts.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(cid, fr.BUILDING)
+    h.linear.lose_response["DoorCommentCreate"] = 1
+    await h.poll()
+    h.restart()
+    await h.poll(2)
+    assert h.factory(h.linear.comments_on(issue)) == ["Factory: Building."]
+
+    h.attempts.outcomes[cid] = single(cid, fr.BUILD_FAILED, True, "tests failed")
+    h.linear.lose_response["DoorCommentCreate"] = 1
+    await h.poll()
+    h.restart()
+    await h.poll(2)
+    comments = h.factory(h.linear.comments_on(issue))
+    assert len(comments) == 2 and comments[1].startswith("Factory: Ended without a merge")
+    assert h.linear.state_name(issue) == "Backlog"
+    assert all(c.splitlines()[-1].startswith("ref: ") for c in h.linear.comments_on(issue)[1:])
+
+
+async def test_a_card_whose_answer_was_lost_is_posted_once_and_answered(h: Harness) -> None:
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(cid, fr.PLANNING)
+    h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
+    h.feed.push(CARDS, plan_card(cid))
+    h.linear.lose_response["DoorCommentCreate"] = 1
+    await h.poll()  # the card is on the issue; the door did not hear back
+    assert len(h.feed.pending(CARDS)) == 1
+    h.restart()
+    await h.poll()
+    (card,) = h.card_comments(issue)
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)  # under the card found again
+    await h.poll()
+    assert [p.request_id for _, p, _ in h.answers.published] == ["req-plan-1"]
+
+
+async def test_a_build_gate_answered_in_slack_is_not_posted_or_answered(h: Harness) -> None:
+    # R6: posted while open; answered in Slack; then a replay of the card.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(cid, fr.BUILDING, build_id="build-1")
+    h.attempts.cards = [fr.OpenCard("build", cid, "build-1:autobuild:0", build_id="build-1")]
+    h.feed.push(CARDS, gate_card(cid, "build-1"))
+    await h.poll()
+    (card,) = h.card_comments(issue)
+    h.attempts.cards = []  # answered in Slack: the build is no longer paused
+    await h.poll()
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    await h.poll()
+    assert h.answers.published == []
+
+    second = await sent_single(h, "Second")
+    cid2 = "lin-ENG-2-1"
+    h.attempts.outcomes[cid2] = single(cid2, fr.BUILDING, build_id="build-2")
+    h.feed.push(CARDS, gate_card(cid2, "build-2"))  # a replay after the Slack answer
+    await h.poll()
+    assert h.card_comments(second) == []
+
+
+async def test_a_card_the_record_cannot_check_is_answered_in_slack_only(h: Harness) -> None:
+    # R6: a card for a build the record does not link to this attempt.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(cid, fr.BUILDING)
+    h.feed.push(CARDS, gate_card(cid, "build-9"))
+    await h.poll()
+    (card,) = h.card_comments(issue)
+    assert plain(card.body).endswith(SLACK_ONLY_ENDING)
+    assert h.store.open_cards(answerable_only=True) == []
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    await h.poll()
+    assert h.answers.published == []
+
+
+async def test_an_expired_spec_digest_card_is_recovered_from_the_real_record(
+    tmp_path: Path,
+) -> None:
+    # R5: Forge's spec digest card waits inline (no PAUSED state); its opening
+    # is in planning_run_events. Through the real reader.
+    db = tmp_path / "forge.db"
+    cx = sqlite3.connect(db)
+    cx.executescript(SCHEMA.read_text())
+    h = Harness(tmp_path)
+    h.attempts = ForgeAttempts(fr.ForgeRecord(db, timeout=0.2))  # type: ignore[assignment]
+    h.door = h._door()
+    issue = h.linear.issue("Add a dark mode")
+    await h.poll()
+    cid = "lin-ENG-1-1"
+    request = f"plan-{cid}:feature-spec-digest-review:0"
+    now = "2026-10-18T10:00:00+00:00"
+    cx.execute(
+        "INSERT INTO planning_runs (correlation_id, state, originating_user, expected_approver, "
+        "request_text, triggered_by, queued_at) VALUES (?, 'FEATURE_SPEC', 'u', 'a', 'r', "
+        "'jarvis', ?)",
+        (cid, now),
+    )
+    cx.execute(
+        "INSERT INTO planning_run_events (correlation_id, stage_label, status, actor_identity, "
+        "details_json, recorded_at) VALUES (?, 'feature-spec-digest-review', 'GATED', "
+        "'planning-driver', ?, ?)",
+        (
+            cid,
+            json.dumps(
+                {
+                    "digest_review": {
+                        "outcome": "opened",
+                        "request_id": request,
+                        "attempt_count": 0,
+                        "expected_approver": "a",
+                        "card": {"title": "The spec is ready"},
+                        "wait_seconds": 900,
+                    }
+                }
+            ),
+            now,
+        ),
+    )
+    cx.commit()
+    await h.poll()  # seen; the stream gets a moment to deliver the full card
+    assert h.card_comments(issue) == []
+    old = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    h.store.set_progress(cid, "", f"card-seen:{request}", old)
+    await h.poll()
+    (card,) = h.card_comments(issue)
+    assert "please answer it in Slack" in card.body and request in card.body
+    assert h.store.open_cards(answerable_only=True) == []
+    cx.close()

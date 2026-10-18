@@ -616,3 +616,110 @@ def test_record_without_mission_tables_has_no_missions(tmp_path: Path) -> None:
     assert led.record.outcome_for_mission(MCID).phase == fr.UNFILED
     assert [a.correlation_id for a in led.record.all_linear_attempts()] == [CID]
     led.cx.close()
+
+
+# ---------------------------------------------------------------------------
+# Codex review of 5c34f70: inline planning cards (R5), paused builds (R6),
+# and when an attempt was filed (R1)
+# ---------------------------------------------------------------------------
+
+
+def door_event(ledger: Ledger, cid: str, stage: str, status: str, details: dict) -> None:
+    """A row as Forge's inline door writes it (``driver.py`` 9512-9531)."""
+    ledger.cx.execute(
+        "INSERT INTO planning_run_events (correlation_id, stage_label, status, actor_identity, "
+        "details_json, recorded_at) VALUES (?, ?, ?, 'planning-driver', ?, ?)",
+        (cid, stage, status, json.dumps(details), NOW),
+    )
+    ledger.cx.commit()
+
+
+def opened(key: str, request_id: str, outcome: str = "opened") -> dict:
+    return {
+        key: {
+            "outcome": outcome,
+            "request_id": request_id,
+            "attempt_count": 0,
+            "expected_approver": "a",
+            "card": {"title": "The spec is ready"},
+            "wait_seconds": 900,
+        }
+    }
+
+
+DIGEST = ("feature-spec-digest-review", "digest_review")
+AUTH = ("qa-pass-bars-auth-confirm", "auth_confirmation")
+
+
+@pytest.mark.parametrize(
+    ("stage", "key", "state"), [(*DIGEST, "FEATURE_SPEC"), (*AUTH, "FEATURE_PLAN")]
+)
+def test_a_planning_card_waiting_inline_is_an_open_plan_card(
+    ledger: Ledger, stage: str, key: str, state: str
+) -> None:
+    ledger.run(CID, state)
+    request = f"plan-{CID}:{stage}:0"
+    door_event(ledger, CID, stage, "GATED", opened(key, request))
+    assert [(c.kind, c.request_id) for c in ledger.record.open_cards_for([CID])] == [
+        ("plan", request)
+    ]
+    assert ledger.record.outcome_for_single(CID).phase == fr.PLANNING
+    # Re-opened after a restart: the same card, still open.
+    door_event(ledger, CID, stage, "reopened", opened(key, request, "reopened"))
+    assert [c.request_id for c in ledger.record.open_cards_for([CID])] == [request]
+    # Any verdict closes it.
+    door_event(
+        ledger, CID, stage, "approved", {key: {"outcome": "approved", "request_id": request}}
+    )
+    assert ledger.record.open_cards_for([CID]) == []
+
+
+def test_an_inline_card_left_open_by_a_run_that_ended_is_not_open(ledger: Ledger) -> None:
+    ledger.run(CID, "FAILED", error="the daemon stopped")
+    door_event(ledger, CID, DIGEST[0], "GATED", opened(DIGEST[1], "plan-x:d:0"))
+    assert ledger.record.open_cards_for([CID]) == []
+
+
+def test_a_paused_build_is_an_open_card(ledger: Ledger) -> None:
+    ledger.queue(CID, "ADMITTED")
+    ledger.build(CID, "build-1", "PAUSED")
+    ledger.cx.execute(
+        "UPDATE builds SET pending_approval_request_id = 'build-1:autobuild:0' "
+        "WHERE build_id = 'build-1'"
+    )
+    ledger.cx.commit()
+    [card] = ledger.record.open_cards_for([CID])
+    assert (card.kind, card.correlation_id, card.request_id, card.build_id) == (
+        "build",
+        CID,
+        "build-1:autobuild:0",
+        "build-1",
+    )
+    # Answered (in Slack or anywhere): Forge clears the pause.
+    ledger.cx.execute(
+        "UPDATE builds SET status = 'RUNNING', pending_approval_request_id = NULL "
+        "WHERE build_id = 'build-1'"
+    )
+    ledger.cx.commit()
+    assert ledger.record.open_cards_for([CID]) == []
+
+
+def test_a_mission_features_paused_build_is_an_open_card(ledger: Ledger) -> None:
+    ledger.mission(MCID, "m-1", "RUNNING", keys=("ENG4",))
+    ledger.attempt("m-1", MCID, "ENG4", 1, "ADMITTED")
+    ledger.build(f"{MCID}-ENG4-a1", "build-4", "PAUSED")
+    ledger.cx.execute("UPDATE builds SET pending_approval_request_id = 'build-4:autobuild:0'")
+    ledger.cx.commit()
+    [card] = ledger.record.open_cards_for([MCID])
+    assert (card.kind, card.correlation_id, card.build_id) == (
+        "build",
+        f"{MCID}-ENG4-a1",
+        "build-4",
+    )
+
+
+def test_recorded_attempts_say_when_they_were_filed(ledger: Ledger) -> None:
+    ledger.queue("lin-ENG-1-1", "WITHDRAWN", "withdrawn")
+    ledger.mission(MCID, "m-1", "REJECTED")
+    filed = {a.correlation_id: a.filed_at for a in ledger.record.all_linear_attempts()}
+    assert filed == {"lin-ENG-1-1": NOW, MCID: NOW}

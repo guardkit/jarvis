@@ -192,4 +192,3 @@ CREATE TABLE missions (id TEXT PRIMARY KEY, title TEXT NOT NULL, target_repo TEX
 CREATE TABLE mission_features (mission_id TEXT NOT NULL REFERENCES missions(id), key TEXT NOT NULL, sentence TEXT NOT NULL, no_sign_in INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (mission_id, key)) STRICT;
 
 CREATE TABLE mission_attempts (mission_id TEXT NOT NULL, key TEXT NOT NULL, attempt INTEGER NOT NULL CHECK (attempt IN (1, 2)), correlation_id TEXT NOT NULL UNIQUE, status TEXT NOT NULL CHECK (status IN ('WAITING', 'ADMITTED', 'LANDED', 'FAILED', 'HELD')), reason TEXT, admitted_at TEXT, closed_at TEXT, PRIMARY KEY (mission_id, key, attempt)) STRICT;
-

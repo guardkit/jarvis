@@ -15,8 +15,10 @@ What it answers:
 * :meth:`ForgeRecord.outcome_for_mission` - the same for a mission
   (``lin-m-<label id>-<n>``), with which keys landed;
 * :meth:`ForgeRecord.open_cards_for` - the cards still open for some
-  attempts (merge offers without a decision, paused planning runs, proposed
-  missions), so a card the message stream no longer holds can be posted;
+  attempts (merge offers without a decision, paused planning runs, planning
+  cards that wait inline, proposed missions, paused builds), so a card the
+  message stream no longer holds can be posted, and a card the stream still
+  holds is posted only while it is open;
 * :meth:`ForgeRecord.all_linear_attempts` - every attempt Forge has recorded
   for the door, ended or not, for rebuilding the door's own record.
 
@@ -104,6 +106,21 @@ Values and rules:
   ``cli/status.py`` 96-101; the failed ones are those minus COMPLETE -
   ``planning/work_queue_loop.py`` 192-195. Planning failure words -
   ``work_queue_loop.py`` 280-284.
+* Planning cards that wait inline (no PAUSED state): the spec digest review
+  (stage ``feature-spec-digest-review``, details key ``digest_review``) and
+  the sign-in confirmation (``qa-pass-bars-auth-confirm``,
+  ``auth_confirmation``) - ``planning/driver.py`` 258, 291, 6248-6252,
+  9804-9808. Each opening is written to ``planning_run_events`` before the
+  card is sent, with status ``GATED`` or ``reopened`` and the card's
+  ``request_id`` under the details key; any later row for the stage is its
+  verdict and closes it - ``driver.py`` 300, 9512-9531, 9858-9890.
+* Paused builds (build gates, budget pauses): ``builds.status`` ``PAUSED``
+  with ``pending_approval_request_id``, written before the card is sent and
+  only while PAUSED - ``lifecycle/schema.sql`` 44-49,
+  ``lifecycle/persistence.py`` 2093-2098, ``cli/_serve_gate_activation.py``
+  368-378.
+* When an attempt was filed: ``work_queue.queued_at`` and
+  ``planning_runs.queued_at`` (the earlier), ``missions.created_at``.
 * A mission's merge build: the first ``builds`` row by ``queued_at`` with
   that ``mission_id`` and ``mission_role = 'mission-merge'`` -
   ``lifecycle/mission_builds.py`` 111-126, ``missions.py`` 91. Latest
@@ -169,6 +186,15 @@ _PLANNING_FAILURE_WORDS = {
     "TIMED_OUT": "the planning run ran out of time",
 }
 _PLANNING_HANDED_OVER = frozenset({"PLANNED_HANDOFF", "BUILD_QUEUED"})
+#: Planning states after which no planning card can still be waiting.
+_PLANNING_OVER = frozenset(_PLANNING_FAILURE_WORDS) | _PLANNING_HANDED_OVER
+#: forge/planning/driver.py 291 + 6252, 258 + 9808: (stage, details key).
+_INLINE_DOORS = (
+    ("feature-spec-digest-review", "digest_review"),
+    ("qa-pass-bars-auth-confirm", "auth_confirmation"),
+)
+#: forge/planning/driver.py 300 (_AUTH_DOOR_OPEN_STATUSES).
+_DOOR_OPEN_STATUSES = frozenset({"GATED", "reopened"})
 _MISSION_ENDED = frozenset({"REJECTED", "NOT_STARTED", "MERGED", "NOT_MERGED"})
 
 #: Columns this module reads, per table. A record missing any is refused.
@@ -308,9 +334,10 @@ class OpenCard:
     """A card Forge's record shows as still waiting for an answer.
 
     ``kind`` is ``merge`` (answerable from Linear: it carries the request id,
-    correlation id and approval subject), ``plan`` (a paused planning run) or
-    ``mission_plan`` (a proposed mission); the last two lack their assumption
-    lists here, so the door asks for them to be answered in Slack.
+    correlation id and approval subject), ``plan`` (a paused planning run, or
+    a planning card waiting inline), ``mission_plan`` (a proposed mission) or
+    ``build`` (a paused build). Recovered from here, the last three lack their
+    details, so the door asks for them to be answered in Slack.
     """
 
     kind: str
@@ -330,6 +357,9 @@ class RecordedAttempt:
     kind: str
     phase: str
     ended: bool
+    #: When Forge filed it (ISO time). An issue is in one open attempt at a
+    #: time, so of its attempts the one filed last also ended last.
+    filed_at: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -726,18 +756,22 @@ class _Reader:
 
     def cards(self, cid: str) -> list[OpenCard]:
         found: list[OpenCard] = []
-        run = self._one(
-            "SELECT pending_approval_request_id FROM planning_runs "
-            "WHERE correlation_id = ? AND state = 'PAUSED'",
-            cid,
-        )
-        if run is not None and run[0]:
-            found.append(OpenCard("plan", cid, str(run[0])))
+        run_cids = [cid]
         mission = self._mission_row(cid)
         if mission is not None:
+            mission_id = str(mission[0])
             if mission[1] == "PROPOSED" and mission[3]:
                 found.append(OpenCard("mission_plan", cid, str(mission[3])))
-            merge = self._mission_merge_build(str(mission[0]))
+            # A mission feature's own planning run and build.
+            run_cids += [
+                str(r[0])
+                for r in self._cx.execute(
+                    "SELECT correlation_id FROM mission_attempts WHERE mission_id = ? "
+                    "ORDER BY key, attempt",
+                    (mission_id,),
+                )
+            ]
+            merge = self._mission_merge_build(mission_id)
             build_id = merge[0] if merge else None
         else:
             build = self._one(
@@ -746,11 +780,54 @@ class _Reader:
                 cid,
             )
             build_id = str(build[0]) if build else None
+        for run_cid in run_cids:
+            found.extend(self._plan_cards(run_cid))
+            found.extend(self._paused_builds("correlation_id = ?", run_cid))
         if build_id is not None:
+            if mission is not None:
+                found.extend(self._paused_builds("build_id = ?", build_id))
             card = self._open_merge_card(cid, build_id)
             if card is not None:
                 found.append(card)
+        return list(dict.fromkeys(found))
+
+    def _plan_cards(self, cid: str) -> list[OpenCard]:
+        """A paused planning run's card, or the planning cards waiting inline."""
+        run = self._one(
+            "SELECT state, pending_approval_request_id FROM planning_runs WHERE correlation_id = ?",
+            cid,
+        )
+        if run is None or run[0] in _PLANNING_OVER:
+            return []
+        if run[0] == "PAUSED":
+            return [OpenCard("plan", cid, str(run[1]))] if run[1] else []
+        found = []
+        for stage, key in _INLINE_DOORS:
+            row = self._one(
+                "SELECT status, details_json FROM planning_run_events "
+                "WHERE correlation_id = ? AND stage_label = ? ORDER BY id DESC LIMIT 1",
+                cid,
+                stage,
+            )
+            if row is None or row[0] not in _DOOR_OPEN_STATUSES:
+                continue
+            door = _details(row[1]).get(key)
+            request_id = _text(door.get("request_id")) if isinstance(door, dict) else None
+            if request_id:
+                found.append(OpenCard("plan", cid, request_id))
         return found
+
+    def _paused_builds(self, where: str, value: str) -> list[OpenCard]:
+        """Paused builds' cards (a build gate, a budget pause)."""
+        return [
+            OpenCard("build", str(r[1]), str(r[2]), build_id=str(r[0]))
+            for r in self._cx.execute(
+                "SELECT build_id, correlation_id, pending_approval_request_id FROM builds "
+                f"WHERE {where} AND status = 'PAUSED' "
+                "AND pending_approval_request_id IS NOT NULL ORDER BY queued_at",
+                (value,),
+            )
+        ]
 
     def _open_merge_card(self, cid: str, build_id: str) -> OpenCard | None:
         """The latest offer, when no decision row is on record for the build."""
@@ -814,8 +891,32 @@ class _Reader:
         found: list[RecordedAttempt] = []
         for cid in singles:
             single = self.single(cid)
-            found.append(RecordedAttempt(cid, "single", single.phase, single.ended))
+            filed = self._one(
+                "SELECT min(queued_at) FROM (SELECT queued_at FROM work_queue "
+                "WHERE correlation_id = ? UNION ALL SELECT queued_at FROM planning_runs "
+                "WHERE correlation_id = ?)",
+                cid,
+                cid,
+            )
+            found.append(
+                RecordedAttempt(
+                    cid,
+                    "single",
+                    single.phase,
+                    single.ended,
+                    _text(filed[0] if filed else None) or "",
+                )
+            )
         for cid in sorted(missions):
             mission = self.mission(cid)
-            found.append(RecordedAttempt(cid, "mission", mission.phase, mission.ended))
+            filed = self._one("SELECT created_at FROM missions WHERE correlation_id = ?", cid)
+            found.append(
+                RecordedAttempt(
+                    cid,
+                    "mission",
+                    mission.phase,
+                    mission.ended,
+                    _text(filed[0] if filed else None) or "",
+                )
+            )
         return found

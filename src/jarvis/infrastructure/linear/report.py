@@ -12,20 +12,29 @@ Every poll, after the door has finished delivering its own sends:
    attempt, which releases its issues.
 2. **Cards from the bus.** Card messages from ``agents.approval.forge.*`` on
    the AGENTS stream (:class:`NatsBusFeed`) are matched to an open attempt by
-   correlation id, mission id and the build ids Forge's record links, checked
-   against the record to be still open, and posted on the attempt's issues
-   (on every member for a mission). Slack notifications from the JARVIS stream
-   are copied onto the issues of an attempt Forge has not filed (visibility
-   only). Each feed's last handled time is recorded, so a restart resumes
-   from there.
+   correlation id, mission id and the build ids Forge's record links, and
+   posted on the attempt's issues (on every member for a mission) only while
+   Forge's record shows that card open (Forge writes a card to its record
+   before it sends it). A build gate or other card whose openness the record
+   cannot show is posted to be answered in Slack only. Slack notifications
+   from the JARVIS stream are copied onto the issues of an attempt Forge has
+   not filed (visibility only). A card or notification for a send whose
+   "sent" comment or move is not done yet is held in the door's record until
+   the send is finished. Each feed's last handled time is recorded, so a
+   restart resumes from there.
 3. **Cards the stream no longer holds** are posted from the record: a merge
-   card in full; a plan card asking for its answer in Slack.
+   card in full; any other card asking for its answer in Slack.
 4. **Answers.** Replies under the door's open card comments are read with one
    request; ``approve``/``merge`` approve, ``reject``/``decline`` reject,
    anything else is ignored. A listed author's answer is published as the
    Slack button does; an unlisted author is told once that only the people
-   listed can answer. Each reply is recorded before its answer is published,
-   so it is never published twice.
+   listed can answer. Each reply is recorded before its answer is published
+   and is never published again, even when the publish was not confirmed
+   (then the door says so under the card, once).
+
+Every comment the door writes here ends with a short reference (``ref: …``)
+recorded before it is sent, so a comment whose sending was not confirmed is
+looked for before it is written again (:func:`write_once`).
 
 Nothing here decides an outcome from a reply: what happened is reported later
 from Forge's record.
@@ -35,10 +44,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, Protocol
+from urllib.parse import unquote
 
 import structlog
 
@@ -47,6 +58,7 @@ from jarvis.infrastructure.linear.cards import (
     MERGE,
     MISSION_PLAN,
     NOT_LISTED,
+    OTHER,
     PLAN,
     Card,
     answer_notes,
@@ -90,8 +102,55 @@ RECOVERY_GRACE = timedelta(seconds=60)
 #: Polls a card is tried on before a card Linear keeps refusing is let go.
 MAX_CARD_TRIES = 5
 
-#: Phases in which a plan card can still be waiting.
-_PLANNING_PHASES = frozenset({fr.UNFILED, fr.QUEUED, fr.PLANNING, fr.PLAN_CARD_OPEN})
+#: Said under a card when an answer's publish was not confirmed (R2).
+UNCONFIRMED_ANSWER = (
+    "I could not confirm your answer reached the factory; if the card is still open, "
+    "reply again or answer in Slack."
+)
+
+#: Whether a card is open, by Forge's record.
+_OPEN = "open"
+_SETTLED = "settled"
+_UNKNOWN = "unknown"  # a card the record cannot show either way: Slack only
+
+#: The last line of every comment written once: ``ref: <ref>``.
+REF_WORD = "ref:"
+
+
+def ref_for(*parts: str) -> str:
+    """A short stable reference for one comment the door means to write."""
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:12]
+
+
+async def write_once(
+    client: Any,
+    store: DoorStore,
+    issue_id: str,
+    body: str,
+    ref: str,
+    *,
+    parent_id: str | None = None,
+) -> str:
+    """Write ``body`` on the issue once, and return the comment's id.
+
+    The reference is recorded before the comment is sent and ends its text.
+    If an earlier try was not confirmed (Linear's answer was lost, or the door
+    stopped), the issue's comments are searched for the reference first, so
+    the comment is never written twice (Codex review R3).
+    """
+    started, comment_id = store.comment_ref(ref)
+    if comment_id:
+        return comment_id
+    marker = f"{REF_WORD} {ref}"
+    if started:
+        for found in await client.comments_containing(issue_id, marker):
+            store.finish_comment(ref, found.id)
+            return str(found.id)
+    else:
+        store.begin_comment(ref, issue_id)
+    comment_id = await client.create_comment(issue_id, f"{body}\n\n{marker}", parent_id=parent_id)
+    store.finish_comment(ref, comment_id)
+    return str(comment_id)
 
 
 class AttemptRecordUnavailable(Exception):
@@ -109,12 +168,14 @@ class RecordedAttempt:
 
     ``mission_keys`` are a mission's ``mission_features`` keys (the issue
     identifiers without their hyphen); empty for a single issue, whose
-    identifier is inside its correlation id.
+    identifier is inside its correlation id. ``filed_at`` is when Forge filed
+    it (ISO time): of one issue's attempts, the one filed last is the latest.
     """
 
     correlation_id: str
     open: bool
     mission_keys: tuple[str, ...] = ()
+    filed_at: str = ""
 
 
 class AttemptRecord(Protocol):
@@ -173,7 +234,11 @@ class ForgeAttempts:
                 keys: tuple[str, ...] = ()
                 if is_mission(attempt.correlation_id):
                     keys = tuple(self._record.outcome_for_mission(attempt.correlation_id).keys)
-                found.append(RecordedAttempt(attempt.correlation_id, not attempt.ended, keys))
+                found.append(
+                    RecordedAttempt(
+                        attempt.correlation_id, not attempt.ended, keys, attempt.filed_at
+                    )
+                )
             return found
         except fr.ForgeRecordUnavailable as exc:
             raise AttemptRecordUnavailable(str(exc)) from None
@@ -345,15 +410,25 @@ class Reporter:
         # Cards Linear refused to take, by request id (in memory only).
         self._card_failures: dict[str, int] = {}
 
+    async def _write(
+        self, issue_id: str, body: str, ref: str, *, parent_id: str | None = None
+    ) -> str:
+        return await write_once(self._client, self._store, issue_id, body, ref, parent_id=parent_id)
+
     # -- one poll ---------------------------------------------------------------
 
     async def report(self, state_ids: dict[str, str], unfinished: set[str]) -> None:
         """Progress, cards, notifications and answers for every open attempt.
 
-        ``unfinished`` are sends still being delivered; they are left alone.
-        Raises on a Linear failure (the poll then backs off); a Forge record
-        that cannot be read only skips what depends on it.
+        ``unfinished`` are sends still being delivered: no progress is written
+        for them, and their cards and notifications are held until they are
+        delivered. Raises on a Linear failure (the poll then backs off); a
+        Forge record that cannot be read only skips what depends on it.
         """
+        # Taken before Forge's record is read: Forge records a card before it
+        # sends it, so every card here is already in the read below.
+        cards = self._pending(CARDS)
+        notes = self._pending(NOTIFICATIONS)
         attempts, unreadable = self._read_attempts(unfinished)
         for attempt in attempts.values():
             try:
@@ -376,8 +451,8 @@ class Reporter:
         else:
             open_cards = self._open_cards(list(live))
             if open_cards is not None:
-                await self._cards_from_bus(live, open_cards)
-                await self._notifications(live)
+                await self._cards_from_bus(cards, live, unfinished, open_cards)
+                await self._notifications(notes, live, unfinished)
                 await self._cards_from_record(live, open_cards)
                 self._close_settled_cards(live, open_cards)
         await self._read_answers()
@@ -438,7 +513,7 @@ class Reporter:
     async def _write_step(self, cid: str, issue_id: str, topic: str, key: str, text: str) -> None:
         if self._store.progress(cid, issue_id, topic) == key:
             return
-        await self._client.create_comment(issue_id, comment(text))
+        await self._write(issue_id, comment(text), ref_for("step", cid, issue_id, topic, key))
         self._store.set_progress(cid, issue_id, topic, key)
         logger.info("linear_door_progress_comment", correlation_id=cid, topic=topic, key=key)
 
@@ -472,7 +547,7 @@ class Reporter:
             if final is None:
                 continue
             if self._store.progress(cid, issue_id, "final") is None:
-                await self._client.create_comment(issue_id, comment(final.text))
+                await self._write(issue_id, comment(final.text), ref_for("final", cid, issue_id))
                 self._store.set_progress(cid, issue_id, "final", final.target)
             if self._store.progress(cid, issue_id, "moved") is None:
                 issue = current.get(issue_id)
@@ -483,6 +558,35 @@ class Reporter:
         reason = f"{attempt.outcome.phase}: {attempt.outcome.reason}"[:500]
         self._store.end_attempt(cid, reason)
         logger.info("linear_door_attempt_ended", correlation_id=cid, phase=attempt.outcome.phase)
+
+    # -- the bus -------------------------------------------------------------------
+
+    def _pending(self, name: str) -> list[tuple[int | None, BusMessage]]:
+        """Messages held in the door's record (with their id), then the feed's."""
+        held: list[tuple[int | None, BusMessage]] = [
+            (held_id, BusMessage(subject, data, datetime.fromisoformat(at) if at else None))
+            for held_id, subject, data, at in self._store.held_messages(name)
+        ]
+        fresh = self._feed.pending(name) if self._feed is not None else []
+        return held + [(None, message) for message in fresh]
+
+    def _handled(self, name: str, held_id: int | None, message: BusMessage) -> None:
+        if held_id is not None:
+            self._store.release_message(held_id)
+            return
+        assert self._feed is not None
+        if message.at is not None:
+            self._store.set_mark(name, message.at.isoformat())
+        self._feed.done(name, message)
+
+    def _hold(self, name: str, held_id: int | None, message: BusMessage) -> None:
+        """Keep a message for a send not yet delivered (Codex review R4). It is
+        kept in the door's record, so the feed's mark may move past it."""
+        if held_id is not None:
+            return
+        at = message.at.isoformat() if message.at is not None else None
+        self._store.hold_message(name, message.subject, message.data, at)
+        self._handled(name, None, message)
 
     # -- cards ---------------------------------------------------------------------
 
@@ -511,24 +615,32 @@ class Reporter:
         return index
 
     @staticmethod
-    def _still_open(card: Card, attempt: _Attempt, open_cards: list[Any]) -> bool:
-        """Whether Forge's record still shows the card waiting (a card already
-        answered, in Slack or anywhere, is not posted as open)."""
+    def _card_state(
+        kind: str,
+        request_id: str,
+        attempt: _Attempt,
+        open_cards: list[Any],
+        build_id: str | None = None,
+    ) -> str:
+        """Whether Forge's record shows the card open (a card answered in Slack,
+        or anywhere, is settled). One rule: the card's request id is among the
+        record's open cards. A mission's plan card is recorded just after it is
+        sent, so it is open while the mission is PROPOSED with no other card
+        recorded. A build gate or other card whose build the record does not
+        link to this attempt cannot be checked: ``_UNKNOWN`` (Slack only)."""
         outcome = attempt.outcome
         if outcome.ended:
-            return False
-        if card.kind == MERGE:
-            return any(c.kind == "merge" and c.request_id == card.request_id for c in open_cards)
-        if card.kind == MISSION_PLAN:
-            return bool(outcome.phase == fr.PLAN_CARD_OPEN)
-        if card.kind == PLAN:
-            if outcome.phase not in _PLANNING_PHASES:
-                return False
+            return _SETTLED
+        if kind == MISSION_PLAN:
             waiting = getattr(outcome, "request_id", None)
-            return not (
-                outcome.phase == fr.PLAN_CARD_OPEN and waiting and waiting != card.request_id
-            )
-        return True
+            open_now = outcome.phase == fr.PLAN_CARD_OPEN and waiting in (None, request_id)
+            return _OPEN if open_now else _SETTLED
+        if any(c.request_id == request_id for c in open_cards):
+            return _OPEN
+        if kind != OTHER:
+            return _SETTLED
+        known = {getattr(outcome, "build_id", None), getattr(outcome, "merge_build_id", None)}
+        return _SETTLED if build_id and build_id in known else _UNKNOWN
 
     def _members(self, attempt: _Attempt) -> tuple[list[str], list[str]]:
         """For a mission merge card: the members that landed and those that did not."""
@@ -539,18 +651,35 @@ class Reporter:
         no = [ident or iid for key, (iid, ident) in attempt.by_key.items() if key not in landed]
         return sorted(yes), sorted(no)
 
-    async def _cards_from_bus(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
-        if self._feed is None:
-            return
+    async def _cards_from_bus(
+        self,
+        messages: list[tuple[int | None, BusMessage]],
+        live: dict[str, _Attempt],
+        unfinished: set[str],
+        open_cards: list[Any],
+    ) -> None:
         index = self._index(live)
-        for message in self._feed.pending(CARDS):
+        for held_id, message in messages:
             card = parse_card(message.subject, message.data, message.at)
             if card is not None:
-                target = next((index[k] for k in card.match_keys() if k in index), None)
+                keys = card.match_keys()
+                target = next((index[k] for k in keys if k in index), None)
+                if target is None and any(k in unfinished for k in keys):
+                    self._hold(CARDS, held_id, message)
+                    continue
                 if target is not None:
-                    if self._still_open(card, target.attempt, open_cards):
+                    state = self._card_state(
+                        card.kind, card.request_id, target.attempt, open_cards, _gate_build(card)
+                    )
+                    if state == _SETTLED:
+                        logger.info(
+                            "linear_door_card_not_open",
+                            request_id=card.request_id,
+                            correlation_id=target.attempt.correlation_id,
+                        )
+                    else:
                         try:
-                            await self._post_card(card, target)
+                            await self._post_card(card, target, answerable=state == _OPEN)
                         except (LinearAuthError, LinearRateLimited):
                             raise
                         except LinearError as exc:
@@ -567,33 +696,18 @@ class Reporter:
                             )
                             if tries < MAX_CARD_TRIES:
                                 return
-                    else:
-                        logger.info(
-                            "linear_door_card_not_open",
-                            request_id=card.request_id,
-                            correlation_id=target.attempt.correlation_id,
-                        )
-            self._handled(CARDS, message)
+            self._handled(CARDS, held_id, message)
 
-    def _handled(self, name: str, message: BusMessage) -> None:
-        assert self._feed is not None
-        if message.at is not None:
-            self._store.set_mark(name, message.at.isoformat())
-        self._feed.done(name, message)
-
-    async def _post_card(self, card: Card, target: _Target) -> None:
+    async def _post_card(self, card: Card, target: _Target, *, answerable: bool) -> None:
         attempt = target.attempt
         landed, missing = self._members(attempt) if card.kind == MERGE else ([], [])
-        body = card_comment(card, landed=landed, missing=missing)
-        if card.kind == PLAN:
-            # A newer plan card replaces an older one of the same attempt.
-            for old in self._store.cards_of(attempt.correlation_id):
-                if old.kind == PLAN and old.request_id != card.request_id and old.status == "open":
-                    self._store.set_card_status(old.request_id, "closed")
+        body = card_comment(card, landed=landed, missing=missing, answerable=answerable)
         for issue_id, _ in target.issues:
             if self._store.card_posted(card.request_id, issue_id):
                 continue
-            comment_id = await self._client.create_comment(issue_id, body)
+            comment_id = await self._write(
+                issue_id, body, ref_for("card", card.request_id, issue_id)
+            )
             self._store.record_card(
                 CardComment(
                     request_id=card.request_id,
@@ -601,7 +715,7 @@ class Reporter:
                     comment_id=comment_id,
                     correlation_id=attempt.correlation_id,
                     kind=card.kind,
-                    answerable=True,
+                    answerable=answerable,
                     approval_subject=card.subject,
                     reply_correlation_id=card.correlation_id,
                     assumption_ids=card.assumption_ids(),
@@ -612,26 +726,33 @@ class Reporter:
                 kind=card.kind,
                 request_id=card.request_id,
                 correlation_id=attempt.correlation_id,
+                answerable=answerable,
             )
 
-    async def _notifications(self, live: dict[str, _Attempt]) -> None:
-        if self._feed is None:
-            return
-        for message in self._feed.pending(NOTIFICATIONS):
+    async def _notifications(
+        self,
+        messages: list[tuple[int | None, BusMessage]],
+        live: dict[str, _Attempt],
+        unfinished: set[str],
+    ) -> None:
+        for held_id, message in messages:
             note = parse_notification(message.data)
             attempt = live.get(note.correlation_id) if note is not None else None
+            if note is not None and attempt is None and note.correlation_id in unfinished:
+                self._hold(NOTIFICATIONS, held_id, message)
+                continue
             if note is not None and attempt is not None and attempt.outcome.phase == fr.UNFILED:
                 body = notification_comment(note)
                 key = f"{attempt.correlation_id}\n{note.message_id}"
                 for issue_id, _ in attempt.issues:
                     if self._store.notice_posted(issue_id, key):
                         continue
-                    await self._client.create_comment(issue_id, body)
+                    await self._write(issue_id, body, ref_for("note", key, issue_id))
                     self._store.record_notice(issue_id, key)
                 logger.info(
                     "linear_door_notification_copied", correlation_id=attempt.correlation_id
                 )
-            self._handled(NOTIFICATIONS, message)
+            self._handled(NOTIFICATIONS, held_id, message)
 
     async def _cards_from_record(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
         index = self._index(live)
@@ -662,9 +783,7 @@ class Reporter:
                 continue
             if now - datetime.fromisoformat(seen) < RECOVERY_GRACE:
                 continue
-            kind = (
-                MERGE if found.kind == "merge" else (PLAN if found.kind == "plan" else MISSION_PLAN)
-            )
+            kind = _RECORD_KINDS.get(found.kind, OTHER)
             landed, missing = self._members(target.attempt) if kind == MERGE else ([], [])
             body, answerable = recovered_card_comment(
                 kind,
@@ -675,7 +794,9 @@ class Reporter:
                 missing=missing,
             )
             for issue_id, _ in issues:
-                comment_id = await self._client.create_comment(issue_id, body)
+                comment_id = await self._write(
+                    issue_id, body, ref_for("card", found.request_id, issue_id)
+                )
                 self._store.record_card(
                     CardComment(
                         request_id=found.request_id,
@@ -697,18 +818,11 @@ class Reporter:
 
     def _close_settled_cards(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
         """Stop reading answers under cards Forge's record no longer shows open."""
-        waiting_merges = {c.request_id for c in open_cards if c.kind == "merge"}
         for card in self._store.open_cards():
             attempt = live.get(card.correlation_id)
             if attempt is None:
                 continue
-            outcome = attempt.outcome
-            settled = (
-                (card.kind == MERGE and card.request_id not in waiting_merges)
-                or (card.kind == MISSION_PLAN and outcome.phase != fr.PLAN_CARD_OPEN)
-                or (card.kind == PLAN and outcome.phase not in _PLANNING_PHASES)
-            )
-            if settled:
+            if self._card_state(card.kind, card.request_id, attempt, open_cards) != _OPEN:
                 self._store.set_card_status(card.request_id, "closed")
 
     # -- answers -------------------------------------------------------------------
@@ -751,8 +865,11 @@ class Reporter:
     async def _refuse(self, card: CardComment, reply_id: str, user_id: str | None) -> None:
         key = f"not-listed\n{card.comment_id}\n{user_id or ''}"
         if not self._store.notice_posted(card.issue_id, key):
-            own = await self._client.create_comment(
-                card.issue_id, comment(NOT_LISTED), parent_id=card.comment_id
+            own = await self._write(
+                card.issue_id,
+                comment(NOT_LISTED),
+                ref_for("not-listed", card.comment_id, user_id or ""),
+                parent_id=card.comment_id,
             )
             self._store.record_reply(own, card.request_id, "the door's own")
             self._store.record_notice(card.issue_id, key)
@@ -780,8 +897,11 @@ class Reporter:
             notes=answer_notes(card.kind, decision, notes),
             dispositions=dispositions or None,
         )
-        # Recorded first, so a reply is never published twice; undone only
-        # when the publish certainly failed, so the next poll tries again.
+        # Claimed first, and never published again (Codex review R2): a publish
+        # that raised may still have reached the factory (a flush that timed
+        # out after the send), so it is not repeated. The person is told once
+        # instead, and the card takes a new reply; Forge keeps the first
+        # answer it gets for a card, so a second one is harmless.
         self._store.record_reply(reply_id, card.request_id, decision, answers=True)
         try:
             await self._answers.publish(
@@ -790,12 +910,19 @@ class Reporter:
                 correlation_id=card.reply_correlation_id,
             )
         except Exception as exc:
-            self._store.forget_reply(reply_id, card.request_id)
+            self._store.reopen_card(card.request_id)
             logger.warning(
-                "linear_door_answer_publish_failed",
+                "linear_door_answer_not_confirmed",
                 request_id=card.request_id,
                 error_class=type(exc).__name__,
             )
+            own = await self._write(
+                card.issue_id,
+                comment(UNCONFIRMED_ANSWER),
+                ref_for("unconfirmed", reply_id),
+                parent_id=card.comment_id,
+            )
+            self._store.record_reply(own, card.request_id, "the door's own")
             return
         logger.info(
             "linear_door_answer_published",
@@ -805,15 +932,30 @@ class Reporter:
         )
         words = {"approve": "merge", "reject": "decline"} if card.kind == MERGE else {}
         word = words.get(decision, decision)
-        own = await self._client.create_comment(
+        own = await self._write(
             card.issue_id,
             comment(
                 f"Sent **{word}** to the factory. What happens next is reported here from the "
                 "factory's own record."
             ),
+            ref_for("ack", reply_id),
             parent_id=card.comment_id,
         )
         self._store.record_reply(own, card.request_id, "the door's own")
+
+
+#: Forge's record's card kinds, as the door's.
+_RECORD_KINDS = {"merge": MERGE, "plan": PLAN, "mission_plan": MISSION_PLAN}
+
+
+def _gate_build(card: Card) -> str | None:
+    """The build a build gate (or other card) is about: its details' build id,
+    else the first part of Forge's ``<build>:<stage>:<n>`` request id."""
+    named = card.details.get("build_id")
+    if named:
+        return str(named)
+    parts = card.request_id.split(":")
+    return unquote(parts[0]) if len(parts) == 3 and parts[2].isdigit() else None
 
 
 def _move_to(target: str, issue: Any, state_ids: dict[str, str]) -> str | None:
@@ -837,6 +979,8 @@ __all__ = [
     "CARDS",
     "NOTIFICATIONS",
     "RECOVERY_GRACE",
+    "REF_WORD",
+    "UNCONFIRMED_ANSWER",
     "UNFILED_NOTICE",
     "UNFILED_NOTICE_AFTER",
     "AnswerPublisher",
@@ -849,4 +993,6 @@ __all__ = [
     "NatsBusFeed",
     "RecordedAttempt",
     "Reporter",
+    "ref_for",
+    "write_once",
 ]

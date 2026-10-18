@@ -32,7 +32,8 @@ record (:meth:`.report.AttemptRecord.recorded_attempts`) and the requests still
 waiting in the PIPELINE stream (:class:`NatsIntakeQueue`, which never
 consumes). If either cannot be read, nothing is sent that poll. The issues of
 the latest attempts that had already ended are brought to their final state
-once (design section 1, "Each issue is in at most one open attempt").
+once (design section 1, "Each issue is in at most one open attempt"): each
+issue by its own latest attempt only, single or mission (Codex review R1).
 
 Log hygiene: no log line carries an issue's title or description, or the key.
 """
@@ -89,6 +90,8 @@ from jarvis.infrastructure.linear.report import (
     BusFeed,
     RecordedAttempt,
     Reporter,
+    ref_for,
+    write_once,
 )
 from jarvis.infrastructure.linear.store import (
     DoorStore,
@@ -385,66 +388,68 @@ class LinearDoor:
     def _latest_ended(
         self, team: LinearTeam, recorded: list[RecordedAttempt], open_cids: set[str]
     ) -> list[tuple[str, Any, list[str]]]:
-        """``(correlation id, outcome, identifiers)`` of the latest ended attempt
-        of each issue or mission that has no open attempt.
+        """``(correlation id, outcome, identifiers)``: for each issue, its latest
+        attempt (single or mission), when that attempt has ended.
 
-        Older ended attempts are history: only the latest says where the issue
-        should be now. Raises :class:`RebuildUnavailable` if an outcome cannot
-        be read (nothing is written).
+        One outcome per issue (Codex review R1). An issue is in one open
+        attempt at a time, so the attempt Forge filed last also ended last;
+        older attempts are history. Raises :class:`RebuildUnavailable` if an
+        outcome cannot be read (nothing is written).
         """
 
-        def split(cid: str) -> tuple[str, int]:
-            prefix, _, number = cid.rpartition("-")
-            return f"{prefix}-", int(number) if number.isdigit() else 0
+        def order(attempt: RecordedAttempt) -> tuple[str, int]:
+            number = attempt.correlation_id.rpartition("-")[2]
+            return attempt.filed_at, int(number) if number.isdigit() else 0
 
-        open_prefixes = {split(cid)[0] for cid in open_cids}
-        latest: dict[str, tuple[int, RecordedAttempt]] = {}
+        latest: dict[str, RecordedAttempt] = {}
         for attempt in recorded:
-            prefix, number = split(attempt.correlation_id)
-            if prefix in open_prefixes:
-                continue
-            if prefix not in latest or number > latest[prefix][0]:
-                latest[prefix] = (number, attempt)
+            for identifier in self._identifiers(
+                team, attempt.correlation_id, list(attempt.mission_keys)
+            ):
+                best = latest.get(identifier)
+                if best is None or order(attempt) > order(best):
+                    latest[identifier] = attempt
+        owned: dict[str, list[str]] = {}
+        for identifier, attempt in latest.items():
+            if not attempt.open and attempt.correlation_id not in open_cids:
+                owned.setdefault(attempt.correlation_id, []).append(identifier)
         found = []
-        for _, attempt in sorted(latest.values(), key=lambda pair: pair[1].correlation_id):
-            if attempt.open:
-                continue
+        for cid in sorted(owned):
             try:
-                outcome = self._attempts.outcome(attempt.correlation_id)
+                outcome = self._attempts.outcome(cid)
             except AttemptRecordUnavailable as exc:
                 raise RebuildUnavailable(f"Forge's record could not be read: {exc}") from None
-            if not outcome.ended:
-                continue
-            identifiers = self._identifiers(
-                team, attempt.correlation_id, list(attempt.mission_keys)
-            )
-            found.append((attempt.correlation_id, outcome, identifiers))
+            if outcome.ended:
+                found.append((cid, outcome, sorted(owned[cid], key=identifier_order)))
         return found
 
     async def _finish_recoveries(self) -> None:
         """Bring the issues of attempts that had ended before a rebuild to their
         final state, once: a comment and the move, only when the issue is not
         already where that attempt left it (Done unless finished; Backlog only
-        while still In Progress), and never for an issue an open attempt holds."""
+        while still In Progress), and never for an issue an open attempt holds.
+        Each issue is read again just before it is moved, so a move is never
+        made from an old view of it."""
         pending = self._store.pending_recoveries()
         if not pending:
             return
         from jarvis.infrastructure.linear.report import _move_to
 
         reserved = self._store.reservations()
-        current = {
-            issue.id: issue
-            for issue in await self._client.issues_by_id(sorted({r.issue_id for r in pending}))
-        }
         for recovery in pending:
-            issue = current.get(recovery.issue_id)
-            state_id = (
-                None
-                if issue is None or recovery.issue_id in reserved
-                else _move_to(recovery.target, issue, self._state_ids)
-            )
+            state_id = None
+            if recovery.issue_id not in reserved:
+                found = await self._client.issues_by_id([recovery.issue_id])
+                if found:
+                    state_id = _move_to(recovery.target, found[0], self._state_ids)
             if state_id is not None:
-                await self._client.create_comment(recovery.issue_id, comment(recovery.text))
+                await write_once(
+                    self._client,
+                    self._store,
+                    recovery.issue_id,
+                    comment(recovery.text),
+                    ref_for("recovered", recovery.correlation_id, recovery.issue_id),
+                )
                 await self._client.move_issue(recovery.issue_id, state_id)
                 logger.info(
                     "linear_door_recovered_issue",

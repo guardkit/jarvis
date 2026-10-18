@@ -48,7 +48,19 @@ Stage 4 (factory → Linear) adds, at ``user_version`` 2:
     notifications), where the subscription restarts.
 ``recoveries``
     After a rebuild, the issues of attempts that had already ended, to be
-    brought to their final state once.
+    brought to their final state once (one row per issue: its latest attempt).
+
+Stage 4 repair (Codex review R2-R4), at ``user_version`` 3:
+
+``comment_refs``
+    Each comment the door means to write about the factory's work, by a short
+    stable reference that also ends the comment's text. Written before the
+    comment is sent, so a comment whose sending was not confirmed (a lost
+    response, a crash) is looked for by its reference before it is written
+    again, and is never written twice.
+``held_messages``
+    Card and notification messages for sends whose "sent" comment or move is
+    not done yet, kept here until the send is finished.
 """
 
 from __future__ import annotations
@@ -60,7 +72,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sends (
@@ -152,6 +164,19 @@ CREATE TABLE IF NOT EXISTS recoveries (
     text           TEXT NOT NULL,
     done           INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (correlation_id, issue_id)
+);
+CREATE TABLE IF NOT EXISTS comment_refs (
+    ref        TEXT PRIMARY KEY,
+    issue_id   TEXT NOT NULL,
+    comment_id TEXT,
+    started_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS held_messages (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    feed    TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    data    BLOB NOT NULL,
+    at      TEXT
 );
 """
 
@@ -627,10 +652,10 @@ class DoorStore:
                     (request_id,),
                 )
 
-    def forget_reply(self, comment_id: str, request_id: str) -> None:
-        """Undo :meth:`record_reply` after a publish that certainly failed."""
+    def reopen_card(self, request_id: str) -> None:
+        """After a publish that was not confirmed: the reply stays handled (it
+        is never published again), but a new reply may answer the card."""
         with self._db:
-            self._db.execute("DELETE FROM replies WHERE comment_id = ?", (comment_id,))
             self._db.execute(
                 "UPDATE card_comments SET status = 'open' "
                 "WHERE request_id = ? AND status = 'answered'",
@@ -663,6 +688,51 @@ class DoorStore:
                 "UPDATE recoveries SET done = 1 WHERE correlation_id = ? AND issue_id = ?",
                 (correlation_id, issue_id),
             )
+
+    # -- comments written once (stage 4 repair, R3) --------------------------
+
+    def comment_ref(self, ref: str) -> tuple[bool, str | None]:
+        """``(started, comment id)`` for a comment reference."""
+        row = self._db.execute(
+            "SELECT comment_id FROM comment_refs WHERE ref = ?", (ref,)
+        ).fetchone()
+        return (row is not None, row[0] if row is not None else None)
+
+    def begin_comment(self, ref: str, issue_id: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT OR IGNORE INTO comment_refs (ref, issue_id, started_at) VALUES (?, ?, ?)",
+                (ref, issue_id, _now()),
+            )
+
+    def finish_comment(self, ref: str, comment_id: str) -> None:
+        with self._db:
+            self._db.execute(
+                "UPDATE comment_refs SET comment_id = ? WHERE ref = ?", (comment_id, ref)
+            )
+
+    # -- held bus messages (stage 4 repair, R4) ------------------------------
+
+    def hold_message(self, feed: str, subject: str, data: bytes, at: str | None) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO held_messages (feed, subject, data, at) VALUES (?, ?, ?, ?)",
+                (feed, subject, data, at),
+            )
+
+    def held_messages(self, feed: str) -> list[tuple[int, str, bytes, str | None]]:
+        """``(id, subject, data, time)`` of each message held for ``feed``, oldest first."""
+        return [
+            (int(r[0]), str(r[1]), bytes(r[2]), r[3])
+            for r in self._db.execute(
+                "SELECT id, subject, data, at FROM held_messages WHERE feed = ? ORDER BY id",
+                (feed,),
+            )
+        ]
+
+    def release_message(self, held_id: int) -> None:
+        with self._db:
+            self._db.execute("DELETE FROM held_messages WHERE id = ?", (held_id,))
 
 
 @dataclass(frozen=True)

@@ -87,6 +87,9 @@ class FakeLinear:
         # Failure injection: operation name -> list of responses to give first.
         self.fail_next: dict[str, list[httpx.Response]] = {}
         self.fail_all: httpx.Response | None = None
+        # Operation name -> how many times to do the write and then lose
+        # Linear's answer (a time-out after Linear has done it).
+        self.lose_response: dict[str, int] = {}
         # Issues deleted after they were read: writes to them are refused.
         self.gone: set[str] = set()
 
@@ -265,6 +268,9 @@ class FakeLinear:
             )
         variables = body.get("variables") or {}
         data = getattr(self, f"_op_{operation}")(variables)
+        if self.lose_response.get(operation):
+            self.lose_response[operation] -= 1
+            return server_error()
         return httpx.Response(200, json={"data": data})
 
     def _op_DoorTeams(self, v: dict[str, Any]) -> dict[str, Any]:
@@ -451,16 +457,20 @@ class FakeFeed:
 
 
 class CapturedAnswers:
-    """The approval-response publisher; can be told to fail."""
+    """The approval-response publisher; can be told to fail before sending,
+    or to send and then time out waiting for the flush."""
 
     def __init__(self) -> None:
         self.published: list[tuple[str, Any, str | None]] = []
         self.fail = False
+        self.flush_times_out = False
 
     async def publish(self, *, subject: str, payload: Any, correlation_id: str | None) -> None:
         if self.fail:
             raise ConnectionError("no connection")
         self.published.append((subject, payload, correlation_id))
+        if self.flush_times_out:
+            raise TimeoutError("flush timed out")
 
 
 class FakeIntake:
