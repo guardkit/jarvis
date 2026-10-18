@@ -271,20 +271,41 @@ class NatsPlanningQueuedPublisher:
         correlation_id: str,
     ) -> None:
         """Publish; raises on any transport failure (caller handles)."""
-        # Local imports keep the nats_core chain off this module's cold
-        # import path (schema-import-isolation convention).
-        from nats_core import EventType, MessageEnvelope
-
-        envelope = MessageEnvelope(
-            source_id="jarvis",
-            event_type=EventType.PLANNING_QUEUED,
-            correlation_id=correlation_id,
-            payload=payload.model_dump(mode="json"),
+        await self.publish_bytes(
+            subject=subject,
+            data=planning_queued_envelope_bytes(payload, correlation_id),
         )
+
+    async def publish_bytes(self, *, subject: str, data: bytes) -> None:
+        """Publish bytes already encoded by :func:`planning_queued_envelope_bytes`.
+
+        Returns once JetStream has acknowledged the message; raises otherwise.
+        The Linear door keeps the exact bytes of each send and publishes them
+        again, unchanged, until they are acknowledged.
+        """
         await asyncio.wait_for(
-            self._nats_client.js.publish(subject, envelope.model_dump_json().encode("utf-8")),
+            self._nats_client.js.publish(subject, data),
             timeout=self._timeout_seconds,
         )
+
+
+def planning_queued_envelope_bytes(payload: Any, correlation_id: str) -> bytes:
+    """The bytes published for one ``PlanningQueuedPayload``.
+
+    The payload wrapped in the canonical ``MessageEnvelope``
+    (``source_id="jarvis"``, ``event_type="planning_queued"``).
+    """
+    # Local imports keep the nats_core chain off this module's cold
+    # import path (schema-import-isolation convention).
+    from nats_core import EventType, MessageEnvelope
+
+    envelope = MessageEnvelope(
+        source_id="jarvis",
+        event_type=EventType.PLANNING_QUEUED,
+        correlation_id=correlation_id,
+        payload=payload.model_dump(mode="json"),
+    )
+    return envelope.model_dump_json().encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -750,4 +771,5 @@ __all__ = [
     "PlanningQueuedPublisher",
     "create_slack_planning_intake_handler",
     "parse_originator_ids",
+    "planning_queued_envelope_bytes",
 ]

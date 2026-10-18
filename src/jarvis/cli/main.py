@@ -1,7 +1,8 @@
 """Jarvis CLI entry-point.
 
 Provides the ``jarvis`` console script with ``chat``, ``version``,
-``health``, and ``serve-nats`` sub-commands. The ``serve-nats`` command
+``health``, ``serve-nats`` and ``serve-linear`` (the Linear door)
+sub-commands. The ``serve-nats`` command
 (FEAT-JARVIS-006) supersedes DDR-003's three-command constraint by adding
 the canonical fleet gateway entry-point.
 
@@ -595,6 +596,179 @@ async def _serve_adapter(
     if terminal_close:
         log.error("jarvis_serve_nats_terminal_close_exit", agent_id=agent_id)
         raise SystemExit(1)
+
+
+# ---------------------------------------------------------------------------
+# The Linear door: serve-linear (Linear front door design, 18 October 2026)
+# ---------------------------------------------------------------------------
+
+
+@main.command("serve-linear")
+@click.option(
+    "--log-level",
+    "log_level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+    default=None,
+    help="Structured-log level (overrides JARVIS_LOG_LEVEL).",
+)
+def serve_linear(log_level: str | None) -> None:
+    """Send issues moved to the ready status in Linear to the factory.
+
+    Needs the Linear key, the team and the owner identity; without them it
+    logs one line and exits 0. It needs only the bus, not the supervisor.
+    """
+    if log_level is not None:
+        os.environ["JARVIS_LOG_LEVEL"] = log_level
+    asyncio.run(_run_serve_linear())
+
+
+async def _run_serve_linear() -> None:
+    """Load the door's configuration, connect to the bus and poll until stopped.
+
+    Raises:
+        SystemExit: ``1`` when the configuration is invalid or the bus cannot
+            be reached, or when the bus connection closes for good.
+    """
+    from pydantic import ValidationError
+
+    from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.linear.client import LinearClient
+    from jarvis.infrastructure.linear.door import LinearDoor, NatsIntakeQueue, door_config
+    from jarvis.infrastructure.linear.store import DoorStore
+    from jarvis.infrastructure.nats_client import NATSClient
+    from jarvis.infrastructure.slack_planning_intake import NatsPlanningQueuedPublisher
+
+    _configure_default_logging()
+    log = structlog.get_logger(__name__)
+    try:
+        config = JarvisConfig()
+    except ValidationError as exc:
+        log.error("jarvis_serve_linear_config_invalid", error_count=exc.error_count())
+        raise SystemExit(1) from None
+
+    resolved = door_config(config)
+    if isinstance(resolved, str):
+        log.info("jarvis_serve_linear_not_configured", detail=resolved)
+        return
+
+    try:
+        nats_client = await NATSClient.connect(config)
+    except Exception as exc:
+        log.error("jarvis_serve_linear_bus_unreachable", error_class=type(exc).__name__)
+        raise SystemExit(1) from None
+    if nats_client is None:
+        log.error(
+            "jarvis_serve_linear_bus_unreachable",
+            nats_url=redact_nats_url(config.nats_url),
+        )
+        raise SystemExit(1)
+
+    store = DoorStore(resolved.state_path)
+    client = LinearClient(resolved.linear_auth)
+    door = LinearDoor(
+        client=client,
+        publisher=NatsPlanningQueuedPublisher(
+            nats_client, timeout_seconds=resolved.publish_timeout_seconds
+        ),
+        store=store,
+        settings=resolved.settings,
+        intake=NatsIntakeQueue(nats_client),
+    )
+
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except (NotImplementedError, RuntimeError):
+            signal.signal(sig, lambda *_: loop.call_soon_threadsafe(stop.set))
+
+    async def _watch_bus() -> None:
+        # A connection nats-py has given up on will not come back; exit
+        # non-zero so the container is restarted (as serve-nats does).
+        while not stop.is_set():
+            if nats_client.client.is_closed:
+                log.error("jarvis_serve_linear_bus_closed")
+                stop.set()
+                return
+            await asyncio.sleep(5)
+
+    watcher = asyncio.create_task(_watch_bus())
+    try:
+        await door.run(stop)
+    finally:
+        watcher.cancel()
+        await client.aclose()
+        store.close()
+        bus_closed = nats_client.client.is_closed
+        try:
+            await nats_client.drain(timeout=5.0)
+        except Exception as exc:
+            log.warning("jarvis_serve_linear_drain_warning", error_class=type(exc).__name__)
+    if bus_closed:
+        raise SystemExit(1)
+
+
+@main.group("linear-door")
+def linear_door() -> None:
+    """Operator commands for the Linear door."""
+
+
+_RELEASE_WARNING = (
+    "Releasing is for a request the factory refused without filing anything "
+    "(its reason is in Slack, or in a comment on the issue). It relies on your "
+    "judgement: release a request the factory is still going to file, and it may "
+    "run alongside the next attempt."
+)
+
+
+@linear_door.command("release")
+@click.argument("identifier")
+def linear_door_release(identifier: str) -> None:
+    """End the open attempt holding IDENTIFIER (for example ENG-12).
+
+    Comments on its issues, moves them to Backlog and frees them, so moving
+    them to Todo sends a new attempt. Acts on the door's own record and Linear
+    only.
+    """
+    click.echo(_RELEASE_WARNING)
+    asyncio.run(_run_linear_door_release(identifier))
+
+
+async def _run_linear_door_release(identifier: str) -> None:
+    from jarvis.config.settings import JarvisConfig
+    from jarvis.infrastructure.linear.client import LinearClient, LinearError
+    from jarvis.infrastructure.linear.door import LinearDoor, door_config
+    from jarvis.infrastructure.linear.store import DoorStore
+
+    _configure_default_logging()
+    resolved = door_config(JarvisConfig())
+    if isinstance(resolved, str):
+        click.echo(f"[error] {resolved}", err=True)
+        raise SystemExit(1)
+    if not resolved.state_path.exists():
+        click.echo(f"[error] the door has no record at {resolved.state_path}", err=True)
+        raise SystemExit(1)
+
+    class _NoBus:
+        async def publish_bytes(self, *, subject: str, data: bytes) -> None:
+            raise RuntimeError("the release command publishes nothing")
+
+    store = DoorStore(resolved.state_path)
+    client = LinearClient(resolved.linear_auth)
+    door = LinearDoor(client=client, publisher=_NoBus(), store=store, settings=resolved.settings)
+    try:
+        cid, released = await door.release(identifier)
+    except LookupError as exc:
+        click.echo(f"[error] {exc}", err=True)
+        raise SystemExit(1) from None
+    except LinearError as exc:
+        click.echo(f"[error] Linear could not be updated, nothing was released: {exc}", err=True)
+        raise SystemExit(1) from None
+    finally:
+        await client.aclose()
+        store.close()
+    click.echo(f"Released {cid}: {', '.join(released)} moved to Backlog.")
 
 
 if __name__ == "__main__":
