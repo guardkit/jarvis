@@ -133,7 +133,7 @@ import json
 import sqlite3
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -242,6 +242,12 @@ MERGE_DECLINED = "merge_declined"  # ends
 MERGE_FAILED = "merge_failed"  # ends
 ON_MAIN = "on_main"  # ends
 ON_MAIN_DEPLOY_FAILED = "on_main_deploy_failed"  # ends
+#: On main by its publication record, before Forge has written the merge
+#: report that says whether the deploy worked (Forge writes "published,
+#: deployment pending" before that report, ``merge_executor.py`` 3762-3767,
+#: 1970). Not an end: the issue is Done, and the attempt is watched until the
+#: report arrives (Codex review R11).
+ON_MAIN_REPORT_PENDING = "on_main_report_pending"
 # Mission-only phases.
 MISSION_RUNNING = "running"
 MISSION_READY = "ready"
@@ -522,7 +528,13 @@ class _Reader:
                     ON_MAIN_DEPLOY_FAILED,
                     f"merged into {target}, but its deploy failed: {detail or word}",
                 )
-            return view(ON_MAIN, f"merged into {target} ({result})")
+            reported = report_row is not None and (
+                decision_row is None or report_row[0] > decision_row[0]
+            )
+            return view(
+                ON_MAIN if reported else ON_MAIN_REPORT_PENDING,
+                f"merged into {target} ({result})",
+            )
         if decision_row is not None:
             decision_id, decision_status, decision_details = decision_row
             said = decision_details.get(MERGE_DECISION_DETAILS_KEY)
@@ -699,6 +711,10 @@ class _Reader:
 
         merge = self._mission_merge_build(mission_id)
         view = self.merge_view(*merge) if merge else _MergeView(None)
+        # A mission ends on its own status (MERGED), as before: the report
+        # follow-up is for a single issue only.
+        if view.phase == ON_MAIN_REPORT_PENDING:
+            view = replace(view, phase=ON_MAIN)
 
         request_id = view.request_id
         reason = closed_reason

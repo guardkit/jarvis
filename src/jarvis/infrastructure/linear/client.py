@@ -56,6 +56,14 @@ _MAX_PAGES = 100
 # an ordinary error for that request.
 _AUTH_CODES = frozenset({"AUTHENTICATION_ERROR", "UNAUTHENTICATED"})
 _RATE_LIMITED = "RATELIMITED"
+#: The only errors the door treats as Linear refusing a request for good
+#: (Codex review R9): an entity that does not exist, or input Linear will not
+#: take. Linear marks these with ``extensions.code`` INVALID_INPUT (or
+#: ``extensions.type`` "invalid input") and, for a missing entity, the message
+#: "Entity not found". Every other error, including an internal error inside
+#: an HTTP 200, is an outage and is tried again.
+_REFUSED_CODES = frozenset({"INVALID_INPUT", "ENTITY_NOT_FOUND", "NOT_FOUND", "BAD_USER_INPUT"})
+_REFUSED_TYPES = frozenset({"invalid input"})
 # Reset headers, epoch milliseconds. The first is the hourly request window;
 # the others are the complexity window and a per-endpoint window, which Linear
 # also sends when one of those is what ran out.
@@ -80,9 +88,10 @@ class LinearAuthError(LinearError):
 
 
 class LinearRefused(LinearError):
-    """Linear answered and refused this request's input (an issue that no
-    longer exists, an invalid value): trying again will not help. Outages
-    (no answer, a time-out, HTTP 5xx) are plain :class:`LinearError`."""
+    """Linear answered and refused this request for good: an issue that no
+    longer exists, or input it will not take. Only those errors, positively
+    identified; anything else (no answer, a time-out, HTTP 5xx, an internal
+    or unknown error) is a plain :class:`LinearError` and is tried again."""
 
 
 class LinearRateLimited(LinearError):
@@ -473,16 +482,21 @@ class LinearClient:
             body = None
         errors = body.get("errors") if isinstance(body, dict) else None
         codes: set[str] = set()
+        types: set[str] = set()
         messages: list[str] = []
+        not_found = False
         for error in errors or []:
             if not isinstance(error, dict):
                 continue
             extensions = error.get("extensions") or {}
-            code = extensions.get("code") if isinstance(extensions, dict) else None
-            if code:
-                codes.add(str(code).upper())
+            extensions = extensions if isinstance(extensions, dict) else {}
+            if extensions.get("code"):
+                codes.add(str(extensions["code"]).upper())
+            if extensions.get("type"):
+                types.add(str(extensions["type"]).lower())
             if error.get("message"):
                 messages.append(_safe_text(error["message"], 200))
+                not_found |= str(error["message"]).lower().startswith("entity not found")
         detail = "; ".join(messages) or "no detail"
 
         if _RATE_LIMITED in codes or response.status_code == 429:
@@ -495,7 +509,8 @@ class LinearClient:
                 f"Linear refused the API key (HTTP {response.status_code}): {detail}"
             )
         if errors:
-            refused = LinearRefused if response.status_code < 500 else LinearError
+            permanent = bool(codes & _REFUSED_CODES or types & _REFUSED_TYPES or not_found)
+            refused = LinearRefused if permanent and response.status_code < 500 else LinearError
             raise refused(
                 f"Linear answered with errors (HTTP {response.status_code}, "
                 f"codes {sorted(codes) or 'none'}): {detail}"
@@ -638,13 +653,13 @@ class LinearClient:
         result = data.get("commentCreate") or {}
         comment = result.get("comment") or {}
         if not result.get("success") or not comment.get("id"):
-            raise LinearRefused("Linear did not confirm the comment")
+            raise LinearError("Linear did not confirm the comment")
         return str(comment["id"])
 
     async def move_issue(self, issue_id: str, state_id: str) -> None:
         data = await self.execute(ISSUE_MOVE_MUTATION, {"id": issue_id, "stateId": state_id})
         if not (data.get("issueUpdate") or {}).get("success"):
-            raise LinearRefused("Linear did not confirm the status change")
+            raise LinearError("Linear did not confirm the status change")
 
 
 __all__ = [

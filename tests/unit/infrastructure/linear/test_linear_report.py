@@ -48,6 +48,7 @@ from .fake_linear import (
     FakeFeed,
     FakeIntake,
     FakeLinear,
+    internal_error,
     refused,
     server_error,
 )
@@ -946,6 +947,17 @@ async def test_through_the_real_forge_record(tmp_path: Path) -> None:
         "Factory: Merged into the main branch as `abc1234`."
     )
     assert h.linear.state_name(issue) == "Done"
+    # Watched until Forge's merge report says whether the deploy worked (R11).
+    assert h.store.reservations() == {issue.id: cid}
+    cx.execute(
+        "INSERT INTO stage_log (build_id, stage_label, target_kind, target_identifier, "
+        "status, started_at, completed_at, duration_secs, details_json) VALUES ('build-1', "
+        "'merge-deploy', 'local_tool', 'merge_deploy_executor', 'PASSED', ?, ?, 0.0, ?)",
+        (now, now, json.dumps({"result": "merged-into-the-remote-and-running"})),
+    )
+    cx.commit()
+    await h.poll()
+    assert len(h.factory(h.linear.comments_on(issue))) == 2
     assert h.store.reservations() == {}
 
 
@@ -1484,3 +1496,106 @@ async def test_only_the_doors_own_cards_wake_it(h: Harness) -> None:
     assert not arrive(notification("slack-abc", "Not ours."))
     assert arrive(notification(cid, "Ours."))
     assert len(feed.pending(CARDS)) == 6  # every message is still kept
+
+
+# ---------------------------------------------------------------------------
+# Codex round 4 on 1da0e82 (R9, R10, R11)
+# ---------------------------------------------------------------------------
+
+
+async def test_internal_errors_in_a_200_never_downgrade_a_card(h: Harness) -> None:
+    # R9: Linear answers HTTP 200 with an internal error, more than five times.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(cid, fr.PLANNING)
+    h.attempts.cards = [fr.OpenCard("plan", cid, "req-plan-1")]
+    h.store.set_progress(
+        cid, "", "card-seen:req-plan-1", (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    )
+    h.feed.push(CARDS, plan_card(cid))
+    h.linear.fail_next["DoorCommentCreate"] = [internal_error() for _ in range(7)]
+    for _ in range(7):
+        with pytest.raises(LinearError):
+            await h.poll()
+    h.restart()
+    await h.poll(2)
+    (card,) = h.card_comments(issue)
+    assert card.body.startswith("Factory: **The plan card is waiting for your answer.**")
+    assert all("answer it in Slack" not in c for c in h.linear.comments_on(issue))
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    await h.poll()
+    assert [p.request_id for _, p, _ in h.answers.published] == ["req-plan-1"]
+
+
+async def test_a_transient_error_while_ending_does_not_abandon_the_issue(h: Harness) -> None:
+    # R9: an internal error on the final comment is tried again, not given up.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(cid, fr.BUILD_FAILED, True, "tests failed")
+    h.linear.fail_next["DoorCommentCreate"] = [internal_error()]
+    await h.poll()
+    assert h.store.reservations() == {issue.id: cid}
+    assert h.store.progress(cid, issue.id, "final") is None
+    await h.poll()
+    (only,) = h.factory(h.linear.comments_on(issue))
+    assert only.startswith("Factory: Ended without a merge")
+    assert h.linear.state_name(issue) == "Backlog"
+    assert h.store.reservations() == {}
+
+
+async def test_a_deleted_member_with_unreported_steps_does_not_hold_the_mission(
+    h: Harness,
+) -> None:
+    # R10: the deleted member's FAILED step and the survivor's LANDED step were
+    # never written; the mission merged.
+    cid, a, b = await sent_mission(h)
+    h.linear.gone.add(a.id)
+    h.attempts.outcomes[cid] = mission(
+        cid,
+        fr.ON_MAIN,
+        True,
+        mission_id="m-1",
+        status="MERGED",
+        attempts=(key("ENG1", "FAILED", "tests failed"), key("ENG2", "LANDED")),
+        landed_keys=("ENG2",),
+        j_commit="def5678",
+    )
+    await h.poll()
+    h.restart()
+    await h.poll()
+    assert h.factory(h.linear.comments_on(b)) == [
+        "Factory: Merged with the mission into the main branch as `def5678`."
+    ]
+    assert h.linear.state_name(b) == "Done"
+    assert h.store.reservations() == {}
+
+
+async def test_a_deploy_failure_reported_after_the_merge_is_still_said(h: Harness) -> None:
+    # R11: on main by its publication record first; Forge's merge report, saying
+    # the deploy failed, arrives on a later poll, after a restart.
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    h.attempts.outcomes[cid] = single(
+        cid, fr.ON_MAIN_REPORT_PENDING, False, "merged into main", j_commit="abc1234"
+    )
+    await h.poll(2)
+    assert h.factory(h.linear.comments_on(issue)) == [
+        "Factory: Merged into the main branch as `abc1234`."
+    ]
+    assert h.linear.state_name(issue) == "Done"
+    assert h.store.reservations() == {issue.id: cid}
+    h.restart()
+    h.attempts.outcomes[cid] = single(
+        cid,
+        fr.ON_MAIN_DEPLOY_FAILED,
+        True,
+        "merged into main, but its deploy failed: the health check timed out",
+        j_commit="abc1234",
+    )
+    await h.poll(2)
+    assert h.factory(h.linear.comments_on(issue)) == [
+        "Factory: Merged into the main branch as `abc1234`.",
+        "Factory: The deploy failed: the health check timed out.",
+    ]
+    assert h.linear.state_name(issue) == "Done"
+    assert h.store.reservations() == {}

@@ -722,3 +722,46 @@ def test_recorded_attempts_say_when_they_were_filed(ledger: Ledger) -> None:
     ledger.mission(MCID, "m-1", "REJECTED")
     filed = {a.correlation_id: a.filed_at for a in ledger.record.all_linear_attempts()}
     assert filed == {"lin-ENG-1-1": NOW, MCID: NOW}
+
+
+def test_on_main_before_the_merge_report_is_watched_not_ended(ledger: Ledger) -> None:
+    """R11: Forge writes "published, deployment pending" before its report."""
+    build_id = _built(ledger)
+    ledger.offer(build_id, CID)
+    ledger.decide(build_id, "approve")
+    ledger.publication(build_id, "published, deployment pending", j_commit="j0456")
+    out = single(ledger)
+    assert (out.phase, out.ended, out.j_commit) == (fr.ON_MAIN_REPORT_PENDING, False, "j0456")
+    ledger.report(build_id, "FAILED", "merged-deploy-failed", "the deploy step failed")
+    out = single(ledger)
+    assert (out.phase, out.ended) == (fr.ON_MAIN_DEPLOY_FAILED, True)
+
+
+def test_linear_errors_are_refusals_only_when_linear_says_so() -> None:
+    """R9: only "not found" or "invalid input" is a refusal; the rest is an outage."""
+    import asyncio
+
+    import httpx
+
+    from jarvis.infrastructure.linear.client import LinearClient, LinearError, LinearRefused
+
+    def answer(status: int, errors: list[dict]) -> type[Exception]:
+        client = LinearClient(
+            "fake-linear-key-for-tests-only-7f3a",
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(status, json={"data": None, "errors": errors})
+            ),
+        )
+        try:
+            asyncio.run(client.execute("query DoorX { x }"))
+        except LinearError as exc:
+            return type(exc)
+        raise AssertionError("no error")
+
+    assert answer(200, [{"message": "Entity not found: Issue"}]) is LinearRefused
+    assert answer(200, [{"message": "x", "extensions": {"code": "INVALID_INPUT"}}]) is LinearRefused
+    assert answer(400, [{"message": "x", "extensions": {"type": "invalid input"}}]) is LinearRefused
+    internal = [{"message": "boom", "extensions": {"code": "INTERNAL_SERVER_ERROR"}}]
+    assert answer(200, internal) is LinearError
+    assert answer(200, [{"message": "something else"}]) is LinearError
+    assert answer(500, [{"message": "Entity not found"}]) is LinearError

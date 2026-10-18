@@ -149,6 +149,13 @@ def _deploy_failure(reason: str) -> str:
     return f"its deploy failed: {text}." if text else "its deploy failed."
 
 
+def deploy_failed_words(outcome: Any) -> str:
+    """The follow-up for an issue already Done when its deploy then failed."""
+    text = " ".join(str(outcome.reason or "").split()).rstrip(".")
+    _, sep, after = text.partition("deploy failed: ")
+    return f"The deploy failed: {after}." if sep and after else "The deploy failed."
+
+
 def _ended_words(outcome: Any) -> str:
     words = _ENDED_WORDS.get(outcome.phase, "the attempt ended")
     reason = " ".join(str(outcome.reason or "").split()).rstrip(".")
@@ -163,9 +170,9 @@ def finals(outcome: Any, issues: list[tuple[str, str | None]]) -> dict[str, Fina
     ``issues`` are ``(issue id, identifier)``; a mission member's key is its
     identifier without the hyphen.
     """
-    if not outcome.ended:
+    on_main = outcome.phase in (fr.ON_MAIN, fr.ON_MAIN_DEPLOY_FAILED, fr.ON_MAIN_REPORT_PENDING)
+    if not outcome.ended and outcome.phase != fr.ON_MAIN_REPORT_PENDING:
         return {}
-    on_main = outcome.phase in (fr.ON_MAIN, fr.ON_MAIN_DEPLOY_FAILED)
     if not is_mission(outcome.correlation_id):
         if on_main:
             final = Final(DONE, _merged_words(outcome))
@@ -206,6 +213,7 @@ __all__ = [
     "QUIET_PHASES",
     "Final",
     "Step",
+    "deploy_failed_words",
     "finals",
     "is_mission",
     "key_step",

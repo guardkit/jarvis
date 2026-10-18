@@ -84,6 +84,7 @@ from jarvis.infrastructure.linear.progress import (
     BACKLOG,
     DONE,
     Final,
+    deploy_failed_words,
     finals,
     is_mission,
     key_step,
@@ -517,6 +518,12 @@ class Reporter:
         if outcome.phase == fr.UNFILED and not outcome.ended:
             await self._unfiled(attempt)
             return
+        if outcome.ended or outcome.phase == fr.ON_MAIN_REPORT_PENDING:
+            # Straight to each issue's final comment and move, which already
+            # carries each member's result: nothing in between can hold the
+            # end up (Codex review R10).
+            await self._end(attempt, finals(outcome, attempt.issues), state_ids)
+            return
         if is_mission(cid):
             for key_attempt in getattr(outcome, "attempts", ()) or ():
                 member = attempt.by_key.get(key_attempt.key)
@@ -527,8 +534,6 @@ class Reporter:
         if step is not None:
             for issue_id, _ in attempt.issues:
                 await self._write_step(cid, issue_id, step.topic, step.key, step.text)
-        if outcome.ended:
-            await self._end(attempt, finals(outcome, attempt.issues), state_ids)
 
     async def _write_step(self, cid: str, issue_id: str, topic: str, key: str, text: str) -> None:
         if self._store.progress(cid, issue_id, topic) == key:
@@ -555,9 +560,13 @@ class Reporter:
 
         Linear is written first and each step is recorded, so a failure part
         way is resumed next poll without repeating a comment; the attempt (and
-        its reservations) ends only after every issue is done.
+        its reservations) ends only after every issue is done. A single issue
+        on main before Forge's merge report is Done but not ended: it is
+        watched until the report says whether the deploy worked, and a failed
+        deploy is then said once (Codex review R11).
         """
         cid = attempt.correlation_id
+        outcome = attempt.outcome
         pending = [
             iid for iid, _ in attempt.issues if self._store.progress(cid, iid, "moved") is None
         ]
@@ -567,11 +576,22 @@ class Reporter:
             if final is None:
                 continue
             try:
-                if self._store.progress(cid, issue_id, "final") is None:
+                written = self._store.progress(cid, issue_id, "final")
+                if written is None:
                     await self._write(
                         issue_id, comment(final.text), ref_for("final", cid, issue_id)
                     )
-                    self._store.set_progress(cid, issue_id, "final", final.target)
+                    self._store.set_progress(cid, issue_id, "final", outcome.phase)
+                elif (
+                    written == fr.ON_MAIN_REPORT_PENDING
+                    and outcome.phase == fr.ON_MAIN_DEPLOY_FAILED
+                ):
+                    await self._write(
+                        issue_id,
+                        comment(deploy_failed_words(outcome)),
+                        ref_for("deploy-failed", cid, issue_id),
+                    )
+                    self._store.set_progress(cid, issue_id, "final", outcome.phase)
                 if self._store.progress(cid, issue_id, "moved") is None:
                     issue = current.get(issue_id)
                     state_id = _move_to(final.target, issue, state_ids)
@@ -586,7 +606,9 @@ class Reporter:
                 )
                 self._store.set_progress(cid, issue_id, "final", "refused")
                 self._store.set_progress(cid, issue_id, "moved", "refused")
-        reason = f"{attempt.outcome.phase}: {attempt.outcome.reason}"[:500]
+        if not outcome.ended:
+            return  # on main, waiting for Forge's merge report
+        reason = f"{outcome.phase}: {outcome.reason}"[:500]
         self._store.end_attempt(cid, reason)
         logger.info("linear_door_attempt_ended", correlation_id=cid, phase=attempt.outcome.phase)
 

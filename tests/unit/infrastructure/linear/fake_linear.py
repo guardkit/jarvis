@@ -374,6 +374,22 @@ def server_error() -> httpx.Response:
     return httpx.Response(503, text="unavailable")
 
 
+def internal_error() -> httpx.Response:
+    """An internal error inside an HTTP 200 (an outage, not a refusal)."""
+    return httpx.Response(
+        200,
+        json={
+            "data": None,
+            "errors": [
+                {
+                    "message": "Internal server error",
+                    "extensions": {"code": "INTERNAL_SERVER_ERROR", "type": "internal error"},
+                }
+            ],
+        },
+    )
+
+
 def refused() -> httpx.Response:
     """Linear answered and refused the request's input."""
     return httpx.Response(
