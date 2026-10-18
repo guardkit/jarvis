@@ -28,9 +28,11 @@ Every poll, after the door has finished delivering its own sends:
    request; ``approve``/``merge`` approve, ``reject``/``decline`` reject,
    anything else is ignored. A listed author's answer is published as the
    Slack button does; an unlisted author is told once that only the people
-   listed can answer. Each reply is recorded before its answer is published
-   and is never published again, even when the publish was not confirmed
-   (then the door says so under the card, once).
+   listed can answer. Each answer is claimed before it is published and is
+   never published again. A claim whose publish did not return (it raised, or
+   the door stopped part way) is settled on a later poll: if Forge's record
+   still shows the card open, the door says once under the card that it
+   could not confirm the answer, and the card takes a new reply.
 
 Every comment the door writes here ends with a short reference (``ref: …``)
 recorded before it is sent, so a comment whose sending was not confirmed is
@@ -454,6 +456,7 @@ class Reporter:
                 await self._cards_from_bus(cards, live, unfinished, open_cards)
                 await self._notifications(notes, live, unfinished)
                 await self._cards_from_record(live, open_cards)
+                await self._settle_claims(live, open_cards)
                 self._close_settled_cards(live, open_cards)
         await self._read_answers()
 
@@ -664,7 +667,7 @@ class Reporter:
             if card is not None:
                 keys = card.match_keys()
                 target = next((index[k] for k in keys if k in index), None)
-                if target is None and any(k in unfinished for k in keys):
+                if target is None and _belongs_to(keys, unfinished):
                     self._hold(CARDS, held_id, message)
                     continue
                 if target is not None:
@@ -678,8 +681,9 @@ class Reporter:
                             correlation_id=target.attempt.correlation_id,
                         )
                     else:
+                        answerable = state == _OPEN and not card.slack_only
                         try:
-                            await self._post_card(card, target, answerable=state == _OPEN)
+                            await self._post_card(card, target, answerable=answerable)
                         except (LinearAuthError, LinearRateLimited):
                             raise
                         except LinearError as exc:
@@ -738,7 +742,11 @@ class Reporter:
         for held_id, message in messages:
             note = parse_notification(message.data)
             attempt = live.get(note.correlation_id) if note is not None else None
-            if note is not None and attempt is None and note.correlation_id in unfinished:
+            if (
+                note is not None
+                and attempt is None
+                and _belongs_to([note.correlation_id], unfinished)
+            ):
                 self._hold(NOTIFICATIONS, held_id, message)
                 continue
             if note is not None and attempt is not None and attempt.outcome.phase == fr.UNFILED:
@@ -815,6 +823,31 @@ class Reporter:
                 request_id=found.request_id,
                 correlation_id=cid,
             )
+
+    async def _settle_claims(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
+        """Answers claimed whose publish never returned (Codex review R2, R8).
+
+        The original is never published again. If Forge's record still shows
+        the card open, the person is told once under it and the card takes a
+        new reply (Forge keeps the first answer it gets, so a second is
+        harmless); otherwise the claim is simply settled.
+        """
+        for claim in self._store.unpublished_claims():
+            attempt = live.get(claim.correlation_id)
+            if (
+                attempt is not None
+                and self._card_state(claim.kind, claim.request_id, attempt, open_cards) == _OPEN
+            ):
+                own = await self._write(
+                    claim.issue_id,
+                    comment(UNCONFIRMED_ANSWER),
+                    ref_for("unconfirmed", claim.reply_id),
+                    parent_id=claim.comment_id,
+                )
+                self._store.record_reply(own, claim.request_id, "the door's own")
+                self._store.reopen_card(claim.request_id)
+                logger.info("linear_door_answer_reopened", request_id=claim.request_id)
+            self._store.settle_claim(claim.reply_id)
 
     def _close_settled_cards(self, live: dict[str, _Attempt], open_cards: list[Any]) -> None:
         """Stop reading answers under cards Forge's record no longer shows open."""
@@ -897,12 +930,12 @@ class Reporter:
             notes=answer_notes(card.kind, decision, notes),
             dispositions=dispositions or None,
         )
-        # Claimed first, and never published again (Codex review R2): a publish
-        # that raised may still have reached the factory (a flush that timed
-        # out after the send), so it is not repeated. The person is told once
-        # instead, and the card takes a new reply; Forge keeps the first
-        # answer it gets for a card, so a second one is harmless.
-        self._store.record_reply(reply_id, card.request_id, decision, answers=True)
+        # Claimed first, and never published again (Codex review R2, R8): a
+        # publish that raised may still have reached the factory (a flush that
+        # timed out after the send), and one interrupted may not have. Either
+        # way the claim stays unpublished and :meth:`_settle_claims` deals
+        # with it on a later poll.
+        self._store.claim_answer(reply_id, card, decision)
         try:
             await self._answers.publish(
                 subject=f"{card.approval_subject}.response",
@@ -910,20 +943,13 @@ class Reporter:
                 correlation_id=card.reply_correlation_id,
             )
         except Exception as exc:
-            self._store.reopen_card(card.request_id)
             logger.warning(
                 "linear_door_answer_not_confirmed",
                 request_id=card.request_id,
                 error_class=type(exc).__name__,
             )
-            own = await self._write(
-                card.issue_id,
-                comment(UNCONFIRMED_ANSWER),
-                ref_for("unconfirmed", reply_id),
-                parent_id=card.comment_id,
-            )
-            self._store.record_reply(own, card.request_id, "the door's own")
             return
+        self._store.mark_published(reply_id)
         logger.info(
             "linear_door_answer_published",
             request_id=card.request_id,
@@ -946,6 +972,15 @@ class Reporter:
 
 #: Forge's record's card kinds, as the door's.
 _RECORD_KINDS = {"merge": MERGE, "plan": PLAN, "mission_plan": MISSION_PLAN}
+
+
+def _belongs_to(correlation_ids: list[str], unfinished: set[str]) -> bool:
+    """Whether a message is for a send not yet delivered: its correlation id
+    is the send's, or a child of it (a mission feature's
+    ``<mission cid>-<KEY>-a<n>``)."""
+    return any(
+        cid == send or cid.startswith(f"{send}-") for cid in correlation_ids for send in unfinished
+    )
 
 
 def _gate_build(card: Card) -> str | None:

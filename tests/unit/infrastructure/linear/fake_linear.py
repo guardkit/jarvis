@@ -437,7 +437,15 @@ class FakeAttempts:
 
     def open_cards(self, correlation_ids: list[str]) -> list[Any]:
         self._check("open_cards")
-        return [c for c in self.cards if c.correlation_id in correlation_ids]
+        # A mission feature's card carries its own <mission cid>-<KEY>-a<n>.
+        return [
+            c
+            for c in self.cards
+            if any(
+                c.correlation_id == x or c.correlation_id.startswith(f"{x}-")
+                for x in correlation_ids
+            )
+        ]
 
 
 class FakeFeed:
@@ -464,8 +472,13 @@ class CapturedAnswers:
         self.published: list[tuple[str, Any, str | None]] = []
         self.fail = False
         self.flush_times_out = False
+        self.interrupted = False
 
     async def publish(self, *, subject: str, payload: Any, correlation_id: str | None) -> None:
+        if self.interrupted:  # the door stopped part way (a crash, a cancelled poll)
+            import asyncio
+
+            raise asyncio.CancelledError
         if self.fail:
             raise ConnectionError("no connection")
         self.published.append((subject, payload, correlation_id))

@@ -7,6 +7,7 @@ Forge record built from Forge's schema. All names and ids are made up.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import sqlite3
@@ -19,6 +20,7 @@ import pytest
 
 from jarvis.infrastructure.linear import forge_record as fr
 from jarvis.infrastructure.linear.cards import (
+    AUTH_CONFIRMATION,
     SLACK_ONLY_ENDING,
     https_link,
     parse_approvers,
@@ -1251,3 +1253,119 @@ async def test_an_expired_spec_digest_card_is_recovered_from_the_real_record(
     assert "please answer it in Slack" in card.body and request in card.body
     assert h.store.open_cards(answerable_only=True) == []
     cx.close()
+
+
+# ---------------------------------------------------------------------------
+# Codex review round 2 on 3dde0e4 (R4, R7, R8)
+# ---------------------------------------------------------------------------
+
+
+async def test_a_mission_features_card_waits_for_the_missions_send_to_finish(
+    h: Harness,
+) -> None:
+    # R4: a feature's build gate carries <mission cid>-<KEY>-a<n>; it arrives
+    # while the mission's "sent" comment is failing.
+    label = h.linear.label("mission: Sharing")
+    a = h.linear.issue("Share a note", labels=[label])
+    b = h.linear.issue("Revoke a share", labels=[label], blocked_by=[a.id])
+    cid = f"{mission_prefix(label)}1"
+    child = f"{cid}-ENG1-a1"
+    h.linear.fail_next["DoorCommentCreate"] = [server_error(), server_error()]
+    with pytest.raises(LinearError):
+        await h.poll()
+    assert h.bus.payloads()[0]["correlation_id"] == cid
+    h.feed.push(CARDS, gate_card(child, "build-4"))
+    await h.poll()  # the "sent" comment fails again: the card is held
+    assert h.feed.pending(CARDS) == []
+    assert len(h.store.held_messages(CARDS)) == 1
+    h.restart()
+    h.attempts.outcomes[cid] = mission(
+        cid,
+        fr.MISSION_RUNNING,
+        mission_id="m-1",
+        attempts=(fr.KeyAttempt("ENG1", 1, "ADMITTED", None, child),),
+    )
+    h.attempts.cards = [fr.OpenCard("build", child, "build-4:autobuild:0", build_id="build-4")]
+    await h.poll()
+    assert h.linear.state_name(a) == h.linear.state_name(b) == "In Progress"
+    (card,) = h.card_comments(a)
+    assert h.card_comments(b) == []
+    assert plain(card.body).endswith("**approve** or **reject**.")
+    assert h.store.held_messages(CARDS) == []
+
+
+def auth_confirmation_card(cid: str, request_id: str) -> BusMessage:
+    """Forge's sign-in confirmation card (driver.py 9965-10010, checkpoint.py 324-420)."""
+    return card_message(
+        f"agents.approval.forge.plan-{cid}",
+        request_id,
+        cid=cid,
+        details={
+            "build_id": f"plan-{cid}",
+            "correlation_id": cid,
+            "checkpoint_type": AUTH_CONFIRMATION,
+            "summary": {
+                "checkpoint": AUTH_CONFIRMATION,
+                "title": "Does this feature sit behind a sign-in?",
+                "what_happened": "The spec checker flagged this feature as behind a sign-in.",
+                "flagged_lines": ["Only signed-in users can see their notes."],
+                "confirm_means": "Confirm — there is no sign-in here.",
+                "reject_means": "Reject — this really is behind a sign-in.",
+                "later_means": "Setting this aside for later stops the run too.",
+                "no_answer_means": "No answer within 15 minutes: the run stops.",
+            },
+        },
+        action="The owner confirms whether the sign-in is real.",
+    )
+
+
+async def test_the_sign_in_confirmation_card_is_answered_in_slack_only(h: Harness) -> None:
+    # R7
+    issue = await sent_single(h)
+    cid = "lin-ENG-1-1"
+    request = f"plan-{cid}:qa-pass-bars-auth-confirm:0"
+    h.attempts.outcomes[cid] = single(cid, fr.PLANNING)
+    h.attempts.cards = [fr.OpenCard("plan", cid, request)]
+    h.feed.push(CARDS, auth_confirmation_card(cid, request))
+    await h.poll()
+    (card,) = h.card_comments(issue)
+    assert plain(card.body) == (
+        "Factory: **A factory card is waiting: Does this feature sit behind a sign-in?**"
+        f"\n\n{SLACK_ONLY_ENDING}"
+    )
+    assert h.store.open_cards(answerable_only=True) == []
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    await h.poll()
+    assert h.answers.published == []
+
+
+async def test_an_answer_interrupted_after_its_claim_is_not_lost(h: Harness) -> None:
+    # R8: the door stops straight after claiming the answer.
+    _, card = await _plan_card_posted(h)
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    h.answers.interrupted = True
+    with pytest.raises(asyncio.CancelledError):
+        await h.poll()
+    h.answers.interrupted = False
+    h.restart()
+    await h.poll(2)
+    assert h.answers.published == []  # the original is never published
+    assert _unconfirmed_notices(h, card) == [f"Factory: {UNCONFIRMED_ANSWER}"]
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)  # a new reply is taken
+    await h.poll()
+    assert len(h.answers.published) == 1
+
+
+async def test_an_unpublished_claim_for_a_settled_card_says_nothing(h: Harness) -> None:
+    # R8: answered in Slack meanwhile; nothing to tell, nothing to reopen.
+    _, card = await _plan_card_posted(h)
+    h.linear.reply(card, "approve", user_id=OWNER_LINEAR)
+    h.answers.interrupted = True
+    with pytest.raises(asyncio.CancelledError):
+        await h.poll()
+    h.answers.interrupted = False
+    h.restart()
+    h.attempts.cards = []
+    await h.poll(2)
+    assert _unconfirmed_notices(h, card) == []
+    assert h.store.unpublished_claims() == []

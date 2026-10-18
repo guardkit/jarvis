@@ -48,6 +48,10 @@ OTHER_IN_SLACK = (
     "A factory card is waiting. Its details have expired from the message stream; "
     "please answer it in Slack."
 )
+#: Forge's sign-in confirmation card (``planning/driver.py`` 307, 9965-10010):
+#: what approve and reject mean there is not what they mean on a plan card,
+#: so it is answered in Slack only (Codex review R7).
+AUTH_CONFIRMATION = "auth_surface_confirmation"
 #: The ending of a card whose openness the door cannot check in Forge's
 #: record: shown, but answered in Slack only (Codex review R6).
 SLACK_ONLY_ENDING = "Answer this card in Slack; it cannot be answered here."
@@ -92,6 +96,13 @@ class Card:
             if self.token.startswith(prefix):
                 keys.append(self.token[len(prefix) :])
         return list(dict.fromkeys(k for k in keys if k))
+
+    @property
+    def slack_only(self) -> bool:
+        """A card shown here but answered in Slack only (the sign-in check)."""
+        summary = self.details.get("summary")
+        checkpoint = summary.get("checkpoint") if isinstance(summary, dict) else None
+        return AUTH_CONFIRMATION in (self.details.get("checkpoint_type"), checkpoint)
 
     def assumption_ids(self) -> tuple[str, ...]:
         """The ids an approve accepts: every assumption on a plan card (as the
@@ -282,6 +293,11 @@ def card_comment(
         parts = ["**The mission's plan card is waiting for your answer.**"]
         parts.append(_lines(str(details.get("rationale") or card.action_description)))
         return _finish(parts, APPROVE_ENDING)
+    if card.slack_only:
+        summary = details.get("summary")
+        summary = summary if isinstance(summary, dict) else {}
+        title = str(summary.get("title") or card.action_description or "A factory card")
+        return _finish([f"**A factory card is waiting: {title}**"], SLACK_ONLY_ENDING)
     if card.kind == PLAN:
         parts = ["**The plan card is waiting for your answer.**"]
         parts.extend(_plan_parts(details))
@@ -412,6 +428,7 @@ def notification_comment(note: Notification) -> str:
 __all__ = [
     "ANSWER_IN_SLACK",
     "APPROVE_ENDING",
+    "AUTH_CONFIRMATION",
     "MERGE",
     "MERGE_ENDING",
     "MISSION_PLAN",

@@ -61,6 +61,12 @@ Stage 4 repair (Codex review R2-R4), at ``user_version`` 3:
 ``held_messages``
     Card and notification messages for sends whose "sent" comment or move is
     not done yet, kept here until the send is finished.
+``answer_claims``
+    Each answer from Linear, claimed before it is published, with a
+    ``published`` flag set only after the publish returns (Codex review R8).
+    A claim left unpublished (the publish raised, or the door stopped part
+    way) is never published again; it is settled once, by telling the person
+    under the card and taking a new reply if Forge still shows the card open.
 """
 
 from __future__ import annotations
@@ -170,6 +176,16 @@ CREATE TABLE IF NOT EXISTS comment_refs (
     issue_id   TEXT NOT NULL,
     comment_id TEXT,
     started_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS answer_claims (
+    reply_id       TEXT PRIMARY KEY,
+    request_id     TEXT NOT NULL,
+    issue_id       TEXT NOT NULL,
+    comment_id     TEXT NOT NULL,
+    correlation_id TEXT NOT NULL,
+    kind           TEXT NOT NULL,
+    published      INTEGER NOT NULL DEFAULT 0,
+    settled        INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS held_messages (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -634,23 +650,67 @@ class DoorStore:
             is not None
         )
 
-    def record_reply(
-        self, comment_id: str, request_id: str | None, outcome: str, *, answers: bool = False
-    ) -> None:
-        """Record a handled reply; with ``answers`` the card is answered in the
-        same transaction (written before the answer is published)."""
+    def record_reply(self, comment_id: str, request_id: str | None, outcome: str) -> None:
+        """Record a handled reply that answers nothing."""
         with self._db:
             self._db.execute(
                 "INSERT OR IGNORE INTO replies (comment_id, request_id, outcome, handled_at) "
                 "VALUES (?, ?, ?, ?)",
                 (comment_id, request_id, outcome, _now()),
             )
-            if answers and request_id:
-                self._db.execute(
-                    "UPDATE card_comments SET status = 'answered' "
-                    "WHERE request_id = ? AND status = 'open'",
-                    (request_id,),
-                )
+
+    def claim_answer(self, reply_id: str, card: CardComment, decision: str) -> None:
+        """Before an answer is published: the reply is handled, the claim is
+        recorded unpublished and the card is answered, in one transaction."""
+        with self._db:
+            self._db.execute(
+                "INSERT OR IGNORE INTO replies (comment_id, request_id, outcome, handled_at) "
+                "VALUES (?, ?, ?, ?)",
+                (reply_id, card.request_id, decision, _now()),
+            )
+            self._db.execute(
+                "INSERT OR IGNORE INTO answer_claims (reply_id, request_id, issue_id, "
+                "comment_id, correlation_id, kind) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    reply_id,
+                    card.request_id,
+                    card.issue_id,
+                    card.comment_id,
+                    card.correlation_id,
+                    card.kind,
+                ),
+            )
+            self._db.execute(
+                "UPDATE card_comments SET status = 'answered' "
+                "WHERE request_id = ? AND status = 'open'",
+                (card.request_id,),
+            )
+
+    def mark_published(self, reply_id: str) -> None:
+        with self._db:
+            self._db.execute(
+                "UPDATE answer_claims SET published = 1 WHERE reply_id = ?", (reply_id,)
+            )
+
+    def unpublished_claims(self) -> list[AnswerClaim]:
+        """Claims whose publish never returned, not yet settled."""
+        return [
+            AnswerClaim(
+                r["reply_id"],
+                r["request_id"],
+                r["issue_id"],
+                r["comment_id"],
+                r["correlation_id"],
+                r["kind"],
+            )
+            for r in self._db.execute(
+                "SELECT * FROM answer_claims WHERE published = 0 AND settled = 0 ORDER BY rowid"
+            )
+        ]
+
+    def settle_claim(self, reply_id: str) -> None:
+        with self._db:
+            self._db.execute("UPDATE answer_claims SET settled = 1 WHERE reply_id = ?", (reply_id,))
 
     def reopen_card(self, request_id: str) -> None:
         """After a publish that was not confirmed: the reply stays handled (it
@@ -752,6 +812,18 @@ class CardComment:
 
 
 @dataclass(frozen=True)
+class AnswerClaim:
+    """An answer from Linear claimed before it was published."""
+
+    reply_id: str
+    request_id: str
+    issue_id: str
+    comment_id: str  # the card comment it replied under
+    correlation_id: str
+    kind: str
+
+
+@dataclass(frozen=True)
 class Recovery:
     """An issue of an attempt that had ended before a rebuild."""
 
@@ -764,6 +836,7 @@ class Recovery:
 
 __all__ = [
     "STATUSES",
+    "AnswerClaim",
     "CardComment",
     "DoorStore",
     "IssueAlreadyReserved",
