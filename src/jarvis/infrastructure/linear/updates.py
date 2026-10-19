@@ -1,8 +1,9 @@
-"""Project updates after each merge (design sections 11.4 and 11.5).
+"""Project updates after each merge (design sections 11.4, 11.5 and 11.8).
 
-Once per merge to main of Linear-originated work in a mapped project, the door
-posts a short project update to Linear: what was delivered, what is open and
-what it cost, with Linear's own on track / at risk / off track health. The
+Once per merge to main in a mapped project (Linear-originated work by 11.4,
+every other merge by 11.8), the door posts a short project update to Linear:
+what was delivered, what is open and what it cost, with Linear's own on
+track / at risk / off track health. The
 dashboard computes the figures and writes ``project-summaries.json``; the door
 only reads that file, at the moment it posts, and formats.
 
@@ -87,6 +88,8 @@ class Summary:
     cost_read_at: datetime | None = None
     projects: dict[str, Any] = field(default_factory=dict)
     attempts: dict[str, Any] = field(default_factory=dict)
+    #: ``merges."<build id>"`` (section 11.8): each merge's cost.
+    merges: dict[str, Any] = field(default_factory=dict)
 
     def project(self, repo: str) -> dict[str, Any] | None:
         for name, entry in self.projects.items():
@@ -131,6 +134,7 @@ def read_summary(path: Path | None, *, now: datetime | None = None) -> Summary:
         cost_state = "fresh"
     projects = data.get("projects")
     attempts = data.get("attempts")
+    merges = data.get("merges")
     return Summary(
         available=True,
         forge_fresh=forge_fresh,
@@ -138,6 +142,7 @@ def read_summary(path: Path | None, *, now: datetime | None = None) -> Summary:
         cost_read_at=read_at,
         projects=projects if isinstance(projects, dict) else {},
         attempts=attempts if isinstance(attempts, dict) else {},
+        merges=merges if isinstance(merges, dict) else {},
     )
 
 
@@ -179,6 +184,9 @@ class Delivered:
     #: The deploy after this merge failed: the reader's words, else "".
     deploy_failed: str = ""
     is_mission: bool = False
+    #: Section 11.8: the merged build, whose cost is the summary's
+    #: ``merges.<build id>``; ``None`` for 11.4 (``attempts.<correlation id>``).
+    merge_build_id: str | None = None
 
 
 def update_health(delivered: Delivered, summary: Summary) -> tuple[str | None, str]:
@@ -249,8 +257,13 @@ def update_body(
         lines.append("In the factory: not available from the dashboard.")
 
     lines += ["", "**Cost** (nominal US dollars, as the dashboard shows them)"]
-    attempt = summary.attempts.get(delivered.correlation_id) if summary.available else None
-    lines.append(f"- This merge: {cost_words(attempt, summary)}")
+    if not summary.available:
+        this_merge = None
+    elif delivered.merge_build_id is not None:
+        this_merge = summary.merges.get(delivered.merge_build_id)
+    else:
+        this_merge = summary.attempts.get(delivered.correlation_id)
+    lines.append(f"- This merge: {cost_words(this_merge, summary)}")
     lines.append(
         f"- This week: {cost_words((entry or {}).get('spend_week') if entry else None, summary)}"
     )

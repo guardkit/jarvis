@@ -81,6 +81,18 @@ Linear projects (design section 11), at ``user_version`` 4:
 ``comment_refs`` also holds each project update's reference (its
 ``issue_id`` column then holds the project's id, the update's destination,
 fixed when the update is begun).
+
+A project update after every merge (design section 11.8), at ``user_version`` 5:
+
+``merges``
+    Each build Forge's record shows on main, by build id, with its state:
+    ``seen`` (on main when the baseline was taken, or one of the door's own
+    ``lin-`` attempts, which the 11.4 path reports), ``pending`` (a new merge
+    whose update is owed), ``posted`` (its update is written) or ``skipped``
+    (with the reason, also logged). The baseline itself is the ``marks`` row
+    ``merge-baseline``, written in the same transaction as the ``seen`` rows.
+    Nothing here depends on a time Forge wrote. ``long_noted`` is set once a
+    merge pending for over a day has been logged, so it is logged once.
 """
 
 from __future__ import annotations
@@ -92,7 +104,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sends (
@@ -212,6 +224,15 @@ CREATE TABLE IF NOT EXISTS project_intents (
     started_at      TEXT NOT NULL,
     completed_at    TEXT
 );
+CREATE TABLE IF NOT EXISTS merges (
+    build_id       TEXT PRIMARY KEY,
+    correlation_id TEXT NOT NULL,
+    state          TEXT NOT NULL CHECK (state IN ('seen', 'pending', 'posted', 'skipped')),
+    reason         TEXT,
+    recorded_at    TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    long_noted     INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS held_messages (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     feed    TEXT NOT NULL,
@@ -222,6 +243,9 @@ CREATE TABLE IF NOT EXISTS held_messages (
 """
 
 STATUSES = ("pending", "published", "commented", "moved")
+MERGE_STATES = ("seen", "pending", "posted", "skipped")
+#: The ``marks`` row saying the merge baseline has been taken (section 11.8).
+MERGE_BASELINE = "merge-baseline"
 
 
 def _now() -> str:
@@ -875,6 +899,87 @@ class DoorStore:
                 (note, _now(), repo),
             )
 
+    # -- every merge to main (section 11.8) ----------------------------------
+
+    def merge_baseline(self) -> str | None:
+        """When the merge baseline was taken, or ``None`` before the first."""
+        return self.mark(MERGE_BASELINE)
+
+    def take_merge_baseline(self, merges: list[tuple[str, str]]) -> None:
+        """Record every ``(build id, correlation id)`` now on main as ``seen``
+        and the baseline itself, in one transaction."""
+        now = _now()
+        with self._db:
+            self._db.executemany(
+                "INSERT OR IGNORE INTO merges (build_id, correlation_id, state, recorded_at, "
+                "updated_at) VALUES (?, ?, 'seen', ?, ?)",
+                [(build_id, cid, now, now) for build_id, cid in merges],
+            )
+            self._db.execute(
+                "INSERT OR REPLACE INTO marks (name, value) VALUES (?, ?)", (MERGE_BASELINE, now)
+            )
+
+    def record_new_merges(self, merges: list[tuple[str, str, str]]) -> list[str]:
+        """Record each ``(build id, correlation id, state)`` not yet recorded,
+        in one transaction; the build ids that were new."""
+        now = _now()
+        new: list[str] = []
+        with self._db:
+            for build_id, cid, state in merges:
+                if state not in ("seen", "pending"):
+                    raise ValueError(state)
+                cursor = self._db.execute(
+                    "INSERT OR IGNORE INTO merges (build_id, correlation_id, state, "
+                    "recorded_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                    (build_id, cid, state, now, now),
+                )
+                if cursor.rowcount:
+                    new.append(build_id)
+        return new
+
+    def merge_state(self, build_id: str) -> tuple[str, str | None] | None:
+        """``(state, reason)`` of one recorded merge."""
+        row = self._db.execute(
+            "SELECT state, reason FROM merges WHERE build_id = ?", (build_id,)
+        ).fetchone()
+        return (str(row[0]), row[1]) if row is not None else None
+
+    def pending_merges(self) -> list[str]:
+        """The build ids whose update is still owed, oldest first."""
+        return [
+            str(row[0])
+            for row in self._db.execute(
+                "SELECT build_id FROM merges WHERE state = 'pending' ORDER BY rowid"
+            )
+        ]
+
+    def long_pending_merges(self, before: datetime) -> list[tuple[str, str]]:
+        """``(build id, recorded at)`` of each merge pending since before
+        ``before`` and not yet logged as pending long."""
+        return [
+            (str(row[0]), str(row[1]))
+            for row in self._db.execute(
+                "SELECT build_id, recorded_at FROM merges WHERE state = 'pending' "
+                "AND long_noted = 0 AND recorded_at < ? ORDER BY rowid",
+                (before.astimezone(UTC).isoformat(),),
+            )
+        ]
+
+    def note_long_pending(self, build_id: str) -> None:
+        with self._db:
+            self._db.execute("UPDATE merges SET long_noted = 1 WHERE build_id = ?", (build_id,))
+
+    def settle_merge(self, build_id: str, state: str, reason: str | None = None) -> None:
+        """A pending merge is ``posted`` or ``skipped`` (with its reason)."""
+        if state not in ("posted", "skipped"):
+            raise ValueError(state)
+        with self._db:
+            self._db.execute(
+                "UPDATE merges SET state = ?, reason = ?, updated_at = ? "
+                "WHERE build_id = ? AND state = 'pending'",
+                (state, reason, _now(), build_id),
+            )
+
 
 @dataclass(frozen=True)
 class ProjectIntent:
@@ -930,6 +1035,8 @@ class Recovery:
 
 
 __all__ = [
+    "MERGE_BASELINE",
+    "MERGE_STATES",
     "STATUSES",
     "AnswerClaim",
     "CardComment",

@@ -63,12 +63,13 @@ class Ledger:
         error: str | None = None,
         pending: str | None = None,
         event: tuple[str, dict] | None = None,
+        request_text: str = "r",
     ) -> None:
         self.cx.execute(
             "INSERT INTO planning_runs (correlation_id, state, originating_user, "
             "expected_approver, request_text, triggered_by, queued_at, error, "
-            "pending_approval_request_id) VALUES (?, ?, 'u', 'a', 'r', 'jarvis', ?, ?, ?)",
-            (cid, state, NOW, error, pending),
+            "pending_approval_request_id) VALUES (?, ?, 'u', 'a', ?, 'jarvis', ?, ?, ?)",
+            (cid, state, request_text, NOW, error, pending),
         )
         if event is not None:
             label, details = event
@@ -90,13 +91,15 @@ class Ledger:
         target: str | None = "main",
         mission_id: str | None = None,
         role: str | None = None,
+        feature_id: str = "FEAT-1",
+        repo: str = "repo",
     ) -> None:
         self.cx.execute(
             "INSERT INTO builds (build_id, feature_id, repo, branch, feature_yaml_path, "
             "status, triggered_by, correlation_id, queued_at, error, target_branch, "
-            "mission_id, mission_role) VALUES (?, 'FEAT-1', 'repo', 'b', 'f.yaml', ?, "
+            "mission_id, mission_role) VALUES (?, ?, ?, 'b', 'f.yaml', ?, "
             "'jarvis', ?, ?, ?, ?, ?, ?)",
-            (build_id, status, cid, queued_at, error, target, mission_id, role),
+            (build_id, feature_id, repo, status, cid, queued_at, error, target, mission_id, role),
         )
         self.cx.commit()
 
@@ -168,17 +171,19 @@ class Ledger:
         keys: tuple[str, ...] = (),
         reason: str | None = None,
         plan_request_id: str | None = None,
+        title: str = "t",
+        sentences: dict[str, str] | None = None,
     ) -> None:
         self.cx.execute(
             "INSERT INTO missions (id, title, target_repo, branch, status, correlation_id, "
             "originating_user, plan_request_id, created_at, closed_reason) "
-            "VALUES (?, 't', 'repo', ?, ?, ?, 'u', ?, ?, ?)",
-            (mission_id, f"mission/{mission_id}", status, cid, plan_request_id, NOW, reason),
+            "VALUES (?, ?, 'repo', ?, ?, ?, 'u', ?, ?, ?)",
+            (mission_id, title, f"mission/{mission_id}", status, cid, plan_request_id, NOW, reason),
         )
         for key in keys:
             self.cx.execute(
-                "INSERT INTO mission_features (mission_id, key, sentence) VALUES (?, ?, 's')",
-                (mission_id, key),
+                "INSERT INTO mission_features (mission_id, key, sentence) VALUES (?, ?, ?)",
+                (mission_id, key, (sentences or {}).get(key, "s")),
             )
         self.cx.commit()
 
@@ -786,3 +791,162 @@ def test_the_target_repository_is_read_from_the_record(ledger: Ledger) -> None:
     assert single(ledger).target_repo == "example-org/from-queue"
     ledger.mission(MCID, "m-1", "RUNNING")
     assert ledger.record.outcome_for_mission(MCID).target_repo == "repo"
+
+
+# ---------------------------------------------------------------------------
+# Every build on main (design section 11.8)
+# ---------------------------------------------------------------------------
+
+ORG_REPO = "example-org/notes-app"
+
+
+def _merged(ledger: Ledger, cid: str, build_id: str, *, report: bool = True, **kw: object) -> None:
+    ledger.build(cid, build_id, "COMPLETE", repo=ORG_REPO, **kw)  # type: ignore[arg-type]
+    ledger.decide(build_id, "approve")
+    ledger.publication(build_id, "published, deployment pending", j_commit=f"j-{build_id}")
+    if report:
+        ledger.report(build_id, "PASSED", "merged-and-running", "deployed")
+
+
+def test_merges_on_main_lists_a_single_build_with_its_title(ledger: Ledger) -> None:
+    request = "\n  Explain the checks  in the README\nMore."
+    ledger.run("slack-1", "BUILD_QUEUED", request_text=request)
+    _merged(ledger, "slack-1", "build-a", feature_id="FEAT-9163")
+    (found,) = ledger.record.merges_on_main()
+    assert found == fr.MergeOnMain(
+        build_id="build-a",
+        correlation_id="slack-1",
+        feature_id="FEAT-9163",
+        repo=ORG_REPO,
+        title="Explain the checks in the README",
+        j_commit="j-build-a",
+        report=True,
+        report_result="merged-and-running",
+    )
+    assert found.ready and not found.is_mission
+
+
+def test_a_merge_without_a_planning_request_is_named_by_its_feature_id(ledger: Ledger) -> None:
+    _merged(ledger, "cli-7", "build-b", feature_id="FEAT-77")
+    (found,) = ledger.record.merges_on_main()
+    assert found.title == "FEAT-77"
+
+
+def test_a_merge_before_its_report_is_listed_but_not_ready(ledger: Ledger) -> None:
+    _merged(ledger, "slack-1", "build-a", report=False)
+    (found,) = ledger.record.merges_on_main()
+    assert not found.report and not found.ready
+
+
+def test_a_failed_deploy_is_carried(ledger: Ledger) -> None:
+    ledger.build("slack-1", "build-a", "COMPLETE", repo=ORG_REPO)
+    ledger.decide("build-a", "approve")
+    ledger.publication("build-a", "published, deployment pending")
+    ledger.report("build-a", "FAILED", "merged-deploy-failed", "the health check timed out")
+    (found,) = ledger.record.merges_on_main()
+    assert found.ready
+    assert found.deploy_failed == "the health check timed out"
+
+
+def test_builds_not_on_main_are_not_listed(ledger: Ledger) -> None:
+    ledger.build("slack-1", "build-pending", "COMPLETE")
+    ledger.publication("build-pending", "publication pending")
+    ledger.build("slack-2", "build-other", "COMPLETE", target="release")
+    ledger.publication("build-other", "published, deployment pending", target="main")
+    ledger.build("slack-3", "build-none", "COMPLETE")
+    assert ledger.record.merges_on_main() == []
+
+
+def test_a_mission_lists_its_merge_build_once_and_never_its_parts(ledger: Ledger) -> None:
+    mcid = "slack-mission-1"
+    ledger.mission(mcid, "m-1", "MERGING", keys=("A1", "A2", "A3"), title="Dark mode")
+    for key, status in (("A1", "LANDED"), ("A2", "LANDED"), ("A3", "FAILED")):
+        ledger.attempt("m-1", mcid, key, 1, status)
+        part = f"build-part-{key}"
+        ledger.build(
+            f"{mcid}-{key}-a1",
+            part,
+            "COMPLETE",
+            mission_id="m-1",
+            role="feature",
+            target="mission/m-1",
+        )
+        ledger.publication(part, "published to the mission branch", target="mission/m-1")
+    # Even a part whose record used an on-main word is never listed.
+    ledger.cx.execute(
+        "UPDATE publication_records SET result = 'published, deployment pending' "
+        "WHERE build_id = 'build-part-A1'"
+    )
+    ledger.cx.commit()
+    ledger.build(
+        mcid, "build-merge", "COMPLETE", mission_id="m-1", role="mission-merge", repo=ORG_REPO
+    )
+    ledger.decide("build-merge", "approve")
+    ledger.publication("build-merge", "merged into the remote and running")
+    (found,) = ledger.record.merges_on_main()
+    assert found.build_id == "build-merge"
+    assert found.is_mission and found.mission_id == "m-1"
+    assert found.title == "Dark mode"
+    assert found.landed_keys == ("A1", "A2")
+    assert found.not_landed_keys == ("A3",)
+    assert found.mission_status == "MERGING" and not found.ready
+    ledger.cx.execute("UPDATE missions SET status = 'MERGED' WHERE id = 'm-1'")
+    ledger.cx.commit()
+    (found,) = ledger.record.merges_on_main()
+    assert found.ready
+
+
+def test_merges_on_main_on_an_unreadable_record_raises(tmp_path: Path) -> None:
+    with pytest.raises(ForgeRecordUnavailable):
+        ForgeRecord(tmp_path / "missing.db").merges_on_main()
+
+
+@pytest.mark.parametrize(
+    ("text", "title"),
+    [
+        ("Add a dark mode", "Add a dark mode"),
+        ("\n  Add a  dark mode.  Then more words.\nSecond line", "Add a dark mode."),
+        ("", ""),
+        (None, ""),
+        ("word " * 60, ("word " * 23).strip() + "…"),
+        ("x" * 200, "x" * 119 + "…"),
+    ],
+)
+def test_short_title(text: str | None, title: str) -> None:
+    assert fr.short_title(text) == title
+    assert len(fr.short_title(text)) <= fr.TITLE_MAX
+
+
+def test_a_long_request_is_shortened_in_its_merge_title(ledger: Ledger) -> None:
+    paragraph = (
+        "When the nightly security sweep runs against a private project it should fetch from "
+        "the sandbox's own read-only copy of GitHub and never through the Git door, and the "
+        "report should say which commit it checked"
+    )
+    ledger.run("slack-1", "BUILD_QUEUED", request_text=paragraph + "\nMore.")
+    _merged(ledger, "slack-1", "build-a")
+    (found,) = ledger.record.merges_on_main()
+    assert len(found.title) <= fr.TITLE_MAX
+    assert found.title.endswith("…")
+    assert paragraph.startswith(found.title[:-1])
+    assert not found.title[:-1].endswith(" ")
+
+
+def test_a_missions_parts_carry_their_sentences(ledger: Ledger) -> None:
+    mcid = "slack-mission-2"
+    ledger.mission(
+        mcid,
+        "m-2",
+        "MERGED",
+        keys=("A", "B"),
+        title="Dark mode",
+        sentences={"A": "Add a dark mode toggle. It sits in settings.", "B": "word " * 40},
+    )
+    ledger.attempt("m-2", mcid, "A", 1, "LANDED")
+    ledger.build(mcid, "build-merge-2", "COMPLETE", mission_id="m-2", role="mission-merge")
+    ledger.decide("build-merge-2", "approve")
+    ledger.publication("build-merge-2", "merged into the remote and running")
+    (found,) = ledger.record.merges_on_main()
+    assert found.part_sentence("A") == "Add a dark mode toggle."
+    assert found.part_sentence("B").endswith("…")
+    assert found.landed_keys == ("A",) and found.not_landed_keys == ("B",)

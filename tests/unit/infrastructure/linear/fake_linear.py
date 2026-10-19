@@ -554,6 +554,7 @@ class FakeAttempts:
     dataclasses); otherwise an attempt in ``ended`` (or recorded as ended) has
     ended quietly (withdrawn, or a mission that did not start) and any other is
     waiting in the queue. ``cards`` are the cards the record shows open.
+    ``merges`` are the builds the record shows on main (section 11.8).
     """
 
     def __init__(self) -> None:
@@ -561,6 +562,7 @@ class FakeAttempts:
         self.outcomes: dict[str, Any] = {}
         self.cards: list[Any] = []
         self.recorded: list[Any] = []
+        self.merges: list[Any] = []
         self.unreadable = False
         self.asked: list[str] = []
 
@@ -591,6 +593,10 @@ class FakeAttempts:
     def recorded_attempts(self) -> list[Any]:
         self._check("recorded_attempts")
         return list(self.recorded)
+
+    def merges_on_main(self) -> list[Any]:
+        self._check("merges_on_main")
+        return list(self.merges)
 
     def open_cards(self, correlation_ids: list[str]) -> list[Any]:
         self._check("open_cards")

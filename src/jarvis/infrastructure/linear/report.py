@@ -47,12 +47,21 @@ from Forge's record.
    is posted to the Linear project its repository maps to (:mod:`.updates`),
    before the attempt ends; nothing for a declined or failed merge, nor to an
    archived or completed project.
+6. **A project update after every merge** (design section 11.8). Every other
+   build Forge's record shows on main (sent from Slack, the command line, a
+   mission not sent from Linear) gets the same kind of update, once, in the
+   project its repository maps to. The first time this runs (and after a lost
+   door record) everything already on main is recorded as seen, and a log
+   line says that those merges get no update; each later build id on main is
+   a new merge, posted once it is ready (its merge report; a mission's
+   MERGED). The door's own ``lin-`` builds are left to step 5.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import hashlib
 import json
 from collections import deque
@@ -119,6 +128,9 @@ UNFILED_NOTICE = (
 #: A card found open in the record is posted from the record only after this
 #: long, so the full card from the stream, which arrives within moments, wins.
 RECOVERY_GRACE = timedelta(seconds=60)
+
+#: A merge pending longer than this is logged once (section 11.8, coach).
+MERGE_PENDING_NOTE_AFTER = timedelta(hours=24)
 
 #: Polls a card is tried on before a card Linear keeps refusing is let go.
 MAX_CARD_TRIES = 5
@@ -247,6 +259,10 @@ class AttemptRecord(Protocol):
 
     def open_cards(self, correlation_ids: list[str]) -> list[Any]: ...
 
+    def merges_on_main(self) -> list[Any]:
+        """Every build on main (:class:`.forge_record.MergeOnMain`), section 11.8."""
+        ...
+
 
 class AssumeAttemptsOpen:
     """No Forge record: nothing can be read, so no attempt ever ends, a new or
@@ -260,6 +276,9 @@ class AssumeAttemptsOpen:
         raise AttemptRecordUnavailable("Forge's record is not configured")
 
     def open_cards(self, correlation_ids: list[str]) -> list[Any]:
+        raise AttemptRecordUnavailable("Forge's record is not configured")
+
+    def merges_on_main(self) -> list[Any]:
         raise AttemptRecordUnavailable("Forge's record is not configured")
 
 
@@ -296,6 +315,12 @@ class ForgeAttempts:
     def open_cards(self, correlation_ids: list[str]) -> list[Any]:
         try:
             return self._record.open_cards_for(correlation_ids)
+        except fr.ForgeRecordUnavailable as exc:
+            raise AttemptRecordUnavailable(str(exc)) from None
+
+    def merges_on_main(self) -> list[Any]:
+        try:
+            return list(self._record.merges_on_main())
         except fr.ForgeRecordUnavailable as exc:
             raise AttemptRecordUnavailable(str(exc)) from None
 
@@ -522,6 +547,7 @@ class Reporter:
                 await self._settle_claims(live, open_cards)
                 self._close_settled_cards(live, open_cards)
         await self._read_answers()
+        await self._merge_updates()
 
     def _read_attempts(self, unfinished: set[str]) -> tuple[dict[str, _Attempt], list[str]]:
         found: dict[str, _Attempt] = {}
@@ -685,62 +711,96 @@ class Reporter:
         there (R3).
         """
         from jarvis.infrastructure.linear import updates as up
-        from jarvis.infrastructure.linear.projects import AMBIGUOUS, is_active
 
         cid = attempt.correlation_id
         if self._store.progress(cid, "", "project-update") is not None:
             return True
         log = logger.bind(correlation_id=cid)
-        ref = ref_for("project-update", cid)
         outcome = attempt.outcome
         sent = self._attempt_repo(cid) or getattr(outcome, "target_repo", None)
+
+        async def delivered_for(repo: str) -> up.Delivered:
+            issues = {
+                i.id: i for i in await self._client.issues_by_id([i for i, _ in attempt.issues])
+            }
+            landed_keys = set(getattr(outcome, "landed_keys", ()) or ())
+
+            def line(issue_id: str, identifier: str | None) -> tuple[str, str]:
+                found = issues.get(issue_id)
+                return (identifier or issue_id, found.title if found is not None else "")
+
+            mission = is_mission(cid)
+            landed, not_landed = [], []
+            for issue_id, identifier in attempt.issues:
+                if not mission or feature_key(identifier or "") in landed_keys:
+                    landed.append(line(issue_id, identifier))
+                else:
+                    not_landed.append(line(issue_id, identifier))
+            send = self._store.get_send(cid)
+            return up.Delivered(
+                correlation_id=cid,
+                repo=repo,
+                landed=landed,
+                not_landed=not_landed,
+                commit=getattr(outcome, "j_commit", None),
+                mission_title=send.mission_title if send is not None else None,
+                deploy_failed=_deploy_reason(outcome)
+                if outcome.phase == fr.ON_MAIN_DEPLOY_FAILED
+                else "",
+                is_mission=mission,
+            )
+
+        result = await self._post_project_update(
+            ref_for("project-update", cid), sent, delivered_for, log
+        )
+        if result is None:
+            return False
+        if result.startswith(_SKIPPED):
+            return self._skip_update(cid, result[len(_SKIPPED) :])
+        self._store.set_progress(cid, "", "project-update", result)
+        return True
+
+    async def _post_project_update(
+        self,
+        ref: str,
+        sent: str | None,
+        delivered_for: Callable[[str], Awaitable[Any]],
+        log: Any,
+    ) -> str | None:
+        """Post one project update once, for 11.4 and 11.8 alike.
+
+        Returns ``None`` when it cannot be decided this poll (the projects
+        could not be read whole: tried again next poll), ``"posted"``,
+        ``"refused"`` (Linear refused it for good) or ``"skipped: <why>"``.
+        ``sent`` is the repository the work was for, as recorded (a short
+        name is resolved first, R1). Once an update is begun its project is
+        fixed in the door's record and every retry looks for it, and posts,
+        there (R3); a project no longer active gets nothing new (R5).
+        """
+        from jarvis.infrastructure.linear import updates as up
+        from jarvis.infrastructure.linear.projects import AMBIGUOUS, is_active
+
         projects = self.projects
         destination = self._store.comment_owner(ref)
         if destination is None:
             if not sent:
-                return self._skip_update(cid, "the repository it was sent to is not known")
+                return f"{_SKIPPED}the repository it was sent to is not known"
             if projects is None:
                 log.info("linear_door_project_update_waits")
-                return False
+                return None
             repo = projects.resolve(sent)
             if repo == AMBIGUOUS:
-                return self._skip_update(cid, "its short repository name fits more than one")
+                return f"{_SKIPPED}its short repository name fits more than one"
             project = projects.project_for_repo(repo) if repo else None
             if repo is None or project is None:
-                return self._skip_update(cid, "its repository has no active project")
+                return f"{_SKIPPED}its repository has no active project"
             destination = project.id
         else:
             resolved = projects.resolve(sent) if projects is not None and sent else None
             repo = sent or ""
             if resolved is not None and resolved != AMBIGUOUS:
                 repo = resolved
-        issues = {i.id: i for i in await self._client.issues_by_id([i for i, _ in attempt.issues])}
-        landed_keys = set(getattr(outcome, "landed_keys", ()) or ())
-
-        def line(issue_id: str, identifier: str | None) -> tuple[str, str]:
-            found = issues.get(issue_id)
-            return (identifier or issue_id, found.title if found is not None else "")
-
-        mission = is_mission(cid)
-        landed, not_landed = [], []
-        for issue_id, identifier in attempt.issues:
-            if not mission or feature_key(identifier or "") in landed_keys:
-                landed.append(line(issue_id, identifier))
-            else:
-                not_landed.append(line(issue_id, identifier))
-        send = self._store.get_send(cid)
-        delivered = up.Delivered(
-            correlation_id=cid,
-            repo=repo,
-            landed=landed,
-            not_landed=not_landed,
-            commit=getattr(outcome, "j_commit", None),
-            mission_title=send.mission_title if send is not None else None,
-            deploy_failed=_deploy_reason(outcome)
-            if outcome.phase == fr.ON_MAIN_DEPLOY_FAILED
-            else "",
-            is_mission=mission,
-        )
+        delivered = await delivered_for(repo)
         open_in_linear = await self._client.project_open_issues(destination)
         summary = up.read_summary(self._summary_path)
         health, health_line = up.update_health(delivered, summary)
@@ -770,21 +830,109 @@ class Reporter:
         except up.UpdateHeld as held:
             if held.wait:
                 log.info("linear_door_project_update_waits", reason=str(held))
-                return False
-            return self._skip_update(cid, str(held))
+                return None
+            return f"{_SKIPPED}{held}"
         except LinearRefused as exc:
-            # The project was deleted, say: given up, so the attempt still ends.
+            # The project was deleted, say: given up, so nothing waits on it.
             log.warning("linear_door_project_update_refused", error=str(exc)[:300])
-            self._store.set_progress(cid, "", "project-update", "refused")
-            return True
-        self._store.set_progress(cid, "", "project-update", "posted")
+            return "refused"
         log.info("linear_door_project_update_posted", health=health or "omitted")
-        return True
+        return "posted"
 
     def _skip_update(self, cid: str, why: str) -> bool:
         self._store.set_progress(cid, "", "project-update", f"skipped: {why}")
         logger.info("linear_door_project_update_skipped", correlation_id=cid, reason=why)
         return True
+
+    # -- a project update after every merge (section 11.8) ------------------------------
+
+    async def _merge_updates(self) -> None:
+        """Record the builds now on main and post each new merge's update once.
+
+        The first run (no merge baseline in the door's record: a new or lost
+        record) records every build already on main as ``seen`` and posts
+        nothing for them. Later, each build id not yet recorded is a new
+        merge: ``seen`` when it is one of the door's own ``lin-`` attempts
+        (the 11.4 path reports those), else ``pending``. A pending merge is
+        posted when it is ready (11.4's gates) or skipped with a logged
+        reason. A failed read of Forge's record changes nothing this poll.
+        """
+        try:
+            merges = self._attempts.merges_on_main()
+        except AttemptRecordUnavailable as exc:
+            logger.info("linear_door_merges_unreadable", error=str(exc))
+            return
+        if self._store.merge_baseline() is None:
+            self._store.take_merge_baseline([(m.build_id, m.correlation_id) for m in merges])
+            logger.info(
+                "linear_door_merge_baseline_taken",
+                merges_on_main=len(merges),
+                gap="builds already on main when the door's record began (a first run, or "
+                "a record that was lost) get no project update",
+            )
+            return
+        new = self._store.record_new_merges(
+            [
+                (
+                    m.build_id,
+                    m.correlation_id,
+                    "seen" if m.correlation_id.startswith(fr.LINEAR_PREFIX) else "pending",
+                )
+                for m in merges
+            ]
+        )
+        if new:
+            logger.info("linear_door_merges_recorded", new=len(new))
+        on_main = {m.build_id: m for m in merges}
+        for build_id in self._store.pending_merges():
+            merge = on_main.get(build_id)
+            if merge is None or not merge.ready:
+                continue  # its report (or the mission's MERGED) is not written yet
+            log = logger.bind(build_id=build_id, correlation_id=merge.correlation_id)
+            try:
+                result = await self._post_project_update(
+                    ref_for("merge-update", build_id),
+                    merge.repo,
+                    functools.partial(_merge_delivered, merge),
+                    log,
+                )
+            except (LinearAuthError, LinearRateLimited):
+                raise
+            except LinearError as exc:
+                # An outage for this one: it stays pending, tried again next poll.
+                log.warning("linear_door_merge_update_failed", error=str(exc)[:300])
+                continue
+            if result is None:
+                continue
+            if result.startswith(_SKIPPED):
+                why = result[len(_SKIPPED) :]
+                self._store.settle_merge(build_id, "skipped", why)
+                log.info("linear_door_merge_update_skipped", reason=why)
+            elif result == "refused":
+                self._store.settle_merge(build_id, "skipped", "Linear refused the update")
+                log.info("linear_door_merge_update_skipped", reason="Linear refused the update")
+            else:
+                self._store.settle_merge(build_id, "posted")
+        self._log_long_pending(on_main)
+
+    def _log_long_pending(self, on_main: dict[str, Any]) -> None:
+        """One log line for each merge pending longer than
+        :data:`MERGE_PENDING_NOTE_AFTER`, once per merge, so a stuck one is seen."""
+        for build_id, since in self._store.long_pending_merges(_now() - MERGE_PENDING_NOTE_AFTER):
+            merge = on_main.get(build_id)
+            if merge is None:
+                waiting = "it is no longer listed on main in Forge's record"
+            elif not merge.ready:
+                waiting = "the mission's MERGED" if merge.is_mission else "its merge report"
+            else:
+                waiting = "its project, or Linear"
+            logger.warning(
+                "linear_door_merge_pending_long",
+                build_id=build_id,
+                pending_since=since,
+                waiting_for=waiting,
+            )
+            self._store.note_long_pending(build_id)
 
     # -- the bus -------------------------------------------------------------------
 
@@ -1256,6 +1404,44 @@ def _deploy_reason(outcome: Any) -> str:
     text = " ".join(str(outcome.reason or "").split()).rstrip(".")
     _, sep, after = text.partition("deploy failed: ")
     return after if sep and after else "no reason was given"
+
+
+#: How :meth:`Reporter._post_project_update` says it skipped an update.
+_SKIPPED = "skipped: "
+
+
+async def _merge_delivered(merge: fr.MergeOnMain, repo: str) -> Any:
+    """What one merge to main delivered (section 11.8), from Forge's record:
+    the feature's title, its id and the merged commit; for a mission's merge
+    build, its title and which parts landed."""
+    from jarvis.infrastructure.linear import updates as up
+
+    if merge.is_mission:
+
+        def part(key: str) -> tuple[str, str]:
+            sentence = merge.part_sentence(key)
+            return (key, f"— {sentence}" if sentence else "")
+
+        return up.Delivered(
+            correlation_id=merge.correlation_id,
+            repo=repo,
+            landed=[part(key) for key in merge.landed_keys],
+            not_landed=[part(key) for key in merge.not_landed_keys],
+            commit=merge.j_commit,
+            mission_title=merge.title,
+            deploy_failed=merge.deploy_failed,
+            is_mission=True,
+            merge_build_id=merge.build_id,
+        )
+    title = merge.title if merge.title != merge.feature_id else ""
+    return up.Delivered(
+        correlation_id=merge.correlation_id,
+        repo=repo,
+        landed=[(merge.feature_id, title)],
+        commit=merge.j_commit,
+        deploy_failed=merge.deploy_failed,
+        merge_build_id=merge.build_id,
+    )
 
 
 def _move_to(target: str, issue: Any, state_ids: dict[str, str]) -> str | None:
