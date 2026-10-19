@@ -161,8 +161,9 @@ def choose_repo(
         return RepoChoice(default_repo)
     return RepoChoice(
         None,
-        "This issue was not sent because I do not know which repository it is for. "
-        "Add a label `repo: <name>`.",
+        "This issue isn't in a Linear project, so the factory doesn't know which "
+        "repository to build it in. Move it into the project for that repository "
+        "(or add a `repo:` label), then move it to Todo again.",
     )
 
 
