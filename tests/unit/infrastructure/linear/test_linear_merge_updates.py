@@ -56,6 +56,7 @@ def mission_merge(status: str = "MERGED") -> fr.MergeOnMain:
         mission_status=status,
         landed_keys=("A1", "A2"),
         not_landed_keys=("A3",),
+        part_sentences=(("A1", "Add a dark mode toggle."), ("A3", "Theme the charts.")),
     )
 
 
@@ -207,10 +208,10 @@ async def test_a_mission_merge_posts_once_on_merged(h: Harness) -> None:
                 "**Delivered**",
                 "The mission “Dark mode everywhere” merged into the main branch as `d00dfeed`.",
                 "Landed:",
-                "- A1",
+                "- A1 — Add a dark mode toggle.",
                 "- A2",
                 "Did not land:",
-                "- A3",
+                "- A3 — Theme the charts.",
             ]
         )
     )
@@ -410,3 +411,23 @@ async def test_a_merge_read_from_forges_record_is_posted_once(h: Harness) -> Non
     assert len(updates) == 2
     assert "- FEAT-9163 Explain the security checks in the README" in updates[1].body
     cx.close()
+
+
+async def test_a_merge_pending_over_a_day_is_logged_once(h: Harness) -> None:
+    h.attempts.merges = [merge(report=False, report_result=None)]
+    await h.poll()
+    assert h.store.merge_state(MERGE_ID) == ("pending", None)
+    with capture_logs() as logs:
+        await h.poll()
+    assert not [e for e in logs if e["event"] == "linear_door_merge_pending_long"]
+    h.store._db.execute(
+        "UPDATE merges SET recorded_at = '2026-01-01T00:00:00+00:00' WHERE build_id = ?",
+        (MERGE_ID,),
+    )
+    h.store._db.commit()
+    with capture_logs() as logs:
+        await h.poll(3)
+    (noted,) = [e for e in logs if e["event"] == "linear_door_merge_pending_long"]
+    assert noted["build_id"] == MERGE_ID
+    assert noted["waiting_for"] == "its merge report"
+    assert h.store.merge_state(MERGE_ID) == ("pending", None)

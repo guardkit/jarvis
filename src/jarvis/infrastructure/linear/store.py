@@ -91,7 +91,8 @@ A project update after every merge (design section 11.8), at ``user_version`` 5:
     whose update is owed), ``posted`` (its update is written) or ``skipped``
     (with the reason, also logged). The baseline itself is the ``marks`` row
     ``merge-baseline``, written in the same transaction as the ``seen`` rows.
-    Nothing here depends on a time Forge wrote.
+    Nothing here depends on a time Forge wrote. ``long_noted`` is set once a
+    merge pending for over a day has been logged, so it is logged once.
 """
 
 from __future__ import annotations
@@ -229,7 +230,8 @@ CREATE TABLE IF NOT EXISTS merges (
     state          TEXT NOT NULL CHECK (state IN ('seen', 'pending', 'posted', 'skipped')),
     reason         TEXT,
     recorded_at    TEXT NOT NULL,
-    updated_at     TEXT NOT NULL
+    updated_at     TEXT NOT NULL,
+    long_noted     INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS held_messages (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -950,6 +952,22 @@ class DoorStore:
                 "SELECT build_id FROM merges WHERE state = 'pending' ORDER BY rowid"
             )
         ]
+
+    def long_pending_merges(self, before: datetime) -> list[tuple[str, str]]:
+        """``(build id, recorded at)`` of each merge pending since before
+        ``before`` and not yet logged as pending long."""
+        return [
+            (str(row[0]), str(row[1]))
+            for row in self._db.execute(
+                "SELECT build_id, recorded_at FROM merges WHERE state = 'pending' "
+                "AND long_noted = 0 AND recorded_at < ? ORDER BY rowid",
+                (before.astimezone(UTC).isoformat(),),
+            )
+        ]
+
+    def note_long_pending(self, build_id: str) -> None:
+        with self._db:
+            self._db.execute("UPDATE merges SET long_noted = 1 WHERE build_id = ?", (build_id,))
 
     def settle_merge(self, build_id: str, state: str, reason: str | None = None) -> None:
         """A pending merge is ``posted`` or ``skipped`` (with its reason)."""

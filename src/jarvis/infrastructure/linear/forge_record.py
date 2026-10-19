@@ -148,6 +148,7 @@ Values and rules:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager, suppress
@@ -165,6 +166,7 @@ __all__ = [
     "RecordedAttempt",
     "SingleOutcome",
     "connect_read_only",
+    "short_title",
 ]
 
 
@@ -263,7 +265,7 @@ _MISSION_COLUMNS: dict[str, frozenset[str]] = {
             "target_repo",
         }
     ),
-    "mission_features": frozenset({"mission_id", "key"}),
+    "mission_features": frozenset({"mission_id", "key", "sentence"}),
     "mission_attempts": frozenset(
         {"mission_id", "key", "attempt", "correlation_id", "status", "reason"}
     ),
@@ -438,6 +440,11 @@ class MergeOnMain:
     mission_status: str | None = None
     landed_keys: tuple[str, ...] = ()
     not_landed_keys: tuple[str, ...] = ()
+    #: ``(key, shortened sentence)`` of each part, from ``mission_features``.
+    part_sentences: tuple[tuple[str, str], ...] = ()
+
+    def part_sentence(self, key: str) -> str:
+        return dict(self.part_sentences).get(key, "")
 
     @property
     def is_mission(self) -> bool:
@@ -483,6 +490,24 @@ def _details(raw: Any) -> dict[str, Any]:
 
 def _text(value: Any) -> str | None:
     return str(value) if value not in (None, "") else None
+
+
+#: A title is cut to about this many characters (section 11.8, coach).
+TITLE_MAX = 120
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+
+
+def short_title(text: str | None, limit: int = TITLE_MAX) -> str:
+    """The first non-blank line's first sentence, cut at about ``limit``
+    characters on a word boundary with "…"; "" for no text."""
+    line = next((ln for ln in (text or "").splitlines() if ln.strip()), "")
+    first = _SENTENCE_END.split(" ".join(line.split()), maxsplit=1)[0]
+    if len(first) <= limit:
+        return first
+    cut = first[: limit - 1]
+    if " " in cut:
+        cut = cut[: cut.rindex(" ")]
+    return cut.rstrip(",;:- ") + "…"
 
 
 class ForgeRecord:
@@ -1006,13 +1031,10 @@ class _Reader:
         return found
 
     def _request_title(self, cid: str) -> str | None:
-        """The planning request's first line, when one is filed under ``cid``."""
+        """The planning request's first line, shortened (:func:`short_title`),
+        when one is filed under ``cid``."""
         row = self._one("SELECT request_text FROM planning_runs WHERE correlation_id = ?", cid)
-        text = str(row[0]) if row and row[0] else ""
-        for line in text.splitlines():
-            if line.strip():
-                return " ".join(line.split())
-        return None
+        return short_title(str(row[0]) if row and row[0] else "") or None
 
     def _filed_repo(self, cid: str) -> str | None:
         """The repository the request was filed for (queue item, else planning run)."""
@@ -1026,13 +1048,14 @@ class _Reader:
         row = self._one("SELECT status, title, target_repo FROM missions WHERE id = ?", mission_id)
         if row is None:
             return merge
-        keys = [
-            str(r[0])
+        sentences = {
+            str(r[0]): short_title(_text(r[1]))
             for r in self._cx.execute(
-                "SELECT key FROM mission_features WHERE mission_id = ? ORDER BY key",
+                "SELECT key, sentence FROM mission_features WHERE mission_id = ? ORDER BY key",
                 (mission_id,),
             )
-        ]
+        }
+        keys = list(sentences)
         latest: dict[str, str] = {}
         for r in self._cx.execute(
             "SELECT key, status FROM mission_attempts WHERE mission_id = ? ORDER BY key, attempt",
@@ -1042,12 +1065,13 @@ class _Reader:
         everyone = sorted(set(keys) | set(latest))
         return replace(
             merge,
-            title=_text(row[1]) or merge.title,
+            title=short_title(_text(row[1])) or merge.title,
             repo=merge.repo or _text(row[2]),
             mission_id=mission_id,
             mission_status=str(row[0]),
             landed_keys=tuple(k for k in everyone if latest.get(k) == KEY_LANDED),
             not_landed_keys=tuple(k for k in everyone if latest.get(k) != KEY_LANDED),
+            part_sentences=tuple((k, sentences[k]) for k in everyone if sentences.get(k)),
         )
 
     # -- the rebuild ---------------------------------------------------------

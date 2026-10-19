@@ -172,6 +172,7 @@ class Ledger:
         reason: str | None = None,
         plan_request_id: str | None = None,
         title: str = "t",
+        sentences: dict[str, str] | None = None,
     ) -> None:
         self.cx.execute(
             "INSERT INTO missions (id, title, target_repo, branch, status, correlation_id, "
@@ -181,8 +182,8 @@ class Ledger:
         )
         for key in keys:
             self.cx.execute(
-                "INSERT INTO mission_features (mission_id, key, sentence) VALUES (?, ?, 's')",
-                (mission_id, key),
+                "INSERT INTO mission_features (mission_id, key, sentence) VALUES (?, ?, ?)",
+                (mission_id, key, (sentences or {}).get(key, "s")),
             )
         self.cx.commit()
 
@@ -898,3 +899,54 @@ def test_a_mission_lists_its_merge_build_once_and_never_its_parts(ledger: Ledger
 def test_merges_on_main_on_an_unreadable_record_raises(tmp_path: Path) -> None:
     with pytest.raises(ForgeRecordUnavailable):
         ForgeRecord(tmp_path / "missing.db").merges_on_main()
+
+
+@pytest.mark.parametrize(
+    ("text", "title"),
+    [
+        ("Add a dark mode", "Add a dark mode"),
+        ("\n  Add a  dark mode.  Then more words.\nSecond line", "Add a dark mode."),
+        ("", ""),
+        (None, ""),
+        ("word " * 60, ("word " * 23).strip() + "…"),
+        ("x" * 200, "x" * 119 + "…"),
+    ],
+)
+def test_short_title(text: str | None, title: str) -> None:
+    assert fr.short_title(text) == title
+    assert len(fr.short_title(text)) <= fr.TITLE_MAX
+
+
+def test_a_long_request_is_shortened_in_its_merge_title(ledger: Ledger) -> None:
+    paragraph = (
+        "When the nightly security sweep runs against a private project it should fetch from "
+        "the sandbox's own read-only copy of GitHub and never through the Git door, and the "
+        "report should say which commit it checked"
+    )
+    ledger.run("slack-1", "BUILD_QUEUED", request_text=paragraph + "\nMore.")
+    _merged(ledger, "slack-1", "build-a")
+    (found,) = ledger.record.merges_on_main()
+    assert len(found.title) <= fr.TITLE_MAX
+    assert found.title.endswith("…")
+    assert paragraph.startswith(found.title[:-1])
+    assert not found.title[:-1].endswith(" ")
+
+
+def test_a_missions_parts_carry_their_sentences(ledger: Ledger) -> None:
+    mcid = "slack-mission-2"
+    ledger.mission(
+        mcid,
+        "m-2",
+        "MERGED",
+        keys=("A", "B"),
+        title="Dark mode",
+        sentences={"A": "Add a dark mode toggle. It sits in settings.", "B": "word " * 40},
+    )
+    ledger.attempt("m-2", mcid, "A", 1, "LANDED")
+    ledger.build(mcid, "build-merge-2", "COMPLETE", mission_id="m-2", role="mission-merge")
+    ledger.decide("build-merge-2", "approve")
+    ledger.publication("build-merge-2", "merged into the remote and running")
+    (found,) = ledger.record.merges_on_main()
+    assert found.part_sentence("A") == "Add a dark mode toggle."
+    assert found.part_sentence("B").endswith("…")
+    assert found.landed_keys == ("A",) and found.not_landed_keys == ("B",)

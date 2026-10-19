@@ -129,6 +129,9 @@ UNFILED_NOTICE = (
 #: long, so the full card from the stream, which arrives within moments, wins.
 RECOVERY_GRACE = timedelta(seconds=60)
 
+#: A merge pending longer than this is logged once (section 11.8, coach).
+MERGE_PENDING_NOTE_AFTER = timedelta(hours=24)
+
 #: Polls a card is tried on before a card Linear keeps refusing is let go.
 MAX_CARD_TRIES = 5
 
@@ -910,6 +913,26 @@ class Reporter:
                 log.info("linear_door_merge_update_skipped", reason="Linear refused the update")
             else:
                 self._store.settle_merge(build_id, "posted")
+        self._log_long_pending(on_main)
+
+    def _log_long_pending(self, on_main: dict[str, Any]) -> None:
+        """One log line for each merge pending longer than
+        :data:`MERGE_PENDING_NOTE_AFTER`, once per merge, so a stuck one is seen."""
+        for build_id, since in self._store.long_pending_merges(_now() - MERGE_PENDING_NOTE_AFTER):
+            merge = on_main.get(build_id)
+            if merge is None:
+                waiting = "it is no longer listed on main in Forge's record"
+            elif not merge.ready:
+                waiting = "the mission's MERGED" if merge.is_mission else "its merge report"
+            else:
+                waiting = "its project, or Linear"
+            logger.warning(
+                "linear_door_merge_pending_long",
+                build_id=build_id,
+                pending_since=since,
+                waiting_for=waiting,
+            )
+            self._store.note_long_pending(build_id)
 
     # -- the bus -------------------------------------------------------------------
 
@@ -1394,11 +1417,16 @@ async def _merge_delivered(merge: fr.MergeOnMain, repo: str) -> Any:
     from jarvis.infrastructure.linear import updates as up
 
     if merge.is_mission:
+
+        def part(key: str) -> tuple[str, str]:
+            sentence = merge.part_sentence(key)
+            return (key, f"— {sentence}" if sentence else "")
+
         return up.Delivered(
             correlation_id=merge.correlation_id,
             repo=repo,
-            landed=[(key, "") for key in merge.landed_keys],
-            not_landed=[(key, "") for key in merge.not_landed_keys],
+            landed=[part(key) for key in merge.landed_keys],
+            not_landed=[part(key) for key in merge.not_landed_keys],
             commit=merge.j_commit,
             mission_title=merge.title,
             deploy_failed=merge.deploy_failed,
