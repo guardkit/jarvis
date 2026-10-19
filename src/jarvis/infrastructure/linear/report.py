@@ -685,7 +685,7 @@ class Reporter:
         there (R3).
         """
         from jarvis.infrastructure.linear import updates as up
-        from jarvis.infrastructure.linear.projects import AMBIGUOUS
+        from jarvis.infrastructure.linear.projects import AMBIGUOUS, is_active
 
         cid = attempt.correlation_id
         if self._store.progress(cid, "", "project-update") is not None:
@@ -745,10 +745,33 @@ class Reporter:
         summary = up.read_summary(self._summary_path)
         health, health_line = up.update_health(delivered, summary)
         body = up.update_body(delivered, summary, open_in_linear, health_line)
+        target = destination
+
+        def still_active() -> None:
+            # R5: a retry may find the update already made (done, whatever the
+            # project's state now), but creates one only on a project this
+            # poll's whole read shows active.
+            if projects is None:
+                raise up.UpdateHeld("the projects could not be read whole", wait=True)
+            found = projects.get(target)
+            if found is None or not is_active(found):
+                raise up.UpdateHeld("its project is no longer active", wait=False)
+
         try:
             await up.post_update_once(
-                self._client, self._store, destination, body, ref, health=health
+                self._client,
+                self._store,
+                destination,
+                body,
+                ref,
+                health=health,
+                before_create=still_active,
             )
+        except up.UpdateHeld as held:
+            if held.wait:
+                log.info("linear_door_project_update_waits", reason=str(held))
+                return False
+            return self._skip_update(cid, str(held))
         except LinearRefused as exc:
             # The project was deleted, say: given up, so the attempt still ends.
             log.warning("linear_door_project_update_refused", error=str(exc)[:300])

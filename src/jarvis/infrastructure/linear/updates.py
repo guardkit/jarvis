@@ -26,6 +26,7 @@ shown as on track.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -261,6 +262,19 @@ def update_body(
     return "\n".join(lines)
 
 
+class UpdateHeld(Exception):
+    """An update not found on its project is not created now (Codex review R5).
+
+    ``wait``: the projects could not be read whole this poll, so it is tried
+    again; otherwise the project is no longer active and the update is given
+    up without being created.
+    """
+
+    def __init__(self, why: str, *, wait: bool) -> None:
+        super().__init__(why)
+        self.wait = wait
+
+
 async def post_update_once(
     client: Any,
     store: DoorStore,
@@ -269,10 +283,16 @@ async def post_update_once(
     ref: str,
     *,
     health: str | None,
+    before_create: Callable[[], None] | None = None,
 ) -> str:
     """Post the update once: its reference is recorded before it is posted
     and ends its text, so an update whose posting was not confirmed is looked
-    for among the project's updates before it is posted again."""
+    for among the project's updates before it is posted again.
+
+    ``before_create`` runs only when no update was found and one is about to
+    be created; it raises :class:`UpdateHeld` to stop the creation. An update
+    already found counts as posted whatever the project's state now.
+    """
 
     async def find(marker: str) -> str | None:
         for update in await client.project_updates(project_id):
@@ -281,6 +301,8 @@ async def post_update_once(
         return None
 
     async def create(text: str) -> str:
+        if before_create is not None:
+            before_create()
         return str(await client.create_project_update(project_id, text, health=health))
 
     return await write_once_to(store, ref, project_id, body, find=find, create=create)
@@ -292,6 +314,7 @@ __all__ = [
     "NOT_AVAILABLE",
     "Delivered",
     "Summary",
+    "UpdateHeld",
     "cost_words",
     "post_update_once",
     "read_summary",

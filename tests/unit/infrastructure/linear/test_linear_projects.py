@@ -1138,3 +1138,59 @@ async def test_c4_an_unusable_forge_yaml_is_logged_once(tmp_path: Path) -> None:
         await h.poll(2)
     events = [e["event"] for e in logs if e["event"].startswith("linear_door_forge_settings")]
     assert events == ["linear_door_forge_settings_unusable", "linear_door_forge_settings_usable"]
+
+
+@pytest.mark.parametrize("change", ["completed", "archived", "trashed"])
+async def test_r5_a_failed_update_is_not_created_on_a_project_since_closed(
+    h: Harness, change: str
+) -> None:
+    from structlog.testing import capture_logs
+
+    project, _ = await sent_in_project(h)
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    h.linear.fail_next["DoorProjectUpdateCreate"] = [server_error()]
+    await h.poll()  # begun on Notes; Linear never took it
+    assert h.store.reservations() != {}
+    if change == "completed":
+        project.status = "completed"
+    else:
+        setattr(project, change, True)
+    with capture_logs() as logs:
+        await h.poll(2)
+    assert h.linear.updates_on(project) == []
+    assert h.linear.calls.count("DoorProjectUpdateCreate") == 1
+    assert h.store.reservations() == {}  # finished without creating
+    (skipped,) = [e for e in logs if e["event"] == "linear_door_project_update_skipped"]
+    assert "no longer active" in skipped["reason"]
+
+
+async def test_r5_a_retry_waits_while_the_read_is_unusable(h: Harness) -> None:
+    project, _ = await sent_in_project(h)
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    h.linear.fail_next["DoorProjectUpdateCreate"] = [server_error()]
+    await h.poll()
+    h.linear.fail_next["DoorProjects"] = [server_error()]
+    await h.poll()
+    assert h.linear.updates_on(project) == []
+    assert h.store.reservations() != {}
+    await h.poll()
+    assert len(h.linear.updates_on(project)) == 1
+    assert h.store.reservations() == {}
+
+
+@pytest.mark.parametrize("change", ["completed", "archived"])
+async def test_r5_an_update_found_on_a_closed_project_still_counts(h: Harness, change: str) -> None:
+    project, _ = await sent_in_project(h)
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    h.linear.lose_response["DoorProjectUpdateCreate"] = 1
+    await h.poll()  # made on Notes, answer lost
+    if change == "completed":
+        project.status = "completed"
+    else:
+        project.archived = True
+    h.restart()
+    await h.poll(2)
+    assert len(h.linear.updates_on(project)) == 1
+    assert h.linear.calls.count("DoorProjectUpdateCreate") == 1
+    assert h.store.progress("lin-ENG-1-1", "", "project-update") == "posted"
+    assert h.store.reservations() == {}
