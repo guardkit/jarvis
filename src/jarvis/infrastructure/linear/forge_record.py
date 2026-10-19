@@ -20,7 +20,11 @@ What it answers:
   message stream no longer holds can be posted, and a card the stream still
   holds is posted only while it is open;
 * :meth:`ForgeRecord.all_linear_attempts` - every attempt Forge has recorded
-  for the door, ended or not, for rebuilding the door's own record.
+  for the door, ended or not, for rebuilding the door's own record;
+* :meth:`ForgeRecord.merges_on_main` - every build on main by its publication
+  record, whatever sent it, for the project update after every merge (design
+  section 11.8). A mission's parts (landed on the mission branch) are not in
+  it; the mission's own merge build is.
 
 Any failure to read (a missing file, a locked database, a schema that is not
 the one checked here) raises :class:`ForgeRecordUnavailable`; the caller
@@ -129,6 +133,16 @@ Values and rules:
   that ``mission_id`` and ``mission_role = 'mission-merge'`` -
   ``lifecycle/mission_builds.py`` 111-126, ``missions.py`` 91. Latest
   attempt per key - ``missions.py`` 667-674.
+* Section 11.8 (checked at Forge commit b729b04b): a mission's merge build
+  carries the mission's own ``correlation_id`` - ``pipeline/mission_finish.py``
+  956-958, ``lifecycle/persistence.py`` 1514-1530; a mission's part builds
+  carry ``mission_role = 'feature'`` (``missions.py`` 93,
+  ``persistence.py`` 990-995) and their publication result is ``published to
+  the mission branch``, never one of the on-main words -
+  ``pipeline/publication_record.py`` 134-140. ``builds.repo`` is the
+  build's ``owner/name`` (``BuildQueuedPayload.repo``); ``builds.feature_id``
+  and ``planning_runs.request_text`` - ``lifecycle/schema.sql`` 15-20,
+  ``schema_v3.sql`` 38; ``missions.title`` - ``missions.py`` 100-110.
 """
 
 from __future__ import annotations
@@ -145,6 +159,7 @@ __all__ = [
     "ForgeRecord",
     "ForgeRecordUnavailable",
     "KeyAttempt",
+    "MergeOnMain",
     "MissionOutcome",
     "OpenCard",
     "RecordedAttempt",
@@ -178,8 +193,11 @@ BUILD_REJECTED_ACTION = "build_rejected"
 #: forge/planning/nothing_to_build.py 58, 61, 64, 71.
 NOTHING_TO_BUILD = "nothing_to_build"
 NOTHING_TO_BUILD_QUEUE_REASON = "already done, nothing to build"
-#: forge/lifecycle/missions.py 91.
+#: forge/lifecycle/missions.py 91, 93.
 MISSION_ROLE_MERGE = "mission-merge"
+MISSION_ROLE_FEATURE = "feature"
+#: forge/lifecycle/missions.py (mission_attempts.status).
+KEY_LANDED = "LANDED"
 
 _BUILD_FAILED_STATES = frozenset({"FAILED", "CANCELLED", "SKIPPED"})
 _PLANNING_FAILURE_WORDS = {
@@ -204,13 +222,29 @@ _REQUIRED_COLUMNS: dict[str, frozenset[str]] = {
     "work_queue": frozenset({"id", "status", "correlation_id", "closed_reason", "target_repo"}),
     "work_queue_events": frozenset({"id", "queue_id", "action", "details_json"}),
     "planning_runs": frozenset(
-        {"correlation_id", "state", "error", "pending_approval_request_id", "target_repo"}
+        {
+            "correlation_id",
+            "state",
+            "error",
+            "pending_approval_request_id",
+            "target_repo",
+            "request_text",
+        }
     ),
     "planning_run_events": frozenset(
         {"id", "correlation_id", "stage_label", "status", "details_json"}
     ),
     "builds": frozenset(
-        {"build_id", "correlation_id", "status", "error", "queued_at", "target_branch"}
+        {
+            "build_id",
+            "feature_id",
+            "repo",
+            "correlation_id",
+            "status",
+            "error",
+            "queued_at",
+            "target_branch",
+        }
     ),
     "stage_log": frozenset({"id", "build_id", "target_identifier", "status", "details_json"}),
     "publication_records": frozenset({"build_id", "result", "target_branch", "j_commit"}),
@@ -219,7 +253,15 @@ _REQUIRED_COLUMNS: dict[str, frozenset[str]] = {
 #: without any of them simply has no missions. Some but not all is refused.
 _MISSION_COLUMNS: dict[str, frozenset[str]] = {
     "missions": frozenset(
-        {"id", "status", "correlation_id", "plan_request_id", "closed_reason", "target_repo"}
+        {
+            "id",
+            "title",
+            "status",
+            "correlation_id",
+            "plan_request_id",
+            "closed_reason",
+            "target_repo",
+        }
     ),
     "mission_features": frozenset({"mission_id", "key"}),
     "mission_attempts": frozenset(
@@ -370,6 +412,46 @@ class RecordedAttempt:
     filed_at: str = ""
 
 
+@dataclass(frozen=True)
+class MergeOnMain:
+    """One build on main by its publication record (design section 11.8).
+
+    ``title`` is the planning request's first line for the build's correlation
+    id, else the build's feature id; for a mission's merge build, the
+    mission's title. ``report`` is whether Forge has written the merge report
+    after the merge word (so a failed deploy is known); ``deploy_failed`` is
+    the report's words when the deploy after the merge failed, else "".
+    For a mission's merge build, ``mission_status`` is the mission's status
+    and ``landed_keys``/``not_landed_keys`` say which of its parts landed.
+    """
+
+    build_id: str
+    correlation_id: str
+    feature_id: str
+    repo: str | None
+    title: str
+    j_commit: str | None = None
+    report: bool = False
+    report_result: str | None = None
+    deploy_failed: str = ""
+    mission_id: str | None = None
+    mission_status: str | None = None
+    landed_keys: tuple[str, ...] = ()
+    not_landed_keys: tuple[str, ...] = ()
+
+    @property
+    def is_mission(self) -> bool:
+        return self.mission_id is not None
+
+    @property
+    def ready(self) -> bool:
+        """The 11.4 gates: a single build's merge report is written; a
+        mission's merge build waits for the mission's MERGED."""
+        if self.is_mission:
+            return self.mission_status == "MERGED"
+        return self.report
+
+
 # ---------------------------------------------------------------------------
 # Opening the record
 # ---------------------------------------------------------------------------
@@ -426,6 +508,11 @@ class ForgeRecord:
         with self._reading() as reader:
             return reader.all_attempts()
 
+    def merges_on_main(self) -> list[MergeOnMain]:
+        """Every build on main by its publication record (section 11.8)."""
+        with self._reading() as reader:
+            return reader.merges_on_main()
+
     @contextmanager
     def _reading(self) -> Iterator[_Reader]:
         """One read transaction, so every answer comes from one moment."""
@@ -481,6 +568,9 @@ class _MergeView:
     app_url: str | None = None
     report_url: str | None = None
     j_commit: str | None = None
+    #: On main: the merge report's result word and detail (section 11.8).
+    report_result: str | None = None
+    report_detail: str = ""
 
 
 class _Reader:
@@ -531,6 +621,8 @@ class _Reader:
                 app_url=_text(evidence.get("app_url")),
                 report_url=_text(evidence.get("report_url")),
                 j_commit=j_commit,
+                report_result=word or None,
+                report_detail=detail,
                 **extra,
             )
 
@@ -870,6 +962,92 @@ class _Reader:
             build_id=build_id,
             app_url=_text(evidence.get("app_url")),
             report_url=_text(evidence.get("report_url")),
+        )
+
+    # -- every merge to main (section 11.8) ----------------------------------
+
+    def merges_on_main(self) -> list[MergeOnMain]:
+        """Every build on main by the same predicate as :meth:`merge_view`,
+        oldest first; a mission's part builds left out, its merge build in."""
+        role = "b.mission_id, b.mission_role" if self._mission_builds else "NULL, NULL"
+        placeholders = ", ".join("?" for _ in ON_MAIN_RESULTS)
+        rows = self._cx.execute(
+            "SELECT b.build_id, b.correlation_id, b.feature_id, b.repo, b.target_branch, "
+            f"{role} FROM builds b JOIN publication_records p ON p.build_id = b.build_id "
+            f"WHERE p.result IN ({placeholders}) ORDER BY b.queued_at, b.build_id",
+            tuple(sorted(ON_MAIN_RESULTS)),
+        ).fetchall()
+        found: list[MergeOnMain] = []
+        for build_id, cid, feature_id, repo, target, mission_id, mission_role in rows:
+            if mission_role == MISSION_ROLE_FEATURE:
+                continue  # a mission's part: on the mission branch, not main
+            view = self.merge_view(str(build_id), _text(target))
+            if view.phase not in (ON_MAIN, ON_MAIN_DEPLOY_FAILED, ON_MAIN_REPORT_PENDING):
+                continue  # published to another branch than the build's own
+            deploy_failed = ""
+            if view.phase == ON_MAIN_DEPLOY_FAILED:
+                deploy_failed = view.report_detail or view.report_result or ""
+            merge = MergeOnMain(
+                build_id=str(build_id),
+                correlation_id=str(cid),
+                feature_id=str(feature_id),
+                repo=_text(repo),
+                title=self._request_title(str(cid)) or str(feature_id),
+                j_commit=view.j_commit,
+                report=view.phase != ON_MAIN_REPORT_PENDING,
+                report_result=view.report_result,
+                deploy_failed=deploy_failed,
+            )
+            if mission_role == MISSION_ROLE_MERGE and mission_id and self._has_missions:
+                merge = self._with_mission(merge, str(mission_id))
+            elif merge.repo is None:
+                merge = replace(merge, repo=self._filed_repo(str(cid)))
+            found.append(merge)
+        return found
+
+    def _request_title(self, cid: str) -> str | None:
+        """The planning request's first line, when one is filed under ``cid``."""
+        row = self._one("SELECT request_text FROM planning_runs WHERE correlation_id = ?", cid)
+        text = str(row[0]) if row and row[0] else ""
+        for line in text.splitlines():
+            if line.strip():
+                return " ".join(line.split())
+        return None
+
+    def _filed_repo(self, cid: str) -> str | None:
+        """The repository the request was filed for (queue item, else planning run)."""
+        for table in ("work_queue", "planning_runs"):
+            row = self._one(f"SELECT target_repo FROM {table} WHERE correlation_id = ?", cid)
+            if row and _text(row[0]):
+                return _text(row[0])
+        return None
+
+    def _with_mission(self, merge: MergeOnMain, mission_id: str) -> MergeOnMain:
+        row = self._one("SELECT status, title, target_repo FROM missions WHERE id = ?", mission_id)
+        if row is None:
+            return merge
+        keys = [
+            str(r[0])
+            for r in self._cx.execute(
+                "SELECT key FROM mission_features WHERE mission_id = ? ORDER BY key",
+                (mission_id,),
+            )
+        ]
+        latest: dict[str, str] = {}
+        for r in self._cx.execute(
+            "SELECT key, status FROM mission_attempts WHERE mission_id = ? ORDER BY key, attempt",
+            (mission_id,),
+        ):
+            latest[str(r[0])] = str(r[1])
+        everyone = sorted(set(keys) | set(latest))
+        return replace(
+            merge,
+            title=_text(row[1]) or merge.title,
+            repo=merge.repo or _text(row[2]),
+            mission_id=mission_id,
+            mission_status=str(row[0]),
+            landed_keys=tuple(k for k in everyone if latest.get(k) == KEY_LANDED),
+            not_landed_keys=tuple(k for k in everyone if latest.get(k) != KEY_LANDED),
         )
 
     # -- the rebuild ---------------------------------------------------------
