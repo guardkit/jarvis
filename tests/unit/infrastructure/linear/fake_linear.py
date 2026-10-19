@@ -45,6 +45,34 @@ class FakeIssue:
     label_ids: list[str] = field(default_factory=list)
     blocked_by: list[str] = field(default_factory=list)  # issue ids that block this one
     updated_at: datetime = field(default_factory=lambda: datetime(2026, 1, 1, tzinfo=UTC))
+    project_id: str | None = None
+
+
+@dataclass
+class FakeLink:
+    id: str
+    url: str
+    label: str
+
+
+@dataclass
+class FakeProject:
+    id: str
+    name: str
+    description: str = ""
+    links: list[FakeLink] = field(default_factory=list)
+    archived: bool = False
+    status: str = "started"  # Linear's ProjectStatusType
+    team_ids: list[str] = field(default_factory=list)
+    trashed: bool = False
+
+
+@dataclass
+class FakeProjectUpdate:
+    id: str
+    project_id: str
+    body: str
+    health: str | None
 
 
 @dataclass
@@ -92,6 +120,9 @@ class FakeLinear:
         self.lose_response: dict[str, int] = {}
         # Issues deleted after they were read: writes to them are refused.
         self.gone: set[str] = set()
+        # Section 11: projects, their links and their updates.
+        self.projects: dict[str, FakeProject] = {}
+        self.project_updates: list[FakeProjectUpdate] = []
 
     # -- building the workspace ---------------------------------------------
 
@@ -123,6 +154,29 @@ class FakeLinear:
         )
         self.issues[issue.id] = issue
         return issue
+
+    def project(
+        self,
+        name: str,
+        *links: str,
+        archived: bool = False,
+        status: str = "started",
+        team_id: str | None = None,
+    ) -> FakeProject:
+        """A project made by hand in Linear, with these link URLs."""
+        project = FakeProject(
+            id=_uuid(),
+            name=name,
+            links=[FakeLink(_uuid(), url, "GitHub") for url in links],
+            archived=archived,
+            status=status,
+            team_ids=[team_id or self.team_id],
+        )
+        self.projects[project.id] = project
+        return project
+
+    def updates_on(self, project: FakeProject) -> list[FakeProjectUpdate]:
+        return [u for u in self.project_updates if u.project_id == project.id]
 
     def identifier(self, issue: FakeIssue) -> str:
         return f"{self.team_key}-{issue.number}"
@@ -210,6 +264,7 @@ class FakeLinear:
             "url": f"https://linear.example/issue/{self.identifier(issue)}",
             "updatedAt": issue.updated_at.isoformat().replace("+00:00", "Z"),
             "state": self._state(issue.state_id),
+            "project": {"id": issue.project_id} if issue.project_id else None,
             "labels": {
                 "nodes": labels[:20],
                 "pageInfo": {"hasNextPage": len(labels) > 20},
@@ -335,6 +390,79 @@ class FakeLinear:
         )
         self.comments.append(comment)
         return {"commentCreate": {"success": True, "comment": {"id": comment.id}}}
+
+    def _op_DoorProjects(self, v: dict[str, Any]) -> dict[str, Any]:
+        nodes = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "url": f"https://linear.app/example/project/{p.id[:8]}",
+                "archivedAt": "2026-01-02T00:00:00Z" if p.archived else None,
+                "trashed": p.trashed or None,
+                "status": {"type": p.status},
+                "externalLinks": {
+                    "nodes": [{"url": link.url, "label": link.label} for link in p.links[:20]],
+                    "pageInfo": {"hasNextPage": len(p.links) > 20},
+                },
+            }
+            for p in self.projects.values()
+            if v["teamId"] in p.team_ids
+        ]
+        return {"projects": self._page(nodes, v.get("after"))}
+
+    def _op_DoorProjectOpenIssues(self, v: dict[str, Any]) -> dict[str, Any]:
+        unfinished = {"backlog", "unstarted", "started", "triage"}
+        nodes = [
+            {"identifier": self.identifier(i), "title": i.title}
+            for i in self._issues()
+            if i.project_id == v["projectId"] and self._state(i.state_id)["type"] in unfinished
+        ]
+        return {"issues": self._page(nodes, v.get("after"))}
+
+    def _op_DoorProjectUpdates(self, v: dict[str, Any]) -> dict[str, Any]:
+        nodes = [
+            {"id": u.id, "body": u.body}
+            for u in self.project_updates
+            if u.project_id == v["projectId"]
+        ]
+        return {"project": {"projectUpdates": self._page(nodes, v.get("after"))}}
+
+    @staticmethod
+    def _uuid4(value: Any) -> str:
+        # Linear takes a caller-chosen id only in UUID v4 format.
+        parsed = uuid.UUID(str(value))
+        assert parsed.version == 4 and str(parsed) == value, value
+        return str(value)
+
+    def _op_DoorProjectCreate(self, v: dict[str, Any]) -> dict[str, Any]:
+        data = v["input"]
+        project_id = self._uuid4(data["id"])
+        assert project_id not in self.projects, "the same id twice"
+        assert data["teamIds"] == [self.team_id]
+        self.projects[project_id] = FakeProject(
+            id=project_id,
+            name=data["name"],
+            description=data.get("description") or "",
+            team_ids=list(data["teamIds"]),
+        )
+        return {"projectCreate": {"success": True, "project": {"id": project_id}}}
+
+    def _op_DoorLinkCreate(self, v: dict[str, Any]) -> dict[str, Any]:
+        data = v["input"]
+        link_id = self._uuid4(data["id"])
+        project = self.projects[data["projectId"]]
+        assert all(link.id != link_id for link in project.links), "the same link twice"
+        project.links.append(FakeLink(link_id, data["url"], data["label"]))
+        return {
+            "entityExternalLinkCreate": {"success": True, "entityExternalLink": {"id": link_id}}
+        }
+
+    def _op_DoorProjectUpdateCreate(self, v: dict[str, Any]) -> dict[str, Any]:
+        data = v["input"]
+        assert data.get("health") in (None, "onTrack", "atRisk", "offTrack")
+        update = FakeProjectUpdate(_uuid(), data["projectId"], data["body"], data.get("health"))
+        self.project_updates.append(update)
+        return {"projectUpdateCreate": {"success": True, "projectUpdate": {"id": update.id}}}
 
     def _op_DoorIssueMove(self, v: dict[str, Any]) -> dict[str, Any]:
         issue = self.issues[v["id"]]

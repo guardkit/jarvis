@@ -67,6 +67,20 @@ Stage 4 repair (Codex review R2-R4), at ``user_version`` 3:
     A claim left unpublished (the publish raised, or the door stopped part
     way) is never published again; it is settled once, by telling the person
     under the card and taking a new reply if Forge still shows the card open.
+
+Linear projects (design section 11), at ``user_version`` 4:
+
+``project_intents``
+    One row per registered repository the door set out to create a Linear
+    project for: the two UUID v4 ids it chose (the project's and its GitHub
+    link's), generated once and written **before** the first write to Linear,
+    whether the project has been seen created, whether the whole intent is
+    complete, and when to try again after Linear refused a write for good. A
+    completed repository is never created again.
+
+``comment_refs`` also holds each project update's reference (its
+``issue_id`` column then holds the project's id, the update's destination,
+fixed when the update is begun).
 """
 
 from __future__ import annotations
@@ -78,7 +92,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sends (
@@ -186,6 +200,17 @@ CREATE TABLE IF NOT EXISTS answer_claims (
     kind           TEXT NOT NULL,
     published      INTEGER NOT NULL DEFAULT 0,
     settled        INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS project_intents (
+    repo            TEXT PRIMARY KEY,
+    project_id      TEXT NOT NULL,
+    link_id         TEXT NOT NULL,
+    project_created INTEGER NOT NULL DEFAULT 0,
+    complete        INTEGER NOT NULL DEFAULT 0,
+    note            TEXT,
+    retry_after     TEXT,
+    started_at      TEXT NOT NULL,
+    completed_at    TEXT
 );
 CREATE TABLE IF NOT EXISTS held_messages (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -758,6 +783,12 @@ class DoorStore:
         ).fetchone()
         return (row is not None, row[0] if row is not None else None)
 
+    def comment_owner(self, ref: str) -> str | None:
+        """The issue (or project, for a project update) a reference was begun
+        on: where an unconfirmed write must be looked for (Codex review R3)."""
+        row = self._db.execute("SELECT issue_id FROM comment_refs WHERE ref = ?", (ref,)).fetchone()
+        return str(row[0]) if row is not None else None
+
     def begin_comment(self, ref: str, issue_id: str) -> None:
         with self._db:
             self._db.execute(
@@ -793,6 +824,70 @@ class DoorStore:
     def release_message(self, held_id: int) -> None:
         with self._db:
             self._db.execute("DELETE FROM held_messages WHERE id = ?", (held_id,))
+
+    # -- project creation intents (section 11.1) -----------------------------
+
+    def project_intent(self, repo: str) -> ProjectIntent | None:
+        row = self._db.execute("SELECT * FROM project_intents WHERE repo = ?", (repo,)).fetchone()
+        if row is None:
+            return None
+        return ProjectIntent(
+            repo=row["repo"],
+            project_id=row["project_id"],
+            link_id=row["link_id"],
+            project_created=bool(row["project_created"]),
+            complete=bool(row["complete"]),
+            note=row["note"],
+            retry_after=datetime.fromisoformat(row["retry_after"]) if row["retry_after"] else None,
+        )
+
+    def begin_project_intent(self, repo: str, project_id: str, link_id: str) -> ProjectIntent:
+        """Record the intent and its ids before anything is written to Linear.
+        An intent already recorded is kept as it is (its ids never change)."""
+        with self._db:
+            self._db.execute(
+                "INSERT OR IGNORE INTO project_intents (repo, project_id, link_id, started_at) "
+                "VALUES (?, ?, ?, ?)",
+                (repo, project_id, link_id, _now()),
+            )
+        intent = self.project_intent(repo)
+        assert intent is not None
+        return intent
+
+    def mark_project_created(self, repo: str) -> None:
+        with self._db:
+            self._db.execute(
+                "UPDATE project_intents SET project_created = 1 WHERE repo = ?", (repo,)
+            )
+
+    def set_intent_retry(self, repo: str, at: datetime) -> None:
+        with self._db:
+            self._db.execute(
+                "UPDATE project_intents SET retry_after = ? WHERE repo = ?",
+                (at.isoformat(), repo),
+            )
+
+    def complete_project_intent(self, repo: str, note: str) -> None:
+        with self._db:
+            self._db.execute(
+                "UPDATE project_intents SET complete = 1, note = ?, completed_at = ? "
+                "WHERE repo = ? AND complete = 0",
+                (note, _now(), repo),
+            )
+
+
+@dataclass(frozen=True)
+class ProjectIntent:
+    """The door's intent to create one repository's Linear project (section 11.1)."""
+
+    repo: str  # the repository's name, case folded
+    project_id: str
+    link_id: str
+    project_created: bool = False
+    complete: bool = False
+    note: str | None = None
+    #: After Linear refused a write for good: not tried again before this.
+    retry_after: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -840,6 +935,7 @@ __all__ = [
     "CardComment",
     "DoorStore",
     "IssueAlreadyReserved",
+    "ProjectIntent",
     "Recovery",
     "Send",
     "SendIssue",

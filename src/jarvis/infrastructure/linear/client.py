@@ -6,7 +6,12 @@ door's own comments on an issue, write a comment and move an issue. Stage 4
 (writing the factory's cards and progress back to Linear) reuses
 :meth:`LinearClient.create_comment` (with ``parent_id`` for replies) and
 :meth:`LinearClient.move_issue`, and reads the replies under the door's card
-comments with one query (:meth:`LinearClient.replies_under`).
+comments with one query (:meth:`LinearClient.replies_under`). Section 11
+(Linear projects) reads the team's projects with one top-level ``projects``
+query (a ``projects`` field nested inside ``teams`` was refused by Linear,
+HTTP 400, on 18 October 2026), creates a project and its GitHub link with
+caller-chosen UUID v4 ids, reads a project's open issues and posts a project
+update.
 
 Facts about Linear this file relies on (checked 18 October 2026 against
 Linear's published schema, ``packages/sdk/src/schema.graphql`` in
@@ -170,6 +175,25 @@ class LinearIssue:
     #: More than one page of labels or relations: what the door would read
     #: from them is not the whole truth, so it is not guessed from.
     truncated: bool = False
+    #: The Linear project the issue is in, if any (design section 11.2).
+    project_id: str | None = None
+
+
+@dataclass(frozen=True)
+class LinearProject:
+    """One of the team's projects, with its external links' URLs (section 11.1)."""
+
+    id: str
+    name: str
+    url: str
+    archived: bool
+    #: The project's status is "completed" (Linear's ``ProjectStatusType``).
+    completed: bool
+    link_urls: tuple[str, ...] = ()
+    #: More links than one page holds: the whole read is not used (R4).
+    truncated: bool = False
+    #: In Linear's trash (``Project.trashed``): never routed to.
+    trashed: bool = False
 
 
 @dataclass(frozen=True)
@@ -201,6 +225,7 @@ fragment DoorIssue on Issue {{
   url
   updatedAt
   state {{ id name type }}
+  project {{ id }}
   labels(first: {_NESTED_PAGE}) {{
     nodes {{ id name parent {{ name }} }}
     pageInfo {{ hasNextPage }}
@@ -327,6 +352,91 @@ query DoorReplies($parentIds: [ID!]!, $after: String) {{
 }}
 """
 
+# Top-level ``projects`` filtered to the team (``ProjectFilter.accessibleTeams``),
+# archived ones included (section 11.1); a project's status type says whether
+# it is completed.
+PROJECTS_QUERY = f"""
+query DoorProjects($teamId: ID!, $after: String) {{
+  projects(
+    first: {_ISSUE_PAGE}
+    after: $after
+    includeArchived: true
+    filter: {{ accessibleTeams: {{ some: {{ id: {{ eq: $teamId }} }} }} }}
+  ) {{
+    nodes {{
+      id
+      name
+      url
+      archivedAt
+      trashed
+      status {{ type }}
+      externalLinks(first: {_NESTED_PAGE}) {{
+        nodes {{ url label }}
+        pageInfo {{ hasNextPage }}
+      }}
+    }}
+    pageInfo {{ hasNextPage endCursor }}
+  }}
+}}
+"""
+
+# A project's issues that are not Done, Canceled or a duplicate (section 11.4).
+PROJECT_OPEN_ISSUES_QUERY = f"""
+query DoorProjectOpenIssues($projectId: ID!, $after: String) {{
+  issues(
+    first: {_FLAT_PAGE}
+    after: $after
+    filter: {{
+      project: {{ id: {{ eq: $projectId }} }}
+      state: {{ type: {{ nin: ["completed", "canceled", "duplicate"] }} }}
+    }}
+  ) {{
+    nodes {{ identifier title }}
+    pageInfo {{ hasNextPage endCursor }}
+  }}
+}}
+"""
+
+# A project's updates, to find one whose posting was not confirmed
+# (``ProjectUpdateFilter`` has no body filter, so the bodies are read).
+PROJECT_UPDATES_QUERY = f"""
+query DoorProjectUpdates($projectId: String!, $after: String) {{
+  project(id: $projectId) {{
+    projectUpdates(first: {_ISSUE_PAGE}, after: $after) {{
+      nodes {{ id body }}
+      pageInfo {{ hasNextPage endCursor }}
+    }}
+  }}
+}}
+"""
+
+PROJECT_CREATE_MUTATION = """
+mutation DoorProjectCreate($input: ProjectCreateInput!) {
+  projectCreate(input: $input) {
+    success
+    project { id }
+  }
+}
+"""
+
+LINK_CREATE_MUTATION = """
+mutation DoorLinkCreate($input: EntityExternalLinkCreateInput!) {
+  entityExternalLinkCreate(input: $input) {
+    success
+    entityExternalLink { id }
+  }
+}
+"""
+
+PROJECT_UPDATE_CREATE_MUTATION = """
+mutation DoorProjectUpdateCreate($input: ProjectUpdateCreateInput!) {
+  projectUpdateCreate(input: $input) {
+    success
+    projectUpdate { id }
+  }
+}
+"""
+
 COMMENT_CREATE_MUTATION = """
 mutation DoorCommentCreate($input: CommentCreateInput!) {
   commentCreate(input: $input) {
@@ -420,6 +530,25 @@ def _parse_issue(node: dict[str, Any]) -> LinearIssue:
             ((node.get(name) or {}).get("pageInfo") or {}).get("hasNextPage")
             for name in ("labels", "inverseRelations")
         ),
+        project_id=str((node.get("project") or {}).get("id") or "") or None,
+    )
+
+
+def _parse_project(node: dict[str, Any]) -> LinearProject:
+    links = node.get("externalLinks") or {}
+    return LinearProject(
+        id=str(node["id"]),
+        name=str(node.get("name") or ""),
+        url=str(node.get("url") or ""),
+        archived=bool(node.get("archivedAt")),
+        completed=str((node.get("status") or {}).get("type") or "") == "completed",
+        link_urls=tuple(
+            str(link.get("url") or "")
+            for link in links.get("nodes") or []
+            if isinstance(link, dict) and link.get("url")
+        ),
+        truncated=bool((links.get("pageInfo") or {}).get("hasNextPage")),
+        trashed=bool(node.get("trashed")),
     )
 
 
@@ -637,7 +766,70 @@ class LinearClient:
             )
         return replies
 
+    async def projects(self, team_id: str) -> list[LinearProject]:
+        """Every project of the team, archived and completed ones included."""
+        nodes = await self._paginate(PROJECTS_QUERY, {"teamId": team_id}, ("projects",))
+        return [_parse_project(node) for node in nodes]
+
+    async def project_open_issues(self, project_id: str) -> list[tuple[str, str]]:
+        """``(identifier, title)`` of the project's issues not Done, Canceled or a duplicate."""
+        nodes = await self._paginate(
+            PROJECT_OPEN_ISSUES_QUERY, {"projectId": project_id}, ("issues",)
+        )
+        return [(str(n.get("identifier") or ""), str(n.get("title") or "")) for n in nodes]
+
+    async def project_updates(self, project_id: str) -> list[LinearComment]:
+        """The project's updates (id and body)."""
+        nodes = await self._paginate(
+            PROJECT_UPDATES_QUERY, {"projectId": project_id}, ("project", "projectUpdates")
+        )
+        return [LinearComment(id=str(n["id"]), body=str(n.get("body") or "")) for n in nodes]
+
     # -- writes --------------------------------------------------------------
+
+    async def create_project(
+        self, *, project_id: str, name: str, team_id: str, description: str
+    ) -> None:
+        """Create a project with a caller-chosen id (UUID v4)."""
+        data = await self.execute(
+            PROJECT_CREATE_MUTATION,
+            {
+                "input": {
+                    "id": project_id,
+                    "name": name,
+                    "teamIds": [team_id],
+                    "description": description,
+                }
+            },
+        )
+        if not (data.get("projectCreate") or {}).get("success"):
+            raise LinearError("Linear did not confirm the project")
+
+    async def create_project_link(
+        self, *, link_id: str, project_id: str, url: str, label: str
+    ) -> None:
+        """Add an external link to a project, with a caller-chosen id (UUID v4)."""
+        data = await self.execute(
+            LINK_CREATE_MUTATION,
+            {"input": {"id": link_id, "projectId": project_id, "url": url, "label": label}},
+        )
+        if not (data.get("entityExternalLinkCreate") or {}).get("success"):
+            raise LinearError("Linear did not confirm the project's link")
+
+    async def create_project_update(
+        self, project_id: str, body: str, *, health: str | None = None
+    ) -> str:
+        """Post a project update (Markdown) and return its id. ``health`` is
+        ``onTrack``, ``atRisk`` or ``offTrack``; ``None`` leaves it out."""
+        update_input: dict[str, Any] = {"projectId": project_id, "body": body}
+        if health is not None:
+            update_input["health"] = health
+        data = await self.execute(PROJECT_UPDATE_CREATE_MUTATION, {"input": update_input})
+        result = data.get("projectUpdateCreate") or {}
+        update = result.get("projectUpdate") or {}
+        if not result.get("success") or not update.get("id"):
+            raise LinearError("Linear did not confirm the project update")
+        return str(update["id"])
 
     async def create_comment(
         self, issue_id: str, body: str, *, parent_id: str | None = None
@@ -671,6 +863,7 @@ __all__ = [
     "LinearIssue",
     "LinearIssueRef",
     "LinearLabel",
+    "LinearProject",
     "LinearRateLimited",
     "LinearRefused",
     "LinearRelation",

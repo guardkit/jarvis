@@ -11,10 +11,13 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jarvis.infrastructure.linear.client import LinearIssue, LinearIssueRef, LinearLabel
 from jarvis.infrastructure.planning_intake_grammar import is_allowed_target_name
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from jarvis.infrastructure.linear.projects import ProjectMap
 
 #: Every comment the door writes starts with this.
 COMMENT_PREFIX = "Factory: "
@@ -97,13 +100,35 @@ def no_sign_in(issue: LinearIssue) -> bool:
 
 @dataclass(frozen=True)
 class RepoChoice:
-    """The repository for an issue, or the sentence saying why there is none."""
+    """The repository for an issue, or the sentence saying why there is none.
+
+    ``wait`` (no repository, no problem): the team's projects could not be
+    read (or not whole) this poll, so the issue is decided on a later poll,
+    silently.
+    """
 
     repo: str | None
     problem: str | None = None
+    wait: bool = False
 
 
-def choose_repo(issue: LinearIssue, default_repo: str | None) -> RepoChoice:
+def choose_repo(
+    issue: LinearIssue, default_repo: str | None, projects: ProjectMap | None = None
+) -> RepoChoice:
+    """Which repository an issue goes to (design section 11.2, the decision table).
+
+    1. One valid ``repo:`` label: that repository, whatever its project says.
+       Two different ``repo:`` labels (or an unusable one): refused.
+    2. No ``repo:`` label, in a project that maps to exactly one repository:
+       that repository. In a project that maps to nothing, or a conflicting
+       project: refused, naming the project and why. No fallback to the
+       default.
+    3. No ``repo:`` label and no project: ``default_repo``, else refused.
+
+    ``projects`` is this poll's read of the team's projects; ``None`` when it
+    could not be read whole, so an issue in a project waits. A project a whole
+    read did not include is refused (C3).
+    """
     names = list(dict.fromkeys(repo_labels(issue)))
     if len(names) > 1:
         listed = ", ".join(f"`{name}`" for name in names)
@@ -121,6 +146,17 @@ def choose_repo(issue: LinearIssue, default_repo: str | None) -> RepoChoice:
                 "was not sent.",
             )
         return RepoChoice(names[0])
+    if issue.project_id:
+        from jarvis.infrastructure.linear.projects import problem_words, unseen_project_words
+
+        if projects is None:
+            return RepoChoice(None, wait=True)
+        mapped = projects.for_project(issue.project_id)
+        if mapped is None:
+            return RepoChoice(None, unseen_project_words())
+        if mapped.repo is None:
+            return RepoChoice(None, problem_words(mapped))
+        return RepoChoice(mapped.repo)
     if default_repo:
         return RepoChoice(default_repo)
     return RepoChoice(
