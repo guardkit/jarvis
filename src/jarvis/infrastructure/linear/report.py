@@ -674,41 +674,47 @@ class Reporter:
 
     async def _project_update(self, attempt: _Attempt) -> bool:
         """Post the merge's project update once. ``False`` when it cannot be
-        decided this poll (the projects read failed), so the attempt waits."""
+        decided this poll (the projects could not be read whole), so the
+        attempt waits.
+
+        The repository is the one the attempt was sent to: the door's own
+        frozen send, else Forge's record of the attempt; never the issues'
+        current projects (Codex review R2). A short name is resolved to
+        ``owner/name`` first (R1). Once an update is begun, its project is
+        fixed in the door's record and every retry looks for it, and posts,
+        there (R3).
+        """
         from jarvis.infrastructure.linear import updates as up
+        from jarvis.infrastructure.linear.projects import AMBIGUOUS
 
         cid = attempt.correlation_id
         if self._store.progress(cid, "", "project-update") is not None:
             return True
-        projects = self.projects
-        if projects is None:
-            logger.info("linear_door_project_update_waits", correlation_id=cid)
-            return False
         log = logger.bind(correlation_id=cid)
-        repo = self._attempt_repo(cid)
-        issues = {i.id: i for i in await self._client.issues_by_id([i for i, _ in attempt.issues])}
-        if repo is None:
-            # A rebuilt record keeps no payload: the issues' own project.
-            found = {
-                m.repo
-                for i in issues.values()
-                if i.project_id and (m := projects.for_project(i.project_id)) and m.repo
-            }
-            repo = found.pop() if len(found) == 1 else None
-        project = projects.project_for_repo(repo) if repo else None
-        if repo is None or project is None or project.archived or project.completed:
-            why = (
-                "no repository"
-                if repo is None
-                else "no project"
-                if project is None
-                else "archived or completed project"
-            )
-            self._store.set_progress(cid, "", "project-update", f"skipped: {why}")
-            log.info("linear_door_project_update_skipped", reason=why)
-            return True
-
+        ref = ref_for("project-update", cid)
         outcome = attempt.outcome
+        sent = self._attempt_repo(cid) or getattr(outcome, "target_repo", None)
+        projects = self.projects
+        destination = self._store.comment_owner(ref)
+        if destination is None:
+            if not sent:
+                return self._skip_update(cid, "the repository it was sent to is not known")
+            if projects is None:
+                log.info("linear_door_project_update_waits")
+                return False
+            repo = projects.resolve(sent)
+            if repo == AMBIGUOUS:
+                return self._skip_update(cid, "its short repository name fits more than one")
+            project = projects.project_for_repo(repo) if repo else None
+            if repo is None or project is None:
+                return self._skip_update(cid, "its repository has no active project")
+            destination = project.id
+        else:
+            resolved = projects.resolve(sent) if projects is not None and sent else None
+            repo = sent or ""
+            if resolved is not None and resolved != AMBIGUOUS:
+                repo = resolved
+        issues = {i.id: i for i in await self._client.issues_by_id([i for i, _ in attempt.issues])}
         landed_keys = set(getattr(outcome, "landed_keys", ()) or ())
 
         def line(issue_id: str, identifier: str | None) -> tuple[str, str]:
@@ -735,18 +741,13 @@ class Reporter:
             else "",
             is_mission=mission,
         )
-        open_in_linear = await self._client.project_open_issues(project.id)
+        open_in_linear = await self._client.project_open_issues(destination)
         summary = up.read_summary(self._summary_path)
         health, health_line = up.update_health(delivered, summary)
         body = up.update_body(delivered, summary, open_in_linear, health_line)
         try:
             await up.post_update_once(
-                self._client,
-                self._store,
-                project.id,
-                body,
-                ref_for("project-update", cid),
-                health=health,
+                self._client, self._store, destination, body, ref, health=health
             )
         except LinearRefused as exc:
             # The project was deleted, say: given up, so the attempt still ends.
@@ -755,6 +756,11 @@ class Reporter:
             return True
         self._store.set_progress(cid, "", "project-update", "posted")
         log.info("linear_door_project_update_posted", health=health or "omitted")
+        return True
+
+    def _skip_update(self, cid: str, why: str) -> bool:
+        self._store.set_progress(cid, "", "project-update", f"skipped: {why}")
+        logger.info("linear_door_project_update_skipped", correlation_id=cid, reason=why)
         return True
 
     # -- the bus -------------------------------------------------------------------

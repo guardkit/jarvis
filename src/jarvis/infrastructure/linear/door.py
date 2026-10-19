@@ -94,7 +94,7 @@ from jarvis.infrastructure.linear.progress import BACKLOG, finals
 from jarvis.infrastructure.linear.projects import (
     ProjectMap,
     ensure_projects,
-    registered_repositories,
+    read_registered,
     write_projects_file,
 )
 from jarvis.infrastructure.linear.report import (
@@ -268,6 +268,8 @@ class LinearDoor:
         # This poll's read of the team's projects (section 11); ``None`` when
         # it could not be read.
         self._projects: ProjectMap | None = None
+        # Why forge.yaml could not be used, as last logged (logged once, C4).
+        self._registered_problem: str | None = None
         # Loop state, for the back-off rules of section 7.
         self._failures = 0
         self._bad_key_reported = False
@@ -543,8 +545,10 @@ class LinearDoor:
         the projects of registered repositories that no project links to.
 
         A projects read that fails (other than a refused key or the rate
-        limit, which stop the poll) leaves the map ``None`` this poll: issues
-        in a project wait, nothing is created and no update is posted.
+        limit, which stop the poll), or that holds a project with more links
+        than one page (Codex review R4), leaves the map ``None`` this poll:
+        issues in a project wait, nothing is created or written, and no update
+        that needs the map is posted.
         """
         self._projects = None
         try:
@@ -554,8 +558,22 @@ class LinearDoor:
         except LinearError as exc:
             logger.warning("linear_door_projects_unreadable", error=_safe_error(exc))
             return
-        registered = registered_repositories(self._settings.forge_settings)
-        self._projects = ProjectMap(found, registered or [])
+        registered, problem = read_registered(self._settings.forge_settings)
+        if problem != self._registered_problem:
+            if problem is not None:
+                logger.warning("linear_door_forge_settings_unusable", reason=problem)
+            else:
+                logger.info("linear_door_forge_settings_usable")
+            self._registered_problem = problem
+        projects = ProjectMap(found, registered or [])
+        if not projects.complete:
+            logger.warning(
+                "linear_door_projects_incomplete",
+                detail="a project has more links than one page holds; nothing from the "
+                "projects read is used this poll",
+            )
+            return
+        self._projects = projects
         if self._settings.state_dir is not None:
             try:
                 write_projects_file(self._settings.state_dir, self._projects)

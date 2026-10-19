@@ -64,6 +64,7 @@ class FakeProject:
     archived: bool = False
     status: str = "started"  # Linear's ProjectStatusType
     team_ids: list[str] = field(default_factory=list)
+    trashed: bool = False
 
 
 @dataclass
@@ -397,6 +398,7 @@ class FakeLinear:
                 "name": p.name,
                 "url": f"https://linear.app/example/project/{p.id[:8]}",
                 "archivedAt": "2026-01-02T00:00:00Z" if p.archived else None,
+                "trashed": p.trashed or None,
                 "status": {"type": p.status},
                 "externalLinks": {
                     "nodes": [{"url": link.url, "label": link.label} for link in p.links[:20]],

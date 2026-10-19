@@ -74,11 +74,13 @@ Linear projects (design section 11), at ``user_version`` 4:
     One row per registered repository the door set out to create a Linear
     project for: the two UUID v4 ids it chose (the project's and its GitHub
     link's), generated once and written **before** the first write to Linear,
-    whether the project has been seen created, and whether the whole intent is
-    complete. A completed repository is never created again.
+    whether the project has been seen created, whether the whole intent is
+    complete, and when to try again after Linear refused a write for good. A
+    completed repository is never created again.
 
 ``comment_refs`` also holds each project update's reference (its
-``issue_id`` column then holds the project's id).
+``issue_id`` column then holds the project's id, the update's destination,
+fixed when the update is begun).
 """
 
 from __future__ import annotations
@@ -206,6 +208,7 @@ CREATE TABLE IF NOT EXISTS project_intents (
     project_created INTEGER NOT NULL DEFAULT 0,
     complete        INTEGER NOT NULL DEFAULT 0,
     note            TEXT,
+    retry_after     TEXT,
     started_at      TEXT NOT NULL,
     completed_at    TEXT
 );
@@ -780,6 +783,12 @@ class DoorStore:
         ).fetchone()
         return (row is not None, row[0] if row is not None else None)
 
+    def comment_owner(self, ref: str) -> str | None:
+        """The issue (or project, for a project update) a reference was begun
+        on: where an unconfirmed write must be looked for (Codex review R3)."""
+        row = self._db.execute("SELECT issue_id FROM comment_refs WHERE ref = ?", (ref,)).fetchone()
+        return str(row[0]) if row is not None else None
+
     def begin_comment(self, ref: str, issue_id: str) -> None:
         with self._db:
             self._db.execute(
@@ -829,6 +838,7 @@ class DoorStore:
             project_created=bool(row["project_created"]),
             complete=bool(row["complete"]),
             note=row["note"],
+            retry_after=datetime.fromisoformat(row["retry_after"]) if row["retry_after"] else None,
         )
 
     def begin_project_intent(self, repo: str, project_id: str, link_id: str) -> ProjectIntent:
@@ -850,6 +860,13 @@ class DoorStore:
                 "UPDATE project_intents SET project_created = 1 WHERE repo = ?", (repo,)
             )
 
+    def set_intent_retry(self, repo: str, at: datetime) -> None:
+        with self._db:
+            self._db.execute(
+                "UPDATE project_intents SET retry_after = ? WHERE repo = ?",
+                (at.isoformat(), repo),
+            )
+
     def complete_project_intent(self, repo: str, note: str) -> None:
         with self._db:
             self._db.execute(
@@ -869,6 +886,8 @@ class ProjectIntent:
     project_created: bool = False
     complete: bool = False
     note: str | None = None
+    #: After Linear refused a write for good: not tried again before this.
+    retry_after: datetime | None = None
 
 
 @dataclass(frozen=True)

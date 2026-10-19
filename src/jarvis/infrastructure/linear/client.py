@@ -190,8 +190,10 @@ class LinearProject:
     #: The project's status is "completed" (Linear's ``ProjectStatusType``).
     completed: bool
     link_urls: tuple[str, ...] = ()
-    #: More links than one page holds: its repository is not guessed.
+    #: More links than one page holds: the whole read is not used (R4).
     truncated: bool = False
+    #: In Linear's trash (``Project.trashed``): never routed to.
+    trashed: bool = False
 
 
 @dataclass(frozen=True)
@@ -366,6 +368,7 @@ query DoorProjects($teamId: ID!, $after: String) {{
       name
       url
       archivedAt
+      trashed
       status {{ type }}
       externalLinks(first: {_NESTED_PAGE}) {{
         nodes {{ url label }}
@@ -545,6 +548,7 @@ def _parse_project(node: dict[str, Any]) -> LinearProject:
             if isinstance(link, dict) and link.get("url")
         ),
         truncated=bool((links.get("pageInfo") or {}).get("hasNextPage")),
+        trashed=bool(node.get("trashed")),
     )
 
 

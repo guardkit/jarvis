@@ -765,3 +765,24 @@ def test_linear_errors_are_refusals_only_when_linear_says_so() -> None:
     assert answer(200, internal) is LinearError
     assert answer(200, [{"message": "something else"}]) is LinearError
     assert answer(500, [{"message": "Entity not found"}]) is LinearError
+
+
+def test_the_target_repository_is_read_from_the_record(ledger: Ledger) -> None:
+    # Design section 11.4 (Codex review R2): the update's repository comes
+    # from Forge's record when the door's own record is lost.
+    ledger.run(CID, "FEATURE_PLAN")
+    ledger.cx.execute(
+        "UPDATE planning_runs SET target_repo = 'example-org/from-run' WHERE correlation_id = ?",
+        (CID,),
+    )
+    ledger.cx.commit()
+    assert single(ledger).target_repo == "example-org/from-run"
+    ledger.queue(CID, "ADMITTED")
+    ledger.cx.execute(
+        "UPDATE work_queue SET target_repo = 'example-org/from-queue' WHERE correlation_id = ?",
+        (CID,),
+    )
+    ledger.cx.commit()
+    assert single(ledger).target_repo == "example-org/from-queue"
+    ledger.mission(MCID, "m-1", "RUNNING")
+    assert ledger.record.outcome_for_mission(MCID).target_repo == "repo"

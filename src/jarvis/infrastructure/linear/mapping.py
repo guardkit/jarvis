@@ -102,8 +102,8 @@ def no_sign_in(issue: LinearIssue) -> bool:
 class RepoChoice:
     """The repository for an issue, or the sentence saying why there is none.
 
-    ``wait`` (no repository, no problem): the issue's project was not in this
-    poll's read of the projects, so the issue is decided on a later poll,
+    ``wait`` (no repository, no problem): the team's projects could not be
+    read (or not whole) this poll, so the issue is decided on a later poll,
     silently.
     """
 
@@ -126,7 +126,8 @@ def choose_repo(
     3. No ``repo:`` label and no project: ``default_repo``, else refused.
 
     ``projects`` is this poll's read of the team's projects; ``None`` when it
-    could not be read, so an issue in a project waits.
+    could not be read whole, so an issue in a project waits. A project a whole
+    read did not include is refused (C3).
     """
     names = list(dict.fromkeys(repo_labels(issue)))
     if len(names) > 1:
@@ -146,11 +147,13 @@ def choose_repo(
             )
         return RepoChoice(names[0])
     if issue.project_id:
-        from jarvis.infrastructure.linear.projects import problem_words
+        from jarvis.infrastructure.linear.projects import problem_words, unseen_project_words
 
-        mapped = projects.for_project(issue.project_id) if projects is not None else None
-        if mapped is None:
+        if projects is None:
             return RepoChoice(None, wait=True)
+        mapped = projects.for_project(issue.project_id)
+        if mapped is None:
+            return RepoChoice(None, unseen_project_words())
         if mapped.repo is None:
             return RepoChoice(None, problem_words(mapped))
         return RepoChoice(mapped.repo)

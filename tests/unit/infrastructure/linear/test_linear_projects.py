@@ -19,7 +19,7 @@ import pytest
 
 from jarvis.infrastructure.linear import forge_record as fr
 from jarvis.infrastructure.linear.client import LinearIssue, LinearLabel, LinearProject, LinearState
-from jarvis.infrastructure.linear.door import DoorSettings, LinearDoor
+from jarvis.infrastructure.linear.door import DoorSettings, LinearDoor, RecordedAttempt
 from jarvis.infrastructure.linear.mapping import choose_repo, mission_prefix
 from jarvis.infrastructure.linear.projects import (
     PROJECTS_FILE,
@@ -306,8 +306,9 @@ def test_decision_table() -> None:
     assert choose_repo(_issue(), dflt, MAP).repo == dflt
     missing = choose_repo(_issue(), None, MAP)
     assert missing.repo is None and "do not know which repository" in (missing.problem or "")
-    # A project this poll's read did not see, or no read at all: wait, silently.
-    assert choose_repo(_issue(project_id="p-unseen"), dflt, MAP).wait
+    # A project a whole read did not include: refused (C3). No read: wait, silently.
+    unseen = choose_repo(_issue(project_id="p-unseen"), dflt, MAP)
+    assert not unseen.wait and "cannot see its project" in (unseen.problem or "")
     assert choose_repo(_issue(project_id="p-one"), dflt, None).wait
     assert choose_repo(_issue(), dflt, None).repo == dflt
 
@@ -869,3 +870,271 @@ async def test_an_update_waits_while_the_projects_cannot_be_read(h: Harness) -> 
     await h.poll()
     assert len(h.linear.updates_on(project)) == 1
     assert h.store.reservations() == {}
+
+
+# ---------------------------------------------------------------------------
+# Repair pass: Codex round 1 (R1-R4) and the coach (C1-C4)
+# ---------------------------------------------------------------------------
+
+
+def lose_record(h: Harness) -> None:
+    """The door's record is lost: a new, empty one on the next start."""
+    h.store.close()
+    (h.state_dir / "linear-door.sqlite3").unlink()
+    h.door = h._door()
+
+
+async def test_r1_a_short_default_resolves_to_its_project(tmp_path: Path) -> None:
+    h = Harness(tmp_path)
+    h.default_repo = "notes-app"
+    h.restart()
+    project = h.linear.project("Notes", f"https://github.com/{REPO}")
+    h.linear.issue("Add a dark mode")  # no project: the short default
+    await h.poll()
+    assert h.bus.payloads()[0]["target_repo"] == "notes-app"
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    await h.poll()
+    assert len(h.linear.updates_on(project)) == 1
+
+
+async def test_r1_a_short_label_resolves_to_its_project(h: Harness) -> None:
+    project = h.linear.project("Notes", f"https://github.com/{REPO}")
+    ideas = h.linear.project("Ideas")
+    issue = h.linear.issue("Add a dark mode", labels=[h.linear.label("repo: notes-app")])
+    issue.project_id = ideas.id
+    await h.poll()
+    assert h.bus.payloads()[0]["target_repo"] == "notes-app"
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    await h.poll()
+    assert len(h.linear.updates_on(project)) == 1
+    assert h.linear.updates_on(ideas) == []
+
+
+async def test_r1_an_ambiguous_short_name_gets_no_update(tmp_path: Path) -> None:
+    from structlog.testing import capture_logs
+
+    h = Harness(tmp_path, registered=("org-a/notes-app", "org-b/notes-app"))
+    h.default_repo = "notes-app"
+    h.restart()
+    one = h.linear.project("A", "https://github.com/org-a/notes-app")
+    two = h.linear.project("B", "https://github.com/org-b/notes-app")
+    h.linear.issue("Add a dark mode")
+    await h.poll()
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    with capture_logs() as logs:
+        await h.poll()
+    assert h.linear.project_updates == []
+    assert h.linear.updates_on(one) == h.linear.updates_on(two) == []
+    (skipped,) = [e for e in logs if e["event"] == "linear_door_project_update_skipped"]
+    assert "more than one" in skipped["reason"]
+    assert h.store.reservations() == {}
+
+
+async def _sent_then_record_lost(h: Harness, issue: Any) -> None:
+    await h.poll()
+    assert h.linear.state_name(issue) == "In Progress"
+    lose_record(h)
+    h.attempts.recorded = [RecordedAttempt("lin-ENG-1-1", open=True)]
+    h.attempts.outcomes["lin-ENG-1-1"] = fr.SingleOutcome("lin-ENG-1-1", fr.BUILDING, False)
+    await h.poll()  # rebuilt from Forge's record: the attempt is open again
+    assert h.store.reservations() != {}
+
+
+async def test_r2_after_a_lost_record_the_override_repository_gets_the_update(
+    h: Harness,
+) -> None:
+    notes = h.linear.project("Notes", f"https://github.com/{REPO}")
+    other = h.linear.project("Other", f"https://github.com/{OTHER}")
+    issue = h.linear.issue("Add a dark mode", labels=[h.linear.label(f"repo: {OTHER}")])
+    issue.project_id = notes.id
+    await _sent_then_record_lost(h, issue)
+    h.attempts.outcomes["lin-ENG-1-1"] = fr.SingleOutcome(
+        "lin-ENG-1-1", fr.ON_MAIN, True, "merged", j_commit="abc1234", target_repo=OTHER
+    )
+    await h.poll()
+    assert h.linear.updates_on(notes) == []
+    assert len(h.linear.updates_on(other)) == 1
+
+
+async def test_r2_after_a_lost_record_a_moved_issue_keeps_its_repository(h: Harness) -> None:
+    notes = h.linear.project("Notes", f"https://github.com/{REPO}")
+    other = h.linear.project("Other", f"https://github.com/{OTHER}")
+    issue = h.linear.issue("Add a dark mode")
+    issue.project_id = notes.id
+    await _sent_then_record_lost(h, issue)
+    issue.project_id = other.id  # moved while it was being built
+    h.attempts.outcomes["lin-ENG-1-1"] = fr.SingleOutcome(
+        "lin-ENG-1-1", fr.ON_MAIN, True, "merged", j_commit="abc1234", target_repo=REPO
+    )
+    await h.poll()
+    assert len(h.linear.updates_on(notes)) == 1
+    assert h.linear.updates_on(other) == []
+
+
+async def test_r2_with_no_known_repository_no_update_is_posted(h: Harness) -> None:
+    notes = h.linear.project("Notes", f"https://github.com/{REPO}")
+    issue = h.linear.issue("Add a dark mode")
+    issue.project_id = notes.id
+    await _sent_then_record_lost(h, issue)
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()  # Forge's record names no repository
+    await h.poll()
+    assert h.linear.project_updates == []
+    assert h.linear.state_name(issue) == "Done"
+    assert h.store.reservations() == {}
+
+
+async def test_r3_a_lost_update_is_found_where_it_was_written(h: Harness) -> None:
+    project, _ = await sent_in_project(h)
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    h.linear.lose_response["DoorProjectUpdateCreate"] = 1
+    await h.poll()  # written on Notes, answer lost
+    project.links.clear()  # the repository's link moves to another project
+    newer = h.linear.project("Notes v2", f"https://github.com/{REPO}")
+    h.restart()
+    await h.poll(2)
+    assert len(h.linear.updates_on(project)) == 1
+    assert h.linear.updates_on(newer) == []
+    assert h.linear.calls.count("DoorProjectUpdateCreate") == 1
+    assert h.store.reservations() == {}
+
+
+async def test_r3_an_unconfirmed_update_is_retried_on_its_first_project(h: Harness) -> None:
+    project, _ = await sent_in_project(h)
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    h.linear.fail_next["DoorProjectUpdateCreate"] = [server_error()]
+    await h.poll()  # begun on Notes; Linear never took it
+    project.links.clear()
+    newer = h.linear.project("Notes v2", f"https://github.com/{REPO}")
+    await h.poll()
+    assert len(h.linear.updates_on(project)) == 1
+    assert h.linear.updates_on(newer) == []
+
+
+def _many_links(repo: str | None) -> list[str]:
+    """21 links: 20 on the first page, then the GitHub link (or one more)."""
+    links = [f"https://example.com/page-{n}" for n in range(20)]
+    return [*links, f"https://github.com/{repo}" if repo else "https://example.com/page-20"]
+
+
+async def test_r4_a_github_link_on_the_second_page_makes_the_read_unusable(
+    tmp_path: Path,
+) -> None:
+    h = Harness(tmp_path, registered=(REPO,))
+    h.linear.project("Notes", *_many_links(REPO))
+    ideas = h.linear.project("Ideas")
+    issue = h.linear.issue("Add a dark mode")
+    issue.project_id = ideas.id
+    await h.poll(2)
+    assert "DoorProjectCreate" not in h.linear.calls  # nothing created
+    assert h.store.project_intent(REPO) is None
+    assert h.factory(issue) == []  # nothing refused
+    assert h.linear.state_name(issue) == "Todo"
+    assert not (h.state_dir / PROJECTS_FILE).exists()
+
+
+async def test_r4_an_update_waits_while_the_read_is_not_whole(h: Harness) -> None:
+    project, issue = await sent_in_project(h)
+    crowded = h.linear.project("Crowded", *_many_links(None))
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    await h.poll()
+    assert h.linear.state_name(issue) == "Done"
+    assert h.linear.updates_on(project) == []
+    assert h.store.reservations() != {}
+    crowded.links = crowded.links[:5]
+    await h.poll()
+    assert len(h.linear.updates_on(project)) == 1
+    assert h.store.reservations() == {}
+
+
+@pytest.mark.parametrize("old", ["archived", "completed", "trashed"])
+async def test_c1_an_inactive_old_project_does_not_block_a_new_one(
+    tmp_path: Path, old: str
+) -> None:
+    h = Harness(tmp_path, registered=(REPO,))
+    h.summary()
+    retired = h.linear.project("Notes", f"https://github.com/{REPO}")
+    if old == "completed":
+        retired.status = "completed"
+    else:
+        setattr(retired, old, True)
+    new = h.linear.project("Notes v2", f"https://github.com/{REPO}")
+    issue = h.linear.issue("Add a dark mode")
+    issue.project_id = new.id
+    await h.poll()
+    assert h.bus.payloads()[0]["target_repo"] == REPO
+    data = json.loads((h.state_dir / PROJECTS_FILE).read_text(encoding="utf-8"))
+    assert data["projects"][REPO]["name"] == "Notes v2"
+    h.attempts.outcomes["lin-ENG-1-1"] = on_main()
+    await h.poll()
+    assert len(h.linear.updates_on(new)) == 1
+    assert h.linear.updates_on(retired) == []
+    assert "DoorProjectCreate" not in h.linear.calls  # creation still counts the old one
+
+
+async def test_c1_an_issue_in_an_inactive_project_with_an_active_rival_is_refused(
+    h: Harness,
+) -> None:
+    retired = h.linear.project("Notes", f"https://github.com/{REPO}", archived=True)
+    h.linear.project("Notes v2", f"https://github.com/{REPO}")
+    issue = h.linear.issue("Add a dark mode")
+    issue.project_id = retired.id
+    await h.poll()
+    (only,) = h.factory(issue)
+    assert "another project links to the same repository" in only
+
+
+async def test_c1_two_active_projects_still_conflict(h: Harness) -> None:
+    h.linear.project("One", f"https://github.com/{REPO}")
+    h.linear.project("Two", f"https://github.com/{REPO}")
+    await h.poll()
+    data = json.loads((h.state_dir / PROJECTS_FILE).read_text(encoding="utf-8"))
+    assert data["projects"] == {}
+
+
+async def test_c2_a_refused_creation_holds_back_only_its_repository(tmp_path: Path) -> None:
+    h = Harness(tmp_path, registered=(REPO, OTHER))
+    h.linear.fail_next["DoorProjectCreate"] = [refused()]
+    await h.poll(3)
+    assert sorted(p.name for p in h.linear.projects.values()) == ["other-app"]
+    intent = h.store.project_intent(REPO)
+    assert intent is not None and not intent.complete and intent.retry_after is not None
+    assert h.linear.calls.count("DoorProjectCreate") == 2  # not retried within the hour
+    h.store.set_intent_retry(REPO, datetime.now(UTC) - timedelta(seconds=1))
+    await h.poll(2)
+    assert sorted(p.name for p in h.linear.projects.values()) == ["notes-app", "other-app"]
+    assert h.store.project_intent(REPO).complete  # type: ignore[union-attr]
+
+
+async def test_c2_an_outage_still_stops_creation_for_the_poll(tmp_path: Path) -> None:
+    h = Harness(tmp_path, registered=(REPO, OTHER))
+    h.linear.fail_next["DoorProjectCreate"] = [server_error()]
+    await h.poll()
+    assert h.linear.projects == {}
+    await h.poll(2)
+    assert len(h.linear.projects) == 2
+
+
+async def test_c3_an_issue_in_a_project_the_read_cannot_see_is_refused_once(
+    h: Harness,
+) -> None:
+    elsewhere = h.linear.project("Elsewhere", f"https://github.com/{REPO}", team_id="team-x")
+    issue = h.linear.issue("Add a dark mode")
+    issue.project_id = elsewhere.id
+    await h.poll(3)
+    assert h.bus.published == []
+    (only,) = h.factory(issue)
+    assert "cannot see its project" in only
+    assert h.linear.state_name(issue) == "Todo"
+
+
+async def test_c4_an_unusable_forge_yaml_is_logged_once(tmp_path: Path) -> None:
+    from structlog.testing import capture_logs
+
+    h = Harness(tmp_path, registered=(REPO,))
+    h.forge_settings.unlink()
+    with capture_logs() as logs:
+        await h.poll(3)
+        forge_yaml(h.forge_settings, REPO)
+        await h.poll(2)
+    events = [e["event"] for e in logs if e["event"].startswith("linear_door_forge_settings")]
+    assert events == ["linear_door_forge_settings_unusable", "linear_door_forge_settings_usable"]

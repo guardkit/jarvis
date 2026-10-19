@@ -59,6 +59,10 @@ Tables and columns (final shape after ``lifecycle/schema.sql`` and
 * ``planning_run_events`` (id, correlation_id, stage_label, status,
   details_json) - ``schema_v3.sql`` 79-92; one row per transition with the
   new state as ``status`` - ``planning/run_store.py`` 350-358.
+* ``target_repo`` (the repository a request was filed for, read for the
+  project update after a merge, design section 11.4): ``planning_runs`` -
+  ``schema_v3.sql`` 40 (kept by ``schema_v4.sql`` 53); ``work_queue`` -
+  ``schema_v10.sql`` 40; ``missions`` - ``lifecycle/missions.py`` 104.
 * ``work_queue`` (id, status, correlation_id UNIQUE, closed_reason) and
   ``work_queue_events`` (queue_id, action, details_json) - ``schema_v10.sql``
   37-57.
@@ -197,9 +201,11 @@ _MISSION_ENDED = frozenset({"REJECTED", "NOT_STARTED", "MERGED", "NOT_MERGED"})
 
 #: Columns this module reads, per table. A record missing any is refused.
 _REQUIRED_COLUMNS: dict[str, frozenset[str]] = {
-    "work_queue": frozenset({"id", "status", "correlation_id", "closed_reason"}),
+    "work_queue": frozenset({"id", "status", "correlation_id", "closed_reason", "target_repo"}),
     "work_queue_events": frozenset({"id", "queue_id", "action", "details_json"}),
-    "planning_runs": frozenset({"correlation_id", "state", "error", "pending_approval_request_id"}),
+    "planning_runs": frozenset(
+        {"correlation_id", "state", "error", "pending_approval_request_id", "target_repo"}
+    ),
     "planning_run_events": frozenset(
         {"id", "correlation_id", "stage_label", "status", "details_json"}
     ),
@@ -212,7 +218,9 @@ _REQUIRED_COLUMNS: dict[str, frozenset[str]] = {
 #: The mission tables are created outside Forge's migration ladder; a record
 #: without any of them simply has no missions. Some but not all is refused.
 _MISSION_COLUMNS: dict[str, frozenset[str]] = {
-    "missions": frozenset({"id", "status", "correlation_id", "plan_request_id", "closed_reason"}),
+    "missions": frozenset(
+        {"id", "status", "correlation_id", "plan_request_id", "closed_reason", "target_repo"}
+    ),
     "mission_features": frozenset({"mission_id", "key"}),
     "mission_attempts": frozenset(
         {"mission_id", "key", "attempt", "correlation_id", "status", "reason"}
@@ -291,6 +299,9 @@ class SingleOutcome:
     j_commit: str | None = None
     #: The already-done proof lines (``path:line - why``).
     proof: tuple[str, ...] = ()
+    #: The repository Forge filed the request for (its queue item's, else its
+    #: planning run's ``target_repo``), as sent.
+    target_repo: str | None = None
 
 
 @dataclass(frozen=True)
@@ -322,6 +333,8 @@ class MissionOutcome:
     app_url: str | None = None
     report_url: str | None = None
     j_commit: str | None = None
+    #: The mission's ``target_repo``, as sent.
+    target_repo: str | None = None
 
 
 @dataclass(frozen=True)
@@ -567,13 +580,16 @@ class _Reader:
 
     def single(self, cid: str) -> SingleOutcome:
         queue = self._one(
-            "SELECT id, status, closed_reason FROM work_queue WHERE correlation_id = ?", cid
-        )
-        run = self._one(
-            "SELECT state, error, pending_approval_request_id FROM planning_runs "
+            "SELECT id, status, closed_reason, target_repo FROM work_queue "
             "WHERE correlation_id = ?",
             cid,
         )
+        run = self._one(
+            "SELECT state, error, pending_approval_request_id, target_repo FROM planning_runs "
+            "WHERE correlation_id = ?",
+            cid,
+        )
+        target_repo = (_text(queue[3]) if queue else None) or (_text(run[3]) if run else None)
         build = self._one(
             "SELECT build_id, status, error, target_branch FROM builds "
             "WHERE correlation_id = ? ORDER BY queued_at DESC LIMIT 1",
@@ -581,7 +597,9 @@ class _Reader:
         )
 
         def out(phase: str, reason: str = "", **extra: Any) -> SingleOutcome:
-            return SingleOutcome(cid, phase, phase in _SINGLE_ENDS, reason, **extra)
+            return SingleOutcome(
+                cid, phase, phase in _SINGLE_ENDS, reason, target_repo=target_repo, **extra
+            )
 
         if queue is None and run is None and build is None:
             return out(UNFILED, "Forge has not recorded this request")
@@ -670,7 +688,7 @@ class _Reader:
         if not self._has_missions:
             return None
         return self._one(
-            "SELECT id, status, closed_reason, plan_request_id FROM missions "
+            "SELECT id, status, closed_reason, plan_request_id, target_repo FROM missions "
             "WHERE correlation_id = ?",
             cid,
         )
@@ -750,6 +768,7 @@ class _Reader:
             app_url=view.app_url,
             report_url=view.report_url,
             j_commit=view.j_commit,
+            target_repo=_text(row[4]),
         )
 
     # -- open cards ----------------------------------------------------------
