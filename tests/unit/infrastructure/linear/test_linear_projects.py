@@ -305,7 +305,8 @@ def test_decision_table() -> None:
     # No label and no project: the default, else the existing comment.
     assert choose_repo(_issue(), dflt, MAP).repo == dflt
     missing = choose_repo(_issue(), None, MAP)
-    assert missing.repo is None and "do not know which repository" in (missing.problem or "")
+    assert missing.repo is None and "isn't in a Linear project" in (missing.problem or "")
+    assert "Move it into the project for that repository" in (missing.problem or "")
     # A project a whole read did not include: refused (C3). No read: wait, silently.
     unseen = choose_repo(_issue(project_id="p-unseen"), dflt, MAP)
     assert not unseen.wait and "cannot see its project" in (unseen.problem or "")
