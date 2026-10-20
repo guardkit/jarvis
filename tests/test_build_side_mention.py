@@ -334,6 +334,21 @@ class TestOriginatorFallbackIsWiredFromConfig:
         )
         assert sink._render(_complete()).startswith("<@U0RICH> ")
 
+    def test_the_mention_uses_the_originator_not_the_linear_owner(self) -> None:
+        """A separate Linear owner setting must not change who the line mentions.
+
+        ``resolve_linear_owner_identity`` prefers ``linear_owner_identity``
+        and only then falls back to the originator; the mention reads the
+        originator alone.
+        """
+        sink = self._sink(
+            slack_operator_user_ids="U0RICH,U0JAMES",
+            slack_operator_user_id=None,
+            slack_planning_originator_user_id="U0RICH",
+            linear_owner_identity="U0LINEAROWNER",
+        )
+        assert sink._render(_complete()).startswith("<@U0RICH> ")
+
     @pytest.mark.parametrize(
         ("raw", "expected"),
         (
