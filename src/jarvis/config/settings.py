@@ -639,6 +639,18 @@ class JarvisConfig(BaseSettings):
         own = (self.linear_owner_identity or "").strip()
         if own:
             return own
+        return self.resolve_planning_originator_user_id()
+
+    def resolve_planning_originator_user_id(self) -> str | None:
+        """The factory owner's Slack member id, or ``None`` when unset.
+
+        The first non-blank id of ``slack_planning_originator_user_id``
+        (the setting is a comma-separated list, operated as one id). Used
+        as the Linear owner fallback above and as the person a finished or
+        failed build line mentions when nothing more specific is known
+        (20 October 2026: with two operators allowed to answer cards, the
+        line would otherwise mention nobody).
+        """
         for part in (self.slack_planning_originator_user_id or "").split(","):
             if part.strip():
                 return part.strip()

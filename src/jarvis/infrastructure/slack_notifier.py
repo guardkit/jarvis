@@ -1476,6 +1476,7 @@ class SlackNotifier:
         "_client",
         "_dedup_map",
         "_evidence_link_hosts",
+        "_fallback_mention_id",
         "_merge_cards",
         "_operator_ids",
         "_pause_messages",
@@ -1501,6 +1502,7 @@ class SlackNotifier:
         operator_ids: frozenset[str] = frozenset(),
         evidence_link_hosts: frozenset[str] = frozenset(),
         merge_cards: MergeCardStore | None = None,
+        fallback_mention_id: str | None = None,
     ) -> None:
         """Construct the Slack notifier.
 
@@ -1525,11 +1527,11 @@ class SlackNotifier:
                 unmentioned — exactly today's behaviour.
             operator_ids: The resolved operator allowlist
                 (:meth:`JarvisConfig.resolve_operator_allowlist`). Used
-                ONLY as the last link of the mention chain, and only
-                when it has exactly one member — a sole operator is
-                unambiguously the person who wants the build line. Two
-                or more members is not a fact about THIS build, so
-                nobody is mentioned.
+                ONLY near the end of the mention chain, only when no
+                ``fallback_mention_id`` is set, and only when it has
+                exactly one member — a sole operator is unambiguously the
+                person who wants the build line. Two or more members is
+                not a fact about THIS build, so nobody is mentioned.
             evidence_link_hosts: Host names a merge card's preview and
                 evidence links may point at
                 (:meth:`JarvisConfig.resolve_evidence_link_hosts`). Empty
@@ -1539,6 +1541,16 @@ class SlackNotifier:
                 and what it last showed, in the gateway's state volume, plus
                 the click lock and latch the reply handler shares. ``None``
                 keeps an in-memory record for this notifier alone.
+            fallback_mention_id: The configured planning originator — the
+                factory owner
+                (:meth:`JarvisConfig.resolve_planning_originator_user_id`).
+                When set, a finished or failed build line with no planning
+                sender and no tapper mentions this person, whatever the
+                number of operators (20 October 2026: James may answer
+                cards too, so the allowlist has two members, and builds
+                approved through the dashboard, Linear or the card tool
+                must still mention the owner). ``None`` keeps the
+                sole-operator rule.
         """
         from slack_sdk.web.async_client import AsyncWebClient
 
@@ -1549,6 +1561,7 @@ class SlackNotifier:
         self._terminal_registry = terminal_registry
         self._audience = audience
         self._operator_ids = operator_ids
+        self._fallback_mention_id = (fallback_mention_id or "").strip() or None
         self._evidence_link_hosts = evidence_link_hosts
         self._merge_cards = merge_cards if merge_cards is not None else MergeCardStore(None)
         self._client = AsyncWebClient(token=bot_token)
@@ -2596,10 +2609,15 @@ class SlackNotifier:
         b. **The gate clicker for this build_id** — whoever actually
            tapped Approve on this build asked for it, so they are told it
            finished.
-        c. **A SOLE configured operator** — with exactly one member in the
-           allowlist there is no ambiguity about who the estate's operator
-           is.
-        d. **Nobody.** No id is ever invented, and a multi-member
+        c. **The configured planning originator** (the factory owner),
+           when one is set. Since 20 October 2026 two people may answer
+           cards, so the allowlist alone no longer names one person; the
+           owner is told about builds started from the dashboard, Linear
+           or the card tool.
+        d. **A SOLE configured operator**, when no originator is set —
+           with exactly one member in the allowlist there is no ambiguity
+           about who the estate's operator is.
+        e. **Nobody.** No id is ever invented, and a multi-member
            allowlist is a config constant rather than a fact about THIS
            build — the line posts unmentioned, as it always did.
         """
@@ -2611,6 +2629,8 @@ class SlackNotifier:
             clicker = audience.gate_clicker(notification.build_id)
             if clicker:
                 return clicker
+        if self._fallback_mention_id:
+            return self._fallback_mention_id
         operator_ids = self._operator_ids
         if operator_ids and len(operator_ids) == 1:
             return next(iter(operator_ids))
@@ -3198,6 +3218,7 @@ def create_slack_sink(
         operator_ids=config.resolve_operator_allowlist(),
         evidence_link_hosts=config.resolve_evidence_link_hosts(),
         merge_cards=merge_cards,
+        fallback_mention_id=config.resolve_planning_originator_user_id(),
     )
 
 

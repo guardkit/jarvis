@@ -24,8 +24,9 @@ notification sink on the same supervisor event loop):
   tapped the gate for a ``build_id``: they asked for this build, so they
   are the right person to tell it finished.
 * **Reader — the notification sink.** On a terminal build event it asks
-  correlation first, then build, then falls back to a sole configured
-  operator (see ``slack_notifier._resolve_mention_target``).
+  correlation first, then build, then falls back to the configured
+  planning originator (the factory owner) when one is set, else to a sole
+  configured operator (see ``slack_notifier._resolve_mention_target``).
 
 Bounds and degrade (state it plainly — this is the design, DDR-027): both
 maps are in-process, in-memory and capped; the eldest recording is

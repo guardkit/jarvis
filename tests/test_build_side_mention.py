@@ -11,10 +11,11 @@ what state the code was in or that the merge word was the next act.
 
 **What is fenced here.**
 
-* The mention chain, all four rungs: planning target (same
-  correlation_id) → gate clicker (same build_id) → a SOLE configured
-  operator → nobody. Never an invented id, never a multi-member config
-  constant.
+* The mention chain, all five rungs: planning target (same
+  correlation_id) → gate clicker (same build_id) → the configured planning
+  originator, the factory owner (20 October 2026) → a SOLE configured
+  operator when no originator is set → nobody. Never an invented id,
+  never a member picked out of a multi-member allowlist.
 * Terminal events only. ``build_started`` stays unmentioned: mentioning
   progress trains the reader to ignore the mention.
 * The finished-build sentence: how much passed, where the code is, and
@@ -70,6 +71,7 @@ def _notifier(
     *,
     audience: BuildAudienceRegistry | None = None,
     operator_ids: frozenset[str] = frozenset(),
+    fallback_mention_id: str | None = None,
 ) -> SlackNotifier:
     """A SlackNotifier with a fully mocked web client — no network."""
     with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_cls:
@@ -79,6 +81,7 @@ def _notifier(
             channel_id="C123456",
             audience=audience,
             operator_ids=operator_ids,
+            fallback_mention_id=fallback_mention_id,
         )
 
 
@@ -156,7 +159,7 @@ class TestBuildAudienceRegistry:
 
 
 # ---------------------------------------------------------------------------
-# The mention chain — a, b, c, d.
+# The mention chain — a, b, c, d, e.
 # ---------------------------------------------------------------------------
 
 
@@ -188,22 +191,65 @@ class TestMentionChain:
         text = _notifier(audience=registry)._render(_complete())
         assert "<@" not in text
 
-    def test_c_sole_operator_is_mentioned(self) -> None:
-        """Rung (c) — exactly one allowlist member is unambiguous."""
+    def test_c_two_operators_and_an_originator_mention_the_originator(self) -> None:
+        """Rung (c) — Rich and James both answer cards (20 October 2026).
+
+        A build approved through the dashboard, Linear or the card tool has
+        no planning sender and no tapper on record; the owner is still told.
+        """
+        text = _notifier(
+            operator_ids=frozenset({"U0RICH", "U0JAMES"}), fallback_mention_id="U0RICH"
+        )._render(_complete())
+        assert text.startswith("<@U0RICH> ")
+
+    def test_c_originator_outranks_a_sole_operator(self) -> None:
+        """Rung (c) comes before (d): the configured owner is the fallback when set."""
+        text = _notifier(operator_ids=frozenset({"U0SOLE"}), fallback_mention_id="U0OWNER")._render(
+            _complete()
+        )
+        assert text.startswith("<@U0OWNER> ")
+
+    def test_c_originator_never_outranks_the_planning_sender_or_tapper(self) -> None:
+        """The earlier rungs are unchanged: the person who asked or tapped is told."""
+        registry = BuildAudienceRegistry()
+        registry.record_gate_clicker(_BUILD, "U0JAMES")
+        text = _notifier(
+            audience=registry,
+            operator_ids=frozenset({"U0RICH", "U0JAMES"}),
+            fallback_mention_id="U0RICH",
+        )._render(_complete())
+        assert text.startswith("<@U0JAMES> ")
+        registry.record_planning_target(_CORR, "U0PLANNER")
+        text = _notifier(
+            audience=registry,
+            operator_ids=frozenset({"U0RICH", "U0JAMES"}),
+            fallback_mention_id="U0RICH",
+        )._render(_complete())
+        assert text.startswith("<@U0PLANNER> ")
+
+    @pytest.mark.parametrize("blank", ("", "   "))
+    def test_c_a_blank_originator_counts_as_unset(self, blank: str) -> None:
+        text = _notifier(
+            operator_ids=frozenset({"U0ONE", "U0TWO"}), fallback_mention_id=blank
+        )._render(_complete())
+        assert "<@" not in text
+
+    def test_d_sole_operator_is_mentioned_when_no_originator_is_set(self) -> None:
+        """Rung (d) — exactly one allowlist member is unambiguous, as before."""
         text = _notifier(operator_ids=frozenset({"U0SOLE"}))._render(_complete())
         assert text.startswith("<@U0SOLE> ")
 
-    def test_d_two_operators_mention_nobody(self) -> None:
-        """Rung (d) — a multi-member allowlist is config, not a fact about THIS build."""
+    def test_e_two_operators_and_no_originator_mention_nobody(self) -> None:
+        """Rung (e) — a multi-member allowlist is config, not a fact about THIS build."""
         text = _notifier(operator_ids=frozenset({"U0ONE", "U0TWO"}))._render(_complete())
         assert "<@" not in text
 
-    def test_d_empty_allowlist_and_empty_registry_mention_nobody(self) -> None:
+    def test_e_empty_allowlist_and_empty_registry_mention_nobody(self) -> None:
         text = _notifier(audience=BuildAudienceRegistry())._render(_complete())
         assert "<@" not in text
         assert text.startswith(f"[{_HHMM}] Pipeline FEAT-D9A6:")
 
-    def test_d_unwired_registry_mentions_nobody(self) -> None:
+    def test_e_unwired_registry_mentions_nobody(self) -> None:
         assert "<@" not in _notifier()._render(_complete())
 
     def test_build_failed_gains_the_mention_and_keeps_its_reason(self) -> None:
@@ -239,6 +285,73 @@ class TestMentionChain:
             notification
         )
         assert "<@" not in text
+
+
+class TestOriginatorFallbackIsWiredFromConfig:
+    """The real factory reads the originator from settings (20 October 2026).
+
+    JARVIS_SLACK_OPERATOR_USER_IDS becomes Rich then James at the next
+    release; JARVIS_SLACK_PLANNING_ORIGINATOR_USER_ID stays Rich.
+    """
+
+    @staticmethod
+    def _sink(**settings: Any) -> SlackNotifier:
+        from pydantic import SecretStr
+
+        from jarvis.config.settings import JarvisConfig
+        from jarvis.infrastructure.slack_notifier import create_slack_sink
+
+        config = JarvisConfig(
+            slack_bot_token=SecretStr("xoxb-test"), slack_channel_id="C123456", **settings
+        )
+        with patch("slack_sdk.web.async_client.AsyncWebClient") as mock_cls:
+            mock_cls.return_value = AsyncMock()
+            sink = create_slack_sink(config)
+        assert isinstance(sink, SlackNotifier)
+        return sink
+
+    def test_two_operators_and_the_originator_mention_the_originator(self) -> None:
+        sink = self._sink(
+            slack_operator_user_ids="U0RICH,U0JAMES",
+            slack_operator_user_id=None,
+            slack_planning_originator_user_id="U0RICH",
+        )
+        assert sink._render(_complete()).startswith("<@U0RICH> ")
+
+    def test_two_operators_and_no_originator_mention_nobody(self) -> None:
+        sink = self._sink(
+            slack_operator_user_ids="U0RICH,U0JAMES",
+            slack_operator_user_id=None,
+            slack_planning_originator_user_id=None,
+        )
+        assert "<@" not in sink._render(_complete())
+
+    def test_one_operator_and_no_originator_mention_that_operator(self) -> None:
+        sink = self._sink(
+            slack_operator_user_ids="U0RICH",
+            slack_operator_user_id=None,
+            slack_planning_originator_user_id=None,
+        )
+        assert sink._render(_complete()).startswith("<@U0RICH> ")
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        (
+            (None, None),
+            ("", None),
+            (" , ", None),
+            ("U0RICH", "U0RICH"),
+            (" U0RICH , U0OTHER", "U0RICH"),
+            (",U0RICH", "U0RICH"),
+        ),
+    )
+    def test_the_originator_is_the_first_non_blank_id(
+        self, raw: str | None, expected: str | None
+    ) -> None:
+        from jarvis.config.settings import JarvisConfig
+
+        config = JarvisConfig(slack_planning_originator_user_id=raw)
+        assert config.resolve_planning_originator_user_id() == expected
 
 
 # ---------------------------------------------------------------------------
